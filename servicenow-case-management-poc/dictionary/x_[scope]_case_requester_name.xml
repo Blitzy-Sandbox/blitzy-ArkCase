@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `requester_name` String field on the `x_[scope]_case` custom
+    table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field            Type           Constraints
+        requester_name   String(100)    Mandatory - captures external requester
+
+    Per AAP Section 0.4.4 the case-submission portal page populates this field
+    as one of the five user-supplied inputs:
+        "Page 1 - Case Submission: a simple form with five inputs
+        (subject, type, description, requester_name, requester_email)."
+    The submission widget binds the requester-name text input to this field
+    and passes its value through the scripted REST submission endpoint
+    (../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml), which
+    performs a GlideRecord.insert() against `x_[scope]_case` with the user-
+    supplied requester-name literal.
+
+    Per AAP Section 0.7.4 ("Portal lookup output filtering") this field is
+    EXPLICITLY NOT exposed by the case-status-lookup endpoint - the lookup
+    returns ONLY status, subject, opened_date - no internal fields exposed.
+    requester_name is treated as INTERNAL because:
+      (a) returning the requester's name to an arbitrary anonymous caller
+          who happens to know a case number would leak personal-attribution
+          information about who filed which case (e.g., enabling enumeration
+          of which named individuals filed complaints);
+      (b) AAP Section 0.7.4 enumerates exactly THREE whitelisted lookup
+          fields, and requester_name is not among them.
+    This intentional omission is enforced at the response-payload level by
+    the lookup endpoint's CasePortalService.lookupCase() helper, which
+    constructs a JSON object containing only the three permitted columns.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java lines 47, 114,
+        120, 389-427, 961-963: ArkCase did NOT carry a flat `requester_name`
+        String column on `acm_case_file`. Instead, it modeled the external
+        requester as a PersonAssociation with personType="Initiator",
+        retrieved by getOriginator() / setOriginator() helpers that filter
+        the case's PersonAssociation collection:
+
+            public PersonAssociation getOriginator() {
+                ...
+                Optional<PersonAssociation> found = getPersonAssociations()
+                    .stream()
+                    .filter(pa -> "Initiator".equalsIgnoreCase(pa.getPersonType()))
+                    .findFirst();
+                ...
+            }
+
+        i.e., the requester was a row in `acm_person_assoc` (FK -> Person ->
+        first_name + last_name across acm_person) joined back to the case via
+        parent_id / parent_type. AAP Section 0.5.1 explicitly simplifies
+        this for the POC: rather than requiring a synchronously-created
+        PersonAssociation row at portal-submission time (which would couple
+        the anonymous submission endpoint to two child-table inserts plus
+        the optional `sys_user`/Person lookups they imply), the POC captures
+        the requester's name as a free-form String directly on the case row.
+        The richer requester-as-party model is still available via the
+        x_[scope]_case_party table (AAP Section 0.5.7), where staff users
+        can attach a typed Person or Organization party (with role_label
+        such as "Requester") to a case AFTER initial submission.
+      - The field name is `requester_name` (snake_case, 14 chars; NOT
+        `requesterName`, NOT `originator`, NOT `initiator`, NOT
+        `requester_full_name`) per AAP Section 0.5.7 verbatim. Snake_case
+        aligns with ServiceNow's platform-native column-naming convention
+        (sys_user.first_name, sys_user.last_name, incident.opened_by, etc.)
+        and matches the snake_case used by every other field on this
+        scoped table (assigned_group, assigned_agent, opened_date,
+        closed_date, requester_email).
+      - ArkCase's ROOT-LEVEL CaseFile entity also exposes `getOriginator()`
+        as part of the `AcmObjectOriginator` interface (CaseFile.java line
+        120: implements ... AcmObjectOriginator). The POC's requester_name
+        column does NOT implement that contract directly because the
+        ServiceNow target abandons the cross-cutting Acm*Object interface
+        family entirely (AAP Section 0.1.2 - Java domain classes become
+        ServiceNow tables; cross-cutting interfaces are NOT replicated).
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_[scope]_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, `core_company`, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical field identifier `x_[scope]_case.requester_name`)
+        and is NOT a reference to any other record. The MD5 derivation
+        guarantees that re-generation of this Update Set on any agent run
+        produces a byte-identical `<sys_id>` (no random UUIDs), which is
+        required for clean Update-Set re-import on a fresh PDI without
+        creating duplicate sys_dictionary rows. Verified:
+            python3 -c "import hashlib; print(hashlib.md5(b'x_[scope]_case.requester_name').hexdigest())"
+        prints 696e73e041d826fe2d43a3f259acd1f1 (matches sys_id below).
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time. The placeholder appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=true at the dictionary level (AAP Section 0.5.7 verbatim:
+        "requester_name | String(100) | Mandatory - captures external
+        requester"). Without a requester name, the case has no external
+        attribution and the case-submission portal page (AAP Section 0.4.4)
+        cannot satisfy its specified contract that the requester provides
+        a name. This MUST hold across all four insert paths into
+        `x_[scope]_case`:
+          (1) the internal form - the platform's form-layout engine renders
+              an asterisk and refuses to save without a value;
+          (2) the Table API (PUT/POST) - the platform returns a 400 with
+              "field is mandatory" if missing;
+          (3) the scripted REST submission endpoint - the endpoint's
+              field-validation pre-check rejects an empty requester_name
+              before invoking GlideRecord.insert() and returns a structured
+              400 to the portal so the submission widget can display an
+              inline error;
+          (4) the seed-data scripts - all 10 demo cases populate this
+              field with non-PII synthetic names (per AAP Section 0.7.2).
+      - read_only=false: internal users with the case_manager role may
+        correct an erroneous requester_name (e.g., a typo from the portal
+        submission) AFTER the case is created; case_agent role users on
+        assigned cases may also correct per AAP Section 0.5.6 ACL matrix.
+        Internal-user write authorization is governed by the table-level
+        ACLs in ../acl/ - this dictionary entry deliberately does NOT
+        carry per-role write_roles since the table-level ACLs apply
+        uniformly across all editable fields.
+      - default_value is EMPTY (no implicit default) per AAP Section 0.5.7
+        and the agent prompt's Phase 4 verbatim. Defaulting silently to a
+        placeholder string ("Anonymous", "Unknown Requester", etc.) would
+        silently mask submissions that failed mandatory enforcement and
+        pollute the Manager View dashboard's per-requester drilldowns
+        with semantically-empty rows. It would also undermine the synthetic-
+        data audit trail: a row without a real synthetic name should fail
+        validation, not coerce to a default.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and the
+        agent prompt's Phase 4. The status field on this same table
+        carries audit=true because every state transition must be
+        reconstructable post-hoc; requester_name is descriptive identity
+        metadata, not a regulated lifecycle attribute, so the additional
+        sys_audit row per update is unnecessary overhead for a POC.
+      - max_length=100 EXACTLY per AAP Section 0.5.7 verbatim. NOT 4000
+        (description, the long-form free-text body), NOT 255 (subject, the
+        case summary line), NOT 40 (number / type / status / priority,
+        the controlled-vocabulary identifier-style strings). 100 chars
+        comfortably accommodates international name forms with prefixes/
+        suffixes (e.g., "Dr. Maria del Carmen Hernandez-Rodriguez, PhD"
+        at 47 chars; "Sir Christopher Alexander Worthington III" at 41
+        chars; CJK full names at 8-12 chars; transliterated forms at 30+
+        chars), and matches the sibling requester_email column's 100-char
+        ceiling for symmetric storage of the requester's two identity
+        strings. Mirrors AAP Section 0.4.4's Page 1 - Case Submission
+        sizing for the inline form input.
+      - internal_type=string is correct for fields up to 4000 chars in
+        ServiceNow. The platform's form engine renders a String column
+        with max_length<=255 as a single-line text input (no `attributes`
+        override required for this presentation), which matches the
+        single-line name input expected on the portal submission form.
+      - choice=0 = "Free-form String, no choice list" (NOT 3 like the
+        type / status / priority fields). Names are unconstrained natural-
+        language text; constraining them to a choice list would defeat
+        the purpose of capturing a free-form external-requester name.
+      - unique=false: multiple cases may legitimately share the same
+        requester_name (e.g., a recurring requester who submits multiple
+        cases over time, or two distinct individuals who happen to share
+        a common name). Uniqueness at the case level is delegated entirely
+        to the auto-generated `number` field per AAP Section 0.5.7
+        (./x_[scope]_case_number.xml carries unique=true).
+      - text_index=false per the agent prompt's Phase 6 verbatim. Unlike
+        subject (text_index=true, the primary search target across the
+        case list) and description (text_index=true, the long-form
+        searchable body), requester_name is identity metadata that does
+        not need to participate in the case-list quick-search index for
+        the POC. Internal users wanting to filter by requester can still
+        do so via the standard list-view condition builder (which works
+        without a text index for short String columns at POC data
+        volumes). Avoiding the index also reduces the surface area for
+        accidental anonymous-list enumeration of requester names through
+        any future search widget.
+      - spell_check=false per the agent prompt's Phase 6 verbatim. Names
+        are proper nouns and are not amenable to dictionary-based spell-
+        checking - any spell-check suggestions on a name field generate
+        false-positive squiggles that degrade UX without adding value.
+        This matches the platform-native convention for sys_user.first_name
+        and sys_user.last_name, which also disable spell_check.
+      - attributes is EMPTY per the agent prompt's Phase 6 verbatim.
+        Unlike description (attributes="edge_encryption_enabled=true",
+        which marks the long-form narrative column eligible for ServiceNow
+        Edge Encryption), the POC does NOT mark the requester_name column
+        as Edge-Encryption-eligible. Edge Encryption support for short
+        identity strings is intentionally out of POC scope; if a future
+        production deployment requires it, the dictionary attribute can
+        be added in a follow-up scoped change.
+      - No reference target: this is a free-form String field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`. The POC deliberately
+        does NOT model requester_name as a Reference->sys_user because:
+          (i) the case-submission portal is UNAUTHENTICATED (AAP Section
+              0.4.4 - "two unauthenticated pages: case submission and
+              case status lookup") - the anonymous submitter generally
+              has no sys_user account and cannot be resolved to one;
+          (ii) AAP Section 0.5.7's literal type for requester_name is
+              "String(100)" - NOT a reference. The exact field type and
+              constraint matrix is preserved verbatim per AAP Section
+              0.7.1 ("Preserve the user-prompt's data-model field set
+              verbatim - no additions, no renames, no type relaxations").
+          (iii) The richer typed-party association (Person -> sys_user OR
+              Organization -> core_company) is implemented separately on
+              the x_[scope]_case_party child table, which staff users can
+              populate AFTER initial submission to attach a Resolvable
+              party with role_label such as "Requester".
+      - No PII: per AAP Section 0.7.2 (No-PII constraint, "Synthetic data
+        only. The seed users, groups, cases, tasks, and parties MUST be
+        fabricated - no real names, real email addresses, real phone
+        numbers, real organization names, or real case content.") and
+        AAP Section 0.3.2 (synthetic-data-only constraint). NO real
+        names from the source ArkCase database are placed in this column
+        at any point in the build. Demo seed values are fabricated names
+        such as "Demo Requester 01", "Demo Requester 02", "Synthetic
+        Submitter Alpha", or "Test Requester Beta" - none of which are
+        real individuals.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_[scope]_case.xml`
+        (parent table), since `<name>x_[scope]_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `requester_name` column:
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+            (the scripted REST submission endpoint - writes this field
+            from the user's portal-form input on every anonymous case
+            submission; AAP Section 0.4.4 lists `requester_name` as one
+            of the five user-supplied inputs the page collects)
+          * ../portal/widgets/sp_widget_x_[scope]_case_submission_widget.xml
+            (the submission widget binds its requester-name text input
+            to this field via the scripted REST submission endpoint)
+          * ../script_includes/x_[scope]_CasePortalService.xml
+            (the submitCase() helper method writes this field on behalf
+            of the scripted REST submission endpoint)
+          * ../seed-data/cases/x_[scope]_case_demo_*.xml (synthetic
+            demo cases that MUST populate this mandatory field with
+            synthetic non-PII names to satisfy AAP Section 0.7.4
+            minimum-data threshold of "at least 10 cases across all
+            statuses, both case types represented")
+
+      - This record is EXPLICITLY NOT consumed by:
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_status_lookup.xml
+            (the scripted REST status-lookup endpoint - per AAP Section
+            0.7.4, the lookup returns ONLY status, subject, opened_date;
+            requester_name is treated as internal/PII-protected and MUST
+            NOT appear in the response payload). Implementations of the
+            lookup endpoint MUST whitelist exactly status, subject,
+            opened_date when constructing the response object - any
+            leakage of requester_name is a portal-data-exposure violation
+            per AAP Section 0.7.4.
+          * ../portal/widgets/sp_widget_x_[scope]_case_lookup_widget.xml
+            (consumes only the three whitelisted fields returned by the
+            lookup endpoint).
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Requester Name</column_label>
+        <comments>Mandatory String(100) capturing the external requester's name. Populated by the case_submit scripted REST endpoint from the portal submission page. NOT exposed by case_status_lookup per AAP Section 0.7.4. Use synthetic names only per AAP Section 0.7.2 (No-PII constraint). Replaces ArkCase CaseFile.getOriginator()'s PersonAssociation lookup with a flat String column for the POC.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>requester_name</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>100</max_length>
+        <name>x_[scope]_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>696e73e041d826fe2d43a3f259acd1f1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_requester_name</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
