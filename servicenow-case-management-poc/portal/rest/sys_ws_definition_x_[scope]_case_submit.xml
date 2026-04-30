@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sys_ws_definition`
+    row that declares the Case Submit Scripted REST API namespace inside the
+    scoped application `x_[scope]`. This is the API "container" record - the
+    namespace, base URL, and authentication policy that hosts the actual POST
+    operation handler at the paired sibling
+    `./sys_ws_operation_x_[scope]_case_submit_post.xml`.
+
+    PURPOSE (AAP Section 0.4.3 / Section 0.4.4 / Section 0.5.1):
+
+      AAP Section 0.4.3 (Design Pattern): "Anonymous portal via scripted REST
+      + Experience widget - Two scripted REST endpoints execute at platform-
+      default elevated privilege, but their request/response shapes whitelist
+      exactly the fields specified by the user, giving anonymous callers no
+      path to internal data."
+
+      AAP Section 0.4.4 (UI Design - External Experience Portal UI):
+      "Page 1 - Case Submission: a simple form with five inputs (subject,
+      type, description, requester_name, requester_email). On submit, calls
+      the scripted REST endpoint, displays a confirmation panel showing the
+      returned case number and a friendly 'Your case has been submitted'
+      message."
+
+      AAP Section 0.5.1 (in-scope artifact verbatim):
+      "servicenow-case-management-poc/portal/rest/sys_ws_definition_x_[scope]_case_submit.xml -
+      Scripted REST endpoint: POST anonymously allowed; creates x_[scope]_case
+      in Draft; returns {number}. Whitelisted fields only."
+
+      This is the foundational artifact that, together with the paired
+      sys_ws_operation record, registers the URL `/api/x_[scope]/case_submit`
+      with the ServiceNow REST router. Without this record, the operation
+      record would have no parent definition and the platform would not route
+      requests to the endpoint at all (HTTP 404 from the routing layer).
+
+    DEFINITION-VS-OPERATION RECORD SEPARATION (ServiceNow data-model):
+
+      ServiceNow's Scripted REST API data-model splits a single REST endpoint
+      across two records:
+
+        1. sys_ws_definition (THIS file) - the API "container":
+             - Defines `name`, `api_id`, `namespace`, `active` flag, and
+               authentication policy (`requires_authentication`,
+               `requires_acl_authorization`, `requires_snc_internal_role`,
+               `enforce_acl`).
+             - Contains NO handler scripts.
+             - One definition can host multiple operations (e.g., a single
+               API with both POST and GET on different paths). For our case,
+               each definition has exactly ONE operation, but the separation
+               is still required by the platform's data model.
+
+        2. sys_ws_operation (SIBLING file
+             ./sys_ws_operation_x_[scope]_case_submit_post.xml) - the
+             actual HTTP-method handler:
+             - References this definition via `<web_service_definition>` field
+               (resolved by `sys_update_name` lookup against THIS record's
+               `<sys_update_name>`).
+             - Defines `http_method` (POST), `relative_path` (empty / root for
+               this single-operation API), `consumes`/`produces`
+               (application/json), and the `operation_script` body that
+               actually handles incoming HTTP requests.
+             - The operation's script delegates field whitelisting and
+               persistence to `../../script_includes/x_[scope]_CasePortalService.xml`
+               via `new x_[scope].CasePortalService().submitCase(payload)`.
+
+      This separation matches ArkCase's Spring-bean architecture:
+
+        - `acm-services/acm-service-portal-gateway/src/main/java/com/armedia/
+          acm/portalgateway/service/DefaultPluggablePortalRequestService.java`
+          line 48 ("public class DefaultPluggablePortalRequestService
+          implements PortalRequestService") is the Spring-bean container -
+          the analog of THIS sys_ws_definition record (the namespace + URL
+          prefix).
+        - `DefaultPluggablePortalRequestService.submitRequest(String portalId,
+          String portalUserId, PortalRequest request)` (line 60-65) is the
+          actual handler method - the analog of the paired sys_ws_operation
+          record.
+
+      The same separation-of-concerns principle is preserved: the "container"
+      knows the URL/auth policy; the "handler" knows the actual request
+      processing. No Java code is byte-for-byte ported (the Java code is
+      consulted ONLY for semantic reference per AAP Section 0.5.1 and
+      Section 0.8.1).
+
+    URL PATH COMPOSITION:
+
+      The full URL is composed by the platform from `<namespace>` + `<api_id>`:
+
+          /api/<namespace>/<api_id>
+          /api/x_[scope]/case_submit
+
+      Note specifically:
+
+        - `<namespace>` = `x_[scope]` (the scope identifier prefix). The PDI
+          auto-resolves `x_[scope]` to the actual scope id at App Engine
+          Studio creation time.
+        - `<api_id>` = `case_submit` (BARE, without the scope prefix). The
+          platform automatically prefixes the URL with `<namespace>`. Putting
+          the scope prefix in `<api_id>` would result in a doubled prefix
+          (`/api/x_[scope]/x_[scope]_case_submit`), which is incorrect.
+        - This matches AAP Section 0.5.1 verbatim ("api_id = case_submit") and
+          the convention documented in the AAP's "design pattern" entry for
+          Anonymous portal via scripted REST.
+
+      The `<sys_update_name>sys_ws_definition_x_[scope]_case_submit</sys_update_name>`
+      cross-record identifier IS scope-prefixed, because `sys_update_name` is
+      a global identifier across all scoped apps on the PDI. The operation
+      record's `<web_service_definition>` reference resolves against this
+      `sys_update_name`, NOT against `<api_id>`.
+
+    UNAUTHENTICATED ANONYMOUS-ACCESS DESIGN (AAP Section 0.4.4 verbatim:
+    "two unauthenticated pages"):
+
+      Four configuration flags work together to make this a true public
+      anonymous endpoint at the API-definition level:
+
+        1. <requires_authentication>false</requires_authentication>
+           Anonymous access ALLOWED at the definition level. CRITICAL.
+           Even if the operation record permits anonymous access, the
+           definition's setting is checked first. If THIS were `true`,
+           the platform would reject anonymous requests before evaluating
+           the operation's settings.
+
+        2. <requires_acl_authorization>false</requires_acl_authorization>
+           No ACL check at definition level. The field whitelist enforced
+           by the Script Include `x_[scope].CasePortalService` is the
+           security perimeter, not table-level ACLs.
+
+        3. <requires_snc_internal_role>false</requires_snc_internal_role>
+           No SNC-internal-role requirement.
+
+        4. <enforce_acl/>
+           Empty (no ACL roster enforced at this layer).
+
+      All four flags must be set; omitting any one OR changing the polarity
+      breaks the anonymous-access guarantee, breaks Validation Gate 4
+      ("Portal - submission"), and breaks the AAP's "two unauthenticated
+      pages" requirement.
+
+      The agent prompt's Phase 8 (Critical Authoring Rule 1) explicitly
+      mandates each of these four values. The operation record (sibling
+      file ./sys_ws_operation_x_[scope]_case_submit_post.xml) ALSO sets
+      requires_authentication=false for layered consistency - both records
+      must permit anonymous, otherwise the request fails.
+
+    CONSUMES / PRODUCES (cascading defaults):
+
+      <consumes/> and <produces/> are intentionally EMPTY at the definition
+      level. The operation record specifies `application/json` for both.
+      The definition's empty values mean "use whatever the operation
+      specifies" - the platform's standard cascading-defaults pattern. Any
+      caller posting `application/json` to /api/x_[scope]/case_submit will
+      be matched by the operation's content-type filter; any caller
+      requesting a non-JSON content type will receive HTTP 406 from the
+      operation layer (not from THIS definition record).
+
+      <consumes_customized>false</consumes_customized> and
+      <produces_customized>false</produces_customized> tell the platform
+      to use the platform-default content-type negotiation rather than a
+      custom override. Setting them to `true` would require additional
+      <consumes>/<produces> values to be authored on THIS record, which
+      would conflict with the operation's content-type declarations.
+
+    ACTIVE FLAG (AAP Section 0.7.1 verbatim - "Confirm post-commit
+    deployable state"):
+
+      <active>true</active> is REQUIRED so the platform routes requests to
+      the endpoint. An inactive (`<active>false</active>`) definition would
+      result in HTTP 404 from the platform's request-routing layer, before
+      the operation script runs. This satisfies AAP Section 0.7.1's
+      post-commit verification requirement that the Experience Portal be
+      "accessible at [instance URL]/x_[scope]_portal" and that submitting
+      a case from the portal results in a successful HTTP 200 response.
+
+    SCOPE BINDING (AAP Sections 0.5.2 and 0.7.2):
+
+      <sys_scope> and <sys_package> reference the scoped application by its
+      actual scope NAME (`x_[scope]`), not by sys_id. This matches the
+      sibling-file convention used by every other XML record in this scoped
+      application:
+
+        - ../../app/sys_scope/x_[scope].xml carries `<name>x_[scope]</name>`
+          and `<source>x_[scope]</source>`.
+        - ../../app/sys_app/x_[scope]_case_management.xml carries
+          `<scope>x_[scope]</scope>` and `<vendor_prefix>x_[scope]</vendor_prefix>`.
+        - All sibling dictionary entries (../../dictionary/x_[scope]_case_*.xml),
+          choices, tables, roles, ACLs, and the parent portal record
+          (../sp_portal_x_[scope]_case_portal.xml) use
+          `<sys_scope display_value="Case Management">x_[scope]</sys_scope>`
+          and `<sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>`.
+
+      Update Set re-import resolves cross-references by matching the
+      <sys_scope> text-node value against the scope record's <name>/<source>
+      fields. Using `x_[scope]_case_management` (rather than `x_[scope]`)
+      would fail to match and trigger a preview error on fresh-PDI re-import,
+      breaking AAP Section 0.7.3 Validation Gate 7 ("Update Set integrity").
+      Therefore THIS record uses `x_[scope]` consistently with every sibling.
+
+      The `display_value="Case Management"` and `source="x_[scope]"` attributes
+      are descriptive metadata that ServiceNow uses for human-readable display
+      on the Update Set preview page; the actual reference resolution uses
+      the text-node values.
+
+    NO HARDCODED SYS_IDS (AAP Section 0.7.2):
+
+      The ONLY sys_id literal in this file is `<sys_id>` itself (THIS
+      record's own primary key). Per AAP Section 0.7.2, the no-hardcoded-
+      sys_id rule applies to references TO OTHER records, not to a record's
+      own identity primary key. The record's <sys_id> is the deterministic
+      32-char lowercase hex MD5 of the canonical sys_update_name:
+
+          printf '%s' 'sys_ws_definition_x_[scope]_case_submit' | md5sum | cut -c1-32
+          -> ef9090a5b03f1a36c248ce65065a1b74
+
+      The MD5 derivation guarantees that re-generation of this Update Set on
+      any agent run produces a byte-identical <sys_id> (no random UUIDs),
+      which is required for clean Update-Set re-import on a fresh PDI without
+      creating duplicate sys_ws_definition rows. All cross-references
+      (<sys_scope>, <sys_package>) resolve by NAME against stable identifiers.
+
+    NO PII, NO EMAIL (AAP Section 0.7.2):
+
+      The description below contains ZERO PII (no real names, no real email
+      addresses, no real organization names, no real case content). Email
+      notifications are explicitly disabled on the PDI per AAP Section 0.7.2
+      ("Email-disabled constraint"). This sys_ws_definition record contains
+      NO scripts and therefore NO `gs.eventQueue(...)` calls; the constraint
+      is reaffirmed here for context with the paired operation record.
+
+    [scope] PLACEHOLDER PRESERVATION (AAP Section 0.7.2):
+
+      All `x_[scope]_*` references preserve the literal `[scope]` placeholder
+      in square brackets - in <api_id>'s embedded scope context (NOT used here
+      since api_id is bare), in <namespace>, in <sys_update_name>, in
+      <sys_scope>, and in <sys_package>. The PDI auto-resolves [scope] to the
+      actual scope id (e.g., `12345` becomes `x_12345`) at App Engine Studio
+      creation time when the Update Set is imported. This placeholder
+      convention is observed consistently across every sibling XML in this
+      scoped application; substituting an actual scope id here would diverge
+      from the sibling convention and break re-import portability across
+      different PDIs.
+
+    XML CONVENTIONS HONORED (matching every sibling file in this app):
+
+      - First line: <?xml version="1.0" encoding="UTF-8"?>
+      - Wrapper element: <record_update table="sys_ws_definition"> matching
+        the agent prompt's Phase 1 specification and the sibling pattern used
+        by ../sp_portal_x_[scope]_case_portal.xml,
+        ../../tables/x_[scope]_case.xml, and other primary-record XMLs.
+      - Inner element: <sys_ws_definition action="INSERT_OR_UPDATE">.
+      - Indentation: 4 spaces for record fields (matching sibling convention).
+      - Element ordering: alphabetical within the record (matching sibling
+        convention; e.g., `active` before `api_id` before `consumes` before
+        `description`...).
+      - sys_scope text-node value: `x_[scope]` (NOT `x_[scope]_case_management`),
+        matching every sibling XML in this scoped app per the actual scope
+        record's <name>x_[scope]</name>.
+      - sys_package text-node value: `x_[scope]` with `source="x_[scope]"`
+        attribute, matching the sys_app record's <scope>x_[scope]</scope>
+        per ../../app/sys_app/x_[scope]_case_management.xml.
+      - Deterministic 32-char lowercase hex sys_id:
+        MD5("sys_ws_definition_x_[scope]_case_submit") =
+        ef9090a5b03f1a36c248ce65065a1b74. Re-generation of this XML is
+        byte-identical (no random UUIDs).
+      - Audit fields: <sys_created_by>admin</sys_created_by> and
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
+        repeatable timestamps (the same date is used by EVERY sibling
+        record in this scoped app for repeatable XML re-generation).
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict XML
+        conformance for ServiceNow Update Set re-import preview (AAP
+        Section 0.7.3 validation gate 7 - Update Set integrity).
+
+    SOURCE-SIDE SEMANTIC REFERENCE (read-only, NOT byte-for-byte ported per
+    AAP Section 0.5.1):
+
+      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/
+      acm/portalgateway/service/DefaultPluggablePortalRequestService.java
+        line 48 - "public class DefaultPluggablePortalRequestService
+                   implements PortalRequestService"
+        line 60-65 - public PortalResponse submitRequest(String portalId,
+                     String portalUserId, PortalRequest request) throws
+                     PortalRequestServiceException { ... return
+                     getServiceProvider(request.getRequestType())
+                     .submitRequest(portalId, portalUserId, request); }
+
+      ArkCase implements anonymous portal submission via a Java Spring
+      service (DefaultPluggablePortalRequestService) that resolves a
+      PortalRequestServiceProvider bean by request type and forwards the
+      submitRequest(...) call. The ServiceNow target eliminates the Spring
+      bean indirection entirely - this sys_ws_definition record IS the
+      "container" (analog of the Spring bean configuration: namespace +
+      URL prefix + auth policy), and the paired sys_ws_operation record IS
+      the "handler" (analog of the submitRequest method body). The
+      submission widget's client-side script invokes
+      POST /api/x_[scope]/case_submit and the platform routes to the
+      operation's script, which delegates to
+      `new x_[scope].CasePortalService().submitCase(payload)` - the
+      ServiceNow analog of ArkCase's getServiceProvider(...).submitRequest(...)
+      provider-resolution-and-forward pattern.
+
+      The Java reference is consulted ONLY for semantic shape (the public
+      API of submitRequest's portalId / portalUserId / PortalRequest /
+      PortalResponse); no Java code is ported.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
+
+      THIS RECORD MUST LOAD AFTER:
+        - ../../app/sys_scope/x_[scope].xml (scope record; <sys_scope>
+          cross-reference resolves against this record's <name>x_[scope]</name>)
+        - ../../app/sys_app/x_[scope]_case_management.xml (scoped application
+          record; <sys_package> cross-reference resolves against this
+          record's <scope>x_[scope]</scope>)
+
+      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
+      tolerates any order within the same Update Set, since references
+      resolve by name):
+        - ./sys_ws_operation_x_[scope]_case_submit_post.xml (the POST
+          operation record; <web_service_definition> cross-reference resolves
+          against this record's <sys_update_name>)
+        - ../widgets/sp_widget_x_[scope]_case_submission_widget.xml (the
+          widget calls POST /api/x_[scope]/case_submit, transitively
+          dependent on this URL being registered with the platform's REST
+          router)
+
+      THIS RECORD HAS NO ANCESTOR DEPENDENCY OUTSIDE THE SCOPED APPLICATION
+      (per AAP Section 0.7.2 scope-namespace exclusivity - zero global
+      writes; the sys_ws_definition table itself is OOB but it accepts
+      records from any scope).
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation
+    gates):
+
+      This record is the FOUNDATIONAL artifact for Validation Gate 4:
+
+        Gate 4 ("Portal - submission"): "Case created from unauthenticated
+          portal submission - Case appears in internal list with Draft
+          status and correct case number." The four anonymous-access flags
+          (requires_authentication=false, requires_acl_authorization=false,
+          requires_snc_internal_role=false, enforce_acl empty) at the
+          definition level enable anonymous access to the API namespace.
+          The <api_id>case_submit</api_id> and <namespace>x_[scope]</namespace>
+          together determine the URL path /api/x_[scope]/case_submit that
+          the submission widget targets via fetch()/$http.post(). Without
+          this definition record, the operation record would have no parent
+          definition and the platform would not register the endpoint at
+          all - anonymous callers would receive HTTP 404 from the routing
+          layer.
+
+      Gates 1 (data model), 2 (workflow), 3 (ACLs), 5 (portal-lookup),
+      6 (dashboards), and 7 (Update Set integrity) are not directly
+      affected by this file (Gate 5 is governed by the parallel
+      sys_ws_definition_x_[scope]_case_status_lookup.xml record; Gate 7
+      requires this file to be well-formed XML, which it is).
+
+      This file is one of two foundational artifacts (this + the operation
+      record at ./sys_ws_operation_x_[scope]_case_submit_post.xml) that
+      together implement the submission endpoint. Both must be present and
+      both must permit anonymous access for Gate 4 to pass.
+-->
+<record_update table="sys_ws_definition">
+    <sys_ws_definition action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <api_id>case_submit</api_id>
+        <consumes/>
+        <consumes_customized>false</consumes_customized>
+        <description>Scripted REST API definition for the Case Submit endpoint. Provides anonymously-accessible POST /api/x_[scope]/case_submit for the unauthenticated Experience Portal submission widget. The actual HTTP-method handler lives in the paired sys_ws_operation record (sys_ws_operation_x_[scope]_case_submit_post.xml). The handler delegates field whitelisting and persistence to the x_[scope].CasePortalService Script Include. Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern (DefaultPluggablePortalRequestService.submitRequest). Per AAP Sections 0.4.3, 0.4.4, 0.5.1.</description>
+        <enforce_acl/>
+        <name>Case Submit</name>
+        <namespace>x_[scope]</namespace>
+        <produces/>
+        <produces_customized>false</produces_customized>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <sys_class_name>sys_ws_definition</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ef9090a5b03f1a36c248ce65065a1b74</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Submit</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_ws_definition_x_[scope]_case_submit</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_ws_definition>
+</record_update>
