@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `pending_reason` Choice field on the `x_[scope]_case` custom
+    table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning) and the assigned
+    folder description:
+        Field            Type      Constraints
+        pending_reason   Choice    Awaiting Info, Awaiting Third Party, Other
+                                   (optional - relevant only when status=Pending)
+
+    NOTE: `pending_reason` is INTERNAL SUPPORTING SCAFFOLDING - it is NOT one
+    of the 12 core user-prompt fields enumerated in AAP Section 0.5.7's
+    verbatim data-model table. It exists solely to support the state-machine
+    transition `In Progress -> Pending` per AAP Section 0.5.5 verbatim:
+        "In Progress -> Pending: None; sets pending_reason
+         (Awaiting Info / Awaiting Third Party / Other)"
+    The companion transition `Pending -> In Progress` clears this field per
+    AAP Section 0.5.5 verbatim:
+        "Pending -> In Progress: None; clears pending_reason"
+
+    THIS FIELD IS A CONDITIONAL, NON-MANDATORY ATTRIBUTE. The other five
+    statuses (Draft, Open, In Progress, Resolved, Closed) all legitimately
+    leave this field empty. The Pending status alone implies a populated
+    `pending_reason`. The conditional logic is enforced by the Flow Designer
+    sub-flows and Business Rules listed below; the dictionary entry itself
+    encodes only the column shape.
+
+    This dictionary entry ONLY declares that the `pending_reason` Choice
+    field exists on the parent table. The choice values themselves
+    (Awaiting Info, Awaiting Third Party, Other) are authored as separate
+    sys_choice records in ../choices/sys_choice_case_pending_reason.xml.
+    This separation is a deliberate consequence of the ServiceNow Choice-
+    field design pattern: a sys_dictionary row declares the column shape;
+    sibling sys_choice rows declare the allowed string-label values keyed
+    by `name` + `element` lookup against this entry. New pending reasons
+    can later be added by appending sys_choice rows WITHOUT altering this
+    dictionary entry, mirroring the AAP-stipulated extensibility for
+    pending-status taxonomies that may emerge once the POC scope graduates
+    to production use cases.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java does NOT carry
+        a flat `pending_reason` String column on the `acm_case_file` table.
+        ArkCase's case-status taxonomy was driven by the `cm_case_status`
+        column (lines 141-142) and an associated ChangeCaseStatus history
+        entity (../casefile/model/ChangeCaseStatus.java) whose
+        IN_APPROVAL / DRAFT / APPROVED enumeration covered approval-flow
+        states but did NOT include a discrete "Pending" sub-state with a
+        typed reason code. The closest semantic ancestors in the ArkCase
+        codebase are:
+          * acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+            com/armedia/acm/plugins/task/model/AcmTask.java's pendingStatus
+            attribute (a String tracking the task's pending sub-state),
+            which establishes the broader ArkCase pattern of pairing a
+            primary status with a free-form pending-status label.
+          * The ../flows/sub_flows/validate_pending_transition.xml flow
+            replaces the implicit ArkCase pattern with an explicit, typed
+            three-value Choice on the case row itself.
+        The ServiceNow target therefore ADDS this field as part of the
+        target-side state-machine design, NOT as a port of an existing
+        ArkCase field. The constraint to a closed Choice vocabulary
+        (rather than a free-form String like AcmTask.pendingStatus) is
+        deliberate: it (a) keeps the Manager View dashboard analytics
+        deterministic if a future report is added to group by reason,
+        (b) prevents typo-driven splitting of the same logical reason
+        across multiple labels, (c) lets a future flow (e.g., escalation
+        on long-running "Awaiting Third Party" cases) match against a
+        stable enumerated value rather than fuzzy-matching free text.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_[scope]_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical field identifier
+        `x_[scope]_case.pending_reason`) and is NOT a reference to any
+        other record. The deterministic derivation makes the Update Set
+        re-importable on a fresh PDI without sys_id collisions: re-importing
+        the same XML on the same or any future PDI resolves the same sys_id
+        and idempotently updates the same dictionary row rather than
+        creating a duplicate. This deterministic-sys_id discipline applies
+        to every dictionary entry in this Update Set.
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time.
+      - mandatory=false at the dictionary level. This is CRITICAL: forcing
+        always-required would break the data model because Draft, Open,
+        In Progress, Resolved, and Closed cases all legitimately have an
+        empty `pending_reason`. Only the Pending status implies a populated
+        value, and that conditionality is enforced not by the dictionary
+        but by:
+          * ../flows/sub_flows/validate_pending_transition.xml (sets the
+            field as part of the In Progress -> Pending transition flow,
+            which is the ONLY pathway by which a case can enter Pending),
+          * ../business_rules/x_[scope]_clear_pending_reason_on_inprogress
+            .xml (clears the field on Pending -> In Progress transition).
+        Per AAP Section 0.5.5 the In Progress -> Pending transition has
+        no required-condition gate ("None; sets pending_reason"), but the
+        flow itself prompts the user for the reason before completing the
+        transition; the prompted value is then written to this column.
+        The mandatory=false dictionary configuration is what allows the
+        column to remain empty for all other statuses without violating
+        platform-level validation on insert/update.
+      - read_only=false: an internal user (case_manager or assigned
+        case_agent under AAP Section 0.5.6 "Assigned only" condition)
+        editing a Pending case may correct an erroneous reason or update
+        it as new information emerges (e.g., a case initially flagged
+        "Awaiting Info" may shift to "Awaiting Third Party" once the
+        requester responds but a vendor is now blocking). Setting
+        read_only=true here would require a flow re-traversal to update
+        the reason, which is unnecessary friction for a categorical
+        attribute that does NOT itself drive a state transition.
+      - default_value is EMPTY (no implicit default) per the agent prompt
+        Phase 4 verbatim. Defaulting silently to "Other" or "Awaiting Info"
+        would (a) populate the column for non-Pending cases that should
+        legitimately leave it empty, (b) skew any future analytics that
+        group by reason, (c) hide genuine "user did not specify" cases
+        behind a fabricated catch-all. The flow that transitions to
+        Pending status will prompt the user for the reason; until then,
+        the field is empty.
+      - active=true, display=true: the field appears on the form (so
+        case_manager and assigned case_agent can see why a case is
+        Pending without having to navigate to the audit log) and is
+        evaluated by the platform for validation/display. Per AAP
+        Section 0.7.4 it is NOT exposed by the case-status-lookup
+        portal endpoint - the lookup returns ONLY status, subject,
+        opened_date - so display=true here governs the INTERNAL form,
+        not the external portal.
+      - audit=false: the field tracks a categorical attribute that
+        coexists with the audited `status` field. Per AAP Section 0.7.2
+        this POC is scoped to functional capability, not full audit-trail
+        compliance. The status field (../dictionary/x_[scope]_case_status
+        .xml) IS audited because every state transition must be
+        reconstructable for forensic correctness; pending_reason, being
+        an attribute of an in-flight Pending state and being cleared on
+        the way out, does not require independent audit fidelity for the
+        POC scope (the status-change history adequately reconstructs
+        when the case was Pending; the reason can be inferred from
+        contemporaneous activity).
+      - max_length=40: sufficient for "Awaiting Third Party" (19 chars,
+        the longest of the three defined labels) plus comfortable
+        headroom for future extensible labels (e.g., "Awaiting Legal
+        Review", "Awaiting Translation"). The other defined labels are
+        "Awaiting Info" (12 chars) and "Other" (5 chars). Aligning to
+        the same max_length=40 used by the type, status, and priority
+        Choice fields keeps the Choice-field column-shape consistent
+        across the table.
+      - choice=3 = "Choice list, no description column" - the standard
+        Choice-field configuration when a sibling sys_choice record set
+        defines the allowed values without a long-form description
+        column on the dropdown. This matches the convention used by the
+        type, status, and priority Choice fields on the same table.
+      - No reference target: this is a String-backed Choice field, not
+        a Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - text_index=false: pending_reason is a low-cardinality enumerated
+        Choice (three values), so full-text indexing would be wasteful.
+        The platform's standard list/report/dashboard surface filters on
+        the column directly via GlideRecord addQuery without needing a
+        full-text index.
+      - No PII: the field stores only categorical labels chosen from a
+        controlled vocabulary; no real names, email addresses, or
+        organizational identifiers are derived from or stored in this
+        column.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_[scope]_case.xml`
+        (parent table), since `<name>x_[scope]_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `pending_reason` column:
+          * ../choices/sys_choice_case_pending_reason.xml (the choice
+            values Awaiting Info, Awaiting Third Party, Other - which
+            reference this dictionary entry by `name` + `element` lookup)
+          * ../flows/sub_flows/validate_pending_transition.xml (sets this
+            field as part of the In Progress -> Pending transition; the
+            flow prompts the user for one of the three Choice values)
+          * ../business_rules/x_[scope]_clear_pending_reason_on_inprogress
+            .xml (clears this field when status transitions back from
+            Pending to In Progress, ensuring the column remains empty
+            for non-Pending statuses)
+          * ../seed-data/cases/x_[scope]_case_demo_*.xml (the synthetic
+            demo case representing the Pending status - case_demo_04 per
+            AAP Section 0.4.1 - populates this field to exercise the
+            "field appears on form for Pending cases" UI behavior; the
+            other nine demo cases leave this field empty per the
+            non-mandatory dictionary configuration)
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>3</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Pending Reason</column_label>
+        <comments>Internal supporting Choice field set by flows/sub_flows/validate_pending_transition.xml when status transitions to Pending; cleared by business_rules/x_[scope]_clear_pending_reason_on_inprogress.xml on Pending-&gt;In Progress. Values: Awaiting Info, Awaiting Third Party, Other.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>pending_reason</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_[scope]_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c6fd3f91c5c2dc0ecf41923ef9bf75b5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_pending_reason</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
