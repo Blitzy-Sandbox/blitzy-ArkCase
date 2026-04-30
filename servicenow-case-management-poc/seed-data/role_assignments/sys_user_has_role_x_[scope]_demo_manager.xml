@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the synthetic role assignment
+    that grants the scoped role `x_[scope]_case_manager` to the synthetic demo
+    user `x_[scope]_demo_manager`. This is one of exactly THREE role-assignment
+    records in the case-management POC scoped application (the others grant
+    the agent and viewer roles to their respective demo personas — see
+    sys_user_has_role_x_[scope]_demo_agent.xml and
+    sys_user_has_role_x_[scope]_demo_viewer.xml in this same directory).
+
+    Persona role activated by this grant (per AAP Section 0.5.6 ACL Matrix):
+      Once the Update Set commits, the demo manager user holds the
+      x_[scope]_case_manager role and therefore receives:
+        - x_[scope]_case        Create / Read All / Write All / Delete
+        - x_[scope]_case_task   Create / Read All / Write All / Delete
+        - x_[scope]_case_party  Create / Read All / Write All / Delete
+      Unlike the case_agent persona, the manager's read/write scope is NOT
+      restricted to "Assigned only" — the manager has unconditional full
+      access on every row in the three custom tables regardless of
+      assigned_agent / assigned_group, and is the only role permitted to
+      Delete records on these tables. Per AAP Section 0.5.5 (State-Machine
+      Transition Map), the manager is also the SOLE role authorized to
+      perform the Resolved -> Closed transition; the
+      validate_closed_transition subflow enforces this gate via
+      gs.getUser().hasRole('x_[scope]_case_manager') and the role grant
+      authored here is what makes the demo manager pass that check.
+
+    Validation Gate 2 dependency (AAP Section 0.7.3):
+      Per the Workflow gate's pass condition, all state transitions MUST
+      be enforced for both case types — including the manager-only
+      Resolved -> Closed transition. The demo cases at Resolved status
+      (cases 05 General Inquiry, 09 Complaint per the seed data) cannot
+      be moved to Closed during validation testing without a user holding
+      the x_[scope]_case_manager role. This file is therefore the
+      prerequisite that enables the operator to impersonate the demo
+      manager and exercise the terminal Closed transition. Without THIS
+      grant, no demo persona can close any case, and the Workflow gate's
+      Resolved -> Closed scenario fails for both case types.
+
+    Validation Gate 3 dependency (AAP Section 0.7.3):
+      Per the ACL gate's pass condition "case_manager has full access",
+      the operator impersonates the demo manager to verify create / read
+      / write / delete privileges on all three custom scoped tables, and
+      to verify write privileges on the field-level-protected fields
+      assigned_group and assigned_agent (governed by
+      ../../acl/x_[scope]_case_assigned_group_field_acl.xml and
+      ../../acl/x_[scope]_case_assigned_agent_field_acl.xml). Without
+      THIS role-assignment record, the demo manager holds no scoped role
+      at all — making Gate 3's verification inconclusive (a denied write
+      attempt could be due to no role grant rather than a properly
+      enforced ACL pattern). This file is therefore central to Gate 3 of
+      the seven-row validation framework.
+
+    Why this assignment record lives in the SCOPED Update Set even though
+    `sys_user_has_role` is a global OOB table:
+      The scoped Update Set's deliverable is fully self-contained: the
+      reviewer must be able to install the Update Set on a fresh PDI and
+      immediately exercise all seven validation gates. The three demo
+      personas (manager, agent, viewer) are required by Gate 2 (workflow
+      transitions including the manager-only Resolved -> Closed), Gate 3
+      (ACL role-based access), and Gate 6 (dashboard rendering with
+      synthetic data — the Manager View dashboard is targeted at this
+      persona). Tracking the role-assignment records inside the scoped
+      Update Set ensures they import together with the rest of the
+      application; the scope binding via <sys_scope> and <sys_package>
+      source attribute groups them with the scoped app even though their
+      parent table (sys_user_has_role) is global. No global-scope WRITES
+      are performed: only INSERTS into sys_user_has_role (a data table) —
+      the OOB sys_user_has_role dictionary, ACLs, and form layouts are
+      never modified.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the agent
+    prompt's eight authoring rules):
+
+      Rule 1 — Synthetic Only:
+        <user> resolves to `x_[scope]_demo_manager` — a fully synthetic
+        demo persona created by ../users/sys_user_x_[scope]_demo_manager.xml
+        with the unmistakably non-real first_name "Demo" and last_name
+        "Manager" and the synthetic email demo-manager@example.invalid
+        (RFC 2606 reserved-TLD). <role> resolves to `x_[scope]_case_manager`
+        — a brand-new scoped role defined by
+        ../../roles/sys_user_role_x_[scope]_case_manager.xml. Both sides
+        of this association are unmistakably non-real and live exclusively
+        inside the x_[scope] scope. NO real users (no admin, no system)
+        and NO OOB roles (no itil, no snc_internal, no
+        personalize_dictionary, no admin) are referenced.
+
+      Rule 2 — Zero Hardcoded sys_id Cross-References:
+        - The record's OWN <sys_id> below is THIS record's identity key
+          (acceptable per AAP rule). It is a deterministic 32-character
+          lowercase hex value (MD5 of the canonical
+          "x_[scope]_demo_manager:x_[scope]_case_manager" tuple) so the
+          Update Set engine resolves the same sys_id on every PDI,
+          guaranteeing idempotent re-imports during round-trip
+          verification. The same MD5-of-tuple algorithm is used by the
+          sibling sys_user_has_role_x_[scope]_demo_viewer.xml record for
+          consistency.
+        - The <user> reference resolves by display_value="x_[scope]_demo_manager"
+          — the Update Set engine looks up sys_user.user_name = "x_[scope]_demo_manager"
+          at apply time. The text-node value is the same lookup key (NOT
+          a hardcoded sys_id literal) per the project convention used by
+          every ACL <roles> field (e.g., ../../acl/x_[scope]_case_read_manager.xml
+          uses <roles>x_[scope]_case_manager</roles> as a name lookup,
+          not a sys_id literal).
+        - The <role> reference resolves by display_value="x_[scope]_case_manager"
+          — the Update Set engine looks up sys_user_role.name = "x_[scope]_case_manager"
+          at apply time. The text-node value is the same lookup key.
+        - The <sys_scope> and <sys_package> fields resolve by
+          display_value / source attribute lookup against the scoped
+          application's sys_scope record (../../app/sys_scope/x_[scope].xml,
+          where <source>x_[scope]</source>). The text-node value
+          "x_[scope]" is the scope's source key — the canonical project
+          convention used by every other scoped artifact in the Update
+          Set, including the sibling demo viewer role-assignment record.
+
+      Rule 3 — Scope Binding:
+        <sys_scope> binds this assignment record to the scoped application
+        whose source attribute is "x_[scope]" (defined in
+        ../../app/sys_scope/x_[scope].xml). The display_value attribute
+        is "Case Management" — the human-readable scoped-app name. The
+        <sys_package> follows the same pattern with the source attribute
+        pointing at the scope source name. Although sys_user_has_role is
+        a global OOB table, the SCOPED demo grant is tracked in the
+        scoped Update Set so the deliverable is fully self-contained.
+
+      Rule 4 — No Inheritance:
+        <inherited>false</inherited> (literal lowercase string "false").
+        Group-based role inheritance is NOT used in this POC; this is a
+        direct user-to-role grant. If <inherited>true</inherited> were
+        used, the platform would interpret this row as derivative of a
+        parent group's role grant, which would be inconsistent with the
+        canonical pattern. Critically, the demo manager is intentionally
+        NOT a member of x_[scope]_demo_team (only the demo agent is a
+        member — see ../groups/sys_user_group_x_[scope]_demo_team.xml),
+        so even if group-level role inheritance were permitted, the
+        manager would not inherit anything from the group. The manager's
+        full-access privilege is encoded entirely at the table-level ACL
+        via this direct grant — no group membership is required, keeping
+        the manager's privilege surface unconditional per AAP Section
+        0.5.6.
+
+      Rule 5 — Active State:
+        <state>active</state> (literal lowercase string "active"). The
+        role assignment is effective immediately upon Update Set commit.
+        Inactive states (requested, pending, expired) are workflow-
+        related and not used in the POC seeding flow.
+
+      Rule 6 — Idempotency Anchor:
+        The record's idempotent key is the (user, role) tuple
+        ("x_[scope]_demo_manager", "x_[scope]_case_manager"). The
+        companion seed script ../../scripts/seed_demo_data.js's
+        ensureRoleAssignment(DEMO.USERS.MANAGER, ROLES.MANAGER) helper
+        queries by both fields BEFORE inserting; the
+        action="INSERT_OR_UPDATE" attribute on the inner
+        <sys_user_has_role> element provides the equivalent idempotency
+        guarantee at Update Set commit time. These exact display_value
+        strings MUST match the corresponding values in
+        ../users/sys_user_x_[scope]_demo_manager.xml (<user_name> =
+        "x_[scope]_demo_manager") and
+        ../../roles/sys_user_role_x_[scope]_case_manager.xml (<name> =
+        "x_[scope]_case_manager") — verified at authoring time.
+
+      Rule 7 — Minimum Field Set:
+        ONLY the four content fields required by the agent prompt's
+        Mandatory Field Specification are populated: user, role,
+        inherited, state. Plus the standard ServiceNow housekeeping
+        (sys_class_name, sys_id, sys_scope, sys_package, sys_created_by,
+        sys_update_name). All additional sys_user_has_role columns
+        (granted_by, u_*, etc.) are auto-defaulted by the platform on
+        first import. This keeps the file small, avoids dependencies on
+        other global tables (no granted_by reference to another sys_user),
+        and makes the record resilient to ServiceNow release-version
+        drift across Yokohama / Zurich / Australia.
+
+      Rule 8 — Scoped Update Set XML Conventions:
+        Root element: <record_update table="sys_user_has_role">
+        Inner element: <sys_user_has_role action="INSERT_OR_UPDATE">
+        for idempotent re-import per AAP Section 0.7.1 round-trip-
+        verification.
+        UTF-8 encoding declared in XML prolog.
+        Boolean values lowercase: <inherited>false</inherited>.
+        Element ordering: alphabetical (matching the sibling
+        sys_user_has_role_x_[scope]_demo_viewer.xml record and every
+        other XML in the scoped Update Set).
+
+    Cross-dependencies (per AAP Section 0.5.2):
+
+      This grant DEPENDS ON (must be loaded BEFORE this record):
+        - ../../app/sys_app/x_[scope]_case_management.xml (scoped app)
+        - ../../app/sys_scope/x_[scope].xml (scope record - resolves
+          sys_scope and sys_package source="x_[scope]")
+        - ../users/sys_user_x_[scope]_demo_manager.xml (the demo manager
+          user — resolves <user> by user_name lookup)
+        - ../../roles/sys_user_role_x_[scope]_case_manager.xml (the
+          scoped role — resolves <role> by name lookup)
+
+      Records that DEPEND ON this grant (loaded AFTER this record):
+        - The 4 manager-targeted ACL records at
+          ../../acl/x_[scope]_case_create_manager.xml,
+          ../../acl/x_[scope]_case_read_manager.xml,
+          ../../acl/x_[scope]_case_write_manager.xml,
+          ../../acl/x_[scope]_case_delete_manager.xml (plus the mirror
+          ACL records for x_[scope]_case_task and x_[scope]_case_party)
+          — the manager's full CRUD privileges on all three scoped
+          tables are encoded in these ACLs and are activated for the
+          demo manager via this grant.
+        - The 2 field-level ACL records at
+          ../../acl/x_[scope]_case_assigned_group_field_acl.xml and
+          ../../acl/x_[scope]_case_assigned_agent_field_acl.xml — write
+          access to these sensitive assignment fields is restricted to
+          the case_manager role (and partially to the assigned
+          case_agent for the assigned_agent field). Without this grant,
+          the demo manager could not modify either field on any case.
+        - The validate_closed_transition subflow at
+          ../../flows/sub_flows/validate_closed_transition.xml — gates
+          the Resolved -> Closed transition behind
+          gs.getUser().hasRole('x_[scope]_case_manager'); without this
+          grant, the demo manager fails the role check and the demo
+          cases stuck at Resolved (cases 05, 09 per the seed data)
+          cannot be transitioned to Closed during validation testing.
+        - The set_closed_date business rule at
+          ../../business_rules/x_[scope]_set_closed_date.xml — auto-sets
+          closed_date = gs.nowDateTime() when the manager-driven
+          Resolved -> Closed transition is permitted by the subflow
+          above; this grant is the upstream prerequisite that allows
+          the BR to fire.
+        - Validation Gate 2 (Workflow) testing — the operator
+          impersonates the demo manager to verify the manager-only
+          Resolved -> Closed transition succeeds for both case types
+          (General Inquiry on case 05, Complaint on case 09).
+        - Validation Gate 3 (ACLs) testing — the operator impersonates
+          the demo manager to verify full CRUD on all three scoped
+          tables.
+        - Person-type demo party records at
+          ../parties/x_[scope]_case_party_demo_*.xml — some parties use
+          the demo manager as the `person` reference (per the seed-
+          script's party table: case 03 Requester party, case 08
+          Requester party). Although the person reference resolves
+          regardless of role grants, validation tests will involve
+          impersonating the manager to read/write these parties.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Sections 0.8.1 and 0.7.1:
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesConfig.java
+        Holds `application.roles` as List<String> bound from external
+        configuration via @ListValue("application.roles") and exposes
+        MERGE_APPLICATION_ROLES_OP = "application.~roles". Semantic
+        reference for ArkCase's role-list configuration model. ArkCase's
+        mechanism (config-driven `application.roles` list bound to user
+        -> role mappings via RolesPrivilegesService) is replaced in the
+        target by this OOB ServiceNow sys_user_has_role join-table row
+        authored fresh — there is no field-by-field mapping from
+        ArkCase's Java model to sys_user_has_role.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/
+        com/armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        Central CRUD / normalization service for ArkCase role / privilege
+        management. ArkCase normalizes role names by uppercasing,
+        replacing whitespace with underscores, replacing periods with
+        double-underscores, and prepending ROLE_PREFIX = "ROLE_". The
+        ServiceNow target replaces this normalization with the scope-
+        prefix convention (x_[scope]_); the ROLE_ prefix is intentionally
+        NOT used. Per AAP Section 0.7.1 ("API-compatibility preservation
+        is explicitly NOT required"), the ArkCase role-assignment
+        infrastructure (Spring service classes, REST controllers under
+        /api/v1/plugin/admin/... and /api/latest/plugin/admin/...) is
+        explicitly NOT replicated.
+
+    Validation hooks (per the agent prompt):
+      - XML well-formedness check using xmllint in its no-output mode
+        returns zero errors.
+      - The standard no-PII grep targeting common consumer first-name
+        and surname patterns plus consumer-email-domain TLD patterns
+        returns zero matches in the actual data fields of this record;
+        the synthetic identifiers used here (the demo persona user_name
+        and the scoped role name) do not include any PII tokens.
+      - The standard no-extra-fields grep targeting the granted_by
+        element name and the custom-prefix element name pattern returns
+        zero matches; neither the granted_by element nor any custom-
+        prefixed element is populated on this record.
+      - Cross-reference resolution: the display_value="x_[scope]_demo_manager"
+        value matches the <user_name>x_[scope]_demo_manager</user_name>
+        value in ../users/sys_user_x_[scope]_demo_manager.xml exactly;
+        the display_value="x_[scope]_case_manager" value matches the
+        <name>x_[scope]_case_manager</name> value in
+        ../../roles/sys_user_role_x_[scope]_case_manager.xml exactly.
+      - The literal `[scope]` placeholder is preserved verbatim per AAP
+        convention; the PDI auto-assigns the actual concrete scope id
+        at App Engine Studio creation time, and the Update-Set apply-
+        time substitution propagates consistently across all bracketed
+        placeholders in this artifact.
+-->
+<record_update table="sys_user_has_role">
+    <sys_user_has_role action="INSERT_OR_UPDATE">
+        <inherited>false</inherited>
+        <role display_value="x_[scope]_case_manager">x_[scope]_case_manager</role>
+        <state>active</state>
+        <sys_class_name>sys_user_has_role</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>c6ed64934879ee3ea435a2276bb5bf79</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_user_has_role_x_[scope]_demo_manager</sys_update_name>
+        <user display_value="x_[scope]_demo_manager">x_[scope]_demo_manager</user>
+    </sys_user_has_role>
+</record_update>
