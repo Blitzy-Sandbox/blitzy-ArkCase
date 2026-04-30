@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_report` row that
+    declares the "My Overdue Tasks" list report on the
+    `x_[scope]_case_task` custom table inside the scoped application
+    `x_[scope]`.
+
+    Per AAP Section 0.5.1 (File-by-File Transformation Plan) verbatim:
+        servicenow-case-management-poc/reports/x_[scope]_my_overdue_tasks.xml
+            CREATE  Source: -
+            Key Changes: "List report: due_date < javascript:gs.daysAgoStart(0)
+            AND status != Closed AND assigned_to = javascript:gs.getUserID()"
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning) verbatim:
+        Agent Workspace Dashboard widget inventory includes
+            "list widget for 'My overdue tasks'"
+
+    Per AAP Section 0.4.4 (User Interface Design) verbatim:
+        Agent Workspace Dashboard - "list widget for 'My overdue tasks'"
+
+    Per AAP Section 0.7.3 (Validation Framework) verbatim, this report is
+    one of the data sources for Gate 6 (Dashboards):
+        "Both dashboards render with synthetic data ... All widgets display
+         data; no broken report references"
+
+    Per AAP Section 0.3.1 (Exhaustively In Scope) verbatim:
+        servicenow-case-management-poc/reports/sys_report_x_[scope]_my_overdue_tasks.xml
+            "list of tasks where assigned_to = current user AND
+             due_date < Today AND status != Closed"
+
+    THIS FILE'S ROLE IN THE OVERALL POC
+    ===================================
+    This is the SOLE report among the eight `sys_report` records that
+    queries `x_[scope]_case_task`; the other seven all query
+    `x_[scope]_case`. The report is consumed by the Agent Workspace
+    Dashboard (../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml)
+    as a list widget. When rendered, each viewing user sees ONLY their
+    own overdue tasks (per-viewer result-set semantics) - the dynamic
+    `javascript:gs.getUserID()` substitution at evaluation time
+    eliminates any need for hardcoded sys_user references.
+
+    The "overdue" determination uses `javascript:gs.daysAgoStart(0)`,
+    which evaluates to midnight (00:00:00) of "today" in the system
+    timezone. Tasks with `due_date` strictly less than today's midnight
+    are deemed overdue; tasks due "today" are NOT yet overdue under
+    this rule. This semantic matches the AAP-verbatim rule
+    (`due_date < javascript:gs.daysAgoStart(0)`) and intentionally
+    favors the conservative interpretation - a task due at 5pm today
+    will not be flagged overdue until tomorrow's midnight rolls over.
+
+    SEMANTIC SOURCE-SIDE ANCHOR (READ-ONLY, NOT BYTE-FOR-BYTE PORTED)
+    =================================================================
+    ArkCase's task model is at
+    acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+    com/armedia/acm/plugins/task/model/AcmTask.java. The relevant
+    fields for THIS report are (lines numbered against the source):
+
+      - line 70-71:
+            @NotNull
+            private Date dueDate;
+        ArkCase enforced not-null on the `dueDate` Bean Validation
+        annotation. The ServiceNow target preserves this constraint
+        via the Mandatory dictionary flag on `due_date` (defined in
+        ../dictionary/x_[scope]_case_task_due_date.xml).
+
+      - line 75:
+            private String assignee;
+        ArkCase tracked the task assignee as a String field (typically
+        an LDAP user-name). The ServiceNow target replaces this with a
+        Reference field `assigned_to` -> sys_user (defined in
+        ../dictionary/x_[scope]_case_task_assigned_to.xml). The current
+        viewer is matched against this reference via
+        `javascript:gs.getUserID()`, which returns the viewer's
+        sys_user.sys_id, eliminating the need for any string-matching
+        on user-name.
+
+      - line 81:
+            private String status;
+        ArkCase carried task status as a free-form String. The
+        ServiceNow target normalizes this to a Choice field with
+        exactly three values per AAP Section 0.5.7: "Open",
+        "In Progress", "Closed" (defined in
+        ../choices/sys_choice_case_task_status.xml). The encoded-query
+        clause `status!=Closed` matches the Choice label byte-for-byte
+        in Title Case.
+
+      - line 68:
+            @Size(min = 1)
+            private String title;
+        ArkCase's task `title` (Bean Validated @Size(min=1)) maps to
+        the ServiceNow target's `subject` field per AAP Section 0.5.7
+        (which lists `subject` as String(255) Mandatory on the task
+        table). The report column shows the task subject as the first
+        column for readability.
+
+      - parent linkage:
+            attachedToObjectType, attachedToObjectId
+        ArkCase used a polymorphic owner-reference pattern with two
+        fields (string type + numeric id). The ServiceNow target
+        replaces this with a single typed Reference field `case` ->
+        x_[scope]_case (defined in ../dictionary/x_[scope]_case_task_case.xml),
+        which renders in list view as the case `number` (CASE0000001
+        format) per AAP Section 0.7.4 (case display column = `number`).
+
+    DESIGN DECISIONS LOCKED IN BY THIS FILE
+    =======================================
+      - Aggregation discipline (AAP Section 0.5.1, this report's row):
+        type = list. Per agent-prompt Rule 5, list reports leave
+        <aggregate/>, <aggregation_source/>, <group_by/> empty. The
+        rendered output is one row per matching record (NOT a count
+        or grouped tally).
+
+      - Field-list discipline (agent-prompt Rule 6 verbatim):
+        <field_list>subject,case,due_date,status</field_list>. Four
+        columns, comma-separated, no spaces, in display order. The
+        choice of NOT including `type` or `assigned_to` is intentional:
+        - `type` is not required by the agent prompt; including it
+          would add a column without operational value (the agent
+          already knows their task workload type from context).
+        - `assigned_to` is constant across all rows in this report
+          (it is always the current viewer by virtue of the filter),
+          so including it would be redundant and waste horizontal
+          screen real-estate.
+        - `priority` does NOT exist on x_[scope]_case_task per AAP
+          Section 0.5.7 (priority is a case-only field); attempting
+          to reference it would produce a broken column.
+
+      - Filter discipline (agent-prompt Rule 4 verbatim):
+            assigned_to=javascript:gs.getUserID()
+            ^due_date<javascript:gs.daysAgoStart(0)
+            ^status!=Closed
+        Three encoded-query clauses, AND-joined by `^`. The `<`
+        operator MUST be XML-escaped to `&lt;` in the serialized
+        XML; failure to do so breaks Update Set XML deserialization
+        and the "fresh PDI re-import" validation gate (AAP Section
+        0.7.3 Gate 7) will produce a preview error.
+
+      - Per-viewer semantics: the report is identical regardless of
+        which user runs it; the platform's encoded-query parser
+        substitutes `gs.getUserID()` at evaluation time, so each
+        viewer sees only their own overdue tasks. This is the
+        ServiceNow-native equivalent of a "personal queue" view
+        without requiring per-user report duplication.
+
+      - Date-window semantics: `gs.daysAgoStart(0)` returns midnight
+        (00:00:00) of "today". The cutoff is strict less-than (`<`),
+        not less-than-or-equal (`<=`). A task with `due_date` set to
+        any time today is NOT yet overdue. A task with `due_date`
+        set to yesterday at any time IS overdue. This conservative
+        interpretation matches the AAP-specified semantics verbatim
+        and avoids false-positive overdue flags during the day a
+        task is due.
+
+      - Scope binding: <sys_scope>x_[scope]</sys_scope> and
+        <sys_package source="x_[scope]">x_[scope]</sys_package>
+        bind THIS record to the same scoped-app row that the parent
+        sys_app record (../app/sys_app/x_[scope]_case_management.xml)
+        publishes. Cross-file consistency: the sibling sibling reports
+        (e.g., x_[scope]_avg_time_to_close.xml) use the identical
+        scope-reference values, ensuring all eight reports resolve
+        to the same sys_app row at preview time. Reference-by-name
+        not reference-by-sys_id per AAP Section 0.7.2 (no hardcoded
+        sys_ids constraint).
+
+      - <sys_id> determinism: the value
+        d9121344dff6c38d1db560bb7562f6d6 is the lowercase MD5 of the
+        canonical identifier "sys_report.x_[scope]_my_overdue_tasks".
+        The MD5 input is the canonical record identifier
+        <sys_class_name>.<name>, ensuring re-running this build with
+        identical inputs produces an identical sys_id. This stability
+        is REQUIRED because the Agent Workspace dashboard
+        (../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml)
+        references THIS report by name; if the sys_id were
+        non-deterministic, two consecutive Update Set imports could
+        produce divergent sys_ids on the same logical record,
+        breaking the dashboard widget binding.
+
+    CROSS-DEPENDENCY GRAPH
+    ======================
+    DEPENDS ON (must load earlier in the Update Set):
+      - ../app/sys_app/x_[scope]_case_management.xml
+      - ../app/sys_scope/x_[scope].xml
+      - ../tables/x_[scope]_case_task.xml             (parent table)
+      - ../tables/x_[scope]_case.xml                  (referenced via `case` column)
+      - ../dictionary/x_[scope]_case_task_subject.xml
+      - ../dictionary/x_[scope]_case_task_case.xml
+      - ../dictionary/x_[scope]_case_task_due_date.xml
+      - ../dictionary/x_[scope]_case_task_status.xml
+      - ../dictionary/x_[scope]_case_task_assigned_to.xml
+      - ../choices/sys_choice_case_task_status.xml    (defines `Closed` value)
+
+    REFERENCED BY (must load later in the Update Set):
+      - ../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml
+        References THIS report by `<name>x_[scope]_my_overdue_tasks</name>`,
+        NOT by sys_id, so a fresh-PDI re-import correctly resolves the
+        widget binding to whatever sys_id the platform assigns at import
+        time (or, in our deterministic case, to the MD5-derived sys_id
+        above).
+
+    SEED-DATA DEPENDENCY (Validation Gate 6 pass condition):
+      - ../seed-data/users/sys_user_x_[scope]_demo_agent.xml must exist
+        so that gs.getUserID() resolves to a real sys_user when the
+        dashboard is run by the demo agent.
+      - ../seed-data/tasks/x_[scope]_case_task_demo_*.xml must include
+        at least one task where:
+          assigned_to = demo_agent (resolved by user_name lookup)
+          due_date    = a date in the past (e.g., gs.daysAgoStart(7))
+          status      = Open OR In Progress (NOT Closed)
+        Without such a seed task, this report returns zero rows when
+        rendered on the Agent Workspace dashboard, which would fail
+        the "All widgets display data" criterion of Validation Gate 6
+        (AAP Section 0.7.3) - even though the report DEFINITION itself
+        is correct.
+
+    UPDATE-SET ORDERING
+    ===================
+    Per AAP Section 0.5.2 (Cross-File Dependencies):
+      - AFTER tables, dictionary, choices.
+      - AFTER seed-data so that running the report yields non-empty
+        results during validation.
+      - BEFORE the Agent Workspace dashboard so that dashboard
+        widget binding resolves.
+
+    AUTHORING-RULES COMPLIANCE
+    ==========================
+      - AAP Section 0.7.2 verbatim:
+          "No-hardcoded-sys_id constraint. Anywhere - flows, ACL
+           conditions, scripts, seed data, UI Policies, UI Actions,
+           Business Rules. Every cross-reference is resolved by
+           GlideRecord lookup against a stable human-readable key
+           (name, user_name, number, role_label)."
+        This file: <sys_scope> and <sys_package> resolve by scope
+        name; <sys_id> is THIS record's own primary key (not a
+        hardcoded reference to another record). The `assigned_to`
+        comparison uses gs.getUserID() (dynamic), not a literal
+        sys_user.sys_id. All compliant.
+
+      - AAP Section 0.7.2 verbatim:
+          "No-PII constraint. Synthetic data only."
+        This file: report definition contains no PII; the report
+        merely SELECTS rows from a table. Whatever PII or non-PII
+        data is in those rows is the seed-data agent's responsibility
+        to keep synthetic. The report definition is PII-free.
+
+      - AAP Section 0.7.2 verbatim:
+          "Scope-namespace exclusivity: every artifact ... must live
+           in the auto-assigned `x_[scope]` namespace; zero global-
+           scope writes are permitted."
+        This file: <name> is `x_[scope]_my_overdue_tasks`; <table>
+        is `x_[scope]_case_task`; <sys_scope> and <sys_package> bind
+        to the scoped app. Zero global-scope writes.
+
+      - AAP Section 0.7.4 verbatim:
+          "Auto-numbering format: the case `number` field MUST use
+           format `CASE0000001` (7-digit zero-padded) and be Read-only."
+        This file: column 2 (`case`) renders the parent case's display
+        column, which IS `number` (CASE0000001 format) per the
+        x_[scope]_case auto-numbering definition in
+        ../numbers/sys_number_x_[scope]_case.xml.
+
+    VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
+    ====================================================
+    [x] File path: servicenow-case-management-poc/reports/x_[scope]_my_overdue_tasks.xml
+    [x] Starts with <?xml version="1.0" encoding="UTF-8"?>
+    [x] Root: <record_update table="sys_report">
+    [x] Inner: <sys_report action="INSERT_OR_UPDATE">
+    [x] <name> = x_[scope]_my_overdue_tasks
+    [x] <title> = My Overdue Tasks
+    [x] <table> = x_[scope]_case_task (TASK table, not case table)
+    [x] <type> = list
+    [x] <filter> exactly assigned_to=javascript:gs.getUserID()^due_date&lt;javascript:gs.daysAgoStart(0)^status!=Closed
+    [x] <field_list> exactly subject,case,due_date,status (no spaces, this order)
+    [x] <group_by/> empty
+    [x] <aggregate/> empty
+    [x] <aggregation_source/> empty
+    [x] <chart_size> = medium
+    [x] <is_real_time> = false
+    [x] <sys_class_name> = sys_report
+    [x] <sys_scope> and <sys_package> reference scoped app by name/source
+    [x] <sys_update_name> = sys_report_x_[scope]_my_overdue_tasks
+    [x] <sys_name> = My Overdue Tasks
+    [x] <sys_policy/> empty
+    [x] No XML parsing errors (especially around the &lt; escape)
+    [x] No PII in report definition
+    [x] No hardcoded sys_ids except own primary key
+    [x] No hardcoded user IDs (uses javascript:gs.getUserID())
+    [x] No hardcoded date literals (uses javascript:gs.daysAgoStart(0))
+    [x] Filter uses Closed literally (Title Case match with sys_choice_case_task_status)
+    [x] All x_[scope]_ placeholders preserved literally
+    [x] 4-space indentation
+-->
+<record_update table="sys_report">
+    <sys_report action="INSERT_OR_UPDATE">
+        <aggregate/>
+        <aggregation_source/>
+        <chart_size>medium</chart_size>
+        <description>Agent Workspace dashboard list-widget data source. Returns rows from x_[scope]_case_task where assigned_to is the current viewer, due_date is strictly before today's midnight (i.e., overdue), and status is NOT Closed. Per-viewer semantics via javascript:gs.getUserID(); date cutoff via javascript:gs.daysAgoStart(0). Columns: subject, case (renders as parent case number), due_date, status. No external BI engine; uses native GlideAggregate. The lone task-table report among eight; all seven siblings query x_[scope]_case.</description>
+        <field_list>subject,case,due_date,status</field_list>
+        <filter>assigned_to=javascript:gs.getUserID()^due_date&lt;javascript:gs.daysAgoStart(0)^status!=Closed</filter>
+        <format/>
+        <group_by/>
+        <is_real_time>false</is_real_time>
+        <is_scheduled>false</is_scheduled>
+        <name>x_[scope]_my_overdue_tasks</name>
+        <roles/>
+        <sys_class_name>sys_report</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d9121344dff6c38d1db560bb7562f6d6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>My Overdue Tasks</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_report_x_[scope]_my_overdue_tasks</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_[scope]_case_task</table>
+        <title>My Overdue Tasks</title>
+        <type>list</type>
+        <user/>
+    </sys_report>
+</record_update>
