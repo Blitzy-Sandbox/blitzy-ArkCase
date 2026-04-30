@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the TWO `sys_choice` rows that
+    enumerate the legal values of the `type` Choice field on the
+    `x_[scope]_case` custom table inside the scoped application
+    `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field    Type     Constraints
+        type     Choice   General Inquiry, Complaint - extensible
+
+    The values authored here are the AAP-mandated CLOSED enumeration for
+    THIS POC build - exactly two records, no more and no fewer. The AAP
+    Section 0.5.7 "extensible" note documents that future case types CAN
+    be added in a subsequent build (e.g., Service Request, Audit,
+    Investigation), but per the MINIMAL CHANGE CLAUSE in AAP Section 0.7.2
+    no additional values are authored here without explicit AAP
+    authorization, since each new case type would require:
+        (a) a new `sys_choice` row in this file
+        (b) a new Flow Designer flow in ../flows/ filtered by the new type
+            (per AAP Section 0.4.3 Design Pattern: "two Flow Designer flows,
+            one per case type")
+        (c) updates to seed data, reports, and the portal submission widget
+    Adding a third value here without parts (b) and (c) would leave the new
+    type without a state-machine flow, breaking the AAP Section 0.7.3
+    workflow validation gate.
+
+    THIS CHOICE LIST IS THE DRIVER OF THE AAP'S MOST ARCHITECTURALLY
+    SIGNIFICANT DESIGN PATTERN: two Flow Designer flows, one per case
+    type. Per AAP Section 0.5.5 (state-machine), the trigger filter on
+    each flow uses the EXACT label values declared below. If a label
+    here changes, the flows MUST change too:
+        ../flows/general_inquiry_state_machine.xml
+            OnUpdate trigger filtered by `type = General Inquiry`
+        ../flows/complaint_state_machine.xml
+            OnUpdate trigger filtered by `type = Complaint`
+
+    Per AAP Sections 0.5.5, 0.5.2, and 0.4.1, the labels declared here are
+    additionally read by:
+
+      The parent dictionary entry that declares this field as Choice:
+        ../dictionary/x_[scope]_case_type.xml
+            (mandatory=true, choice=3 means "Choice list - dropdown only")
+
+      The Manager View dashboard's "All cases by type" donut chart:
+        ../reports/x_[scope]_all_cases_by_type.xml
+            (donut grouped by type; with two values, two slices)
+
+      The Experience Portal submission page (per AAP Section 0.4.4:
+      "Page 1 - Case Submission: a simple form with five inputs (subject,
+      type, description, requester_name, requester_email)") - anonymous
+      requesters select one of these two case types via dropdown:
+        ../portal/widgets/sp_widget_x_[scope]_case_submission_widget.xml
+        ../portal/pages/sp_page_x_[scope]_case_submit.xml
+        ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+            (the scripted REST endpoint validates the inbound payload's
+            `type` value against this Choice list before insert)
+
+      The synthetic demo cases satisfying AAP Section 0.4.1 minimum-data
+      threshold (each demo case picks one of these two values, with at
+      least 4 General Inquiry cases and 4 Complaint cases distributed
+      across the six statuses):
+        ../seed-data/cases/x_[scope]_case_demo_01.xml ... _demo_10.xml
+            (per AAP Section 0.4.1: demo_01..06 are General Inquiry across
+            all six statuses; demo_07..10 are Complaint across the four
+            primary statuses)
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 134-135:
+            @Column(name = "cm_case_type")
+            private String caseType;
+        ArkCase's `caseType` was a free-form `String` JPA column with NO
+        platform-level enumeration check. Any caller could assign any
+        arbitrary string. The legal values were not documented in code -
+        ArkCase's actual implementations focused on FOIA-specific case
+        types (e.g., FOIA Request, Privacy Request) that are explicitly
+        OUT OF SCOPE per AAP Section 0.3.2. The ServiceNow target FIXES
+        this by declaring a controlled vocabulary of EXACTLY two labels
+        here, enforced at platform-validation time through the parent
+        dictionary entry's `<choice>3</choice>` setting in
+        ../dictionary/x_[scope]_case_type.xml.
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFileConstants.java does
+        NOT declare a case-type enumeration; it only declares OBJECT_TYPE,
+        EVENT_TYPE_*, and queue-action constants. The case-type enumeration
+        was therefore implicit / undocumented in ArkCase - the target
+        FIXES that defect by declaring the two values here explicitly.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - EXACTLY two records: no fewer, no more. Per AAP Section 0.5.7
+        verbatim. The two records below are the COMPLETE enumeration
+        for this POC build. The "extensible" note is informational only
+        and does NOT authorize adding values in this build.
+      - Title Case labels: `General Inquiry`, `Complaint`. NOT uppercase
+        (ArkCase legacy convention), NOT lowercase, NOT camelCase. The
+        agent prompt's "Most common error point" warning specifically
+        calls out: `General Inquiry` is TWO words separated by a SINGLE
+        ASCII space - NOT `GeneralInquiry`, NOT `General-Inquiry`, NOT
+        `general inquiry`, NOT `General  Inquiry` (double space).
+      - Label = Value pattern: each `<value>` matches its sibling
+        `<label>` byte-for-byte. The stored value IS the human-readable
+        label - no integer codes, no enum ordinals, no separate
+        machine-key. This matches the pattern used by sibling Choice
+        lists in this app (sys_choice_case_status, sys_choice_case_task_status,
+        sys_choice_case_priority, sys_choice_case_pending_reason,
+        sys_choice_case_task_type, sys_choice_case_party_party_type) and
+        is essential for the Flow Designer trigger filter equality check
+        (`current.type == 'General Inquiry'`) to work without translation.
+      - Sequence ordering matches the AAP Section 0.5.7 listing order
+        ("General Inquiry, Complaint - extensible") in increments of 100:
+            General Inquiry (100) -> Complaint (200)
+        This drives:
+            (a) the dropdown order on the case form
+            (b) the slice order on the Manager View dashboard donut chart
+                (../reports/x_[scope]_all_cases_by_type.xml)
+            (c) the dropdown order on the Experience Portal submission
+                widget
+            (d) the future extensibility - increment-of-100 spacing leaves
+                room for inserting new values (e.g., Service Request at 150)
+                without renumbering existing rows, though the AAP MINIMAL
+                CHANGE CLAUSE prohibits adding any in this POC.
+      - Both records are <inactive>false</inactive>: every value is
+        active and selectable in the dropdown. There are no deprecated
+        legacy values to filter out (this is a greenfield Choice list).
+      - No <dependent_value/>: case type is a TOP-LEVEL classification
+        whose legal values do NOT depend on `status`, `priority`, or any
+        other field. The case type is selected at submission time and
+        determines which Flow Designer flow handles the lifecycle, but
+        there is no field whose dropdown options cascade from the type
+        value at the form-rendering level.
+      - No <hint/>: the labels are self-documenting (General Inquiry and
+        Complaint are universally understood case-management terms). The
+        agent prompt explicitly suppresses helper text per the POC scope.
+      - No default value at this Choice level: per the parent dictionary
+        entry ../dictionary/x_[scope]_case_type.xml which has an empty
+        <default_value/>, the user MUST explicitly pick one of these two
+        values. Defaulting to either would skew dashboard analytics and
+        bias user behavior - both internal users on the form and anonymous
+        external requesters on the portal must make a deliberate choice.
+      - Scope-namespace exclusivity: every record's `<sys_scope>` and
+        `<sys_package>` resolve into the `x_[scope]_case_management`
+        scoped application by `source` attribute lookup. NO global-scope
+        writes - the OOB tables sys_user, sys_user_group, sys_user_role,
+        core_company, task, incident, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. Each
+        record's `<sys_id>` element value is THIS record's own
+        deterministic primary key - computed as MD5 of the canonical
+        identifier `x_[scope]_case.type.<Value>` so that re-generation
+        of this XML yields byte-identical output (no random UUIDs). The
+        sys_id is NOT a reference to any other record. The MD5 inputs
+        are documented adjacent to each record below for full traceability.
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time, which the import process resolves into the final
+        scope namespace.
+      - English language only: `<language>en</language>` on every record
+        per the POC scope. The platform supports localization via
+        additional sys_choice records keyed by `language`, but no
+        non-English locales are in scope.
+      - `<sys_domain>global</sys_domain>` on every record: domain
+        separation is not used by this scoped application.
+      - No PII: the labels are categorical classification terms only;
+        no real names, email addresses, or organizational identifiers
+        are derived from or stored in these records.
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD SET MUST LOAD AFTER:
+        - ../app/sys_app/x_[scope]_case_management.xml (scoped application)
+        - ../app/sys_scope/x_[scope].xml (scope record)
+        - ../tables/x_[scope]_case.xml (parent table; type field's host)
+        - ../dictionary/x_[scope]_case_type.xml (parent dictionary entry;
+          declares the column shape, choice=3, mandatory=true. Without
+          this entry the sys_choice records below have no column to
+          attach to.)
+
+      THIS RECORD SET MUST LOAD BEFORE:
+        - ../flows/general_inquiry_state_machine.xml
+            (OnUpdate trigger filtered by `type = General Inquiry`)
+        - ../flows/complaint_state_machine.xml
+            (OnUpdate trigger filtered by `type = Complaint`)
+        - ../reports/x_[scope]_all_cases_by_type.xml
+            (donut chart grouped by type - two slices)
+        - ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+            (anonymous portal submission validates inbound `type` against
+            this Choice list before insert)
+        - ../portal/widgets/sp_widget_x_[scope]_case_submission_widget.xml
+            (the portal submission widget displays a dropdown of these
+            choices to anonymous external requesters)
+        - ../portal/pages/sp_page_x_[scope]_case_submit.xml
+            (the page that hosts the submission widget)
+        - ../seed-data/cases/x_[scope]_case_demo_*.xml
+            (demo cases set this field; values must match the labels here
+            byte-for-byte for the GlideRecord seed lookups by `number` to
+            populate the type field correctly)
+
+      Loading order is enforced by the alphabetical Update Set preview
+      ordering plus the record-by-record dependency-resolution pass.
+
+    The MD5 input for each record's <sys_id> is the canonical identifier
+    <table>.<element>.<value>:
+        MD5("x_[scope]_case.type.General Inquiry") = 3e7609e334c65bf732756bc25d9f21c2
+        MD5("x_[scope]_case.type.Complaint")       = 82d6b899a325f343095766a013d6255e
+    These hashes are recomputable from the AAP-mandated canonical input,
+    guaranteeing deterministic XML re-generation across all build runs.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>type</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>General Inquiry</label>
+    <language>en</language>
+    <name>x_[scope]_case</name>
+    <sequence>100</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>3e7609e334c65bf732756bc25d9f21c2</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>General Inquiry</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>type</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Complaint</label>
+    <language>en</language>
+    <name>x_[scope]_case</name>
+    <sequence>200</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>82d6b899a325f343095766a013d6255e</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Complaint</value>
+</sys_choice>
+</unload>
