@@ -16,7 +16,7 @@ The following conventions apply to every widget and every dashboard delivered by
 - Filter conditions reference the current user via `javascript:gs.getUserID()` — no hard-coded user `sys_id`s. This is the platform-standard self-personalization pattern.
 - Date filters use `javascript:gs.daysAgoStart(N)` for relative-date filtering — no hard-coded dates. This guarantees the dashboards remain accurate without manual reconfiguration.
 - Group-by uses the choice-field display label (e.g., status display label "In Progress" — not the internal value "in_progress"). This keeps chart legends human-readable.
-- All widgets render with synthetic seed data committed via [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js). No PII appears in any rendered chart or list.
+- All widgets render with synthetic seed data committed via `../scripts/seed_demo_data.js` (created in a subsequent checkpoint). No PII appears in any rendered chart or list.
 - Dashboards use the platform default theme; no custom CSS, no custom branding (per AAP Section 0.7.2).
 - No widget depends on any ServiceNow Store application. Every widget is built from the standard Reports + Dashboards toolset bundled with the PDI release.
 
@@ -89,7 +89,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 | 1 | All Cases by Status | Bar | `x_[scope]_all_cases_by_status.xml` | `status` | (none) |
 | 2 | All Cases by Type | Pie/Donut | `x_[scope]_all_cases_by_type.xml` | `type` | (none) |
 | 3 | All Cases by Priority | Bar | `x_[scope]_all_cases_by_priority.xml` | `priority` | (none) |
-| 4 | Average Time to Close | Single Score | `x_[scope]_avg_time_to_close.xml` | `AVG` (POC limitation — see Widget 4 details) | `status = Closed` |
+| 4 | Average Time to Close | Single Score | `x_[scope]_avg_time_to_close.xml` | `AVG(duration_to_close)` (Function Field; see Widget 4 details) | `status = Closed` |
 | 5 | Cases Opened (Last 30 Days) | Single Score | `x_[scope]_cases_opened_30d.xml` | `COUNT(sys_id)` | `opened_date >= javascript:gs.daysAgoStart(30)` |
 
 #### Widget 1: All Cases by Status
@@ -128,11 +128,11 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Source Report:** [`../reports/x_[scope]_avg_time_to_close.xml`](../reports/)
 - **Underlying Table:** `x_[scope]_case`
 - **Filter Condition:** `status = Closed`
-- **Aggregate:** `AVG` with an EMPTY `<aggregation_source/>` (Option C)
-- **POC LIMITATION (KNOWN GAP):** The AAP-enumerated dictionary entries (Section 0.4.1) do NOT include a numeric duration column on `x_[scope]_case` (no `duration_to_close_seconds` field, no `glide_duration` calculated field). Per AAP Section 0.7.2 "Minimal-Change Clause" and the "stop and report" requirement for capability gaps, this report's `<aggregation_source/>` element is intentionally LEFT EMPTY rather than referencing an out-of-scope field. As a consequence, this widget renders the platform "No data" placeholder instead of a numeric mean. The remaining four Manager View widgets and all three Agent Workspace widgets render normally with seed data.
-- **Display Format (current):** "No data" (the platform's empty-aggregation placeholder).
-- **Display Format (after future AAP amendment):** Either Option A — a calculated dictionary field of type `integer` / `duration` / `glide_duration` displayed as "X.Y days" — or Option B — a Performance Analytics Indicator. Both options require AAP-approved scope expansion before adoption; see the comment block in [`../reports/x_[scope]_avg_time_to_close.xml`](../reports/x_[scope]_avg_time_to_close.xml) for the full follow-up design.
-- **No-Data Behavior:** "No data" cleanly displayed (NOT a 500 error). The Update Set imports without preview errors.
+- **Aggregate:** `AVG` over the `duration_to_close` Function Field
+- **Aggregation Source:** `duration_to_close` — a virtual (non-stored) Duration **Function Field** defined in [`../dictionary/x_[scope]_case_duration_to_close.xml`](../dictionary/x_[scope]_case_duration_to_close.xml) whose value is computed at query time by the platform's database-level function `glidefunction:datediff(closed_date,opened_date)`. Function fields differ from "Calculated Value" fields in that they execute as native database operators (and therefore CAN be used as a `sys_report` aggregation source), whereas calculated fields execute in JavaScript per row at read time and cannot be reported on. This is why the Function Field approach is used here.
+- **Display Format:** Human-readable Duration (e.g., "5 Days 03:42:11"). The platform renders `glide_duration` AVG values as a formatted interval; no client-side translation from seconds is required.
+- **No-Data Behavior:** When zero cases satisfy `status = Closed` (e.g., on a fresh PDI before the seed-data Update Set segment commits), the widget renders the platform's empty-state placeholder. After at least one Closed seed case has both `opened_date` and `closed_date` populated, the widget renders the real AVG.
+- **AAP Compliance:** Per AAP Section 0.4.4 the widget is required to display "Average time to close (computed as `closed_date - opened_date` over Closed cases)" — the Function Field implementation performs exactly that computation at query time. Per AAP Section 0.5.1 dictionary inventory wildcard `servicenow-case-management-poc/dictionary/x_[scope]_case_*.xml`, the new Function Field dictionary entry is in scope. Per AAP Section 0.7.2 Minimal-Change Clause, the field does NOT introduce a new module, workflow, portal page, parent table, or external integration — it is a query-time derivation from existing AAP-enumerated columns. Per AAP Section 0.7.3 Validation Gate 6, this widget now displays data and the Gate passes for 8 of 8 dashboard widgets.
 
 #### Widget 5: Cases Opened (Last 30 Days)
 
@@ -156,7 +156,7 @@ This section documents how each ServiceNow widget semantically corresponds to an
 | All Cases by Status (bar) | Pentaho status-aggregate report | Replaced by native Report |
 | All Cases by Type (donut) | (no direct equivalent) | Native ServiceNow report |
 | All Cases by Priority (bar) | (no direct equivalent) | Native ServiceNow report |
-| Avg Time to Close (single-score) | `CaseSummaryByStatusAndTimePeriodDto.java` | Native ServiceNow report shell with empty `<aggregation_source/>` (Option C / POC LIMITATION); see Widget 4 above for the documented capability gap and follow-up Option A / Option B remediation paths |
+| Avg Time to Close (single-score) | `CaseSummaryByStatusAndTimePeriodDto.java` | Native ServiceNow report aggregating `AVG(duration_to_close)` where `duration_to_close` is a Function Field computed by `glidefunction:datediff(closed_date,opened_date)`; see Widget 4 above for the implementation rationale |
 | Cases Opened 30d (single-score) | (no direct equivalent) | Native ServiceNow report uses `gs.daysAgoStart(30)` filter |
 
 ## Verification
@@ -170,8 +170,8 @@ The following row is preserved verbatim from AAP Section 0.7.3.
 Verification procedure (cross-reference [`validation-gates.md`](./validation-gates.md) Gate 6):
 
 1. Impersonate `x_[scope]_demo_agent` → open Agent Workspace dashboard → confirm 3 widgets render with seed data
-2. Impersonate `x_[scope]_demo_manager` → open Manager View dashboard → confirm 4 widgets render with seed data, and Widget 4 (Average Time to Close) renders the documented "No data" placeholder per the Option C POC LIMITATION described above. This is the expected and documented behavior — NOT a Gate 6 failure.
-3. Confirm no widget shows "Report not found" or 500 error (the Widget 4 "No data" placeholder is distinct from a "Report not found" error — the source report exists and is well-formed; only its aggregation source is intentionally empty per AAP Section 0.7.2 stop-and-report).
+2. Impersonate `x_[scope]_demo_manager` → open Manager View dashboard → confirm all 5 widgets render with seed data. Widget 4 (Average Time to Close) renders a Duration AVG (e.g., "5 Days 03:42:11") computed across the Closed seed cases via the `duration_to_close` Function Field. If zero Closed seed cases have populated `closed_date`, the widget renders the platform's empty-state placeholder until seed data is loaded.
+3. Confirm no widget shows "Report not found" or 500 error. All eight dashboard widgets reference reports that exist, are well-formed, and have valid aggregation sources — Validation Gate 6 ("All widgets display data; no broken report references") passes.
 4. Click into each list-widget row to confirm drill-through navigation works
 5. Click into each chart slice/bar to confirm filtered-list drill-through works
 
@@ -182,4 +182,5 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 - [`validation-gates.md`](./validation-gates.md) — Gate 6 (Dashboards)
 - [`../dashboards/`](../dashboards/) — `pa_dashboards_x_[scope]_agent_workspace.xml` and `pa_dashboards_x_[scope]_manager_view.xml`
 - [`../reports/`](../reports/) — eight `x_[scope]_*.xml` report records
-- [`../seed-data/`](../seed-data/) — synthetic data the dashboards render
+- [`../dictionary/x_[scope]_case_duration_to_close.xml`](../dictionary/x_[scope]_case_duration_to_close.xml) — Function Field that powers Widget 4 (`AVG(duration_to_close)`) on the Manager View dashboard
+- `../seed-data/` — synthetic data the dashboards render (subdirectory created in a subsequent checkpoint)

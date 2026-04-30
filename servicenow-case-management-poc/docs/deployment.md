@@ -12,7 +12,7 @@ The following prerequisites MUST hold before starting the export step. They alig
 
 - Source PDI is accessible and admin login succeeds at `[instance URL]`. If login fails, stop and report — do not proceed.
 - Validation Gates 1–6 have all passed on the source PDI (see [`validation-gates.md`](./validation-gates.md)).
-- All seed data has been committed via the seed script in [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
+- All seed data has been committed via the seed script in `../scripts/seed_demo_data.js` (created in a subsequent checkpoint) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
 - Both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
 - Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references.
 - Portal pages submit + lookup correctly on the source PDI: the submission page returns an auto-generated case number in `CASE0000001` format; the lookup page returns `status`/`subject`/`opened_date` for valid case numbers and the verbatim text `"No case found with that number."` for invalid ones.
@@ -50,7 +50,7 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
 
 ### Notes
 
-- The exported file MUST be the only Update Set XML in the [`../update-set/`](../update-set/) subdirectory. Do not include intermediate or partial exports — overwrite previous exports rather than versioning them in-place.
+- The exported file MUST be the only Update Set XML in the `../update-set/` subdirectory (created in a subsequent checkpoint). Do not include intermediate or partial exports — overwrite previous exports rather than versioning them in-place.
 - If the export downloads multiple files (this can happen when the Update Set is unusually large), the export operation has split the artifact. This is a hard failure for this POC because the AAP requires a **single** Update Set deliverable. Resolve by reducing the Update Set scope to only the scoped application and re-exporting.
 
 ## Step 2: Verify Update Set Integrity
@@ -138,7 +138,7 @@ Per AAP Section 0.7.2: "Provide the exported Update Set XML file path and the po
      - `x_[scope]_demo_manager` → `x_[scope]_case_manager`
      - `x_[scope]_demo_agent` → `x_[scope]_case_agent`
      - `x_[scope]_demo_viewer` → `x_[scope]_case_viewer`
-   - **Sample case number:** at least one case number from the seed data (e.g., the case generated in [Step 3](#step-3-confirm-deployed-state) sub-step 6, or a known seed case from [`../seed-data/cases/`](../seed-data/cases/)).
+   - **Sample case number:** at least one case number from the seed data (e.g., the case generated in [Step 3](#step-3-confirm-deployed-state) sub-step 6, or a known seed case from `../seed-data/cases/` — directory created in a subsequent checkpoint).
 
 This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifacts beyond what is enumerated in AAP Section 0.3.1 are produced; per AAP Section 0.7.2 (Minimal-Change Clause), no additional capabilities are added.
 
@@ -178,8 +178,8 @@ The following constraints apply throughout deployment. They derive from AAP Sect
 
 - [`validation-gates.md`](./validation-gates.md) — Gate 7 (Update Set) is what this document operationalizes; the Pre-Deployment Checklist references Gates 1–6 as prerequisites.
 - [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md) — manual procedure for the fresh-PDI re-import preview gate referenced by [Step 2](#step-2-verify-update-set-integrity).
-- [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) — idempotent server-side seed script used for post-commit data verification in [Step 3](#step-3-confirm-deployed-state) sub-step 11.
-- [`../update-set/`](../update-set/) — destination directory for the exported XML; only one file (`x_[scope]_case_management_update_set.xml`) lives here.
+- `../scripts/seed_demo_data.js` — idempotent server-side seed script used for post-commit data verification in [Step 3](#step-3-confirm-deployed-state) sub-step 11 (created in a subsequent checkpoint).
+- `../update-set/` — destination directory for the exported XML; only one file (`x_[scope]_case_management_update_set.xml`) lives here (created in a subsequent checkpoint).
 - [`../README.md`](../README.md) — overall POC overview with quick deployment summary; this file is the authoritative detailed walkthrough referenced from there.
 - [`./data-model.md`](./data-model.md) — schema reference for the 23 fields verified in [Step 1](#step-1-export-the-update-set) sub-step 3.
 - [`./state-machine.md`](./state-machine.md) — transition matrix and blocking-error messages exercised by the seed data in [Step 3](#step-3-confirm-deployed-state) sub-step 11.

@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `duration_to_close` Duration **function field** on the
+    `x_[scope]_case` custom table inside the scoped application `x_[scope]`.
+
+    This dictionary entry is the AAP-compliant fix for QA Checkpoint 4 finding
+    Issue #1 ("avg_time_to_close.xml empty <aggregation_source/> element —
+    widget cannot compute AVG, will display 'No data'"). It implements
+    Option A (function field) from the original report file's documented
+    remediation paths, scoped to a single dictionary entry that satisfies
+    AAP Section 0.4.4 (Manager View Dashboard Widget 4 specification:
+    "single-score widget for 'Average time to close' (computed as
+    closed_date - opened_date over Closed cases)") AND AAP Section 0.7.3
+    Validation Gate 6 ("All widgets display data; no broken report
+    references").
+
+    THIS FIELD'S ROLE IN THE OVERALL POC
+    ====================================
+    `duration_to_close` is a **ServiceNow Function Field**: a virtual
+    (non-stored) field whose value is computed at query time by the
+    platform's native database-level function `glidefunction:datediff`.
+    Function fields differ from "Calculated Value" fields in two
+    important ways:
+
+      1) Function fields are reportable. Calculated Value fields are
+         executed in JavaScript each time a row is read and cannot be
+         used as a report aggregation source (per ServiceNow community
+         guidance). Function fields, by contrast, push the computation
+         to the database query layer and can be used in reports just
+         like any other field — including as the `<aggregation_source>`
+         on a `sys_report` of `<aggregate>AVG</aggregate>`.
+
+      2) Function fields require no business rule, no Flow Designer
+         subflow, no seed-data hook, and no calculation script. They
+         re-evaluate themselves at every query against the row and
+         always reflect the current values of their input fields
+         (here, `opened_date` and `closed_date`).
+
+    The Manager View dashboard's "Average Time to Close" single-score
+    widget (../dashboards/pa_dashboards_x_[scope]_manager_view.xml
+    Widget 4) is powered by ../reports/x_[scope]_avg_time_to_close.xml,
+    whose `<aggregation_source>` element references THIS field
+    (`duration_to_close`). At report execution time the platform issues
+    a query equivalent to:
+
+        SELECT AVG(datediff(closed_date, opened_date))
+        FROM   x_[scope]_case
+        WHERE  status = 'Closed'
+
+    yielding a single Duration-typed average that the dashboard widget
+    renders as a human-readable interval (e.g., "5 days 03:42:11").
+
+    WHY OPTION A (FUNCTION FIELD) AND NOT OPTION C (EMPTY SOURCE)
+    =============================================================
+    The original CP4 implementation chose Option C: leave
+    `<aggregation_source/>` empty in the report XML and document the
+    gap as a "POC limitation". QA Checkpoint 4 flagged this as MAJOR
+    Issue #1 because it caused the widget to render the "No data"
+    placeholder, violating Validation Gate 6's "All widgets display
+    data" pass condition.
+
+    The Option C rationale invoked AAP Section 0.7.2 "Minimal-Change
+    Clause" + "stop and report" rule under the assumption that adding
+    a derived field would expand scope beyond the AAP-enumerated
+    schema. On closer reading, that assumption is incorrect:
+
+      - AAP Section 0.7.2 Minimal-Change Clause prohibits adding
+        "modules, workflows, portal pages, tables, or integrations
+        beyond the defined scope". A function field on an existing,
+        AAP-enumerated table is none of those: it is not a module,
+        not a workflow, not a portal page, not a new table, and not
+        an integration. It is a query-time derivation from existing
+        AAP-enumerated columns (`opened_date`, `closed_date`).
+
+      - AAP Section 0.5.1 dictionary inventory uses the wildcard
+        `servicenow-case-management-poc/dictionary/x_[scope]_case_*.xml`
+        ("every dictionary entry on the case table"), which permits
+        derived fields needed to satisfy other AAP requirements.
+
+      - AAP Section 0.4.4 explicitly requires the Manager View widget
+        to display "Average time to close (computed as
+        closed_date - opened_date over Closed cases)" — i.e., it
+        REQUIRES the computation to be performed and rendered. A
+        derived field that performs exactly that computation is the
+        AAP-mandated implementation, not a scope expansion.
+
+      - AAP Section 0.7.3 Validation Gate 6 demands that "All widgets
+        display data". An empty aggregation source produces a "No
+        data" placeholder, which fails the Gate.
+
+    Option A is therefore the AAP-compliant choice. This file
+    implements it with the minimum possible footprint: one dictionary
+    entry, no business rule, no script include, no seed-data
+    coupling, no flow change.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 168-173:
+            @Column(name = "cm_case_created", nullable = false,
+                    insertable = true, updatable = false)
+            @Temporal(TemporalType.TIMESTAMP)
+            private Date created;
+            @Column(name = "cm_case_closed")
+            @Temporal(TemporalType.TIMESTAMP)
+            private Date closed;
+        ArkCase tracked the case-creation timestamp (`created`) and the
+        case-closure timestamp (`closed`) on the same JPA entity. There
+        was no derived `duration` column on `acm_case_file`; Pentaho
+        SQL queries computed `TIMESTAMPDIFF(SECOND, cm_case_created,
+        cm_case_closed)` at report-render time. The ServiceNow target
+        replicates the same query-time-derivation pattern using the
+        platform-native `glidefunction:datediff` operator on the pair
+        (`opened_date`, `closed_date`) — preserving ArkCase's semantic
+        of "duration is computed from the timestamps, not stored
+        separately".
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseSummaryByStatusAndTime
+        PeriodDto.java aggregated cases by status across time periods
+        for Pentaho consumption. The function-field equivalent here is
+        consumed by ../reports/x_[scope]_avg_time_to_close.xml via
+        native ServiceNow GlideAggregate, replacing the external BI
+        engine per AAP Section 0.1.2.
+
+    FIELD NAMING (`duration_to_close`)
+    ==================================
+    The field name is `duration_to_close` (lowercase, snake_case),
+    NOT `duration_to_close_seconds`, `time_to_close`, or
+    `case_duration`:
+
+      - Lowercase snake_case matches every other field on the case
+        table (`opened_date`, `closed_date`, `assigned_group`,
+        `assigned_agent`, etc.) per AAP Section 0.5.7 Title Case
+        column-label convention.
+      - The suffix `_to_close` (rather than `_close`) reads
+        naturally as "duration TO close" — i.e., the elapsed time
+        until closure, paired symmetrically with the closure
+        timestamp `closed_date`.
+      - No `_seconds` suffix because the field is typed as
+        `glide_duration` (a Duration, not an Integer-of-seconds).
+        ServiceNow renders Duration values as human-readable
+        intervals (e.g., "3 Days 12:34:56") and aggregates them
+        natively in reports without requiring caller code to
+        translate seconds <-> days.
+
+    FUNCTION DEFINITION (`glidefunction:datediff(closed_date,opened_date)`)
+    =======================================================================
+    The ServiceNow function-field formula syntax is:
+        glidefunction:<function_name>(<arg1>,<arg2>,...)
+
+    For our use case:
+        glidefunction:datediff(closed_date,opened_date)
+
+    Argument order is significant. ServiceNow's `datediff` function
+    returns the duration `arg1 - arg2`, expecting the LATER timestamp
+    as the first argument and the EARLIER timestamp as the second
+    argument; this convention yields a positive duration when the
+    case has been closed (closed_date > opened_date). If the order
+    were reversed (`datediff(opened_date,closed_date)`), the result
+    would be negative for every Closed case and the AVG would be
+    meaningless. The current order is therefore canonical for the
+    "average time to close" semantic.
+
+    Behavior on non-Closed cases:
+      - If `closed_date` is empty (the case is still in Draft, Open,
+        In Progress, Pending, or Resolved status), the function
+        returns NULL.
+      - The report's `<filter>status=Closed</filter>` element ensures
+        only Closed cases participate in the AVG, so NULL durations
+        are filtered out at the query level — the AVG is computed
+        ONLY over the population of cases that have actually been
+        closed, which is the AAP-correct semantic.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_[scope]_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes. The function field operates only
+        on `x_[scope]_case` columns, never on out-of-the-box tables.
+      - Zero hardcoded cross-reference sys_ids: `<sys_scope>` and
+        `<sys_package>` resolve by scope source name (`x_[scope]`).
+        The `<sys_id>` text-node value is THIS record's own
+        deterministic primary key (MD5 of the canonical field
+        identifier `x_[scope]_case.duration_to_close` =
+        f08a56ae8a5263f0af629913c48ae173) and is NOT a reference to
+        any other record. The deterministic derivation matches the
+        sibling convention (closed_date sys_id =
+        25c60a42b3b9a76ae153979ec5e88edc, opened_date sys_id =
+        3e18b5498c00dfde143bbc84fced474c).
+      - The literal `[scope]` placeholder is preserved per AAP
+        convention (Section 0.7.2 "Scoped-namespace-only constraint");
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time.
+      - mandatory=false at the dictionary level. A function field
+        cannot be "mandatory" in the user-input sense because users
+        cannot type values into it; the platform computes the value
+        automatically from the input fields. The dictionary
+        attribute is set to false to allow rows where the input
+        fields (notably closed_date) are empty.
+      - read_only=true at the dictionary level. Function fields are
+        always read-only by definition: their value is derived from
+        other fields and cannot be overwritten directly. Setting
+        read_only=true is redundant with function_field=true but
+        explicit for clarity and consistency with the read-only
+        treatment of the input fields (`opened_date`, `closed_date`
+        — both read_only=true per their respective dictionary
+        entries).
+      - audit=false. A function field has no persistent value to
+        audit; the audit trail of the input fields (sys_updated_on
+        when opened_date or closed_date last changed) already
+        captures the lineage.
+      - active=true: the field is part of the live schema from
+        Update Set commit forward.
+      - display=false: the duration value is not surfaced on the
+        case form or list views. This matches AAP Section 0.7.4 —
+        the field exists solely to power the Manager View
+        dashboard's avg-time-to-close widget and is NOT exposed in
+        the standard internal-user form layout, the list view, or
+        the public portal lookup. (Setting display=false also
+        prevents accidental exposure of internal duration metrics
+        to external requesters via any future portal-widget that
+        might call `GlideRecord.next()` and iterate columns.)
+      - virtual=true: function fields are virtual (NOT stored in
+        the underlying database column). The platform computes the
+        value at query time from the input fields. Virtual fields
+        do NOT trigger insert/update business rules, do NOT
+        consume disk space on the case row, and do NOT participate
+        in record-level audit history.
+      - function_field=true: marks this dictionary entry as a
+        ServiceNow Function Field (NOT a Calculated Value field).
+        This is what makes the field reportable.
+      - function_definition=glidefunction:datediff(closed_date,opened_date):
+        the function-field formula, evaluated at query time on the
+        platform's database engine.
+      - max_length=40: standard ServiceNow ceiling for date/datetime/
+        duration fields. Duration values internally render as
+        `YYYY-MM-DD HH:mm:ss` glide_duration strings of at most
+        19 chars; 40 chars provides ample headroom.
+      - choice=0: free-form Duration output (no choice list).
+      - No reference target: this is a Duration field, not a
+        Reference field.
+      - text_index=false: Duration fields are not full-text-indexed.
+      - unique=false: cases legitimately share durations.
+      - calculation EMPTY: this is a FUNCTION FIELD, not a
+        CALCULATED VALUE field. The `<calculation>` element is for
+        the latter (a JavaScript `calculatedFieldValue(current)`
+        function). Per ServiceNow platform semantics, a single
+        dictionary entry uses EITHER `function_definition` OR
+        `calculation`, never both. We use `function_definition`
+        because only function fields are reportable.
+      - No PII: the field stores no rows of data and contains no
+        user identifiers, email addresses, or names.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_[scope]_case.xml (parent table — `<name>`
+            references the table by name)
+          * ../dictionary/x_[scope]_case_opened_date.xml (input
+            field — referenced in <function_definition>)
+          * ../dictionary/x_[scope]_case_closed_date.xml (input
+            field — referenced in <function_definition>)
+      - This record MUST load BEFORE:
+          * ../reports/x_[scope]_avg_time_to_close.xml (the report
+            references this field by element name in
+            <aggregation_source>; without this dictionary entry,
+            the report's aggregation source would not resolve and
+            the widget would render "No data")
+          * ../dashboards/pa_dashboards_x_[scope]_manager_view.xml
+            (the dashboard references the avg_time_to_close report
+            by name; once the report's aggregation source resolves,
+            the widget renders the Duration AVG)
+      - This record is INDEPENDENT of (does not depend on, and is
+        not depended on by) `../business_rules/`,
+        `../flows/sub_flows/`, `../script_includes/`, or any
+        ../seed-data record. The function field's value is computed
+        purely from the row's `opened_date` and `closed_date`
+        columns at query time.
+
+    DEPLOYMENT RE-VERIFICATION (POST-COMMIT)
+    ========================================
+    On a fresh PDI after Update Set commit:
+      1. `Reports > View / Run` -> open `Average Time to Close`.
+         Verify the single-score renders a Duration value
+         (e.g., "5 Days 03:42:11"), NOT the "No data" placeholder.
+      2. `Dashboards > Manager View`. Verify Widget 4 ("Average
+         Time to Close") renders the same Duration value as the
+         report standalone view.
+      3. With Closed-status seed data showing realistic
+         opened_date/closed_date pairs (e.g., demo case 06: opened
+         10 days ago, closed 3 days ago), the AVG should produce a
+         non-zero Duration. With both Closed demos populated, the
+         AVG is the arithmetic mean of the two case durations.
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Duration to Close</column_label>
+        <comments>Virtual Duration function field on x_[scope]_case computed at query time as glidefunction:datediff(closed_date,opened_date). Used by ../reports/x_[scope]_avg_time_to_close.xml as the aggregation_source for the Manager View dashboard's "Average Time to Close" single-score widget (AAP Section 0.4.4 Widget 4). Resolves QA Checkpoint 4 Issue #1: implements Option A (function field) so the widget renders an actual Duration AVG instead of the "No data" placeholder. Not stored on the row (virtual=true); not displayed on form/list (display=false); not auditable (audit=false). Read-only by definition for function fields.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>duration_to_close</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition>glidefunction:datediff(closed_date,opened_date)</function_definition>
+        <function_field>true</function_field>
+        <internal_type>glide_duration</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_[scope]_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>true</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f08a56ae8a5263f0af629913c48ae173</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_duration_to_close</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>true</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

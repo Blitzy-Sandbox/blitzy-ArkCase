@@ -107,7 +107,7 @@ The three "VERBATIM" rows in the table above MUST surface the EXACT error text o
 
 ## Subflow Specifications
 
-Each transition is encapsulated as a reusable subflow under [`../flows/sub_flows/`](../flows/sub_flows/). Subflows are called from both case-type flows (`general_inquiry_state_machine` and `complaint_state_machine`) so that the validation logic exists in exactly one place per transition.
+Each transition is encapsulated as a reusable subflow under `../flows/sub_flows/` (subdirectory created in a subsequent checkpoint). Subflows are called from both case-type flows (`general_inquiry_state_machine` and `complaint_state_machine`) so that the validation logic exists in exactly one place per transition.
 
 ### validate_open_transition
 
@@ -289,9 +289,9 @@ The following constraints are mandatory and derived from AAP Sections 0.7.1 and 
 - [`data-model.md`](./data-model.md) — schema reference for the fields used in transition guards (`status`, `assigned_group`, `assigned_agent`, `pending_reason`, `closed_date`)
 - [`acl-matrix.md`](./acl-matrix.md) — explains why Resolved → Closed requires the `case_manager` role
 - [`validation-gates.md`](./validation-gates.md) — Gate 2 (Workflow)
-- [`../flows/general_inquiry_state_machine.xml`](../flows/general_inquiry_state_machine.xml) — General Inquiry flow
-- [`../flows/complaint_state_machine.xml`](../flows/complaint_state_machine.xml) — Complaint flow
-- [`../flows/sub_flows/`](../flows/sub_flows/) — five subflows
-- [`../script_includes/x_[scope]_CaseTransitionValidator.xml`](../script_includes/x_[scope]_CaseTransitionValidator.xml) — reusable transition guards
-- [`../business_rules/`](../business_rules/) — six business rules
+- `../flows/general_inquiry_state_machine.xml` — General Inquiry flow (created in a subsequent checkpoint)
+- `../flows/complaint_state_machine.xml` — Complaint flow (created in a subsequent checkpoint)
+- `../flows/sub_flows/` — five subflows (created in a subsequent checkpoint)
+- `../script_includes/x_[scope]_CaseTransitionValidator.xml` — reusable transition guards (created in a subsequent checkpoint)
+- `../business_rules/` — six business rules (created in a subsequent checkpoint)
 

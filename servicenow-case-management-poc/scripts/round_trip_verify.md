@@ -16,7 +16,7 @@ Before starting this procedure, all of the following MUST hold. If ANY prerequis
 - On the **source PDI**, all of Validation Gates 1–6 have passed (per [`../docs/validation-gates.md`](../docs/validation-gates.md)).
 - On the **source PDI**, both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
 - On the **source PDI**, all 10+ demo cases are visible in the case list spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), per AAP Section 0.7.4 minimum demo-data thresholds.
-- The seed data was committed via [`./seed_demo_data.js`](./seed_demo_data.js) and is captured in the same Update Set OR is packaged as a Fix Script in the Update Set so that seed data is generated on import. Document which approach was used so the verifier knows whether seed data is expected to appear automatically post-commit or whether the seed script must be re-run on the verification PDI after commit.
+- The seed data was committed via `./seed_demo_data.js` (created in a subsequent checkpoint) and is captured in the same Update Set OR is packaged as a Fix Script in the Update Set so that seed data is generated on import. Document which approach was used so the verifier knows whether seed data is expected to appear automatically post-commit or whether the seed script must be re-run on the verification PDI after commit.
 - A **fresh, separate PDI** is available with an admin account ready (the verification PDI must NOT be the same instance as the source PDI). Re-importing on the source PDI does not exercise the portability gate and is not a valid round-trip-verify.
 - Admin login to the verification PDI succeeds (URL + admin username + admin password verified). Per AAP Section 0.7.2 Pre-build instance verification: if login fails, **stop and report — do not proceed**.
 - Network connectivity allows the operator to upload an XML file of approximately 0.5–5 MB to the verification PDI without timeout.
@@ -127,7 +127,7 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 
 The Update Set is committed but not yet **delivered**. The final step is to re-run each functional gate on the verification PDI to confirm the application behaves identically to the source PDI. This catches any subtle deployment differences (missing seed data, broken references, role assignment gaps).
 
-If the seed data was packaged as a Fix Script inside the Update Set, the Fix Script will have already executed during commit and the demo cases/tasks/parties/users/groups should already be present. If the seed data was NOT packaged into the Update Set, run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script before proceeding with the gate re-verification below.
+If the seed data was packaged as a Fix Script inside the Update Set, the Fix Script will have already executed during commit and the demo cases/tasks/parties/users/groups should already be present. If the seed data was NOT packaged into the Update Set, run `./seed_demo_data.js` (created in a subsequent checkpoint) on the verification PDI as a Background Script before proceeding with the gate re-verification below.
 
 ### Gate 1 — Data Model (Re-Verify)
 
@@ -233,6 +233,6 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 - [`../docs/acl-matrix.md`](../docs/acl-matrix.md) — Gate 3 re-verify reference (role × table × CRUD matrix).
 - [`../docs/portal-pages.md`](../docs/portal-pages.md) — Gates 4 and 5 re-verify reference (verbatim "not found" text).
 - [`../docs/dashboards.md`](../docs/dashboards.md) — Gate 6 re-verify reference (widget inventory for both dashboards).
-- [`./seed_demo_data.js`](./seed_demo_data.js) — idempotent server-side seed script (must run on the verification PDI if seed data was not captured in the Update Set itself).
-- [`../update-set/`](../update-set/) — destination directory for the exported XML deliverable.
+- `./seed_demo_data.js` — idempotent server-side seed script that must run on the verification PDI if seed data was not captured in the Update Set itself (created in a subsequent checkpoint).
+- `../update-set/` — destination directory for the exported XML deliverable (created in a subsequent checkpoint).
 - [`../README.md`](../README.md) — overall POC overview and entry point.
