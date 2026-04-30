@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `due_date` Date field on the `x_[scope]_case_task` custom
+    table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_task:
+
+        Field      Type    Constraints
+        due_date   Date    Mandatory
+
+    THIS FIELD CAPTURES WHEN THE TASK IS DUE. It is the only Date column on
+    the case_task table (every other timestamp surface in the POC schema -
+    x_[scope]_case.opened_date and x_[scope]_case.closed_date - is a
+    DateTime). The deliberate Date vs. DateTime distinction is significant:
+    tasks in this POC are unit-of-work delegations with day-level
+    granularity. A task is "due today", "due tomorrow", "due Friday" - never
+    "due at 3:47 PM on Friday". Date-level precision avoids spurious
+    overdue-by-one-hour edge cases at midnight rollover, simplifies the
+    "My Overdue Tasks" report's date-arithmetic, and renders cleanly on the
+    auto-generated form layout (the platform's Date picker is simpler than
+    the DateTime picker - no time-of-day spinner, no timezone qualifier).
+
+    Critical behaviors that depend on this field (AAP Sections 0.4.1,
+    0.4.4, 0.5.7, 0.7.4):
+
+      1. "MY OVERDUE TASKS" REPORT FOR AGENT WORKSPACE DASHBOARD
+         (../reports/x_[scope]_my_overdue_tasks.xml,
+          ../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml)
+         Per AAP Section 0.4.1 the Agent Workspace dashboard surfaces a
+         "My overdue tasks" list widget whose underlying report filters
+         x_[scope]_case_task rows by:
+             due_date < javascript:gs.daysAgoStart(0)
+               AND status != Closed
+               AND assigned_to = javascript:gs.getUserID()
+         The first filter clause (`due_date < javascript:gs.daysAgoStart(0)`)
+         REQUIRES this dictionary entry to exist with
+         `<internal_type>glide_date</internal_type>` so the platform's
+         report engine can compare the column to the
+         `javascript:gs.daysAgoStart(0)` script-time value. The
+         `gs.daysAgoStart(0)` function returns the start of today (midnight
+         today, in the session's timezone), and the comparison
+         `due_date < <start of today>` returns rows whose due date is on
+         any day BEFORE today. Tasks due today are NOT flagged as overdue
+         until tomorrow - this is the conventional and expected semantic
+         for an overdue list. Without this dictionary record, the report's
+         WHERE-clause would fail to compile and the dashboard widget would
+         render empty or error.
+
+         The choice of `glide_date` over `glide_date_time` is critical for
+         this comparison. With `glide_date`, the column stores a date
+         (YYYY-MM-DD, no time-of-day component); the `<` comparison
+         against `gs.daysAgoStart(0)` (which evaluates to today's
+         midnight) correctly returns yesterday's and earlier rows but
+         excludes today's rows. If this column were `glide_date_time`, a
+         task with `due_date = 2025-04-30 00:00:00` would be excluded
+         (correctly), but a task with `due_date = 2025-04-30 14:30:00`
+         would also be excluded (also correctly, since 14:30 today is
+         not before midnight today) - HOWEVER, a task created with
+         `due_date = 2025-04-30 00:00:00` could appear or not appear in
+         the overdue list depending on micro-second ordering between
+         insert and query, leading to spurious flicker. `glide_date`
+         eliminates this entire class of edge cases.
+
+      2. AUTOMATIC FORM-LAYOUT INCLUSION ON x_[scope]_case_task
+         (parent table ../tables/x_[scope]_case_task.xml automatic form
+          layout per AAP Section 0.4.4 "Internal user UI" requirements)
+         Per AAP Section 0.4.4 ("ServiceNow's automatic native list and
+         form views for the three custom tables"), when an internal user
+         opens a x_[scope]_case_task record, the form auto-renders every
+         dictionary field in declared order. This entry contributes the
+         "Due Date" picker (a date picker that lets the task creator
+         select a calendar date by clicking through a month-grid widget,
+         with no hour/minute/second spinners). Due date is one of the
+         four user-facing input fields a case_agent or case_manager fills
+         in when creating a new task from the parent case's Related List
+         (the others being Subject, Type, Assigned To - with Status
+         defaulting to Open at insert time and Case auto-populated from
+         the Related List context).
+
+      3. RELATED-LIST DISPLAY COLUMN ON THE PARENT CASE FORM
+         (parent table ../tables/x_[scope]_case.xml automatic Related
+          List rendering per AAP Section 0.4.4)
+         Per AAP Section 0.4.4 the parent case form auto-renders a
+         Related List of x_[scope]_case_task rows filtered by
+         `case = current.sys_id`. The default columns surfaced in the
+         related list - Subject, Type, Status, Assigned To, Due Date -
+         allow a manager or agent reviewing the case to see at-a-glance
+         WHEN each pending task is due. The "Due Date" column renders
+         using the platform's locale-aware date format (e.g., MM/DD/YYYY
+         in en-US, DD/MM/YYYY in en-GB) by virtue of the dictionary's
+         internal_type=glide_date setting; no per-column display script
+         is required.
+
+      4. CASE-RESOLUTION GATE ANCILLARY ROLE
+         (../flows/sub_flows/validate_resolved_transition.xml,
+          ../script_includes/x_[scope]_CaseTransitionValidator.xml)
+         Per AAP Section 0.5.5 the case state-machine flows block the
+         In Progress -> Resolved transition when ANY child task has
+         status != Closed. The gate's primary key is `status` (declared
+         in ../dictionary/x_[scope]_case_task_status.xml), but `due_date`
+         is the ancillary signal that explains WHY the gate is blocking:
+         a manager attempting to resolve a case can see in the Related
+         List which open child tasks are blocking, AND when those tasks
+         were due, allowing prioritization of which task to address
+         first. Tasks blocking case resolution are typically those whose
+         due_date has already passed and whose status is still Open or
+         In Progress.
+
+      5. SEED-DATA POPULATION VIA SYNTHETIC DATES
+         (../seed-data/tasks/x_[scope]_case_task_demo_*.xml,
+          ../scripts/seed_demo_data.js)
+         Per AAP Section 0.7.4's minimum demo-data thresholds ("at least
+         one open and one closed task per demo case in 'In Progress' or
+         'Pending' state, to exercise the 'all-tasks-closed' gate"), the
+         seed-data XMLs and the idempotent seed_demo_data.js script
+         populate this field with synthetic dates spanning past, present,
+         and future ranges so that the Agent Workspace dashboard's "My
+         overdue tasks" widget displays a non-zero count on a fresh PDI
+         immediately after Update Set commit. Demo tasks with status =
+         Open or In Progress and due_date in the past exercise the
+         overdue-list filter; demo tasks with status = Closed and any
+         due_date are excluded from the overdue list (correctly - a
+         closed task cannot be overdue); demo tasks with future
+         due_dates exercise the form's date-picker on a non-overdue
+         row. There are NO PII references in any synthetic due_date -
+         the column stores only an ISO-formatted calendar date.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java lines 70-71:
+            @NotNull
+            private Date dueDate;
+        ArkCase's AcmTask used a JPA `Date` column to capture the task's
+        due date with the Bean Validation annotation `@NotNull`. The
+        `@NotNull` JSR-303 constraint was enforced by the validation
+        layer at every persist / merge call site - any attempt to save
+        an AcmTask with a null dueDate would throw a
+        ConstraintViolationException before the JPA INSERT/UPDATE was
+        emitted to MySQL. The companion getter/setter at lines 232-240
+            public Date getDueDate()  { return dueDate; }
+            public void setDueDate(Date dueDate) { this.dueDate = dueDate; }
+        materialised the value as a java.util.Date, which carries
+        millisecond-since-epoch precision (date + time + timezone) - a
+        deliberate over-precision relative to what the case-management
+        UX needed. ArkCase's UI normalised the value to date-only at
+        display time, but the storage layer always carried the
+        microsecond-precise UTC instant.
+
+        The ServiceNow target translates these JPA semantics as follows:
+          * @NotNull -> mandatory=true at the dictionary level
+            (the platform's pre-insert validation pass blocks every
+            null-valued INSERT/UPDATE through the form, the Table API,
+            and any GlideRecord.insert() invocation - the same guarantee
+            ArkCase's Bean Validation provided)
+          * java.util.Date (millisecond-precise UTC instant) ->
+            internal_type=glide_date (date-only, no time-of-day
+            component) - an INTENTIONAL precision REDUCTION matching
+            the AAP Section 0.5.7 verbatim "Date" type. The case-
+            management domain UX was never going to use the millisecond
+            precision; the source-side over-precision was an accident
+            of the JPA Date type, not a deliberate design choice. The
+            target reduces precision to match the actual semantic.
+          * default behavior (no JPA default) -> default_value/ empty
+            (no platform default; the user must explicitly choose a
+            date when creating a task)
+
+      - The field name is `due_date` (lowercase, snake_case; NOT
+        `dueDate`, NOT `due`, NOT `task_due_date`, NOT `deadline`) per
+        AAP Section 0.5.7 verbatim. The intentional rename from
+        ArkCase's camelCase `dueDate` to snake_case `due_date` aligns
+        with the ServiceNow convention used by OOB tables (e.g.,
+        change_request.due_date, sc_req_item.due_date, task.due_date
+        all use lowercase snake_case) and reads naturally on the
+        auto-generated list/form views ("Due Date" column header
+        derived from `<column_label>` rather than from the field
+        name).
+
+      - ArkCase's Date column had no explicit JPA length cap (the
+        column was a TIMESTAMP datatype in MySQL, fixed-width). The
+        ServiceNow target uses the standard 40-character Date/DateTime
+        max_length per the agent prompt's Phase 3 verbatim. ServiceNow
+        stores Date values in a canonical YYYY-MM-DD format (10 chars)
+        with optional locale-formatting suffix; 40 chars provides ample
+        headroom for any current or future canonical encoding without
+        a schema migration.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_[scope]_case_task` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. NO global-scope
+        writes - the OOB tables `task`, `incident`, `sys_user`, etc.
+        are never modified by this dictionary entry or any other
+        artifact in the Update Set.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The
+        `<sys_id>` text-node value is THIS record's own deterministic
+        primary key (MD5 of the canonical field identifier
+        `x_[scope]_case_task.due_date` =
+        a20971037c6fb4c520d7a13231b15f3b) and is NOT a reference to
+        any other record. The MD5 derivation guarantees that
+        re-generation of this Update Set on any agent run produces a
+        byte-identical `<sys_id>` (no random UUIDs), which is required
+        for clean Update-Set re-import on a fresh PDI without creating
+        duplicate sys_dictionary rows. The same derivation pattern is
+        used by every sys_dictionary record in this Update Set (e.g.,
+        x_[scope]_case_task.subject       -> 8cd658b766c404ce4445d191adabd14c,
+        x_[scope]_case_task.type          -> 180d00dda06c4b93e4c2c106b621d153,
+        x_[scope]_case_task.status        -> 5f0be2eaed29d45b1d63d64e876d22c4,
+        x_[scope]_case_task.assigned_to   -> 388df21ea3ca149d70916144f84ecf42,
+        x_[scope]_case.opened_date        -> 3e18b5498c00dfde143bbc84fced474c).
+      - The literal `[scope]` placeholder is preserved per AAP
+        convention; the PDI auto-assigns the actual scope id at App
+        Engine Studio creation time. The placeholder appears in
+        `<name>`, `<sys_scope>`, `<sys_package>`, and
+        `<sys_update_name>` consistently.
+      - mandatory=true at the dictionary level. AAP Section 0.5.7's
+        verbatim case_task table tags `due_date` explicitly as
+        Mandatory; the source-side `@NotNull` Bean Validation
+        annotation reinforces this. Mandatory enforcement runs at the
+        platform-validation level on every insert / update through the
+        standard form, the Table API, and any GlideRecord.insert()
+        invocation in ../scripts/seed_demo_data.js. The `@NotNull`
+        constraint on the source side fires at the JPA persist layer;
+        the ServiceNow `mandatory=true` setting fires at the platform's
+        pre-insert validation pass - both are blocking validations
+        with equivalent semantics.
+      - read_only=false: the user creating a task chooses the due
+        date, and the case_manager / assigned case_agent may edit the
+        due date as project plans evolve. The read_only=false setting
+        permits the write through the standard form, the Table API,
+        and the seed scripts. Internal-user write authorization is
+        governed by the table-level ACLs in ../acl/ - this dictionary
+        entry deliberately does NOT carry per-role write_roles since
+        the table-level ACLs apply uniformly across all editable
+        fields on x_[scope]_case_task. There is no platform-side
+        prohibition on adjusting due_date once a task is in flight,
+        nor is the field locked once the task is Closed (a closed
+        task's historical due date remains editable for forensic
+        correction, though such edits are rare in practice).
+      - default_value is EMPTY (no implicit default) per the agent
+        prompt's Phase 4 verbatim. ServiceNow's static dictionary
+        default_value attribute supports literal values only - a
+        runtime-evaluated default like `gs.daysAgoStart(-7)` (a week
+        from today) cannot be encoded as a static dictionary default
+        and would in any case impose an arbitrary policy that the
+        AAP does not specify. The user MUST explicitly choose a date
+        when creating a task; there is no fallback. This forces the
+        creator to think about realistic timing for the work, which
+        is consistent with the case-management domain (assigning a
+        task without thinking about when it should be done is a
+        process anti-pattern).
+      - audit=false per AAP Section 0.3.1 minimal-change clause and
+        the agent prompt's Phase 4. The standard sys_* audit columns
+        on every ServiceNow row already capture the row's last-modified
+        timestamp at platform-default granularity (sys_updated_on,
+        sys_updated_by); per-field audit history on due_date is not
+        required for the POC. If a future enhancement requires
+        forensic reconstruction of due-date adjustments (e.g., to
+        compute average due-date slippage from creation to closure),
+        audit=true can be added without breaking any existing artifact
+        in this Update Set.
+      - active=true: the field is part of the live schema from
+        Update Set commit forward. There is no transitional / staged
+        / inactive phase for the case_task schema in the POC.
+      - display=true: the field renders on the standard list and form
+        views for `x_[scope]_case_task`. Internal users (manager,
+        agent, viewer) see the due date on the task form; the parent
+        case's Related List of tasks also surfaces the due date column.
+      - max_length=40 per the agent prompt's Phase 3 verbatim. Date
+        values are stored in canonical YYYY-MM-DD format (10 chars);
+        40 chars is the standard ServiceNow ceiling for date/datetime
+        fields and provides headroom for any future canonical
+        encoding (e.g., locale-formatted strings, ISO 8601 with
+        fractional precision) without schema migration.
+      - choice=0: free-form Date input (no choice list). The
+        platform's standard date picker widget renders for input on
+        the form; the report builder uses native Date comparison
+        operators on the column. choice=3 (Choice list, no description
+        column) would defeat the purpose of a calendar-pickable date
+        field; choice=1 (Choice list with description) would be
+        nonsensical for a continuous-domain value like a calendar
+        date. Free-form Date input is the only correct setting.
+      - No reference target: this is a Date field, not a Reference
+        field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - text_index=false: Date fields are not full-text-indexed.
+        The platform's standard Date comparison operators on
+        GlideRecord.addQuery() (e.g., `addQuery('due_date', '<',
+        javascript:gs.daysAgoStart(0))`) operate directly on the
+        column without needing a full-text index.
+      - unique=false: tasks legitimately share due dates when bulk-
+        imported, when seed data is loaded, when a case_manager
+        creates multiple tasks all due by the same Friday deadline,
+        or when independent task creation flows arrive within the
+        same calendar day. Uniqueness across tasks is enforced by
+        sys_id (the platform-managed primary key) and by the optional
+        TASK0000001-format number declared in
+        ../numbers/sys_number_x_[scope]_case_task.xml, NOT by due_date.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation.
+      - No PII: the field stores only a calendar date; no real names,
+        email addresses, organizational identifiers, or other
+        personally identifiable information are derived from or
+        stored in this column. Synthetic seed data populates this
+        field with arbitrary dates that do not correspond to any
+        real-world events.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_[scope]_case_task.xml`
+        (parent table), since `<name>x_[scope]_case_task</name>`
+        references the table by name. The parent table record creates
+        the underlying sys_db_object row that this dictionary entry
+        attaches a column to; loading this dictionary entry before the
+        table would fail with a "table not found" preview error.
+      - This record MUST load BEFORE the consumers that read or write
+        the `due_date` column:
+          * ../reports/x_[scope]_my_overdue_tasks.xml (the "My Overdue
+            Tasks" list report on the Agent Workspace dashboard;
+            filters by `due_date < javascript:gs.daysAgoStart(0) AND
+            status != Closed AND assigned_to = javascript:gs.getUserID()`
+            - the report's WHERE clause references this column by
+            element name and would fail to compile against the table
+            if this dictionary entry is absent)
+          * ../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml
+            (the Agent Workspace dashboard that surfaces the overdue-
+            tasks report widget)
+          * ../seed-data/tasks/x_[scope]_case_task_demo_*.xml
+            (synthetic demo tasks populate this field with arbitrary
+            calendar dates - some past for the overdue-list demo, some
+            present, some future - so the dashboard widgets render
+            non-empty data on a fresh PDI immediately after Update Set
+            commit)
+          * ../scripts/seed_demo_data.js (the idempotent seed script
+            that creates the demo task rows; for each demo task it
+            sets `taskGr.due_date = '<calendar-date>';` - the script
+            cannot set a non-existent column, so this dictionary entry
+            must be present in the Update Set ahead of the seed script's
+            execution)
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Due Date</column_label>
+        <comments>Mandatory date when the task is due. Used by the My Overdue Tasks report (filter: due_date less than Today AND status not equal to Closed). Replaces ArkCase AcmTask.dueDate (@NotNull Date).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>due_date</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>glide_date</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>40</max_length>
+        <name>x_[scope]_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a20971037c6fb4c520d7a13231b15f3b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_task_due_date</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
