@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the table-level CREATE ACL that
+    grants the scoped role `x_[scope]_case_agent` UNCONDITIONAL create access
+    on the `x_[scope]_case` custom table inside the scoped application
+    `x_[scope]`. This is the CREATE companion to the sibling READ ACL at
+    ../acl/x_[scope]_case_read_agent_assigned.xml and the WRITE ACL at
+    ../acl/x_[scope]_case_write_agent_assigned.xml; together with the
+    case_manager-specific ../acl/x_[scope]_case_create_manager.xml, the case-
+    table create-permission set is fully and exhaustively realized for the
+    three scoped roles (manager: yes; agent: yes; viewer: deny-by-default).
+
+    AAP cross-references:
+      - Section 0.5.6 (ACL Matrix) - case_agent row:
+          | Role                  | Create | Read              | Write             | Delete |
+          | x_[scope]_case_agent  |  Yes   | Yes Assigned only | Yes Assigned only |  No    |
+        This file authors the single "Create = Yes" cell. The "Yes Assigned
+        only" Read cell is authored by ../acl/x_[scope]_case_read_agent_assigned.xml;
+        the "Yes Assigned only" Write cell by
+        ../acl/x_[scope]_case_write_agent_assigned.xml; the "No" Delete cell
+        is enforced by the deliberate ABSENCE of any
+        x_[scope]_case_delete_agent.xml file (ServiceNow record-level ACLs
+        are deny-by-default: a role with no granting ACL for an operation
+        cannot perform that operation). Each row of the ACL matrix maps to
+        exactly one or zero ACL XML files; this per-cell granularity is what
+        lets the Update Set add or remove role privileges independently
+        without entangling roles or operations.
+      - Section 0.5.6 (ACL Matrix) - all-roles create coverage:
+          - case_manager: Create=Yes  -> ../acl/x_[scope]_case_create_manager.xml
+          - case_agent:   Create=Yes  -> THIS FILE
+          - case_viewer:  Create=No   -> deliberate absence of any ACL
+        Together these three facts implement the user prompt's contract that
+        both managers and agents can submit cases, but the lowest-privilege
+        viewer (audit / compliance / supervisor tier) cannot.
+      - Section 0.7.3 (Validation Framework, Gate 3 - ACLs):
+          "Role-based access enforced - case_viewer cannot write; case_agent
+           cannot access unassigned cases; case_manager has full access."
+        The clause "case_agent cannot access UNASSIGNED cases" applies to
+        read and write only - it is logically inapplicable to create because
+        a record cannot be "assigned" to anyone before it exists. Therefore
+        this ACL grants create unconditionally to any caller holding the
+        x_[scope]_case_agent role; downstream visibility of the created
+        record is governed by the read/write _agent_assigned siblings.
+      - Section 0.4.3 (Design Pattern Applications - Scoped role-based
+        access control): "Three named roles paired with table-level and
+        field-level ACLs whose conditions are encoded as scripted ACL
+        expressions, replacing ArkCase's ApplicationRolesToPrivilegesConfig
+        map." This ACL is the table-level CREATE binding for the mid-tier
+        scoped role.
+      - Section 0.1.2 (Technical Interpretation - Access-control
+        transformation): The ServiceNow target replaces
+        ApplicationRolesToPrivilegesConfig.getRolesToPrivileges() (a
+        Map<String, List<Object>> bound from application.rolesToPrivileges
+        configuration) and AcmPluginUrlPrivilege URL-method enforcement
+        with declarative scoped record-level ACLs. This XML record is
+        therefore the declarative equivalent of the conceptual
+        (case_agent, CREATE) cell of that ArkCase map.
+      - Section 0.5.5 (State-Machine Transition Map): Cases are born in
+        Draft. The state machine then drives Draft -> Open -> In Progress
+        -> (Pending) -> Resolved -> Closed. Without this CREATE ACL the
+        agent role would have no way to insert a new case row, and the
+        Draft entry point of the state machine would be unreachable from
+        the agent surface (only managers could ever start a case). The
+        AAP explicitly requires both manager AND agent to be able to
+        create cases (Section 0.5.6); this ACL realizes the agent half.
+      - Section 0.7.4 (Other User-Provided Rules) - "Cases created,
+        assigned, progressed through all defined states, and closed via
+        both internal UI and external portal." This success-criterion
+        bullet implies that authenticated case_agent users must be able
+        to create cases via the internal native form view. THIS ACL is
+        what makes that path permitted.
+
+    Why <advanced>false</advanced> (in contrast to read/write _agent_assigned):
+      The READ and WRITE agent-assigned siblings use <advanced>true</advanced>
+      so the platform invokes their CDATA scripted condition that evaluates
+      "current.assigned_agent == gs.getUserID() OR current is in current
+      user's group memberships." That predicate cannot be evaluated at
+      create time because no `current` record exists yet - the row is being
+      inserted at the moment the ACL fires. The platform binds `current` to
+      a freshly-instantiated record skeleton with the caller's POSTed field
+      values, and assigned_agent / assigned_group on that skeleton are
+      typically null (or whatever the form defaulted them to) - making any
+      "Assigned only" check meaningless and noisy. Per the AAP design
+      pattern in Section 0.4.3 the "Assigned only" predicate is reserved
+      for read/write ACLs; create is a binary role check.
+      Consequences of <advanced>false</advanced>:
+        - <condition/>  is evaluated as an empty encoded query (no row
+                        filter; permits the request).
+        - <script/>     is NOT evaluated (the platform skips it when
+                        advanced=false).
+        - <roles>       remains the sole admission gate: callers holding
+                        x_[scope]_case_agent are granted create; callers
+                        without the role are denied.
+      This is the standard ServiceNow pattern for "any role member can
+      perform this operation, no per-row predicate" and matches the agent
+      prompt's "create has no condition" rule verbatim.
+
+    Why creation is unconditional (and what governs the created row afterward):
+      Pre-creation there is no record to evaluate against - any "row-level"
+      check is logically impossible. Once the record is inserted, downstream
+      access is governed by:
+        (a) The read/write _agent_assigned ACLs (siblings of this file),
+            which restrict the creating agent's subsequent visibility of
+            and edits to their own freshly-created case to the rows where
+            they are the assigned_agent or a member of the assigned_group.
+        (b) The field-level ACL on `assigned_group`
+            (../acl/x_[scope]_case_assigned_group_field_acl.xml), which
+            restricts WRITE on the assigned_group column to the
+            x_[scope]_case_manager role only - an agent who creates a case
+            therefore cannot self-assign it to a group at create time. The
+            new case lands in the database with assigned_group = null, which
+            (per AAP Section 0.5.5) corresponds to the Draft state.
+        (c) The before-insert business rule
+            ../business_rules/x_[scope]_set_opened_date.xml, which auto-
+            populates opened_date = gs.nowDateTime() on every successful
+            insert.
+        (d) The before-update business rule
+            ../business_rules/x_[scope]_validate_assigned_agent_membership.xml,
+            which (later, when the manager assigns a group/agent) enforces
+            that assigned_agent is a member of assigned_group.
+      In short: an agent CAN create a case but cannot self-promote the new
+      record out of Draft. Promotion to Open requires the manager-only
+      assigned_group field-level ACL grant, which then unlocks the Open
+      transition rule per AAP Section 0.5.5. This composition of create-ACL
+      + field-ACL is the AAP's design for letting agents file cases without
+      bypassing the manager's queue-assignment authority.
+
+    Why a separate file per role (instead of one create ACL with both roles):
+      ServiceNow allows multiple roles in a single <roles> field as a comma-
+      separated list, and that pattern technically also satisfies the AAP.
+      However, the established convention in this Update Set (and in
+      industry practice for scoped applications) is one ACL record per
+      (table, operation, role) triple. Reasons:
+        - Single-responsibility: each ACL record encodes exactly one
+          authorization fact; if the AAP later removes case_agent's create
+          privilege (e.g., to enforce a stricter intake-via-portal-only
+          policy), the change is a single-file deletion with no risk of
+          accidentally also revoking case_manager's create privilege.
+        - Auditability: the file inventory under ../acl/ becomes a
+          self-documenting matrix - the presence or absence of a file
+          named x_[scope]_<table>_<operation>_<role>.xml is the answer
+          to "does role X have privilege Y on table Z?".
+        - Update Set diff clarity: when the Update Set is re-imported on
+          a fresh PDI, each ACL is a discrete row in the preview screen,
+          making it easy to spot that case_agent's create privilege was
+          installed (alongside case_manager's) versus a single combined
+          row that would obscure the role membership.
+      The companion ../acl/x_[scope]_case_create_manager.xml file
+      authors the case_manager half of the Create=Yes pair using the
+      same per-role-per-operation pattern.
+
+    Semantic source-side reference (read-only context per AAP Section 0.3.2;
+    no code or configuration is byte-for-byte ported from these files):
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/services/
+        users/model/ApplicationRolesToPrivilegesConfig.java
+        ArkCase mapped roles to privileges through a single configuration
+        map (`Map<String, List<Object>> rolesToPrivileges`) keyed by the
+        property `application.rolesToPrivileges`. In that model, an
+        "agent-equivalent" role would have been associated with privilege
+        identifiers such as `acm-case-create` or `acm-case-add`, and those
+        privilege strings would have been resolved at runtime against
+        URL-method bindings declared in
+        ApplicationPluginPrivilegesConfig.getApplicationPluginsPrivileges()
+        via AcmPluginUrlPrivilege. The ServiceNow target replaces this
+        bifurcated model (declarative privilege list + imperative URL-
+        binding) with a single declarative scoped record-level ACL: this
+        XML record IS the (case_agent, CREATE) cell of that conceptual map.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/com/
+        armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        Encapsulated role-CRUD and privilege-paging behavior in ArkCase
+        (`retrieveRoles()`, `retrievePrivileges()`,
+        `retrievePrivilegesByAuthorization(...)`,
+        `retrievePrivilegesByRole(...)`, `updateRolePrivileges(...)`,
+        plus the role-name normalization step that uppercased the role,
+        replaced whitespace with underscores, replaced periods with
+        double-underscores, and prepended the `ROLE_` prefix from
+        RolePrivilegesConstants). All of this Java service surface is
+        replaced in the ServiceNow target by the platform's built-in
+        sys_security_acl evaluator and by static role names declared in
+        scope-prefixed sys_user_role records (the case_agent role is
+        declared in ../roles/sys_user_role_x_[scope]_case_agent.xml; this
+        ACL references it by literal name in the <roles> field).
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - Scope-namespace exclusivity: every cross-reference resolves into
+        the x_[scope] scope (sys_scope = x_[scope], sys_package =
+        x_[scope]). No global-scope ACLs are written. The <name> field
+        references the scoped table x_[scope]_case (NOT the OOB `task`
+        table or any other global table), and <roles> references the
+        scoped role x_[scope]_case_agent. Per AAP Section 0.3.2 "Global
+        scope changes of any kind" are explicitly prohibited.
+      - Zero hardcoded cross-reference sys_id literals: <name>, <roles>,
+        <sys_scope>, and <sys_package> all resolve their targets by name /
+        source attribute lookup at Update Set apply time. The <sys_id>
+        below is THIS record's own deterministic primary key (MD5 of the
+        canonical identifier "x_[scope]_case.create.case_agent", a stable
+        key for this exact ACL) and is not a cross-reference to any other
+        record. Computing the sys_id deterministically guarantees the ACL
+        is re-applyable / idempotent across fresh PDIs and round-trip
+        Update Set previews per AAP Section 0.7.3 Gate 7.
+      - Table-level (not field-level): <name> is `x_[scope]_case` with NO
+        dot. ServiceNow's create operation has no concept of "create this
+        specific column" - field-level ACLs apply only to read/write/none.
+        The <type>record</type> field below confirms this is a row-level
+        (table-level) ACL, not a UI/REST/SOAP-flavored ACL.
+      - Operation = create: corresponds exactly to the "Create = Yes" cell
+        in the AAP matrix for the case_agent role.
+      - admin_overrides = true: standard ServiceNow pattern that allows
+        the platform `admin` role to bypass this ACL. This is required so
+        platform administrators can troubleshoot, repair, or seed scoped
+        data (per AAP Section 0.7.4 the seed_demo_data.js script seeds
+        cases under the platform's elevated context). It does NOT widen
+        case_agent privileges - case_agents without admin still see
+        exactly what this ACL permits.
+      - active = true: ACL is in force the moment the Update Set commits.
+      - advanced = false: see "Why advanced=false" rationale above. The
+        platform skips the empty <script/> body entirely.
+      - condition (empty): the <condition/> encoded-query field is empty;
+        no row-level filter applies (and none is meaningful pre-insert).
+      - script (empty): the <script/> field is empty; the platform skips
+        it because advanced=false.
+
+    Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
+      MUST be loaded AFTER:
+        - ../app/sys_app/x_[scope]_case_management.xml (scoped app record)
+        - ../app/sys_scope/x_[scope].xml (scope record - resolves
+          sys_scope and sys_package source="x_[scope]")
+        - ../tables/x_[scope]_case.xml (resolves <name>x_[scope]_case</name>)
+        - ../roles/sys_user_role_x_[scope]_case_agent.xml (resolves
+          <roles>x_[scope]_case_agent</roles> by role name)
+      MUST be loaded BEFORE:
+        - ../seed-data/role_assignments/sys_user_has_role_x_[scope]_demo_agent.xml
+          (the demo agent's create access during round-trip verification
+          depends on this ACL being applied first)
+        - ../seed-data/cases/x_[scope]_case_demo_*.xml (demo cases inserted
+          by the seed pass need this ACL in place if any seed runs under
+          the demo agent's identity context; the seed_demo_data.js script
+          itself runs as admin so admin_overrides bypasses this ACL during
+          seeding, but post-seed agent-side smoke tests against the demo
+          dataset depend on this ACL being applied)
+        - ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml (the
+          scripted REST endpoint for the external portal runs server-side
+          under the platform context, so it does not strictly depend on
+          this agent-role ACL for its insert; however the ACL is loaded
+          earlier in the Update Set anyway because the scripted REST and
+          its handler script are loaded after all ACLs)
+
+    The literal `[scope]` placeholder is preserved verbatim per AAP
+    convention (Section 0.7.2 "Scoped-namespace-only constraint"); the
+    Personal Developer Instance auto-assigns the actual concrete scope id
+    at App Engine Studio creation time, and the Update-Set apply-time
+    renaming propagates consistently across all bracketed placeholders in
+    this artifact. The deterministic sys_id below is computed against the
+    `[scope]` literal and remains stable across re-imports onto fresh PDIs.
+-->
+<record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <admin_overrides>true</admin_overrides>
+        <advanced>false</advanced>
+        <condition/>
+        <description>Table-level ACL: x_[scope]_case_agent can create x_[scope]_case records (no condition; assignment is governed by separate ACLs).</description>
+        <name>x_[scope]_case</name>
+        <operation>create</operation>
+        <roles>x_[scope]_case_agent</roles>
+        <script/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8ae51c961898321cb00dc4018d7e88d5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_case</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_security_acl_x_[scope]_case_create_agent</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>record</type>
+    </sys_security_acl>
+</record_update>
