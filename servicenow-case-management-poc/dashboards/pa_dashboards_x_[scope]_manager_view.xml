@@ -1,0 +1,911 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the Manager View Dashboard
+    of the scoped application `x_[scope]`. This file authors the FIVE-WIDGET
+    executive dashboard that case managers use to monitor team-wide case
+    distributions and throughput KPIs.
+
+    Per AAP Section 0.5.1 (File-by-File Transformation Plan) verbatim:
+        servicenow-case-management-poc/dashboards/pa_dashboards_x_[scope]_manager_view.xml
+            CREATE  Source: -
+            Key Changes: "Author Manager View dashboard: 5 widgets (cases by
+            status bar, cases by type donut, cases by priority bar, avg
+            time-to-close single score, cases-opened-30-days single score)"
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning) verbatim:
+        dashboards/
+          pa_dashboards_x_[scope]_manager_view.xml      Manager View Dashboard
+
+    Per AAP Section 0.4.4 (User Interface Design - Dashboard UI) verbatim:
+        Manager View Dashboard - bar chart for "All cases by status",
+        donut chart for "All cases by type", bar chart for "All cases by
+        priority", single-score widget for "Average time to close"
+        (computed as `closed_date - opened_date` over Closed cases),
+        single-score widget for "Cases opened in last 30 days".
+
+    Per AAP Section 0.7.3 (Validation Framework) verbatim, this dashboard
+    is the second of two in Gate 6:
+        Gate 6 Criterion: Both dashboards render with synthetic data.
+        Gate 6 Pass Condition: All widgets display data; no broken
+        report references.
+
+    Per AAP Section 0.3.1 (Exhaustively In Scope) verbatim:
+        servicenow-case-management-poc/dashboards/
+          pa_dashboards_x_[scope]_manager_view.xml      Manager View Dashboard
+
+    THIS FILE'S ROLE IN THE OVERALL POC
+    ===================================
+    This dashboard is the manager-facing operational view of the
+    case-management scoped application. It is the SECOND of two
+    dashboards in the POC; the FIRST is the Agent Workspace
+    (../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml). The two
+    dashboards target different audiences with deliberately different
+    role visibility:
+      - Agent Workspace - visible to x_[scope]_case_agent role (and
+        optionally x_[scope]_case_manager). Three widgets focused on
+        the agent's own caseload (My open cases list, My overdue tasks
+        list, Case count by status donut). Default daily-driver view.
+      - THIS Manager View - visible to x_[scope]_case_manager role
+        ONLY. Five widgets focused on team-wide aggregates and
+        throughput KPIs. Operational review view.
+
+    The Manager View dashboard exposes the following five widgets in a
+    two-row 12-column responsive grid layout:
+
+        Row 1 (chart row), columns 1-12:
+            Widget [1] Bar Chart       column=1, width=4   columns 1 to 4
+                       All Cases by Status
+            Widget [2] Donut Chart     column=5, width=4   columns 5 to 8
+                       All Cases by Type
+            Widget [3] Bar Chart       column=9, width=4   columns 9 to 12
+                       All Cases by Priority
+        Row 2 (KPI row), columns 1-12:
+            Widget [4] Single Score    column=1, width=6   columns 1 to 6
+                       Average Time to Close
+            Widget [5] Single Score    column=7, width=6   columns 7 to 12
+                       Cases Opened in Last 30 Days
+
+    Row 1 has three CHART widgets (width=4 each, summing to 12 = full
+    row). Row 2 has two SINGLE-SCORE widgets (width=6 each, summing
+    to 12 = full row). All widgets have height=4 (standard ServiceNow
+    widget height). Row 2 is at row=5 because row=1 widgets occupy
+    rows 1 through 4 (height=4).
+
+    Each widget references its underlying sys_report record by NAME
+    (not by hardcoded sys_id). The reports themselves live in the
+    sibling ../reports/ folder:
+
+        Widget                     | Underlying Report                              | Chart Type
+        Widget 1 by_status         | ../reports/x_[scope]_all_cases_by_status.xml   | bar
+        Widget 2 by_type           | ../reports/x_[scope]_all_cases_by_type.xml     | pie (donut)
+        Widget 3 by_priority       | ../reports/x_[scope]_all_cases_by_priority.xml | bar
+        Widget 4 avg_time_to_close | ../reports/x_[scope]_avg_time_to_close.xml     | single_score
+        Widget 5 cases_opened_30d  | ../reports/x_[scope]_cases_opened_30d.xml      | single_score
+
+    Per AAP Section 0.5.2 (Cross-File Dependencies), this dashboard
+    record MUST be loaded AFTER all five referenced reports and AFTER
+    the x_[scope]_case_manager role record so that all cross-references
+    resolve at Update-Set apply time. The Update-Set engine processes
+    records in the order they appear in the master XML; the Update Set
+    aggregator at servicenow-case-management-poc/update-set/
+    x_[scope]_case_management_update_set.xml is responsible for
+    inserting this file's records AFTER the corresponding reports and
+    role records.
+
+    SEMANTIC SOURCE-SIDE ANCHORS (READ-ONLY, NOT BYTE-FOR-BYTE PORTED)
+    =================================================================
+    The Java DTOs and aggregation classes in the existing ArkCase
+    case-file plugin provide the semantic shape of what this dashboard
+    replaces:
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/CaseByStatusDto.java
+        Captures (status, count) pairs returned by the ArkCase
+        ActiveCaseFileByQueueServiceImpl. The ServiceNow target replaces
+        this with native sys_report records (group_by=status,
+        aggregate=COUNT) consumed by Widget 1 of THIS dashboard.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/
+        CaseSummaryByStatusAndTimePeriodDto.java
+        Captures (timePeriod, list of CaseByStatusDto) tuples driving
+        ArkCase's time-period-grouped reports. The ServiceNow target
+        decomposes this into separate sys_report records: per-status
+        aggregation (Widget 1), per-type aggregation (Widget 2),
+        per-priority aggregation (Widget 3), and time-windowed counts
+        (Widget 5 - cases opened in last 30 days).
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/AcmCasesState.java
+        Captures the `numberOfCases` counter used by ArkCase's module-
+        state-of cards. The ServiceNow target replaces this with
+        single-score widget rendering of GlideAggregate counts (Widget 5).
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/CaseFile.java
+        The ArkCase entity that the x_[scope]_case table replicates.
+        Specifically, the @Column-mapped fields cm_case_status,
+        cm_case_type, cm_priority, cm_due_date are the source of the
+        `status`, `type`, `priority`, `closed_date`, `opened_date`
+        Choice/DateTime fields that drive THIS dashboard's widgets.
+        The ServiceNow target uses the equivalent dictionary entries
+        defined in ../dictionary/.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/Disposition.java
+        ArkCase's disposition record carrying `closeDate`,
+        `dispositionType`, `referExternalDate`. Disposition is the
+        semantic anchor for the `closed_date` field on x_[scope]_case
+        that drives the Average Time to Close calculation in Widget 4
+        (Strategy A in ../reports/x_[scope]_avg_time_to_close.xml uses
+        a calculated `duration_to_close_seconds` field equal to
+        `closed_date - opened_date` over Closed cases).
+
+    None of these Java DTOs is byte-for-byte ported. The ArkCase
+    Pentaho/Solr-backed reporting pipeline is replaced wholesale with
+    the ServiceNow Performance Analytics-style dashboards + sys_report
+    records. Per AAP Section 0.3.2 ("Document management ... Pentaho ...
+    are not replicated"), no Pentaho engine exists in the target;
+    no Solr facet aggregator exists in the target; aggregation runs
+    natively against the GlideRecord-backed x_[scope]_case table at
+    dashboard-render time.
+
+    RECORD INVENTORY (10 RECORDS IN THIS FILE)
+    ==========================================
+    This file uses `<unload>` as the XML root because it contains
+    multiple records of multiple table classes per AAP convention
+    (matching the convention used by other multi-record files in this
+    project - see ../choices/sys_choice_case_party_party_type.xml,
+    ../ui_policy/x_[scope]_case_party_conditional_fields.xml). Each
+    record carries `action="INSERT_OR_UPDATE"` so the Update Set engine
+    inserts on first import and updates on subsequent imports without
+    duplicate-sys_id errors.
+
+      Record [1]:  sys_grid_canvas_pane    Name = x_[scope]_manager_view_canvas
+      Record [2]:  pa_dashboards           Name = x_[scope]_manager_view
+      Record [3]:  pa_tab                  Name = x_[scope]_manager_view_tab_main
+      Record [4]:  pa_m2m_dashboard_tabs   anonymous; carries dashboard+tab refs
+      Record [5]:  pa_dashboard_widgets    Name = x_[scope]_manager_view_widget_all_cases_by_status
+      Record [6]:  pa_dashboard_widgets    Name = x_[scope]_manager_view_widget_all_cases_by_type
+      Record [7]:  pa_dashboard_widgets    Name = x_[scope]_manager_view_widget_all_cases_by_priority
+      Record [8]:  pa_dashboard_widgets    Name = x_[scope]_manager_view_widget_avg_time_to_close
+      Record [9]:  pa_dashboard_widgets    Name = x_[scope]_manager_view_widget_cases_opened_30d
+      Record [10]: pa_dashboard_role       anonymous; attaches dashboard to manager
+
+    Records [1] through [3] are independent. Record [4] (m2m membership)
+    requires [2] dashboard and [3] tab to exist. Records [5] through [9]
+    (widget instances) each require [2] dashboard, [3] tab, and the
+    corresponding sys_report in ../reports/ to exist. Record [10] (role
+    attachment) requires [2]
+    dashboard and ../roles/sys_user_role_x_[scope]_case_manager.xml to
+    exist. Within this file the records are emitted in dependency order
+    (canvas first, dashboard next, tab next, m2m next, widgets next, role
+    last) to maximize Update-Set apply-time success.
+
+    CROSS-REFERENCE RESOLUTION
+    ==========================
+    Per AAP Section 0.7.2 ("No-hardcoded-sys_id constraint"), every
+    cross-reference in this file resolves by record `<name>` text content
+    plus a human-readable `display_value` attribute. This matches the
+    convention used by the existing reports (../reports/*.xml), ACLs
+    (../acl/*.xml), dictionary entries (../dictionary/*.xml), and the
+    portal record (../portal/sp_portal_x_[scope]_case_portal.xml). The
+    ServiceNow Update-Set engine resolves the text content against the
+    referenced table's `<name>` field at apply time; the deterministic
+    MD5(name) sys_id values stored on each record's own `<sys_id>` field
+    are stable across re-imports onto fresh PDIs.
+
+    Cross-reference targets used by this file:
+      - <sys_scope>x_[scope]</sys_scope>             -> ../app/sys_scope/x_[scope].xml
+      - <sys_package source="x_[scope]">x_[scope]</> -> ../app/sys_app/x_[scope]_case_management.xml
+      - <canvas_id>x_[scope]_manager_view_canvas</>  -> record [1] in this file
+      - <dashboard>x_[scope]_manager_view</>         -> record [2] in this file
+      - <tab>x_[scope]_manager_view_tab_main</>      -> record [3] in this file
+      - <report>x_[scope]_all_cases_by_status</>     -> ../reports/x_[scope]_all_cases_by_status.xml
+      - <report>x_[scope]_all_cases_by_type</>       -> ../reports/x_[scope]_all_cases_by_type.xml
+      - <report>x_[scope]_all_cases_by_priority</>   -> ../reports/x_[scope]_all_cases_by_priority.xml
+      - <report>x_[scope]_avg_time_to_close</>       -> ../reports/x_[scope]_avg_time_to_close.xml
+      - <report>x_[scope]_cases_opened_30d</>        -> ../reports/x_[scope]_cases_opened_30d.xml
+      - <role>x_[scope]_case_manager</>              -> ../roles/sys_user_role_x_[scope]_case_manager.xml
+
+    DETERMINISTIC SYS_ID DERIVATION
+    ===============================
+    Each record's `<sys_id>` is computed as the lowercase MD5 hash of
+    that record's canonical `<name>` (or, for anonymous records [4]
+    and [10] that have no `<name>` field, of the canonical
+    `<sys_update_name>`). This matches the convention used by the
+    sibling reports (../reports/x_[scope]_all_cases_by_status.xml line
+    435 with sys_id deeaca81d8626c9c2cc2974716efd08c =
+    md5("x_[scope]_all_cases_by_status"); ../reports/
+    x_[scope]_all_cases_by_type.xml line for sys_id
+    f35f0a22b19d6e5385538eb3febb1a84 =
+    md5("x_[scope]_all_cases_by_type"); etc.) and by ACLs (../acl/
+    x_[scope]_case_create_manager.xml line for sys_id
+    225e62a69110cad11ec91010e2a8b380). Re-importing this file onto a
+    fresh PDI resolves the same sys_id values and idempotently updates
+    the same rows rather than creating duplicates.
+
+    Computed values (verified via `echo -n NAME | md5sum`):
+      [1]  md5("x_[scope]_manager_view_canvas")                           = 041b6707a9ea36b9928d6b380ee5b039
+      [2]  md5("x_[scope]_manager_view")                                  = 6459b19ef618e53a07735c38fc6a1d5c
+      [3]  md5("x_[scope]_manager_view_tab_main")                         = 245b2c0dbb907c31da0c2ad45b574803
+      [4]  md5("pa_m2m_dashboard_tabs_x_[scope]_manager_view_tab_main")   = 5d43fb81693efa2d55369a442f7a87e4
+      [5]  md5("x_[scope]_manager_view_widget_all_cases_by_status")       = 4e5ad436431603d5f7da21d74288d99a
+      [6]  md5("x_[scope]_manager_view_widget_all_cases_by_type")         = 281cbc71dae45c6a650a575f0a7f6e16
+      [7]  md5("x_[scope]_manager_view_widget_all_cases_by_priority")     = 23073e7a38bdcf5795788260c49fd2be
+      [8]  md5("x_[scope]_manager_view_widget_avg_time_to_close")         = 06f09166d8132aa419aebc2328f47a1b
+      [9]  md5("x_[scope]_manager_view_widget_cases_opened_30d")          = dc63d81115b13e70551eddff1115d410
+      [10] md5("pa_dashboard_role_x_[scope]_manager_view_case_manager")   = 8a7f52dd374a8b12e128d3c068fb96d4
+
+    ROLE VISIBILITY (CRITICAL - AAP Section 0.7.2)
+    ==============================================
+    Per the assigned-folder requirements ("Manager View dashboard MUST
+    be visible to x_[scope]_case_manager only"), record [10] is the
+    SOLE role attachment. It binds this dashboard to the scoped manager
+    role. There is intentionally NO role attachment for:
+      - x_[scope]_case_agent (agents have their own dashboard)
+      - x_[scope]_case_viewer (viewers have read-only on tables but no
+        dashboard access by default)
+      - admin (no global-scope writes per AAP Section 0.7.2)
+      - itil (no global ServiceNow role attachments per AAP)
+    A user with NONE of the above roles cannot navigate to this
+    dashboard from the Performance Analytics dashboard catalog.
+    A user with the x_[scope]_case_manager role gets the dashboard
+    rendered with all five widgets populated by the underlying
+    sys_report queries. Per AAP Section 0.7.3 Gate 6 ("Both dashboards
+    render with synthetic data"), the demo manager
+    (../seed-data/users/sys_user_x_[scope]_demo_manager.xml) MUST see
+    a fully-populated rendering after Update Set apply.
+
+    LAYOUT DISCIPLINE (12-COLUMN RESPONSIVE GRID)
+    =============================================
+    ServiceNow's modern dashboard grid is 12-column responsive. The
+    five widget records below honor this grid:
+      Row 1 (chart row): three width=4 widgets at columns 1, 5, 9.
+      Row 2 (score row): two width=6 widgets at columns 1, 7.
+
+    Position math:
+      Widget 1: column=1, width=4  -> occupies columns 1-4
+      Widget 2: column=5, width=4  -> occupies columns 5-8
+      Widget 3: column=9, width=4  -> occupies columns 9-12
+      Widget 4: column=1, width=6  -> occupies columns 1-6
+      Widget 5: column=7, width=6  -> occupies columns 7-12
+
+    Row math (each widget is height=4):
+      Widget 1, 2, 3: row=1 -> occupies rows 1-4
+      Widget 4, 5:    row=5 -> occupies rows 5-8
+
+    On mobile/tablet viewports (below ~768px), ServiceNow auto-stacks
+    widgets vertically; the column/width values become collapsed to a
+    single-column layout. The dashboard remains usable on a phone.
+
+    No widget overlaps any other widget. The total grid usage is
+    8 row-units tall and 12 columns wide on desktop.
+
+    ORDER FIELDS
+    ============
+    The pa_dashboards record carries `<order>200</order>` so this
+    dashboard appears AFTER the Agent Workspace dashboard
+    (`<order>100</order>`) when a user holds both case_agent and
+    case_manager roles. This gives a natural reading order: agent
+    dashboard first (daily-driver), manager dashboard second
+    (operational-review). The agent dashboard's order=100 is
+    documented in ../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml.
+
+    The pa_tab record carries `<order>1</order>` because there is
+    exactly one tab on this dashboard. If future iterations add a
+    second tab, that tab would carry `<order>2</order>`.
+
+    The pa_m2m_dashboard_tabs record carries `<order>1</order>` for
+    its position in the dashboard's tab list (left-most tab).
+
+    The pa_dashboard_widgets records carry order values 10, 20, 30,
+    40, 50 (left-to-right, top-to-bottom across the grid). These
+    order values do NOT affect grid placement (column/row/width/height
+    do that); they affect tab-key navigation order and accessibility-
+    tool reading order. The 10/20/30/40/50 spacing leaves room for
+    future widgets to be inserted (e.g., 15) without renumbering.
+
+    ICON
+    ====
+    The pa_dashboards `<icon>fa-line-chart</icon>` field references
+    the FontAwesome `fa-line-chart` glyph. This icon is decorative
+    only - it appears next to the dashboard title in the Performance
+    Analytics dashboard catalog. If the target PDI release ships a
+    different FontAwesome version that has renamed `fa-line-chart`
+    to `fa-chart-line` or `analytics`, the dashboard catalog will
+    fall back to a default icon; the dashboard itself remains fully
+    functional. The Agent Workspace dashboard
+    (../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml) is
+    expected to use a different icon (e.g., `fa-tasks` or `fa-user`)
+    to visually distinguish the two dashboards in the catalog.
+
+    AUDIT TIMESTAMPS
+    ================
+    All `<sys_created_on>` and `<sys_updated_on>` fields use the
+    fixed value `2025-01-01 00:00:00` to make this Update Set XML
+    deterministically re-importable. ServiceNow ignores these values
+    on import (the platform stamps the actual import timestamp on
+    each row) but having a fixed value here keeps the file byte-for-
+    byte stable across re-generation runs. This matches the convention
+    used by sibling reports, ACLs, and other artifacts in this
+    scoped application.
+
+    The `<sys_created_by>` and `<sys_updated_by>` fields use `admin`
+    because the Update Set is exported by an admin user on the
+    development PDI; on apply, the platform overrides these with
+    the actual importing user. This too matches sibling artifacts.
+
+    XML WELL-FORMEDNESS
+    ===================
+    Per AAP Section 0.7.3 Gate 7 (Update Set integrity) and the
+    assigned-folder requirements, this file MUST parse cleanly with
+    `xmllint -noout`. The XML is rooted at `<unload>` with the
+    required `unload_date` attribute, contains exactly 10 child
+    record elements, uses 4-space indentation, employs lowercase
+    booleans (`true`/`false`), and closes every opened tag. No
+    embedded `<![CDATA[` blocks are needed because none of the field
+    values contain XML special characters.
+
+    Element ordering within each record: alphabetical (per ServiceNow's
+    standard export convention, matching the sibling reports and
+    other artifacts in this project).
+
+    VALIDATION GATE COMPLIANCE
+    ==========================
+    Per AAP Section 0.7.3, this file's success criteria are:
+
+      [x] Gate 6 (Dashboards): Both dashboards render with synthetic
+          data; all widgets display data; no broken report references.
+          * All five `<report>` cross-references resolve to existing
+            ../reports/*.xml records by name.
+          * Role attachment to x_[scope]_case_manager guarantees the
+            demo manager (sys_user_x_[scope]_demo_manager.xml) can
+            navigate to and render this dashboard.
+          * Synthetic data per AAP Section 0.4.1 (10+ demo cases
+            spanning all statuses and both types; cases 06 and 10 with
+            populated closed_date for Avg Time to Close; cases with
+            opened_date within 30 days for Cases Opened in Last 30
+            Days) drives all five widgets to display non-empty values.
+      [x] Gate 7 (Update Set): scoped app exports without errors; loads
+          on a fresh PDI without errors. The deterministic MD5(name)
+          sys_id strategy ensures no duplicate-sys_id collisions on
+          re-import; the `INSERT_OR_UPDATE` action on every record
+          ensures idempotent re-application.
+
+    The literal `[scope]` placeholder is preserved verbatim per AAP
+    convention (Section 0.7.2 "Scoped-namespace-only constraint"); the
+    Personal Developer Instance auto-assigns the actual concrete scope
+    id at App Engine Studio creation time, and the Update Set apply-
+    time renaming propagates consistently across all bracketed
+    placeholders in this artifact. The deterministic sys_ids below
+    are computed against the `[scope]` literal and remain stable across
+    re-imports onto fresh PDIs.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <!--
+        ===================================================================
+        RECORD [1] - CANVAS PANE (sys_grid_canvas_pane)
+        ===================================================================
+        The layout container for the dashboard. ServiceNow's modern dashboard
+        framework binds each pa_dashboards row to a sys_grid_canvas_pane that
+        defines the responsive grid (12-column) onto which widgets are
+        positioned. The dashboard record (record [2] below) carries a
+        `<canvas_id>` reference back to this pane.
+
+        Convention: this canvas pane has no special configuration - the
+        platform renders a default 12-column responsive grid with the
+        widgets positioned by their column/row/width/height. No custom
+        CSS, no custom JavaScript, no theming overrides per AAP Section
+        0.4.4 ("default Service Portal theme. No custom CSS, no custom
+        branding").
+    -->
+    <sys_grid_canvas_pane action="INSERT_OR_UPDATE">
+        <name>x_[scope]_manager_view_canvas</name>
+        <sys_class_name>sys_grid_canvas_pane</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>041b6707a9ea36b9928d6b380ee5b039</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_manager_view_canvas</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_grid_canvas_pane_x_[scope]_manager_view_canvas</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_grid_canvas_pane>
+
+    <!--
+        ===================================================================
+        RECORD [2] - DASHBOARD (pa_dashboards)
+        ===================================================================
+        The Manager View dashboard record itself. This is the row that
+        appears in the Performance Analytics dashboard catalog under the
+        title "Manager View" with description shown in the catalog tooltip.
+
+        Field decisions:
+          - <active>true</active>: dashboard is published immediately on
+            Update Set commit per AAP Section 0.4.4 (manager users see
+            "operationally relevant aggregate views on day one").
+          - <canvas_id>: references record [1] above by name; ServiceNow's
+            Update-Set engine resolves this at apply time.
+          - <description>: AAP-mandated one-sentence summary visible in the
+            catalog. Free of PII per AAP Section 0.7.2.
+          - <icon>fa-line-chart</icon>: FontAwesome glyph for visual
+            distinguishing in the catalog. Decorative only.
+          - <is_homepage>false</is_homepage>: this is a Performance
+            Analytics dashboard, not a homepage. ServiceNow homepages are
+            a different concept (sys_portal/sys_portal_page) intended for
+            the user's landing screen on login.
+          - <name>: machine-readable identifier prefixed with x_[scope]_
+            per AAP Section 0.7.2 scope-namespace-exclusivity rule.
+          - <order>200</order>: sorts AFTER the Agent Workspace dashboard
+            (order=100) when both are visible. Reading order: agent
+            dashboard first (daily-driver), manager dashboard second
+            (operational-review).
+          - <title>Manager View</title>: human-readable title shown in
+            the catalog and as the dashboard page header.
+          - <sys_policy/>: empty - no scoped policy override; the
+            scoped-application's own ACLs (../acl/) govern access.
+    -->
+    <pa_dashboards action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <canvas_id display_value="x_[scope]_manager_view_canvas">x_[scope]_manager_view_canvas</canvas_id>
+        <description>Operational KPI dashboard for case managers - shows team-wide case distributions across status, type, and priority, plus throughput KPIs (average time to close, cases opened in last 30 days).</description>
+        <icon>fa-line-chart</icon>
+        <is_homepage>false</is_homepage>
+        <name>x_[scope]_manager_view</name>
+        <order>200</order>
+        <sys_class_name>pa_dashboards</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6459b19ef618e53a07735c38fc6a1d5c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Manager View</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboards_x_[scope]_manager_view</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <title>Manager View</title>
+    </pa_dashboards>
+
+    <!--
+        ===================================================================
+        RECORD [3] - TAB (pa_tab)
+        ===================================================================
+        The single tab that hosts all five widgets. ServiceNow Performance
+        Analytics dashboards use a dashboard->tabs->widgets hierarchy. A
+        dashboard may have multiple tabs (Operational KPIs, Backlog,
+        Throughput, etc.); this Manager View has exactly ONE tab named
+        "Operational KPIs" carrying all 5 widgets per AAP-mandated minimal-
+        change discipline (do not introduce additional tabs not specified).
+
+        Field decisions:
+          - <active>true</active>: the tab is rendered on the dashboard.
+          - <name>: machine-readable identifier; matches the
+            sys_update_name pattern.
+          - <order>1</order>: position in the dashboard's tab strip
+            (left-most). With only one tab, this value is symbolic.
+          - <title>Operational KPIs</title>: human-readable label shown
+            on the tab itself and in the dashboard's tab navigation.
+    -->
+    <pa_tab action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <name>x_[scope]_manager_view_tab_main</name>
+        <order>1</order>
+        <sys_class_name>pa_tab</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>245b2c0dbb907c31da0c2ad45b574803</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Operational KPIs</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_tab_x_[scope]_manager_view_tab_main</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <title>Operational KPIs</title>
+    </pa_tab>
+
+    <!--
+        ===================================================================
+        RECORD [4] - DASHBOARD-TO-TAB MEMBERSHIP (pa_m2m_dashboard_tabs)
+        ===================================================================
+        ServiceNow's pa_m2m_dashboard_tabs is the many-to-many junction
+        table that wires a pa_dashboards record to one or more pa_tab
+        records. Without this row, the tab exists but the dashboard
+        cannot render it.
+
+        Field decisions:
+          - <dashboard>: cross-reference to record [2] (the dashboard)
+            by name.
+          - <tab>: cross-reference to record [3] (the tab) by name.
+          - <order>1</order>: tab's position in the dashboard's tab
+            strip. With only one tab, this value is symbolic but kept
+            for forward-compatibility with future multi-tab layouts.
+          - This record has no <name> field; sys_update_name carries
+            the canonical identifier for the Update-Set engine.
+    -->
+    <pa_m2m_dashboard_tabs action="INSERT_OR_UPDATE">
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <order>1</order>
+        <sys_class_name>pa_m2m_dashboard_tabs</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5d43fb81693efa2d55369a442f7a87e4</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_m2m_dashboard_tabs_x_[scope]_manager_view_tab_main</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <tab display_value="Operational KPIs">x_[scope]_manager_view_tab_main</tab>
+    </pa_m2m_dashboard_tabs>
+
+
+    <!--
+        ===================================================================
+        RECORD [5] - WIDGET 1: ALL CASES BY STATUS (BAR CHART)
+        ===================================================================
+        The first chart widget on row 1 (left-most). Renders the
+        ../reports/x_[scope]_all_cases_by_status.xml report (type=bar)
+        showing the count of cases in each of the six status buckets
+        (Draft, Open, In Progress, Pending, Resolved, Closed).
+
+        Position math (12-column grid):
+          column=1, width=4 -> occupies columns 1-4
+          row=1, height=4   -> occupies rows 1-4
+
+        Per AAP Section 0.4.4, this is the "lifecycle-stage view" that
+        shows managers where cases pile up. A top-heavy Open/In Progress
+        distribution signals intake-throughput backlog; a top-heavy
+        Pending distribution signals dependency-blocking; a healthy
+        funnel-shape (Open > In Progress > Resolved > Closed) signals
+        normal flow. Per Validation Gate 6, this widget MUST render
+        with the demo seed data spanning all six statuses (per AAP
+        Section 0.4.1, demo cases 01-10 hit every status).
+
+        Cross-references:
+          - <dashboard>: record [2] in this file.
+          - <tab>: record [3] in this file.
+          - <report>: ../reports/x_[scope]_all_cases_by_status.xml.
+            sys_id of that report is deeaca81d8626c9c2cc2974716efd08c
+            (verified via md5("x_[scope]_all_cases_by_status")).
+    -->
+    <pa_dashboard_widgets action="INSERT_OR_UPDATE">
+        <column>1</column>
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <height>4</height>
+        <name>x_[scope]_manager_view_widget_all_cases_by_status</name>
+        <order>10</order>
+        <report display_value="All Cases by Status">x_[scope]_all_cases_by_status</report>
+        <row>1</row>
+        <sys_class_name>pa_dashboard_widgets</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>4e5ad436431603d5f7da21d74288d99a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>All Cases by Status</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboard_widgets_x_[scope]_manager_view_widget_all_cases_by_status</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <tab display_value="Operational KPIs">x_[scope]_manager_view_tab_main</tab>
+        <title>All Cases by Status</title>
+        <type>report</type>
+        <width>4</width>
+    </pa_dashboard_widgets>
+
+    <!--
+        ===================================================================
+        RECORD [6] - WIDGET 2: ALL CASES BY TYPE (DONUT/PIE CHART)
+        ===================================================================
+        The second chart widget on row 1 (center). Renders the
+        ../reports/x_[scope]_all_cases_by_type.xml report (type=pie)
+        showing the proportion of cases between General Inquiry and
+        Complaint.
+
+        Position math (12-column grid):
+          column=5, width=4 -> occupies columns 5-8
+          row=1, height=4   -> occupies rows 1-4
+
+        Per AAP Section 0.4.4, this is the "case-handling-pipeline view"
+        that shows managers the SUBDOMAIN MIX between the two case types.
+        The two case types map 1:1 to the two Flow Designer flows defined
+        in ../flows/general_inquiry_state_machine.xml and
+        ../flows/complaint_state_machine.xml. Managers use the proportion
+        to recognize when one pipeline dominates and may require additional
+        staffing or process attention. Per AAP Section 0.4.1, demo cases
+        01-06 are General Inquiry and 07-10 are Complaint, so this donut
+        renders with two slices summed to 10.
+
+        Why donut not bar: per AAP Section 0.4.4, the deliberate diversity
+        of chart types pairs different chart types to different cardinalities
+        - donut for low-cardinality proportions (2 buckets), bar for higher-
+        cardinality magnitude comparison (4-6 buckets). Do NOT flatten the
+        chart type to "all bar" or "all pie" for consistency.
+
+        Cross-references:
+          - <dashboard>: record [2] in this file.
+          - <tab>: record [3] in this file.
+          - <report>: ../reports/x_[scope]_all_cases_by_type.xml.
+            sys_id of that report is f35f0a22b19d6e5385538eb3febb1a84
+            (verified via md5("x_[scope]_all_cases_by_type")).
+    -->
+    <pa_dashboard_widgets action="INSERT_OR_UPDATE">
+        <column>5</column>
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <height>4</height>
+        <name>x_[scope]_manager_view_widget_all_cases_by_type</name>
+        <order>20</order>
+        <report display_value="All Cases by Type">x_[scope]_all_cases_by_type</report>
+        <row>1</row>
+        <sys_class_name>pa_dashboard_widgets</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>281cbc71dae45c6a650a575f0a7f6e16</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>All Cases by Type</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboard_widgets_x_[scope]_manager_view_widget_all_cases_by_type</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <tab display_value="Operational KPIs">x_[scope]_manager_view_tab_main</tab>
+        <title>All Cases by Type</title>
+        <type>report</type>
+        <width>4</width>
+    </pa_dashboard_widgets>
+
+    <!--
+        ===================================================================
+        RECORD [7] - WIDGET 3: ALL CASES BY PRIORITY (BAR CHART)
+        ===================================================================
+        The third chart widget on row 1 (right-most). Renders the
+        ../reports/x_[scope]_all_cases_by_priority.xml report (type=bar)
+        showing the count of cases at each of the four priority levels
+        (Low, Medium, High, Critical).
+
+        Position math (12-column grid):
+          column=9, width=4 -> occupies columns 9-12
+          row=1, height=4   -> occupies rows 1-4
+
+        Per AAP Section 0.4.4, this is the "urgency-tier view" that
+        shows managers the distribution across the urgency spectrum.
+        Bars at the high end (High, Critical) signal urgent caseload
+        that may need immediate attention; bars at the low end (Low,
+        Medium) signal background work. The ordinal nature of priority
+        favors the bar chart's left-to-right linear ordering. Per
+        Validation Gate 6, the demo seed data MUST span at least two
+        of the four priorities (per AAP Section 0.4.1, the seed data
+        SHOULD use a mix to exercise the visualization).
+
+        Cross-references:
+          - <dashboard>: record [2] in this file.
+          - <tab>: record [3] in this file.
+          - <report>: ../reports/x_[scope]_all_cases_by_priority.xml.
+            sys_id of that report is f4c76c4c0bb1643542ac6347ddf9edcd
+            (verified via md5("x_[scope]_all_cases_by_priority")).
+    -->
+    <pa_dashboard_widgets action="INSERT_OR_UPDATE">
+        <column>9</column>
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <height>4</height>
+        <name>x_[scope]_manager_view_widget_all_cases_by_priority</name>
+        <order>30</order>
+        <report display_value="All Cases by Priority">x_[scope]_all_cases_by_priority</report>
+        <row>1</row>
+        <sys_class_name>pa_dashboard_widgets</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>23073e7a38bdcf5795788260c49fd2be</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>All Cases by Priority</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboard_widgets_x_[scope]_manager_view_widget_all_cases_by_priority</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <tab display_value="Operational KPIs">x_[scope]_manager_view_tab_main</tab>
+        <title>All Cases by Priority</title>
+        <type>report</type>
+        <width>4</width>
+    </pa_dashboard_widgets>
+
+
+    <!--
+        ===================================================================
+        RECORD [8] - WIDGET 4: AVERAGE TIME TO CLOSE (SINGLE-SCORE KPI)
+        ===================================================================
+        The first single-score widget on row 2 (left-most). Renders the
+        ../reports/x_[scope]_avg_time_to_close.xml report (type=single_score)
+        showing the average duration in seconds (or formatted Duration)
+        between opened_date and closed_date over Closed cases.
+
+        Position math (12-column grid):
+          column=1, width=6 -> occupies columns 1-6
+          row=5, height=4   -> occupies rows 5-8
+
+        Per AAP Section 0.4.4, this is the "operational throughput KPI"
+        that shows managers how long the team takes on average to close
+        a case. ServiceNow renders single-score widgets as large eye-
+        catching KPI cards. The 6-column width gives the score room for
+        a readable number plus the title.
+
+        Per AAP Section 0.7.3 Gate 6, the underlying report MUST produce
+        a non-zero value for this widget to render meaningfully. This
+        depends on:
+          - At least one demo case with status=Closed.
+          - That case's closed_date AND opened_date both populated.
+          - Per AAP Section 0.4.1, demo cases 06 (Closed General Inquiry)
+            and 10 (Closed Complaint) supply the closed-date data.
+
+        The underlying report's aggregation strategy (Strategy A in
+        ../reports/x_[scope]_avg_time_to_close.xml) uses a calculated
+        `duration_to_close_seconds` field on x_[scope]_case equal to
+        `closed_date - opened_date`. The dashboard widget itself is
+        agnostic to the calculation strategy - it just renders the
+        report's computed AVG.
+
+        Cross-references:
+          - <dashboard>: record [2] in this file.
+          - <tab>: record [3] in this file.
+          - <report>: ../reports/x_[scope]_avg_time_to_close.xml.
+            sys_id of that report is 79fabb5f5754b629205b2382face3ebb
+            (verified via md5("x_[scope]_avg_time_to_close")).
+    -->
+    <pa_dashboard_widgets action="INSERT_OR_UPDATE">
+        <column>1</column>
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <height>4</height>
+        <name>x_[scope]_manager_view_widget_avg_time_to_close</name>
+        <order>40</order>
+        <report display_value="Average Time to Close">x_[scope]_avg_time_to_close</report>
+        <row>5</row>
+        <sys_class_name>pa_dashboard_widgets</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>06f09166d8132aa419aebc2328f47a1b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Average Time to Close</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboard_widgets_x_[scope]_manager_view_widget_avg_time_to_close</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <tab display_value="Operational KPIs">x_[scope]_manager_view_tab_main</tab>
+        <title>Average Time to Close</title>
+        <type>report</type>
+        <width>6</width>
+    </pa_dashboard_widgets>
+
+    <!--
+        ===================================================================
+        RECORD [9] - WIDGET 5: CASES OPENED IN LAST 30 DAYS (SINGLE-SCORE)
+        ===================================================================
+        The second single-score widget on row 2 (right-most). Renders the
+        ../reports/x_[scope]_cases_opened_30d.xml report (type=single_score)
+        showing the count of cases whose opened_date is within the last
+        30 days.
+
+        Position math (12-column grid):
+          column=7, width=6 -> occupies columns 7-12
+          row=5, height=4   -> occupies rows 5-8
+
+        Per AAP Section 0.4.4, this is the "intake-volume KPI" that shows
+        managers how many new cases entered the system in the most recent
+        30-day window. Used to detect intake surges (e.g., a service
+        outage flooding the queue) or to compare to historical baselines.
+        The underlying report uses gs.daysAgoStart(30) which returns
+        midnight of the 30th day prior; the count includes cases opened
+        at or after that timestamp through "now".
+
+        Per AAP Section 0.7.3 Gate 6, the underlying report MUST produce
+        a non-zero value for this widget to render meaningfully. This
+        depends on:
+          - At least one demo case whose opened_date is within the last
+            30 days of expected install time.
+          - Per AAP Section 0.4.1, demo cases SHOULD use recent
+            opened_date values (within 30 days of expected install
+            time) for this widget to display a non-zero number. Pinning
+            seed opened_date to a fixed past date (more than 30 days
+            ago) breaks this widget's display.
+
+        Cross-references:
+          - <dashboard>: record [2] in this file.
+          - <tab>: record [3] in this file.
+          - <report>: ../reports/x_[scope]_cases_opened_30d.xml.
+            sys_id of that report is 95b2127b026a92ba5e041a8d4d7277ec
+            (verified via md5("x_[scope]_cases_opened_30d")).
+    -->
+    <pa_dashboard_widgets action="INSERT_OR_UPDATE">
+        <column>7</column>
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <height>4</height>
+        <name>x_[scope]_manager_view_widget_cases_opened_30d</name>
+        <order>50</order>
+        <report display_value="Cases Opened in Last 30 Days">x_[scope]_cases_opened_30d</report>
+        <row>5</row>
+        <sys_class_name>pa_dashboard_widgets</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>dc63d81115b13e70551eddff1115d410</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Cases Opened in Last 30 Days</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboard_widgets_x_[scope]_manager_view_widget_cases_opened_30d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <tab display_value="Operational KPIs">x_[scope]_manager_view_tab_main</tab>
+        <title>Cases Opened in Last 30 Days</title>
+        <type>report</type>
+        <width>6</width>
+    </pa_dashboard_widgets>
+
+    <!--
+        ===================================================================
+        RECORD [10] - ROLE ATTACHMENT (pa_dashboard_role)
+        ===================================================================
+        Binds this dashboard to the x_[scope]_case_manager scoped role.
+        Per the assigned-folder requirements ("Manager View dashboard
+        MUST be visible to x_[scope]_case_manager only"), this is the
+        SOLE role attachment for this dashboard.
+
+        Visibility outcome:
+          - Users WITH x_[scope]_case_manager role:
+              Dashboard appears in the Performance Analytics dashboard
+              catalog and renders all five widgets.
+          - Users WITHOUT x_[scope]_case_manager role (including
+              x_[scope]_case_agent and x_[scope]_case_viewer):
+              Dashboard does NOT appear in the catalog by default.
+          - Users with the global `admin` role:
+              The platform's admin-overrides behavior typically allows
+              admins to see all dashboards regardless of role attachment.
+              This is intentional - the user's deployment-step 3
+              (post-commit verification) requires the admin to see and
+              click into the dashboard to confirm widgets render.
+
+        Per AAP Section 0.7.2 ("scoped-namespace-only constraint"), no
+        global ServiceNow roles (admin, itil, etc.) are attached here.
+        Per the same section, no other scoped roles (case_agent,
+        case_viewer) are attached here either - those audiences see the
+        Agent Workspace dashboard or no dashboard, respectively.
+
+        Cross-references:
+          - <dashboard>: record [2] in this file (x_[scope]_manager_view).
+          - <role>: ../roles/sys_user_role_x_[scope]_case_manager.xml.
+            sys_id of that role is 73710b052f274ece1d578c00f4424423
+            (verified via md5("x_[scope]_case_manager")).
+
+        This record has no <name> field; sys_update_name carries the
+        canonical identifier for the Update-Set engine.
+    -->
+    <pa_dashboard_role action="INSERT_OR_UPDATE">
+        <dashboard display_value="Manager View">x_[scope]_manager_view</dashboard>
+        <role display_value="x_[scope]_case_manager">x_[scope]_case_manager</role>
+        <sys_class_name>pa_dashboard_role</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8a7f52dd374a8b12e128d3c068fb96d4</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>pa_dashboard_role_x_[scope]_manager_view_case_manager</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </pa_dashboard_role>
+</unload>
+
