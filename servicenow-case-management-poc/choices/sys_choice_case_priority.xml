@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the FOUR `sys_choice` rows that
+    enumerate the legal values of the `priority` Choice field on the
+    `x_[scope]_case` custom table inside the scoped application
+    `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field      Type     Constraints
+        priority   Choice   Low, Medium, High, Critical
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning):
+        choices/sys_choice_case_priority.xml -> Low, Medium, High, Critical
+
+    Per the assigned-folder description and AAP Section 0.4.1, new cases
+    default to `Medium` priority - a sensible mid-range default for case
+    management. The default itself is configured in the parent dictionary
+    entry (../dictionary/x_[scope]_case_priority.xml has
+    <default_value>Medium</default_value>); these sys_choice records merely
+    enumerate the allowed values without preferring any one of them at the
+    Choice-list level. The Choice-list `<sequence>` controls dropdown DISPLAY
+    order, NOT default selection - displaying Low first does not change the
+    fact that Medium is auto-applied at insert time when no explicit value
+    is provided.
+
+    The values authored here are the EXHAUSTIVE, CLOSED enumeration that the
+    AAP mandates - exactly four records, no more and no fewer. Per the
+    MINIMAL CHANGE CLAUSE in AAP Section 0.7.2, additional priority levels
+    such as `Urgent`, `Severe`, `Emergency`, `None`, `Trivial`, etc. are
+    explicitly out of scope for this POC. The increment-of-100 sequence
+    spacing leaves room for future extensibility without renumbering, but
+    no extension is authorized in this build.
+
+    Per AAP Sections 0.5.2 and 0.4.1, the labels declared here are read by:
+
+      The parent dictionary entry that declares this field as Choice:
+        ../dictionary/x_[scope]_case_priority.xml
+            (mandatory=true, choice=3 means "Choice list - dropdown only";
+            default_value=Medium picks one of the four labels declared
+            below as the auto-applied value at insert time.)
+
+      The Manager View dashboard's "All cases by priority" bar chart:
+        ../reports/x_[scope]_all_cases_by_priority.xml
+            (bar grouped by priority - four bars, one per label below.
+            The visual ordering of the bars is driven by the `sequence`
+            field declared here: Low (left) -> Medium -> High -> Critical
+            (right). This gives the dashboard a meaningful "left-to-right
+            urgency" visualization that internal users intuitively grasp.)
+
+      The synthetic demo cases satisfying AAP Section 0.4.1 minimum-data
+      threshold (each demo case picks one of these four values to exercise
+      the Manager View bar chart and demonstrate Choice-field behavior on
+      the internal form):
+        ../seed-data/cases/x_[scope]_case_demo_01.xml ... _demo_10.xml
+
+    The Experience Portal submission widget per AAP Section 0.4.4 does NOT
+    expose this field to anonymous external requesters - per AAP Section
+    0.7.4, the public submission form has only five inputs: subject, type,
+    description, requester_name, requester_email. The `priority` field is
+    populated by the parent dictionary entry's <default_value>Medium</default_value>
+    server-side at insert time. Internal users (case_manager or assigned
+    case_agent) can re-prioritize a case after creation through the standard
+    form view as new information emerges (e.g., a Low-priority complaint
+    that escalates to Critical when additional facts surface). The Experience
+    Portal lookup widget likewise does NOT expose this field per AAP Section
+    0.7.4 ("the lookup page returns ONLY status, subject, opened_date - no
+    internal fields exposed").
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 178-179:
+            @Column(name = "cm_case_priority")
+            private String priority;
+        ArkCase's `priority` was a free-form `String` JPA column with NO
+        platform-level enumeration check. Any caller could assign any
+        arbitrary string ("urgent", "URGENT", "URG", "p1", "P1", "Hi",
+        "HIGH!!!", "rush", etc.) and the JPA layer enforced no validation.
+        This made aggregate analytics (e.g., "count of high-priority cases")
+        unreliable across ArkCase deployments because the priority column
+        accumulated typos, casing variants, and ad-hoc free-text from the
+        Frevvo form, the Activiti workflow side-channel, and direct SQL
+        scripts. The ServiceNow target FIXES this by declaring a controlled
+        vocabulary of EXACTLY four labels here, enforced at platform-
+        validation time through the parent dictionary entry's
+        `<choice>3</choice>` setting in
+        ../dictionary/x_[scope]_case_priority.xml. Every case insert from
+        any path (internal form, Table API, scripted REST, seed scripts)
+        is now guaranteed to land on one of the four labels below or be
+        rejected.
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFileConstants.java does
+        NOT declare a priority enumeration; it only declares OBJECT_TYPE,
+        EVENT_TYPE_*, and queue-action constants. The priority enumeration
+        was therefore implicit / undocumented in ArkCase - the target
+        FIXES that defect by declaring the four values here explicitly.
+      - The four AAP-mandated values (`Low`, `Medium`, `High`, `Critical`)
+        are standard ITSM/case-management priority levels matching the
+        OOB ServiceNow `incident.priority` and `change_request.priority`
+        conventions. They are entirely defined by the AAP Section 0.5.7
+        verbatim, not derived from any specific ArkCase code path.
+      - The field name is `priority` (lowercase, 8 chars; NOT `casePriority`
+        as in the ArkCase Java field name, NOT `case_priority` as in the
+        ArkCase MySQL column name `cm_case_priority`) per AAP Section 0.5.7
+        verbatim. This matches the conventional ServiceNow Choice-field
+        naming convention across the platform.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - EXACTLY four records: no fewer, no more. Per AAP Section 0.5.7
+        verbatim. The four records below are the COMPLETE enumeration.
+      - Title Case labels: `Low`, `Medium`, `High`, `Critical`. NOT
+        uppercase (ArkCase legacy convention may have used "HIGH"), NOT
+        lowercase, NOT camelCase. The agent prompt's Phase 3 verbatim:
+        "All four labels are Title Case, single words. No spaces, no
+        hyphens, no special characters." Each label is a single ASCII
+        word with the first letter capitalized.
+      - Label = Value pattern: each `<value>` matches its sibling
+        `<label>` byte-for-byte. The stored value IS the human-readable
+        label - no integer priority codes, no enum ordinals, no separate
+        machine-key. This matches the pattern used by sibling Choice
+        lists in this app (sys_choice_case_status, sys_choice_case_type,
+        sys_choice_case_task_status, sys_choice_case_task_type,
+        sys_choice_case_pending_reason, sys_choice_case_party_party_type)
+        and is essential for the Manager View bar chart aggregation
+        (GlideAggregate groupBy('priority')) to produce coherent labels
+        without translation.
+      - Sequence ordering by ascending urgency in increments of 100:
+            Low (100) -> Medium (200) -> High (300) -> Critical (400)
+        This is the standard "ascending urgency" convention. Per the
+        agent prompt's Key Insight #3, this order is intentional:
+            (a) the dropdown order on the case form (least urgent first
+                so an agent triaging a new case sees Low at the top and
+                escalates from there - prevents accidental Critical-by-
+                default-cursor-position)
+            (b) the bar order on the Manager View "All cases by priority"
+                bar chart (../reports/x_[scope]_all_cases_by_priority.xml)
+                left-to-right: Low to Critical, giving a meaningful visual
+                gradient from least to most urgent.
+            (c) the future extensibility - increment-of-100 spacing leaves
+                room for inserting new values (e.g., Urgent at sequence
+                350 between High and Critical) without renumbering existing
+                rows, though the AAP MINIMAL CHANGE CLAUSE prohibits
+                adding any in this POC.
+        Per the agent prompt's Key Insight #3 verbatim: "NEVER use the
+        alphabetical order (Critical -> High -> Low -> Medium)." The
+        ascending-urgency order is non-negotiable.
+      - All four records are <inactive>false</inactive>: every value is
+        active and selectable in the dropdown. There are no deprecated
+        legacy values to filter out (this is a greenfield Choice list).
+      - No <dependent_value/>: priority is a TOP-LEVEL classification
+        whose legal values do NOT depend on `status`, `type`, or any
+        other field. A Draft case can be Critical; a Closed case can be
+        Low; a General Inquiry can be Critical (e.g., a high-profile
+        public-records request); a Complaint can be Low (e.g., a minor
+        suggestion). No cascading dropdown is needed.
+      - No <hint/>: the labels are self-documenting (Low, Medium, High,
+        Critical are universally understood urgency terms). The agent
+        prompt explicitly suppresses helper text per the POC scope.
+      - No default value at this Choice level: per AAP Section 0.4.1 and
+        the agent prompt's Phase 4 verbatim, the default is configured
+        in the DICTIONARY entry (../dictionary/x_[scope]_case_priority.xml
+        has <default_value>Medium</default_value>), NOT in the choice
+        records here. The choice records merely define the available
+        options; the dictionary picks which one is auto-applied at insert
+        time. This separation is the standard ServiceNow design pattern -
+        making the default a property of the COLUMN (one default per
+        column) rather than a property of the VALUE (which would require
+        a "default" flag on each choice with at-most-one constraint).
+      - Scope-namespace exclusivity: every record's `<sys_scope>` and
+        `<sys_package>` resolve into the `x_[scope]_case_management`
+        scoped application by `source` attribute lookup. NO global-scope
+        writes - the OOB tables sys_user, sys_user_group, sys_user_role,
+        core_company, task, incident, etc. are never modified. The
+        OOB `incident.priority` Choice values (1-Critical, 2-High,
+        3-Moderate, 4-Low, 5-Planning) are NOT touched - this scoped
+        Choice list is independent.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. Each
+        record's `<sys_id>` element value is THIS record's own
+        deterministic primary key - computed as MD5 of the canonical
+        identifier `x_[scope]_case.priority.<Value>` so that re-generation
+        of this XML yields byte-identical output (no random UUIDs). The
+        sys_id is NOT a reference to any other record. The MD5 inputs
+        are documented in the trailing comment block below for full
+        traceability.
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time, which the import process resolves into the final
+        scope namespace.
+      - English language only: `<language>en</language>` on every record
+        per the POC scope. The platform supports localization via
+        additional sys_choice records keyed by `language`, but no
+        non-English locales are in scope.
+      - `<sys_domain>global</sys_domain>` on every record: domain
+        separation is not used by this scoped application.
+      - No PII: the labels are categorical urgency terms only; no real
+        names, email addresses, or organizational identifiers are
+        derived from or stored in these records.
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD SET MUST LOAD AFTER:
+        - ../app/sys_app/x_[scope]_case_management.xml (scoped application)
+        - ../app/sys_scope/x_[scope].xml (scope record)
+        - ../tables/x_[scope]_case.xml (parent table; priority field's host)
+        - ../dictionary/x_[scope]_case_priority.xml (parent dictionary entry;
+          declares the column shape, choice=3, default_value=Medium,
+          mandatory=true. Without this entry the sys_choice records below
+          have no column to attach to.)
+
+      THIS RECORD SET MUST LOAD BEFORE:
+        - ../reports/x_[scope]_all_cases_by_priority.xml
+            (Manager View bar chart grouped by priority - four bars, one
+            per label below, ordered Low -> Medium -> High -> Critical
+            left-to-right via the sequence values declared here)
+        - ../seed-data/cases/x_[scope]_case_demo_*.xml
+            (demo cases set this field; values must match the labels here
+            byte-for-byte for the GlideRecord seed lookups by `number` to
+            populate the priority field correctly. The demo cases SHOULD
+            distribute across all four priority values to exercise the
+            Manager View bar chart, though the AAP does not mandate
+            specific per-case priority assignments.)
+
+      Loading order is enforced by the alphabetical Update Set preview
+      ordering plus the record-by-record dependency-resolution pass.
+
+    The MD5 input for each record's <sys_id> is the canonical identifier
+    <table>.<element>.<value>, matching the convention used by the
+    sibling Choice files (sys_choice_case_status.xml,
+    sys_choice_case_type.xml, sys_choice_case_task_status.xml,
+    sys_choice_case_party_party_type.xml):
+        MD5("x_[scope]_case.priority.Low")      = 6224e4afe120474dd8d1257b4a406d37
+        MD5("x_[scope]_case.priority.Medium")   = 7cdfc33aa8fe789423d712565ee468bc
+        MD5("x_[scope]_case.priority.High")     = d7ca8d1e5a898400629bddebe06a9824
+        MD5("x_[scope]_case.priority.Critical") = 34a378616cc6fe411402335b0c0243da
+    These hashes are recomputable from the AAP-mandated canonical input,
+    guaranteeing deterministic XML re-generation across all build runs and
+    idempotent re-imports on any fresh PDI without sys_id collisions.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>priority</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Low</label>
+    <language>en</language>
+    <name>x_[scope]_case</name>
+    <sequence>100</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>6224e4afe120474dd8d1257b4a406d37</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Low</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>priority</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Medium</label>
+    <language>en</language>
+    <name>x_[scope]_case</name>
+    <sequence>200</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>7cdfc33aa8fe789423d712565ee468bc</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Medium</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>priority</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>High</label>
+    <language>en</language>
+    <name>x_[scope]_case</name>
+    <sequence>300</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>d7ca8d1e5a898400629bddebe06a9824</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>High</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>priority</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Critical</label>
+    <language>en</language>
+    <name>x_[scope]_case</name>
+    <sequence>400</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>34a378616cc6fe411402335b0c0243da</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Critical</value>
+</sys_choice>
+</unload>
