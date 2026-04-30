@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
     ServiceNow Update Set record-definition for the foundational `x_[scope]_case`
-    custom table inside the scoped application `x_[scope]_case_management`.
+    custom table inside the scoped application `x_[scope]`.
 
     This table is the case-lifecycle anchor of the POC. It replaces the case-domain
     subset of ArkCase's `acm_case_file` MySQL table (the JPA entity `CaseFile`
@@ -23,7 +23,7 @@
 
     Constraints honored:
       - Scoped-namespace exclusivity: every cross-reference resolves into the
-        x_[scope]_case_management scope; no global-scope writes.
+        x_[scope] scope; no global-scope writes.
       - Zero hardcoded sys_id literals in any reference field; sys_scope,
         sys_package, and number_ref all resolve by scope name via the `source`
         attribute. The sys_id element below is THIS record's own primary key
@@ -58,7 +58,7 @@
         <label>Case</label>
         <live_feed_enabled>false</live_feed_enabled>
         <name>x_[scope]_case</name>
-        <number_ref display_value="CASE" source="x_[scope]_case_management">x_[scope]_case_number</number_ref>
+        <number_ref display_value="CASE" source="x_[scope]">x_[scope]_case_number</number_ref>
         <plural>Cases</plural>
         <provider_class/>
         <read_access>public</read_access>
@@ -70,9 +70,9 @@
         <sys_id>bd806f5b23883f5d28ed792570f1070b</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name>x_[scope]_case</sys_name>
-        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
         <sys_update_name>sys_db_object_x_[scope]_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <record_update table="sys_scope">
     <sys_scope action="INSERT_OR_UPDATE">
-        <name>Case Management POC</name>
-        <scope>x_[scope]_case_management</scope>
-        <source>x_[scope]_case_management</source>
-        <version>1.0.0</version>
-        <short_description>Application scope for Case Management POC</short_description>
-        <vendor>ServiceNow Case Management POC</vendor>
-        <vendor_prefix>x_[scope]_case_management</vendor_prefix>
-        <private>false</private>
         <licensable>false</licensable>
         <logo />
+        <name>x_[scope]</name>
+        <private>false</private>
+        <scope>x_[scope]</scope>
+        <short_description>Application scope for Case Management POC</short_description>
+        <source>x_[scope]</source>
+        <sys_id>0e77960b9cdc260c199f0d2c23f37603</sys_id>
+        <vendor>ServiceNow Case Management POC</vendor>
+        <vendor_prefix>x_[scope]</vendor_prefix>
+        <version>1.0.0</version>
     </sys_scope>
 </record_update>

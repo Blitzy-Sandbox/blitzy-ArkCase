@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definition for the `sys_number` row that
     creates the auto-numbering counter for the `x_[scope]_case_task` custom
-    table inside the scoped application `x_[scope]_case_management`.
+    table inside the scoped application `x_[scope]`.
 
     This counter is what produces the human-readable, sequential identifiers
     (TASK0000001, TASK0000002, ...) for every row inserted into the
@@ -25,7 +25,7 @@
     every ServiceNow sys_db_object record provisions an auto-number column
     by default via its <number_ref> linkage; the parent table record at
     ../tables/x_[scope]_case_task.xml explicitly declares
-        <number_ref display_value="TASK" source="x_[scope]_case_management">
+        <number_ref display_value="TASK" source="x_[scope]">
             x_[scope]_case_task_number
         </number_ref>
     which means the table row REQUIRES this sys_number record to exist for
@@ -71,7 +71,7 @@
     Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
       - Scope-namespace exclusivity: this record's <sys_scope> and
         <sys_package> bind it to the scoped application
-        `x_[scope]_case_management`. The <table> element points at the
+        `x_[scope]`. The <table> element points at the
         SCOPED case_task table `x_[scope]_case_task` - NOT at the OOB
         `task`, `incident`, or any other global table. Per AAP Section
         0.3.2 verbatim: "no edits to ... `task`, `incident`, or any
@@ -81,7 +81,7 @@
         writes occur in this record.
       - Zero hardcoded cross-reference sys_ids: every cross-reference
         (<sys_scope>, <sys_package>, <table>) resolves by NAME (the
-        scope source name `x_[scope]_case_management` and the table
+        scope source name `x_[scope]` and the table
         name `x_[scope]_case_task`), not by literal sys_id. The
         <sys_id> text-node value is THIS record's own deterministic
         primary key (MD5 of the canonical record name
@@ -177,15 +177,16 @@
         <category>x_[scope]_case_task</category>
         <maximum>0</maximum>
         <number>0</number>
+        <number_of_digits>7</number_of_digits>
         <prefix>TASK</prefix>
         <sys_class_name>sys_number</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
         <sys_id>ee298f5e8c95d67c6fa9a97f5b390782</sys_id>
         <sys_mod_count>0</sys_mod_count>
-        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
         <sys_update_name>sys_number_x_[scope]_case_task</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

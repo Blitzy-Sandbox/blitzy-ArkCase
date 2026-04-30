@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definition for the polymorphic
     `x_[scope]_case_party` custom table inside the scoped application
-    `x_[scope]_case_management`.
+    `x_[scope]`.
 
     This table is the centerpiece of the AAP's "Polymorphic association via
     single-table choice + UI Policy" pattern (AAP Section 0.4.3). It COLLAPSES
@@ -64,7 +64,7 @@
 
     Constraints honored:
       - Scoped-namespace exclusivity: every cross-reference resolves into the
-        x_[scope]_case_management scope; no global-scope writes.
+        x_[scope] scope; no global-scope writes.
       - Zero hardcoded sys_id literals in any reference field; sys_scope,
         sys_package, and number_ref all resolve by scope name via the `source`
         attribute. The sys_id element below is THIS record's own primary key
@@ -97,7 +97,7 @@
       - The literal [scope] placeholder is preserved throughout per AAP
         convention; the PDI auto-assigns the actual scope id at App Engine
         Studio creation time. At Update Set import time, the platform resolves
-        every `source="x_[scope]_case_management"` reference against the
+        every `source="x_[scope]"` reference against the
         scope's `name` field on sys_scope / sys_app rather than via sys_id,
         guaranteeing portability across PDIs.
 
@@ -137,7 +137,7 @@
         <label>Case Party</label>
         <live_feed_enabled>false</live_feed_enabled>
         <name>x_[scope]_case_party</name>
-        <number_ref display_value="PARTY" source="x_[scope]_case_management">x_[scope]_case_party_number</number_ref>
+        <number_ref display_value="PARTY" source="x_[scope]">x_[scope]_case_party_number</number_ref>
         <plural>Case Parties</plural>
         <provider_class/>
         <read_access>public</read_access>
@@ -149,9 +149,9 @@
         <sys_id>179699d585b1c44f4a15b28b51a0de1c</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name>x_[scope]_case_party</sys_name>
-        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
         <sys_update_name>sys_db_object_x_[scope]_case_party</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

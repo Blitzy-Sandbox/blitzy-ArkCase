@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definition for the `sys_dictionary` row that
     declares the `case` Reference field on the `x_[scope]_case_party` custom
-    table inside the scoped application `x_[scope]_case_management`.
+    table inside the scoped application `x_[scope]`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_party:
 
@@ -486,9 +486,9 @@
         <sys_id>fbd5378ac5055b3db843042ff20777b5</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name/>
-        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
         <sys_update_name>sys_dictionary_x_[scope]_case_party_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

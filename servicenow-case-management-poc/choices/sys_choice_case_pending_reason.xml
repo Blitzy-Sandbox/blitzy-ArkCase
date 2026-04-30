@@ -3,7 +3,7 @@
     ServiceNow Update Set record-definition for the THREE `sys_choice` rows that
     enumerate the legal values of the `pending_reason` Choice field on the
     `x_[scope]_case` custom table inside the scoped application
-    `x_[scope]_case_management`.
+    `x_[scope]`.
 
     Per AAP Section 0.4.1 (Refactored Structure Planning):
         choices/sys_choice_case_pending_reason.xml -> Awaiting Info,
@@ -202,13 +202,13 @@
         explicitly captured by the validate_pending_transition subflow
         at the moment of transition - there is no auto-applied default.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]_case_management`
+        `<sys_package>` resolve into the `x_[scope]`
         scoped application by `source` attribute lookup. NO global-scope
         writes - the OOB tables sys_user, sys_user_group, sys_user_role,
         core_company, task, incident, etc. are never modified.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]_case_management`), not by literal sys_id. Each
+        (`x_[scope]`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
         identifier `x_[scope]_case.pending_reason.<Value>` so that
@@ -299,8 +299,8 @@
     <sys_id>4c80901f97d80493815d6e5035350545</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Awaiting Info</value>
@@ -321,8 +321,8 @@
     <sys_id>f9f1b37a725e88b044b6b7e39c215670</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Awaiting Third Party</value>
@@ -343,8 +343,8 @@
     <sys_id>6bfddaadc6361fe46d2756027eefec2f</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Other</value>

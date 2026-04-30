@@ -3,7 +3,7 @@
     ServiceNow Update Set record-definition for the FOUR `sys_choice` rows
     that enumerate the legal values of the `type` Choice field on the
     `x_[scope]_case_task` custom table inside the scoped application
-    `x_[scope]_case_management`.
+    `x_[scope]`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_task:
 
@@ -167,14 +167,14 @@
         does not fit a more specific category" if user feedback
         warrants it.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]_case_management`
+        `<sys_package>` resolve into the `x_[scope]`
         scoped application by `source` attribute lookup. NO global-
         scope writes - the OOB tables sys_user, sys_user_group,
         sys_user_role, core_company, task, incident, etc. are never
         modified by these records.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]_case_management`), not by literal sys_id. Each
+        (`x_[scope]`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
         identifier `x_[scope]_case_task.type.<Value>` so that
@@ -255,8 +255,8 @@
     <sys_id>c509a1c2ee11b17bb33984334f603baf</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Investigation</value>
@@ -277,8 +277,8 @@
     <sys_id>b0337f92dc4ec6a9eb8e5a3e4faeccaf</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Review</value>
@@ -299,8 +299,8 @@
     <sys_id>13e5648ac5e3de04d88ab1aef64f0165</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Follow-up</value>
@@ -321,8 +321,8 @@
     <sys_id>2edff77acab5fc790a92ad36e2772600</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Other</value>

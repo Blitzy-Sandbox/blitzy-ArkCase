@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definition for the `sys_number` row that
     creates the auto-numbering counter for the `x_[scope]_case` custom table
-    inside the scoped application `x_[scope]_case_management`.
+    inside the scoped application `x_[scope]`.
 
     This is the most cross-referenced sys_number record in the scoped
     application. Every demo case, every portal-submitted case, every
@@ -61,12 +61,12 @@
     Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
       - Scope-namespace exclusivity: this record's <sys_scope> and
         <sys_package> bind it to the scoped application
-        `x_[scope]_case_management`. The <table> element points at the
+        `x_[scope]`. The <table> element points at the
         SCOPED case table `x_[scope]_case` - NOT at the OOB `task`,
         `incident`, or any other global table. NO global-scope writes.
       - Zero hardcoded cross-reference sys_ids: every cross-reference
         (<sys_scope>, <sys_package>, <table>) resolves by NAME (the
-        scope source name `x_[scope]_case_management` and the table
+        scope source name `x_[scope]` and the table
         name `x_[scope]_case`), not by literal sys_id. The <sys_id>
         text-node value is THIS record's own deterministic primary key
         (MD5 of the canonical record name `sys_number_x_[scope]_case`)
@@ -142,15 +142,16 @@
         <category>x_[scope]_case</category>
         <maximum>0</maximum>
         <number>0</number>
+        <number_of_digits>7</number_of_digits>
         <prefix>CASE</prefix>
         <sys_class_name>sys_number</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
         <sys_id>4fc55a26e01ab60d8ea5ce13ce35f6f3</sys_id>
         <sys_mod_count>0</sys_mod_count>
-        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
         <sys_update_name>sys_number_x_[scope]_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

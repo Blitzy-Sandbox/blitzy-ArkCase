@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definition for the `sys_dictionary` row that
     declares the `number` Auto-number String field on the `x_[scope]_case`
-    custom table inside the scoped application `x_[scope]_case_management`.
+    custom table inside the scoped application `x_[scope]`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
         Field   Type            Constraints
@@ -46,7 +46,7 @@
         `sys_user`, etc. are never modified.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        (`x_[scope]`), not by literal sys_id. The `<sys_id>`
         text-node value is THIS record's own deterministic primary key
         (MD5 of the canonical field identifier `x_[scope]_case.number`)
         and is NOT a reference to any other record.
@@ -159,9 +159,9 @@
         <sys_id>0bf56c205b5fbda5c5971de48d3ca279</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name/>
-        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
         <sys_update_name>sys_dictionary_x_[scope]_case_number</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

@@ -3,7 +3,7 @@
     ServiceNow Update Set record-definition for the TWO `sys_choice` rows
     that enumerate the legal values of the `party_type` Choice field on the
     `x_[scope]_case_party` custom table inside the scoped application
-    `x_[scope]_case_management`.
+    `x_[scope]`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
         Field        Type     Constraints
@@ -159,7 +159,7 @@
         user choice, which would be confusing in a polymorphic
         association.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]_case_management`
+        `<sys_package>` resolve into the `x_[scope]`
         scoped application by `source` attribute lookup. NO global-scope
         writes - the OOB tables sys_user, sys_user_group, sys_user_role,
         core_company, task, incident, etc. are never modified by these
@@ -168,7 +168,7 @@
         a write to that table).
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]_case_management`), not by literal sys_id. Each
+        (`x_[scope]`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
         identifier `x_[scope]_case_party.party_type.<Value>` so that
@@ -245,8 +245,8 @@
     <sys_id>8980a8a92620d4409c084f61a81d5dcb</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Person</value>
@@ -267,8 +267,8 @@
     <sys_id>1c3db1ba6f9ad0bac44139983f64f7d5</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Organization</value>
