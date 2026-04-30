@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `subject` String field on the `x_[scope]_case_task` custom
+    table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_task:
+
+        Field      Type           Constraints
+        subject    String(255)    Mandatory
+
+    THIS FIELD IS THE PRIMARY HUMAN-READABLE IDENTIFIER OF EVERY TASK ROW.
+    It captures the short summary or title that surfaces in every place a
+    user encounters a task:
+      - the auto-generated x_[scope]_case_task list view (AAP Section 0.4.4
+        "Internal user UI" requires "ServiceNow's automatic native list
+        and form views for the three custom tables")
+      - the auto-generated form layout when a user opens an individual
+        task record
+      - the parent case's Related List of tasks (rendered via the `case`
+        reference field declared in ../dictionary/x_[scope]_case_task_case.xml;
+        the user sees `subject` in the Subject column of that related list)
+      - the `My overdue tasks` list report on the Agent Workspace dashboard
+        (AAP Section 0.5.1: list report filtered by
+        `due_date < javascript:gs.daysAgoStart(0) AND status != Closed AND
+        assigned_to = javascript:gs.getUserID()` - subject is the
+        at-a-glance identifier of which task is overdue)
+      - the synthetic seed data per AAP Section 0.7.4 minimum-data threshold
+        (at least one open and one closed task on selected demo cases per
+        AAP Section 0.3.1, all with realistic non-PII summary phrases)
+
+    Without this field, every other column on x_[scope]_case_task (case,
+    type, status, assigned_to, due_date) describes attributes of a
+    nameless task. Subject is the field that gives a task its identity
+    in the eyes of a human user.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java lines 67-68:
+            @Size(min = 1)
+            private String title;
+        ArkCase's task title was a Bean Validation-constrained String on
+        the AcmTask domain object (the source-side analog of this
+        ServiceNow table). The `@Size(min = 1)` annotation (imported on
+        line 50 from `javax.validation.constraints.Size`) enforces a
+        non-empty value at the JSR-380 validator layer - effectively a
+        NOT-NULL-AND-NOT-EMPTY check at the entry-point of every
+        AcmTask-mutating Spring service. The ServiceNow target replaces
+        both the Java field declaration AND the @Size constraint with
+        this single dictionary entry: `mandatory=true` is the platform-
+        native equivalent of `@Size(min=1)`, and the
+        `<max_length>255</max_length>` ceiling caps overlong values
+        without a custom validator. The platform enforces mandatory on
+        every insert / update through the standard form, the Table API,
+        and any seed-script GlideRecord.insert() invocation.
+      - The field name is `subject` (lowercase, 7 chars; NOT `title`,
+        NOT `task_title`, NOT `taskTitle`) per AAP Section 0.5.7 verbatim.
+        This is an INTENTIONAL rename from ArkCase: AAP Section 0.5.1
+        explicitly renames `title` -> `subject` so that BOTH
+        x_[scope]_case AND x_[scope]_case_task carry identically-named
+        human-readable summary columns. The naming symmetry matters at
+        multiple layers:
+          * Cross-table list views and reports can render a unified
+            "Subject" column header without per-table label aliasing.
+          * The Agent Workspace dashboard's "My open cases" list (parent
+            case subject) and "My overdue tasks" list (task subject)
+            both surface a Subject column using the same field
+            identifier, simplifying report authoring and dashboard
+            template binding.
+          * The case form's task Related List uses `subject` as the
+            primary display column, and the case form's own subject
+            field shares the same label - users see "Subject" twice on
+            the case form (once for the case, once per related task)
+            without confusing terminology.
+      - ArkCase's source `title` field had no explicit length cap in the
+        Bean Validation annotations on AcmTask.java (AcmTask is a domain
+        object passed through the Activiti BPMN engine, not a directly-
+        persisted JPA entity in the same sense as CaseFile.java; the
+        underlying ACT_HI_TASKINST.NAME_ column in the Activiti H2/MySQL
+        history schema defaults to VARCHAR(255)). AAP Section 0.5.7
+        codifies the ServiceNow-side cap as the explicit `String(255)`
+        constraint here, mirroring x_[scope]_case.subject for symmetry
+        and matching the platform's sensible default for short-summary
+        columns.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_[scope]_case_task` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. NO global-scope
+        writes - the OOB tables `task`, `incident`, `sys_user`, etc.
+        are never modified by this dictionary entry or any other artifact
+        in the Update Set.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The
+        `<sys_id>` text-node value is THIS record's own deterministic
+        primary key (MD5 of the canonical field identifier
+        `x_[scope]_case_task.subject`) and is NOT a reference to any
+        other record. The MD5 derivation guarantees that re-generation
+        of this Update Set on any agent run produces a byte-identical
+        `<sys_id>` (no random UUIDs), which is required for clean
+        Update-Set re-import on a fresh PDI without creating duplicate
+        sys_dictionary rows.
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time. The placeholder appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=true at the dictionary level (AAP Section 0.5.7
+        verbatim: "subject | String(255) | Mandatory"). This matches the
+        source-side @Size(min=1) constraint on ArkCase's `title` field
+        semantically (an empty string is rejected). A task without a
+        subject would be impossible to identify in any list or related-
+        list - the platform enforces this at every entry point: form
+        submission, Table API insert, GlideRecord seed insert, and any
+        future REST API call. AAP Section 0.7.1 ("Preserve the user-
+        prompt's data-model field set verbatim. The exact field names,
+        types, and constraints in the three tables MUST match the
+        prompt - no additions, no renames, no type relaxations.") is
+        honored exactly.
+      - read_only=false: internal users with the case_manager role, and
+        case_agent role on assigned cases (per AAP Section 0.5.6 ACL
+        matrix), may correct an erroneous subject AFTER the task is
+        created. Internal-user write authorization is governed by the
+        table-level ACLs in ../acl/ - this dictionary entry deliberately
+        does NOT carry per-role write_roles since the table-level ACLs
+        apply uniformly across all editable fields on x_[scope]_case_task.
+      - default_value is EMPTY (no implicit default) per AAP Section 0.5.7
+        and the agent prompt's Phase 4 verbatim. Subject is the most
+        important user-facing identifier of a task; defaulting silently
+        to a placeholder string ("Untitled Task", "(no subject)", etc.)
+        would silently mask submissions that failed mandatory enforcement
+        and pollute the My Overdue Tasks report and the case form's task
+        related list with semantically-empty rows.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and the
+        agent prompt's Phase 4. Task subject is descriptive metadata, not
+        a regulated lifecycle attribute (unlike case.status which carries
+        audit=true because every state transition must be reconstructable
+        post-hoc). The additional sys_audit row per update would be
+        unnecessary overhead for a POC.
+      - max_length=255 EXACTLY per AAP Section 0.5.7 verbatim. NOT 4000
+        (description-style long-form free text is not present on
+        x_[scope]_case_task at all - AAP Section 0.5.7's case_task table
+        has no description column), NOT 100 (requester_name /
+        requester_email-style identity strings are case-table-only),
+        NOT 40 (number / type / status / priority controlled-vocabulary
+        identifier strings). 255 is the standard ceiling on a free-form
+        short-summary String column, consistent with x_[scope]_case.subject.
+      - choice=0 = "Free-form String, no choice list" (NOT 3 like the
+        type / status fields on the same case_task table). Subject is
+        unconstrained natural-language text; constraining it to a choice
+        list would defeat its purpose as a per-task unique human-readable
+        label.
+      - unique=false: multiple tasks with the same subject are explicitly
+        permitted, both within a single case ("Send follow-up email"
+        might appear three times on a complex case) and across cases
+        ("Investigate and respond" is a common subject across many cases).
+        Uniqueness across all tasks is intentionally NOT enforced; the
+        auto-generated `number` field on the case_task table (per the
+        accompanying ../numbers/sys_number_x_[scope]_case_task.xml record)
+        is the unique identifier.
+      - text_index=false per the agent prompt's Phase 6 verbatim. Tasks
+        are a child entity always navigated through their parent case;
+        users locate a task by opening its parent case and selecting it
+        from the related list, not by performing free-form full-text
+        search across the task table directly. A text index on a child
+        table that is rarely queried by free-form search would carry
+        storage and write-time costs without matching usage patterns.
+        (Contrast with x_[scope]_case.subject, which has text_index=true
+        because case-level free-form search is a primary user pattern.)
+      - spell_check=false per the agent prompt's Phase 6 verbatim.
+        Internal agents creating tasks frequently use short, abbreviation-
+        heavy directives ("ETA req", "follow-up w/ legal", "verify ID");
+        spell-check noise would degrade UX and surface false positives on
+        domain abbreviations the platform has no dictionary for.
+      - No reference target: this is a free-form String field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - No PII: while the field stores synthetic task-summary phrases in
+        the demo seed data, NO real names, real email addresses, real
+        phone numbers, real organization names, or real task content from
+        the source ArkCase database are placed in this column at any
+        point in the build (per AAP Section 0.3.2 synthetic-data-only
+        constraint). Demo seed values are fabricated phrases such as
+        "Investigate inquiry details" or "Follow up with requester for
+        additional information".
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_[scope]_case_task.xml (parent table; the
+            `<name>x_[scope]_case_task</name>` element below references
+            the table by name, and the table must exist before any of
+            its dictionary entries can be attached)
+          * ../app/sys_app/x_[scope]_case_management.xml and
+            ../app/sys_scope/x_[scope].xml (scoped application records;
+            <sys_scope> and <sys_package> resolve against them by source
+            name)
+      - This record MUST load BEFORE:
+          * ../seed-data/tasks/x_[scope]_case_task_demo_*.xml (synthetic
+            demo tasks per AAP Section 0.7.4 must populate this mandatory
+            field with realistic non-PII summary phrases. The seed data
+            references this column by `element=subject` and would fail to
+            insert if this sys_dictionary record were absent)
+          * ../reports/x_[scope]_my_overdue_tasks.xml (the list report
+            includes `subject` as a visible column for at-a-glance
+            recognition of each overdue task)
+          * ../scripts/seed_demo_data.js (the idempotent server-side seed
+            script writes synthetic subjects via
+            GlideRecord.setValue('subject', ...))
+          * ../flows/sub_flows/validate_resolved_transition.xml (when the
+            "all tasks must be closed" gate iterates open tasks for an
+            error-message hint, the iteration may surface the offending
+            task's subject in the blocking-error context. The subflow
+            does NOT depend on this dictionary entry for its primary
+            blocking logic - the gate keys off `status != Closed` only -
+            but reading `current.subject` for diagnostic display requires
+            this column to exist)
+
+    Source for the deterministic sys_id derivation:
+        echo -n "x_[scope]_case_task.subject" | md5sum
+        => 8cd658b766c404ce4445d191adabd14c
+
+    The MD5 input is the canonical field identifier <name>.<element>,
+    matching the same derivation pattern used across all other
+    sys_dictionary records in this Update Set (verifiable by re-running
+    md5sum on x_[scope]_case.subject => 96a737c3997894e2ba2aacb07aa4854e
+    which matches ./x_[scope]_case_subject.xml's <sys_id>, and on
+    x_[scope]_case_task.case => 25cae07ed16e95fd89a4c8013152ecc2 which
+    matches ./x_[scope]_case_task_case.xml's <sys_id>).
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Subject</column_label>
+        <comments>Mandatory String(255) capturing the short summary or title of the task. Primary human-readable identifier in the case_task list view, the parent case's task related list, and the My Overdue Tasks report. Replaces ArkCase AcmTask.title (@Size(min=1)).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>subject</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>255</max_length>
+        <name>x_[scope]_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8cd658b766c404ce4445d191adabd14c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_task_subject</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
