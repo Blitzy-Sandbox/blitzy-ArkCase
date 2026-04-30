@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `status` Choice field on the `x_[scope]_case` custom table
+    inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field     Type     Constraints
+        status    Choice   Draft, Open, In Progress, Pending, Resolved, Closed
+
+    Per AAP Section 0.1.2 the `case.status` field defaults to `Draft` and
+    replaces ArkCase's free-form String column `cm_case_status` (whose
+    @PrePersist hook on CaseFile.java line 307-316 silently set
+    setStatus("DRAFT") when null/empty). The ServiceNow target preserves
+    the same default behavior but at the dictionary level via
+    <default_value>Draft</default_value>, which the platform applies on
+    every new record - through the form, the Table API, the scripted REST
+    submission endpoint at ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml,
+    and the seed scripts under ../seed-data/cases/. Note the case change:
+    ArkCase used UPPERCASE "DRAFT"; the ServiceNow target uses Title Case
+    "Draft" per AAP Section 0.1.2 verbatim ("`case.status` default = `Draft`").
+    The scripts that consume this field MUST compare against the Title Case
+    label (e.g., flow trigger filters and Business Rule conditionals).
+
+    THIS FIELD IS THE BACKBONE OF THE ENTIRE STATE-MACHINE. Per AAP Section
+    0.5.5, every transition rule is keyed on changes to this field:
+
+       Draft -> Open
+            : assigned_group populated
+            : ../flows/sub_flows/validate_open_transition.xml
+       Open -> In Progress
+            : assigned_agent populated AND member of assigned_group
+            : ../flows/sub_flows/validate_inprogress_transition.xml
+       In Progress -> Pending
+            : sets pending_reason (Awaiting Info | Awaiting Third Party | Other)
+            : ../flows/sub_flows/validate_pending_transition.xml
+       Pending -> In Progress
+            : clears pending_reason
+            : ../business_rules/x_[scope]_clear_pending_reason_on_inprogress.xml
+       In Progress -> Resolved
+            : all linked x_[scope]_case_task records have status = Closed
+            : ../flows/sub_flows/validate_resolved_transition.xml
+            : Failure surfaces VERBATIM blocking error per AAP Section 0.7.4:
+              "All tasks must be closed before resolving this case."
+       Resolved -> Closed
+            : caller has x_[scope]_case_manager role
+            : auto-set closed_date = gs.nowDateTime()
+            : ../flows/sub_flows/validate_closed_transition.xml
+            : ../business_rules/x_[scope]_set_closed_date.xml
+       *      -> Draft
+            : PROHIBITED (no backward transitions to Draft)
+            : ../business_rules/x_[scope]_block_draft_backtransition.xml
+            : Failure surfaces VERBATIM blocking error per AAP Section 0.7.4:
+              "Cases cannot be returned to Draft."
+       Closed -> *
+            : PROHIBITED - terminal state
+            : ../business_rules/x_[scope]_block_terminal_closed.xml
+            : Failure surfaces VERBATIM blocking error per AAP Section 0.7.4:
+              "Closed cases are terminal and cannot be modified."
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 141-142:
+            @Column(name = "cm_case_status")
+            private String status;
+        ArkCase's `status` was a free-form String column on the
+        `acm_case_file` JPA entity. Any caller could write any string, and
+        ArkCase's enumeration of legal values was distributed across
+        constants files (CaseFileConstants), the queue handler
+        (CaseFileQueueHandler that overrode status to "ACTIVE" pre-save),
+        and the state-change service (ChangeCaseFileStateService). The
+        ServiceNow target consolidates the enumeration into a Choice list
+        in ../choices/sys_choice_case_status.xml and enforces it at the
+        platform level via this dictionary entry's choice=3 setting.
+      - CaseFile.java line 307-316: @PrePersist hook applied a default of
+        "DRAFT" (uppercase) when the status was null/empty. ServiceNow's
+        equivalent is the dictionary <default_value>Draft</default_value>
+        below. Title Case is intentional per AAP Section 0.1.2.
+      - The field name is `status` (lowercase, 6 chars) per AAP Section
+        0.5.7 verbatim. This matches conventional ServiceNow Choice-field
+        naming across the platform (incident.state, sc_request.state,
+        change_request.state - all lowercase).
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_[scope]_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical field identifier `x_[scope]_case.status`)
+        and is NOT a reference to any other record.
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time.
+      - mandatory=true at the dictionary level (AAP Section 0.5.7 verbatim:
+        "status | Choice | Draft, Open, In Progress, Pending, Resolved,
+        Closed"). Without status the entire state-machine breaks - neither
+        per-case-type flow's OnUpdate trigger could match a change in this
+        field, the dashboard "Case count by status" donut would have a
+        null-status slice, and the "My open cases" report's filter
+        (`status NOT IN (Resolved, Closed)`) would return inconsistent
+        results. Mandatory enforcement runs at the platform-validation
+        level on every insert / update through the standard form, the
+        Table API, the scripted REST submission endpoint, and any seed
+        scripts.
+      - read_only=false: case_manager users and (for some transitions)
+        case_agent users edit this field directly to drive transitions.
+        ACL-level fine-grained restrictions on WHICH transitions each
+        role may perform are enforced by the ACLs in ../acl/ and the
+        Flow Designer flows; the dictionary-level read_only flag remains
+        false so the field is editable in principle.
+      - default_value=Draft (Title Case, NOT "DRAFT", NOT "draft") per
+        AAP Section 0.1.2 verbatim. New cases - whether created via the
+        internal form, the Table API, the scripted REST submission
+        endpoint, or seed scripts - start in Draft status. This default
+        is what allows the portal submission endpoint to omit the status
+        field from its INSERT payload while still landing the new case
+        in Draft as required by AAP Section 0.5.1.
+      - audit=true UNIQUELY for this field within this dictionary set.
+        Status is the most important field for state-machine forensics:
+        every transition through the state graph (Draft -> Open ->
+        In Progress -> Pending/Resolved -> Closed) MUST be reconstructable
+        after the fact from the sys_audit table for compliance reasons.
+        No other field on x_[scope]_case carries audit=true for this POC
+        (per AAP Section 0.3.1 minimal-change clause).
+      - max_length 40 is sufficient for the longest defined label
+        "In Progress" (11 chars) with substantial headroom for future
+        statuses - though AAP Section 0.5.7's enumeration is closed-set.
+      - choice 3 = "Choice list, no description column" - the standard
+        Choice-field configuration when a sibling sys_choice record set
+        defines the allowed values.
+      - No reference target: this is a String-backed Choice field, not
+        a Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - text_index=false: status is a low-cardinality enumerated Choice
+        (six values), so full-text indexing would be wasteful. The
+        platform's standard list/report/dashboard surface filters on
+        the column directly via GlideRecord addQuery without needing
+        a full-text index.
+      - No PII: the field stores only categorical lifecycle labels chosen
+        from a controlled vocabulary; no real names, email addresses, or
+        organizational identifiers are derived from or stored in this
+        column.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_[scope]_case.xml`
+        (parent table), since `<name>x_[scope]_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `status` column:
+          * ../choices/sys_choice_case_status.xml (the choice values
+            Draft, Open, In Progress, Pending, Resolved, Closed -
+            which reference this dictionary entry by `name` + `element`
+            lookup; the choice ORDER drives dropdown UX with Draft
+            first and Closed last)
+          * ../flows/general_inquiry_state_machine.xml (OnUpdate trigger
+            filtered on status change for type=General Inquiry)
+          * ../flows/complaint_state_machine.xml (OnUpdate trigger
+            filtered on status change for type=Complaint)
+          * ../flows/sub_flows/validate_open_transition.xml (Draft->Open)
+          * ../flows/sub_flows/validate_inprogress_transition.xml (Open->In Progress)
+          * ../flows/sub_flows/validate_pending_transition.xml (In Progress->Pending)
+          * ../flows/sub_flows/validate_resolved_transition.xml (In Progress->Resolved)
+          * ../flows/sub_flows/validate_closed_transition.xml (Resolved->Closed)
+          * ../business_rules/x_[scope]_block_draft_backtransition.xml (*->Draft prohibited)
+          * ../business_rules/x_[scope]_block_terminal_closed.xml (Closed->* prohibited)
+          * ../business_rules/x_[scope]_set_closed_date.xml (Resolved->Closed sets closed_date)
+          * ../business_rules/x_[scope]_clear_pending_reason_on_inprogress.xml
+          * ../script_includes/x_[scope]_CaseTransitionValidator.xml
+            (canTransitionToOpen / ToInProgress / ToResolved / ToClosed
+            shared static methods)
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_status_lookup.xml
+            (returns this field as one of the three whitelisted output
+            fields per AAP Section 0.7.4: "the lookup page returns ONLY
+            status, subject, opened_date")
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+            (relies on the default_value=Draft in this entry to land
+            new portal-submitted cases in Draft status)
+          * ../reports/x_[scope]_my_open_cases.xml (filter:
+            `status NOT IN (Resolved, Closed)` AND assigned_agent =
+            current user)
+          * ../reports/x_[scope]_case_count_by_status.xml (donut grouped
+            by this field)
+          * ../reports/x_[scope]_all_cases_by_status.xml (bar grouped by
+            this field)
+          * ../seed-data/cases/x_[scope]_case_demo_*.xml (synthetic demo
+            cases that must populate this field with each of the six
+            statuses to satisfy AAP Section 0.7.4 minimum-data threshold:
+            "every one of the six statuses MUST have at least one demo
+            case")
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>true</audit>
+        <calculation/>
+        <choice>3</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Status</column_label>
+        <comments>Mandatory Choice tracking case lifecycle. Values: Draft, Open, In Progress, Pending, Resolved, Closed. Default: Draft. Drives entire case state-machine via Flow Designer flows in ../flows/. Audited (audit=true) for forensic tracking. Replaces ArkCase CaseFile.status (String, defaulted to DRAFT via @PrePersist).</comments>
+        <create_roles/>
+        <default_value>Draft</default_value>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>status</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>40</max_length>
+        <name>x_[scope]_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5f0be2eaed29d45b1d63d64e876d22c4</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_status</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
