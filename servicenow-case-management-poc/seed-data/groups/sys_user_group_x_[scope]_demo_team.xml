@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the synthetic demo group
+    `x_[scope]_demo_team`. This is the SOLE XML file in the
+    `servicenow-case-management-poc/seed-data/groups/` directory per the
+    AAP Section 0.4.1 explicit directory layout, and is the canonical
+    target for every demo case's `assigned_group` reference.
+
+    Group purpose (per AAP Section 0.5.6 ACL Matrix and Validation Gate 3):
+      The "Assigned only" rule for the case_agent role is defined as
+      "cases where assigned_agent = current user OR assigned_group
+      contains current user". Without a demo group whose membership
+      includes the demo agent, the second clause of that rule cannot be
+      exercised by an operator during Validation Gate 3 (ACLs). This
+      group exists exclusively to satisfy that validation requirement on
+      the cases where the demo agent is reachable via group membership
+      rather than direct assignment.
+
+    Single-member rule (per agent prompt key insight #2 and #6):
+      ONLY the demo agent (x_[scope]_demo_agent) is added as a member of
+      this group at runtime. The demo manager (x_[scope]_demo_manager)
+      and demo viewer (x_[scope]_demo_viewer) are explicitly NOT members.
+        - The manager has Read All / Write All / Create / Delete privileges
+          via the case_manager role's table-level ACLs, so group membership
+          is irrelevant for that persona.
+        - The viewer has Read All across all three custom tables via the
+          case_viewer role's READ ACLs, so group membership is irrelevant
+          for that persona as well.
+        - Adding either of them as group members would be harmless from
+          a privilege standpoint but misleading for documentation and
+          test scenarios; the single-member rule keeps the demo data
+          unambiguous.
+
+    The membership row is NOT serialized in this file. Per AAP Section
+    0.4.1's directory layout and the agent prompt key insight #6, the
+    `groups/` folder contains exactly ONE XML file (this one). The
+    `sys_user_grmember` row that adds the demo agent as a member of this
+    group is created at runtime by the idempotent server-side seed
+    script at `../../scripts/seed_demo_data.js` via the helper
+    `ensureGroupMembership(DEMO.USERS.AGENT, DEMO.GROUP)`. This is a
+    deliberate, AAP-aligned design choice; do NOT add a separate XML
+    file for the membership row.
+
+    Why this group record lives in the SCOPED Update Set even though
+    `sys_user_group` is a global OOB table (per the agent prompt and AAP
+    Section 0.7.2 scope-namespace exclusivity):
+      The scoped Update Set's deliverable is fully self-contained: the
+      reviewer must be able to install the Update Set on a fresh PDI and
+      immediately exercise all seven validation gates. The demo group
+      is required by Gate 3 (ACL role-based access) — specifically the
+      "case_agent cannot access unassigned cases" pass row. Tracking the
+      demo group inside the scoped Update Set ensures it imports together
+      with the rest of the application; the scope binding via <sys_scope>
+      and <sys_package> source attribute groups it with the scoped app
+      even though its parent table (sys_user_group) is global. No
+      global-scope WRITES are performed: only an INSERT into sys_user_group
+      (a data table) — the OOB sys_user_group dictionary, ACLs, and form
+      layouts are never modified.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's eight authoring rules):
+
+      Rule 1 — Synthetic Only:
+        name        = "x_[scope]_demo_team" (clearly synthetic with the
+                      `_demo_` infix; unmistakably non-real)
+        description = "Demo team for the case-management POC. Synthetic
+                      group; no production members." (literal fixed
+                      synthetic text containing the tripwire keyword
+                      `Synthetic`; per agent prompt key insight #10)
+        NO real LDAP/AD groups, NO real production team names (no
+        Engineering, HR, Sales, Operations, etc.), NO real production
+        members.
+
+      Rule 2 — Zero Hardcoded sys_id Cross-References:
+        The group's OWN <sys_id> below is the record's primary key,
+        which is acceptable per AAP rule (it is NOT a reference to
+        any other record). It is a deterministic 32-character lowercase
+        hex value (MD5 of the canonical group name "x_[scope]_demo_team"
+        => f5457651a57f6fadb32d3a09f963855b) so the Update Set engine
+        resolves the same sys_id on every PDI import, making the case
+        `assigned_group` cross-references and the seed script's
+        lookupGroupSysId() helper idempotent.
+        The <sys_scope> and <sys_package> reference fields resolve by
+        display_value/source attributes against the scoped application's
+        sys_scope record — NOT by hardcoded sys_id literals.
+        NO <manager>, <parent>, <cost_center> reference fields are
+        populated, so no other reference-resolution concerns arise.
+
+      Rule 3 — Scope Binding:
+        <sys_scope> binds this group record to the scoped application
+        whose sys_scope.source is `x_[scope]` (defined in
+        ../../app/sys_scope/x_[scope].xml). The display_value attribute
+        is "Case Management". The <sys_package> follows the same pattern
+        with the source attribute pointing at the scope source name.
+        This matches the convention used by every other scoped artifact
+        in the Update Set (users, roles, ACLs, dictionary entries,
+        choices, etc.).
+        Although `sys_user_group` is a global OOB table, the SCOPED demo
+        group is tracked in the scoped Update Set so the deliverable is
+        fully self-contained per the folder requirements: "the SCOPED
+        demo group is tracked in the scoped Update Set for full
+        deliverable encapsulation."
+
+      Rule 4 — No Production Data:
+        No real LDAP/AD groups, no real production team names, no real
+        production members, no realistic email addresses, no realistic
+        identifiers. The synthetic placeholder values (the literal
+        `x_[scope]_demo_team` name and the description text containing
+        `Synthetic`) are unmistakably non-real.
+
+      Rule 5 — Idempotency Anchor:
+        The group's idempotent key is <name> = "x_[scope]_demo_team".
+        The companion seed script ../../scripts/seed_demo_data.js
+        ensureGroup() helper queries sys_user_group by name BEFORE
+        inserting; the action="INSERT_OR_UPDATE" attribute on the inner
+        <sys_user_group> element ensures the same behavior at Update Set
+        import time. This <name> value MUST EXACTLY match every
+        downstream reference: the seed script's DEMO.GROUP constant,
+        the `assigned_group` field on cases 02 through 10 under
+        ../cases/x_[scope]_case_demo_*.xml, the membership row created
+        by the seed script (ensureGroupMembership), and any ACL
+        conditions or validation subflows that resolve groups by name.
+
+      Rule 6 — Single Member Rule:
+        Only the demo agent is a member of this group. The membership
+        row is created at runtime by the seed script's
+        ensureGroupMembership(DEMO.USERS.AGENT, DEMO.GROUP) helper, NOT
+        by an XML file in this folder. This XML file does not encode
+        that membership; it only declares the group itself.
+
+      Rule 7 — Minimum Field Set:
+        ONLY the minimum content fields required by the agent prompt are
+        populated: active, description, name. All additional
+        sys_user_group columns (manager, parent, email, cost_center,
+        roles, source, type, hourly_rate, default_assignee, vendors,
+        u_*) are auto-defaulted by the platform on first import. This
+        keeps the file small, avoids dependencies on other global tables
+        (cmn_cost_center, sys_user, sys_user_group parent), and makes
+        the record resilient to ServiceNow release-version drift across
+        Yokohama / Zurich / Australia.
+
+      Rule 8 — Scoped Update Set XML conventions:
+        Root element: <record_update table="sys_user_group">
+        Inner element: <sys_user_group action="INSERT_OR_UPDATE"> for
+        idempotent re-import per AAP Section 0.7.1 round-trip-
+        verification.
+        UTF-8 encoding declared in XML prolog.
+        Boolean values lowercase: <active>true</active>.
+        Element ordering: alphabetical (matching the user records, role
+        records, and every other XML in the scoped Update Set).
+
+    Cross-dependencies (per AAP Section 0.5.2):
+
+      This group IS REFERENCED BY (these files resolve THIS group by
+      <name> = "x_[scope]_demo_team", NOT by sys_id literal):
+        - ../cases/x_[scope]_case_demo_02.xml  (Open, General Inquiry)
+        - ../cases/x_[scope]_case_demo_03.xml  (In Progress, General Inquiry)
+        - ../cases/x_[scope]_case_demo_04.xml  (Pending, General Inquiry)
+        - ../cases/x_[scope]_case_demo_05.xml  (Resolved, General Inquiry)
+        - ../cases/x_[scope]_case_demo_06.xml  (Closed, General Inquiry)
+        - ../cases/x_[scope]_case_demo_07.xml  (Open, Complaint)
+        - ../cases/x_[scope]_case_demo_08.xml  (In Progress, Complaint)
+        - ../cases/x_[scope]_case_demo_09.xml  (Resolved, Complaint)
+        - ../cases/x_[scope]_case_demo_10.xml  (Closed, Complaint)
+            (cases 02-10 use this group as their `assigned_group`
+            reference; case 01 (Draft, General Inquiry) is pre-assignment
+            and does NOT reference this group)
+        - ../../flows/sub_flows/validate_open_transition.xml
+            (Draft -> Open transition requires assigned_group populated)
+        - ../../flows/sub_flows/validate_inprogress_transition.xml
+            (Open -> In Progress requires assigned_agent is a member of
+            assigned_group; the membership row enables this validation
+            to pass on cases 03-06 and 08-10)
+        - ../../business_rules/x_[scope]_validate_assigned_agent_membership.xml
+            (same group-membership validation, before-update layer)
+        - ../../acl/x_[scope]_case_read_agent_assigned.xml
+        - ../../acl/x_[scope]_case_write_agent_assigned.xml
+            ("Assigned only" ACL second clause:
+             gs.getUser().isMemberOf(current.assigned_group.toString());
+             the demo agent's membership in this group enables that
+             clause to grant access)
+        - ../../scripts/seed_demo_data.js
+            (DEMO.GROUP constant equals this group name; the script's
+            lookupGroupSysId(groupName) helper resolves this group's
+            sys_id by name lookup; the ensureGroupMembership helper
+            creates the demo agent's membership row at runtime)
+
+      This group IS NOT referenced by:
+        - case 01 (Draft, General Inquiry) — pre-assignment, no
+          assigned_group set on this case
+        - any task's reference field (tasks reference users by
+          assigned_to, not groups)
+        - any party's reference field (parties reference users via
+          person reference or companies via organization reference, not
+          groups)
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER the scope/app records under
+          ../../app/ (since <sys_scope>/<sys_package> reference the
+          scope's source).
+        - This record MUST be loaded AFTER the demo user records under
+          ../users/ (although the membership row is not serialized in
+          this folder, the loading order keeps the seed-data segment
+          internally consistent and ensures the seed-script
+          ensureGroupMembership helper has both endpoints resolvable
+          when it runs post-import).
+        - This record MUST be loaded BEFORE:
+            * the role assignments under ../role_assignments/ (these are
+              unrelated dependencies but the loading order keeps the
+              seed-data segment internally consistent per the folder
+              requirements)
+            * any case under ../cases/ (cases 02-10 reference this group
+              via `assigned_group` resolved by name lookup; this group
+              must exist before those cases deserialize)
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesConfig.java
+        Holds `application.roles` as a List<String> bound from external
+        configuration via @ListValue("application.roles"); exposes
+        `MERGE_APPLICATION_ROLES_OP = "application.~roles"`. Semantic
+        anchor only: ArkCase's role/group configuration model (which
+        would be backed by LDAP/AD groups in production) is replaced in
+        the target by named scoped roles plus a single fully synthetic
+        in-platform group. ArkCase's broader user/group infrastructure
+        is NOT replicated; the ServiceNow target uses one synthetic
+        in-platform group on the OOB sys_user_group table with
+        deliberately minimal field set.
+      - ArkCase's underlying group mechanism (LDAP/AD-backed groups in
+        production) is NOT replicated; the ServiceNow target uses fully
+        synthetic in-platform groups on the OOB sys_user_group table.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (production|engineer|
+        hr |sales|operations|@gmail|@yahoo|@outlook|@hotmail|\.com|\.org|
+        \.net) — synthetic name and description only.
+      - No-extra-fields grep returns zero matches against (manager|
+        parent|email|cost_center|roles|source|u_) (excluding
+        sys_class_name, sys_created_by, sys_id, sys_package, sys_scope,
+        sys_update_name which are sys_* housekeeping fields).
+      - The <name> value matches downstream references exactly across
+        all 9 case demo XMLs and the seed script's DEMO.GROUP constant.
+      - The literal `[scope]` placeholder is preserved in the name,
+        sys_update_name, sys_package source, and file path — NOT
+        pre-substituted with a concrete scope id (per agent prompt key
+        insight #1).
+-->
+<record_update table="sys_user_group">
+    <sys_user_group action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Demo team for the case-management POC. Synthetic group; no production members.</description>
+        <name>x_[scope]_demo_team</name>
+        <sys_class_name>sys_user_group</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>f5457651a57f6fadb32d3a09f963855b</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_user_group_x_[scope]_demo_team</sys_update_name>
+    </sys_user_group>
+</record_update>
