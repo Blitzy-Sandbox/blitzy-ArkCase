@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `requester_email` String field on the `x_[scope]_case` custom
+    table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field             Type           Constraints
+        requester_email   String(100)    Optional
+
+    Per AAP Section 0.4.4 the case-submission portal page populates this field
+    as one of the five user-supplied inputs:
+        "Page 1 - Case Submission: a simple form with five inputs
+        (subject, type, description, requester_name, requester_email)."
+    The submission widget binds the requester-email text input to this field
+    and passes its value through the scripted REST submission endpoint
+    (../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml), which
+    performs a GlideRecord.insert() against `x_[scope]_case` with the user-
+    supplied requester-email literal (or empty string when the requester
+    elects to omit it - see "mandatory=false" rationale below).
+
+    Per AAP Section 0.7.4 ("Portal lookup output filtering") this field is
+    EXPLICITLY NOT exposed by the case-status-lookup endpoint - the lookup
+    returns ONLY status, subject, opened_date - no internal fields exposed.
+    requester_email is treated as INTERNAL/PII-PROTECTED because:
+      (a) returning the requester's email address to an arbitrary anonymous
+          caller who happens to know a case number would leak personal-
+          contact information about who filed which case (e.g., enabling
+          targeted phishing or harassment of named complainants once their
+          email is paired to a known case context);
+      (b) AAP Section 0.7.4 enumerates exactly THREE whitelisted lookup
+          fields (status, subject, opened_date), and requester_email is
+          NOT among them.
+    This intentional omission is enforced at the response-payload level by
+    the lookup endpoint's CasePortalService.lookupCase() helper, which
+    constructs a JSON object containing only the three permitted columns.
+    Any leakage of requester_email through the lookup response is a portal-
+    data-exposure violation per AAP Section 0.7.4 and MUST be caught by
+    the validation gate "Portal - lookup" defined in AAP Section 0.7.3.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java lines 47, 114,
+        120, 389-427, 961-963: ArkCase did NOT carry a flat `requester_email`
+        String column on `acm_case_file`. The originator (requester) was
+        modeled as a PersonAssociation with personType="Initiator",
+        retrieved by getOriginator() / setOriginator() helpers, and the
+        email itself lived FOUR JOINS deep on the linked Person record:
+            CaseFile (acm_case_file)
+              -> PersonAssociation [personType="Initiator"] (acm_person_assoc)
+                 -> Person (acm_person)
+                    -> Person.defaultEmail (cm_default_email FK)
+                       -> ContactMethod (acm_contact_method, cm_value column)
+        Verified in acm-plugins/acm-default-plugins/acm-person-plugin/src/
+        main/java/com/armedia/acm/plugins/person/model/Person.java lines
+        212-216:
+            // ContactMethod which is default as email
+            @JoinColumn(name = "cm_default_email")
+            private ContactMethod defaultEmail;
+        i.e., the requester's email was a row in `acm_contact_method` whose
+        `cm_value` held the literal email string, joined back to the case
+        through Person.defaultEmail -> Person -> PersonAssociation ->
+        CaseFile.parentId.
+        AAP Section 0.5.1 explicitly simplifies this for the POC: rather
+        than requiring a synchronously-created PersonAssociation row + a
+        Person row + a ContactMethod row at portal-submission time (which
+        would couple the anonymous submission endpoint to four child-table
+        inserts on every submit), the POC captures the requester's email
+        as a free-form String directly on the case row. The richer requester-
+        as-party model is still available via the x_[scope]_case_party
+        table (AAP Section 0.5.7), where staff users can attach a typed
+        Person or Organization party (with role_label such as "Requester")
+        to a case AFTER initial submission - and the typed party's contact
+        information lives on the referenced sys_user / core_company record
+        rather than being duplicated on the case row.
+      - The field name is `requester_email` (snake_case, 15 chars; NOT
+        `requesterEmail`, NOT `email`, NOT `originator_email`, NOT
+        `requester_email_address`, NOT `contact_email`) per AAP Section
+        0.5.7 verbatim. Snake_case aligns with ServiceNow's platform-
+        native column-naming convention (sys_user.email, sys_user.first_name,
+        incident.opened_by, etc.) and matches the snake_case used by every
+        other field on this scoped table (assigned_group, assigned_agent,
+        opened_date, closed_date, requester_name).
+      - ArkCase's `acm_contact_method.cm_value` had no explicit length
+        cap defined at the JPA-annotation layer for email-typed entries
+        (relying on the database engine's VARCHAR default for MySQL
+        InnoDB). AAP Section 0.5.7 codifies a deliberate explicit
+        `String(100)` cap here. RFC 5321 specifies an 8-bit-clean upper
+        bound of 254 octets on the full mailbox length (64 octets local-
+        part + 1 octet "@" + 189 octets domain headroom up to 253), but
+        in real-world intake patterns the overwhelming majority of valid
+        email addresses fit within 50-60 chars; the 100-char cap captures
+        the long-tail without permitting pathological 254-char mailboxes
+        and matches the sibling requester_name column's 100-char ceiling
+        for symmetric storage of the requester's two identity strings.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_[scope]_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, `core_company`, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical field identifier `x_[scope]_case.requester_email`)
+        and is NOT a reference to any other record. The MD5 derivation
+        guarantees that re-generation of this Update Set on any agent run
+        produces a byte-identical `<sys_id>` (no random UUIDs), which is
+        required for clean Update-Set re-import on a fresh PDI without
+        creating duplicate sys_dictionary rows. Verified:
+            python3 -c "import hashlib; print(hashlib.md5(b'x_[scope]_case.requester_email').hexdigest())"
+        prints 6f706e8bfa01ada7d9e44707e33251be (matches sys_id below).
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time. The placeholder appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=false at the dictionary level (AAP Section 0.5.7 verbatim:
+        "requester_email | String(100) | Optional"). This is the ONLY field
+        on the x_[scope]_case table that is explicitly Optional - all other
+        case columns are either Mandatory (subject, description, type,
+        status, priority, requester_name) or auto-managed by the platform
+        (number, opened_date, closed_date, assigned_group on Open transition,
+        assigned_agent on In Progress transition). The Optional designation
+        accommodates intake channels where an email is genuinely not
+        available, including:
+          (i)  phone-based intake transcribed by a staff agent who never
+               receives a typed email from the caller;
+          (ii) walk-in intake captured at a service desk where the
+               requester provides only a name and a topic;
+          (iii) anonymous portal submissions where the requester
+                deliberately elects to remain unreachable by email;
+          (iv) cases imported from external paper-form scans that have
+                no machine-readable email field.
+        The Optional designation MUST hold uniformly across all four
+        insert paths into `x_[scope]_case`:
+          (1) the internal form - the platform's form-layout engine
+              renders NO asterisk and accepts a save with an empty value;
+          (2) the Table API (PUT/POST) - the platform accepts inserts/
+              updates with the field omitted or set to empty string;
+          (3) the scripted REST submission endpoint - the endpoint's
+              field-validation logic accepts a missing or empty
+              requester_email and proceeds with GlideRecord.insert();
+          (4) the seed-data scripts - synthetic demo cases MAY (but need
+              not) populate this field; cases that DO populate it use
+              the synthetic non-PII format demo+NN@example.invalid per
+              AAP Section 0.7.2 (No-PII constraint).
+      - read_only=false: internal users with the case_manager role may
+        correct an erroneous requester_email (e.g., a typo from the
+        portal submission, or a follow-up channel update) AFTER the
+        case is created; case_agent role users on assigned cases may
+        also correct per AAP Section 0.5.6 ACL matrix. Internal-user
+        write authorization is governed by the table-level ACLs in
+        ../acl/ - this dictionary entry deliberately does NOT carry
+        per-role write_roles since the table-level ACLs apply uniformly
+        across all editable fields.
+      - default_value is EMPTY (no implicit default) per AAP Section 0.5.7
+        and the agent prompt's Phase 4 verbatim. Defaulting silently to a
+        placeholder string ("noemail@example.com", "anonymous@", etc.)
+        would silently mask submissions that legitimately omit an email
+        and pollute downstream filtering / segmentation logic with
+        sentinel values that look like real emails. An empty string is
+        unambiguously distinguishable from a real email at the consumer
+        layer (e.g., reports filtering "requester_email IS NOT EMPTY"
+        for follow-up campaigns).
+      - audit=false per AAP Section 0.3.1 minimal-change clause and the
+        agent prompt's Phase 4. The status field on this same table
+        carries audit=true because every state transition must be
+        reconstructable post-hoc; requester_email is descriptive
+        identity-contact metadata, not a regulated lifecycle attribute,
+        so the additional sys_audit row per update is unnecessary
+        overhead for a POC.
+      - max_length=100 EXACTLY per AAP Section 0.5.7 verbatim. NOT 4000
+        (description, the long-form free-text body), NOT 255 (subject,
+        the case summary line), NOT 40 (number / type / status / priority,
+        the controlled-vocabulary identifier-style strings). 100 chars
+        comfortably accommodates real-world email addresses (including
+        very long internal corporate addresses like
+        "first.last+departmental.subteam.alias@subsidiary.parent-company.com"
+        at 73 chars), while staying well under RFC 5321's 254-octet
+        upper bound and matching the sibling requester_name column's
+        100-char ceiling for symmetric storage of the requester's two
+        identity strings. The cap is intentionally NOT 254 because that
+        upper bound is rarely exercised and a tighter cap defends against
+        accidental insertion of long non-email values into the field.
+      - internal_type=string is correct. ServiceNow does NOT provide a
+        built-in "email" internal_type; per the agent prompt's Key Insight
+        #3, "If email-format validation is desired, it would be added via
+        a Client Script, not a dictionary attribute." The POC deliberately
+        does NOT add a regex-based email-format Client Script because:
+          (a) AAP Section 0.3.1 minimal-change clause - only the seven
+              enumerated capabilities are in scope; email-format
+              validation is not enumerated;
+          (b) AAP Section 0.7.2 minimal-Change Clause is reinforced;
+          (c) lenient acceptance of varied email formats (international,
+              IDN, punycode, plus-tagged, role addresses) is generally
+              preferred over strict regex which is notorious for false-
+              negative rejections of legitimate addresses;
+          (d) the field is OPTIONAL anyway - regex-validating an Optional
+              field that the requester may legitimately leave empty adds
+              UX friction for a feature that may simply not be used.
+        The platform's form engine renders a String column with
+        max_length<=255 as a single-line text input (no `attributes`
+        override required for this presentation), which matches the
+        single-line email input expected on the portal submission form.
+      - choice=0 = "Free-form String, no choice list" (NOT 3 like the
+        type / status / priority fields). Email addresses are unconstrained
+        natural-language text; constraining them to a choice list would
+        be nonsensical for a free-form contact field.
+      - unique=false: multiple cases may legitimately share the same
+        requester_email (e.g., a recurring requester who submits multiple
+        cases over time, or a shared mailbox like "support@requester-org"
+        used by multiple individuals at the requester's organization).
+        Uniqueness at the case level is delegated entirely to the
+        auto-generated `number` field per AAP Section 0.5.7
+        (./x_[scope]_case_number.xml carries unique=true).
+      - text_index=false per the agent prompt's Phase 6 verbatim. Unlike
+        subject (text_index=true, the primary search target across the
+        case list) and description (text_index=true, the long-form
+        searchable body), requester_email is identity-contact metadata
+        that does not need to participate in the case-list quick-search
+        index for the POC. Internal users wanting to filter by requester
+        email can still do so via the standard list-view condition
+        builder (which works without a text index for short String
+        columns at POC data volumes). Avoiding the index also reduces
+        the surface area for accidental anonymous-list enumeration of
+        requester emails through any future search widget - which is
+        especially important for requester_email since it is treated
+        as PII-protected per AAP Section 0.7.4.
+      - spell_check=false per the agent prompt's Phase 6 verbatim.
+        Email addresses contain "@", ".", "+", "_", "-" and other non-
+        dictionary characters that defeat dictionary-based spell-checking;
+        any spell-check suggestions on an email field generate noisy
+        false-positive squiggles on the local-part and the TLD without
+        adding value. This matches the platform-native convention for
+        sys_user.email, which also disables spell_check.
+      - attributes is EMPTY per the agent prompt's Phase 6 verbatim.
+        Unlike description (attributes="edge_encryption_enabled=true",
+        which marks the long-form narrative column eligible for
+        ServiceNow Edge Encryption), the POC does NOT mark the
+        requester_email column as Edge-Encryption-eligible. Edge
+        Encryption support for short identity strings is intentionally
+        out of POC scope; if a future production deployment requires
+        it (e.g., for GDPR / HIPAA compliance on requester contact
+        data), the dictionary attribute can be added in a follow-up
+        scoped change.
+      - No reference target: this is a free-form String field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`. The POC deliberately
+        does NOT model requester_email as a Reference->sys_user.email
+        because:
+          (i)  the case-submission portal is UNAUTHENTICATED (AAP
+               Section 0.4.4 - "two unauthenticated pages: case
+               submission and case status lookup") - the anonymous
+               submitter generally has no sys_user account and cannot
+               be resolved to one by email;
+          (ii) AAP Section 0.5.7's literal type for requester_email is
+               "String(100)" - NOT a reference. The exact field type
+               and constraint matrix is preserved verbatim per AAP
+               Section 0.7.1 ("Preserve the user-prompt's data-model
+               field set verbatim - no additions, no renames, no type
+               relaxations").
+          (iii) The richer typed-party association (Person -> sys_user
+                OR Organization -> core_company) is implemented
+                separately on the x_[scope]_case_party child table,
+                which staff users can populate AFTER initial submission
+                to attach a Resolvable party with role_label such as
+                "Requester" - and the linked sys_user record carries
+                the email through its own sys_user.email column.
+      - No PII: per AAP Section 0.7.2 (No-PII constraint, "Synthetic
+        data only. The seed users, groups, cases, tasks, and parties
+        MUST be fabricated - no real names, real email addresses, real
+        phone numbers, real organization names, or real case content.")
+        and AAP Section 0.3.2 (synthetic-data-only constraint). NO
+        real email addresses from the source ArkCase database (or any
+        other real-world source) are placed in this column at any point
+        in the build. Demo seed values that DO populate this field use
+        the IANA-reserved synthetic format demo+NN@example.invalid (the
+        ".invalid" TLD is reserved by RFC 2606 specifically for use in
+        examples and tests and resolves to no real domain), making
+        accidental real-world delivery impossible.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_[scope]_case.xml`
+        (parent table), since `<name>x_[scope]_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `requester_email` column:
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+            (the scripted REST submission endpoint - writes this field
+            from the user's portal-form input on every anonymous case
+            submission; AAP Section 0.4.4 lists `requester_email` as one
+            of the five user-supplied inputs the page collects, though
+            the field is Optional so an empty value MUST be accepted)
+          * ../portal/widgets/sp_widget_x_[scope]_case_submission_widget.xml
+            (the submission widget binds its requester-email text input
+            to this field via the scripted REST submission endpoint)
+          * ../script_includes/x_[scope]_CasePortalService.xml
+            (the submitCase() helper method writes this field on behalf
+            of the scripted REST submission endpoint, accepting empty
+            string when the requester elects to omit)
+          * ../seed-data/cases/x_[scope]_case_demo_*.xml (synthetic
+            demo cases that may optionally populate this field with
+            synthetic non-PII addresses in the format
+            demo+NN@example.invalid to satisfy AAP Section 0.7.4
+            minimum-data threshold of "at least 10 cases across all
+            statuses, both case types represented")
+
+      - This record is EXPLICITLY NOT consumed by:
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_status_lookup.xml
+            (the scripted REST status-lookup endpoint - per AAP Section
+            0.7.4, the lookup returns ONLY status, subject, opened_date;
+            requester_email is treated as internal/PII-protected and
+            MUST NOT appear in the response payload). Implementations
+            of the lookup endpoint MUST whitelist exactly status,
+            subject, opened_date when constructing the response object -
+            any leakage of requester_email is a portal-data-exposure
+            violation per AAP Section 0.7.4 and fails the validation
+            gate "Portal - lookup" defined in AAP Section 0.7.3.
+          * ../portal/widgets/sp_widget_x_[scope]_case_lookup_widget.xml
+            (consumes only the three whitelisted fields returned by
+            the lookup endpoint).
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Requester Email</column_label>
+        <comments>Optional String(100) capturing the external requester's email. Populated by the case_submit scripted REST endpoint from the portal submission page. NOT exposed by the case_status_lookup endpoint per AAP Section 0.7.4 (portal output filtering).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>requester_email</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>100</max_length>
+        <name>x_[scope]_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6f706e8bfa01ada7d9e44707e33251be</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_requester_email</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
