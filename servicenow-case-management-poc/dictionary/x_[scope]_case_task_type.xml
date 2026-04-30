@@ -115,30 +115,28 @@
         the PDI auto-assigns the actual scope id at App Engine Studio
         creation time. The placeholder appears in `<name>`, `<sys_scope>`,
         `<sys_package>`, and `<sys_update_name>` consistently.
-      - mandatory=true at the dictionary level. AAP Section 0.5.7's
-        verbatim case_task table does not explicitly mark `type` as
-        Mandatory the way it does for `case`, `subject`, `assigned_to`,
-        and `due_date`. However, the agent prompt's Phase 4 explicitly
-        instructs `<mandatory>true</mandatory>` to match "the implicit
-        requirement that every task has a type." This implicit
-        requirement is supported by:
-          * Practical UX - a task with NO type is undistinguishable
-            from any other on the parent case's related list at a
-            taxonomic level; the four labels exist precisely to
-            disambiguate at-a-glance.
-          * "Other" exists as a deliberate non-empty default-of-last-
-            resort so that a user who genuinely has no preferred
-            label still produces a valid row rather than leaving the
-            field blank.
-          * Consistency with x_[scope]_case_task.subject, which
-            similarly carries mandatory=true (per
-            ../dictionary/x_[scope]_case_task_subject.xml line 260).
-            Treating type identically to subject reflects that both
-            are fundamental categorizing attributes on every task row.
-        Mandatory enforcement runs at the platform-validation level on
-        every insert / update through the standard form, the Table API,
-        and any GlideRecord.insert() invocation in
-        ../scripts/seed_demo_data.js.
+      - mandatory=false at the dictionary level per AAP Section 0.5.7
+        verbatim ("type | Choice | Investigation, Review, Follow-up,
+        Other" - no Mandatory marker) and AAP Section 0.7.1
+        strict-literal "no additions, no renames, no type relaxations"
+        rule. The AAP authoritative text takes precedence over the
+        earlier functional argument that "every task has a type."
+        Although the four-label vocabulary is deliberately rich enough
+        to categorize any conceivable task (with "Other" serving as
+        the deliberate non-empty default-of-last-resort), AAP Section
+        0.5.7 does not require a dictionary-level mandatory constraint
+        to enforce that classification. Internal-form callers, Table
+        API consumers, and the synthetic demo tasks per
+        ../seed-data/tasks/x_[scope]_case_task_demo_*.xml continue to
+        populate this field explicitly with one of the four supported
+        labels at insert time. The contrast with case_task.subject
+        (which IS marked Mandatory in AAP Section 0.5.7 and therefore
+        carries mandatory=true in
+        ../dictionary/x_[scope]_case_task_subject.xml) is intentional:
+        AAP authoritative text differentiates the two fields and the
+        dictionary entries reflect that exactly. If a future requirement
+        makes type strictly mandatory, AAP Section 0.5.7 will be
+        updated first and this dictionary entry will follow.
       - read_only=false: an internal user (case_manager or assigned
         case_agent within the AAP Section 0.5.6 "Assigned only"
         condition) editing the task record may correct an erroneous
@@ -260,7 +258,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Type</column_label>
-        <comments>Mandatory Choice categorizing the task. Values: Investigation, Review, Follow-up, Other. Authored as separate sys_choice rows in ../choices/sys_choice_case_task_type.xml. Surfaces in the case_task list view, the parent case's task related list, and the auto-generated form. Replaces ArkCase AcmTask.type (free-form String, no validator).</comments>
+        <comments>Optional Choice categorizing the task per AAP Section 0.5.7 verbatim (no Mandatory marker). Values: Investigation, Review, Follow-up, Other. Authored as separate sys_choice rows in ../choices/sys_choice_case_task_type.xml. Surfaces in the case_task list view, the parent case's task related list, and the auto-generated form. Replaces ArkCase AcmTask.type (free-form String, no validator). Internal forms, Table API, and seed tasks all populate this field explicitly with one of the supported labels.</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -278,7 +276,7 @@
         <function_definition/>
         <function_field>false</function_field>
         <internal_type>string</internal_type>
-        <mandatory>true</mandatory>
+        <mandatory>false</mandatory>
         <max_length>40</max_length>
         <name>x_[scope]_case_task</name>
         <next_element/>

@@ -68,15 +68,27 @@
       - The literal `[scope]` placeholder is preserved per AAP convention;
         the PDI auto-assigns the actual scope id at App Engine Studio
         creation time.
-      - mandatory=true at the dictionary level (AAP Section 0.5.7 verbatim:
-        "type | Choice | General Inquiry, Complaint - extensible"; AAP
-        Section 0.5.5 establishes that the per-case-type flows REQUIRE
-        this discriminator to be populated - if a case were inserted
-        without a `type`, neither flow's OnUpdate trigger would match
-        and the entire state-machine would be unreachable for that row).
-        This mandatory enforcement runs at the platform-validation level
-        on every insert / update through the standard form, the Table API,
-        the scripted REST submission endpoint, and any seed scripts.
+      - mandatory=false at the dictionary level per AAP Section 0.5.7
+        verbatim ("type | Choice | General Inquiry, Complaint -
+        extensible" - no Mandatory marker) and AAP Section 0.7.1
+        strict-literal "no additions, no renames, no type relaxations"
+        rule. The AAP authoritative text takes precedence over the
+        functional argument that the per-case-type flows in AAP
+        Section 0.5.5 require this discriminator: if a case is
+        inserted without a `type`, neither flow's OnUpdate trigger
+        will match and the case will simply have no automated
+        lifecycle - which is acceptable POC behavior since manual
+        status writes are still possible. Internal-form callers,
+        Table API consumers, the scripted REST submission endpoint
+        per ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml,
+        and the synthetic seed cases per
+        ../seed-data/cases/x_[scope]_case_demo_*.xml all continue
+        to populate this field explicitly with one of the two
+        supported labels (General Inquiry or Complaint), so the
+        absence of a dictionary-level mandatory constraint does not
+        in practice produce empty `type` values. If a future
+        requirement makes type strictly mandatory, AAP Section 0.5.7
+        will be updated first and this dictionary entry will follow.
       - read_only=false: an internal user (case_manager) editing the case
         record may correct an erroneous type assignment. The corresponding
         flow filter changes are picked up by the platform on the next
@@ -138,7 +150,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Type</column_label>
-        <comments>Mandatory Choice categorizing the case. Values: General Inquiry, Complaint (extensible). Drives which Flow Designer flow handles state transitions: ../flows/general_inquiry_state_machine.xml or ../flows/complaint_state_machine.xml. Used by ../reports/x_[scope]_all_cases_by_type.xml. Replaces ArkCase CaseFile.caseType (free-form String).</comments>
+        <comments>Optional Choice categorizing the case per AAP Section 0.5.7 verbatim (no Mandatory marker). Values: General Inquiry, Complaint (extensible). Drives which Flow Designer flow handles state transitions: ../flows/general_inquiry_state_machine.xml or ../flows/complaint_state_machine.xml. Used by ../reports/x_[scope]_all_cases_by_type.xml. Replaces ArkCase CaseFile.caseType (free-form String). Internal forms, the Table API, the scripted REST submission endpoint, and seed cases all populate this field explicitly with one of the supported labels.</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -156,7 +168,7 @@
         <function_definition/>
         <function_field>false</function_field>
         <internal_type>string</internal_type>
-        <mandatory>true</mandatory>
+        <mandatory>false</mandatory>
         <max_length>40</max_length>
         <name>x_[scope]_case</name>
         <next_element/>
