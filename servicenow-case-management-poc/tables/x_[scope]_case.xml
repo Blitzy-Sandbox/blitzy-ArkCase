@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the foundational `x_[scope]_case`
+    custom table inside the scoped application `x_[scope]_case_management`.
+
+    This table is the case-lifecycle anchor of the POC. It replaces the case-domain
+    subset of ArkCase's `acm_case_file` MySQL table (the JPA entity `CaseFile`
+    in acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    armedia/acm/plugins/casefile/model/CaseFile.java) - converting the JPA
+    @Entity / @Table(name="acm_case_file") / @Inheritance(SINGLE_TABLE) pattern
+    into a ServiceNow scoped table whose discriminator collapses into a `type`
+    Choice rather than a class-name discriminator column.
+
+    This record authors ONLY table-level metadata (name, labels, parent class,
+    scope linkage, auto-numbering reference, and access flags). The 13 fields
+    enumerated in the AAP (number, type, status, priority, subject, description,
+    opened_date, closed_date, assigned_group, assigned_agent, requester_name,
+    requester_email, plus the internal pending_reason) are authored as
+    sys_dictionary records in the sibling ../dictionary/ folder. The platform
+    automatically inherits the standard sys_* audit columns (sys_id,
+    sys_created_on, sys_created_by, sys_updated_on, sys_updated_by) by virtue
+    of being a sys_db_object record.
+
+    Constraints honored:
+      - Scoped-namespace exclusivity: every cross-reference resolves into the
+        x_[scope]_case_management scope; no global-scope writes.
+      - Zero hardcoded sys_id literals in any reference field; sys_scope,
+        sys_package, and number_ref all resolve by scope name via the `source`
+        attribute. The sys_id element below is THIS record's own primary key
+        (deterministic MD5 of the table name) and is not a reference to any
+        other record.
+      - super_class is empty: this table extends NOTHING. It does not extend
+        the OOB `task` table (which would write to global scope and violate
+        AAP Section 0.3.2). The platform still provides standard sys_* audit columns
+        because sys_db_object records always do.
+      - create_access_controls is false: ServiceNow auto-creates a default ACL
+        set when this is true. Since ../acl/ enumerates a precise role x table
+        x CRUD matrix with custom "Assigned only" conditions for case_agent,
+        the auto-generated ACLs would conflict and are explicitly suppressed
+        here.
+      - The literal [scope] placeholder is preserved throughout per AAP
+        convention; the PDI auto-assigns the actual scope id at App Engine
+        Studio creation time.
+-->
+<record_update table="sys_db_object">
+    <sys_db_object action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <actions_update>true</actions_update>
+        <alter_access>public</alter_access>
+        <caller_access/>
+        <client_scripts_access>public</client_scripts_access>
+        <configuration_access>public</configuration_access>
+        <create_access>public</create_access>
+        <create_access_controls>false</create_access_controls>
+        <delete_access>public</delete_access>
+        <extension_model/>
+        <is_extendable>false</is_extendable>
+        <label>Case</label>
+        <live_feed_enabled>false</live_feed_enabled>
+        <name>x_[scope]_case</name>
+        <number_ref display_value="CASE" source="x_[scope]_case_management">x_[scope]_case_number</number_ref>
+        <plural>Cases</plural>
+        <provider_class/>
+        <read_access>public</read_access>
+        <scriptable_table>false</scriptable_table>
+        <super_class/>
+        <sys_class_name>sys_db_object</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bd806f5b23883f5d28ed792570f1070b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_case</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_db_object_x_[scope]_case</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <update_access>public</update_access>
+        <user_role/>
+        <ws_access>public</ws_access>
+    </sys_db_object>
+</record_update>
