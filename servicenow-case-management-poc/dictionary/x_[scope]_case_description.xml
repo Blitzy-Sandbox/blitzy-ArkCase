@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `description` String field on the `x_[scope]_case` custom
+    table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field        Type           Constraints
+        description  String(4000)   Mandatory
+
+    Per AAP Section 0.4.4 the case-submission portal page populates this
+    field as one of the five user-supplied inputs:
+        "Page 1 - Case Submission: a simple form with five inputs
+        (subject, type, description, requester_name, requester_email)."
+    The submission widget binds the textarea input to this field and passes
+    its value through the scripted REST submission endpoint, which performs
+    a GlideRecord.insert() against `x_[scope]_case` with the user-supplied
+    description literal.
+
+    Per AAP Section 0.7.4 ("Portal lookup output filtering") this field is
+    EXPLICITLY NOT exposed by the case-status-lookup endpoint - the lookup
+    returns ONLY status, subject, opened_date - no internal fields exposed.
+    Description is treated as INTERNAL because:
+      (a) free-form descriptions can contain sensitive narrative detail that
+          MUST NOT be returned to anonymous callers performing a case-number
+          lookup; and
+      (b) AAP Section 0.7.4 enumerates exactly THREE whitelisted lookup
+          fields, and description is not among them.
+    This intentional omission is enforced at the response-payload level by
+    the lookup endpoint's CasePortalService.lookupCase() helper, which
+    constructs a JSON object containing only the three permitted columns.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java lines 144-146:
+            @Lob
+            @Column(name = "cm_case_details")
+            private String details;
+        ArkCase's `details` field was a JPA Large Object (`@Lob`) String
+        column on `acm_case_file` mapped to physical column
+        `cm_case_details`. JPA `@Lob` on a String maps to the database-
+        engine TEXT/LONGTEXT type (effectively unbounded - up to 4 GB on
+        MySQL InnoDB). Per AAP Section 0.1.2, the ServiceNow target
+        intentionally caps the equivalent column at 4000 chars to keep
+        the schema bounded and predictable for a POC; unbounded LOB
+        storage on a scoped table is not justified by the POC's data
+        volumes and would require special handling on the form, in the
+        scripted REST endpoint, and in dashboards.
+      - The field name is RENAMED from ArkCase's `details` to ServiceNow's
+        `description` per AAP Section 0.5.7 verbatim. This is an
+        INTENTIONAL rename: AAP Section 0.5.1 lists the target field as
+        `description`, and `description` is the conventional ServiceNow
+        long-form text column name (e.g., task.description,
+        incident.description, change_request.description). The rename
+        aligns the POC schema with platform-native naming so OOB form
+        layouts, list-view column choosers, and report-grouping UIs all
+        recognize the column as the long-form descriptive narrative.
+      - ArkCase's CaseFile also had a sibling `caseDetailsSummary` field
+        (lines 148-150, also `@Lob` String mapped to `cm_case_details_summary`).
+        That sibling is NOT replicated in the POC: AAP Section 0.5.7's
+        case schema lists only `description`, not a separate summary
+        column. The POC accepts a single descriptive field per case, and
+        any summarization is delegated to the user when populating
+        `subject` (the short summary in ./x_[scope]_case_subject.xml).
+      - Bean Validation: ArkCase's `details` carried no @Size, @NotNull,
+        or @NotEmpty annotations - it was technically nullable. The POC
+        UPGRADES this to mandatory=true per AAP Section 0.5.7 verbatim
+        ("description | String(4000) | Mandatory"). A case with no
+        description is rejected at every entry point: the internal form
+        (platform-native mandatory enforcement), the Table API, the
+        scripted REST submission endpoint (which surfaces a 400-class
+        error to the portal), and seed scripts (which fail to insert).
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_[scope]_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical field identifier `x_[scope]_case.description`)
+        and is NOT a reference to any other record. The MD5 derivation
+        guarantees that re-generation of this Update Set on any agent run
+        produces a byte-identical `<sys_id>` (no random UUIDs), which is
+        required for clean Update-Set re-import on a fresh PDI without
+        creating duplicate sys_dictionary rows. Verified:
+            python3 -c "import hashlib; print(hashlib.md5(b'x_[scope]_case.description').hexdigest())"
+        prints 548ff520bd22f86da39916a86f8cef1e (matches sys_id below).
+      - The literal `[scope]` placeholder is preserved per AAP convention;
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time. The placeholder appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=true at the dictionary level (AAP Section 0.5.7 verbatim:
+        "description | String(4000) | Mandatory"). This MUST hold across
+        all four insert paths into `x_[scope]_case`:
+          (1) the internal form - the platform's form-layout engine renders
+              an asterisk and refuses to save without a value;
+          (2) the Table API (PUT/POST) - the platform returns a 400 with
+              "field is mandatory" if missing;
+          (3) the scripted REST submission endpoint - the endpoint's
+              field-validation pre-check rejects an empty description
+              before invoking GlideRecord.insert() and returns a structured
+              400 to the portal so the submission widget can display an
+              inline error;
+          (4) the seed-data scripts - all 10 demo cases populate this
+              field with non-PII synthetic narratives.
+      - read_only=false: internal users with the case_manager role may
+        amend or extend the description after submission (e.g., to
+        consolidate later context); case_agent role users on assigned
+        cases may also extend per AAP Section 0.5.6 ACL matrix. Internal-
+        user write authorization is governed by the table-level ACLs in
+        ../acl/ - this dictionary entry deliberately does NOT carry
+        per-role write_roles since the table-level ACLs apply uniformly
+        across all editable fields.
+      - default_value is EMPTY (no implicit default) per AAP Section 0.5.7
+        and the agent prompt's Phase 4 verbatim. Defaulting silently to
+        a placeholder string ("(no description)") would silently mask
+        submissions that failed mandatory enforcement and pollute later
+        report grouping or text searches.
+      - audit=false per AAP Section 0.3.1 minimal-change clause. The
+        status field on this same table carries audit=true because every
+        state transition must be reconstructable post-hoc; description is
+        long-form descriptive metadata, not a regulated lifecycle
+        attribute, so the additional sys_audit row per update is
+        unnecessary overhead for a POC. (Storing a 4000-char column in
+        sys_audit per update would also amplify the audit-trail volume
+        considerably for what is effectively descriptive content.)
+      - max_length=4000 EXACTLY per AAP Section 0.5.7 verbatim. NOT 4096,
+        NOT unlimited (`@Lob` in ArkCase was effectively unbounded), NOT
+        255 (subject, the short summary), NOT 100 (requester_name,
+        requester_email). The 4000-char cap is a deliberate POC
+        simplification per AAP Section 0.1.2 that:
+          (i) keeps the platform-native string column type (no large-
+              object handling, no streaming, no CLOB semantics);
+          (ii) renders cleanly in the OOB form-layout text-area;
+          (iii) fits comfortably within typical case-narrative volumes
+                without truncation in practice;
+          (iv) avoids platform-specific tunings required for very large
+               text storage on scoped tables.
+      - internal_type=string is correct for fields up to 4000 chars in
+        ServiceNow. The platform's form engine automatically renders a
+        String column with max_length > 255 as a multi-line text-area on
+        the form layout (no `attributes` override required for the text-
+        area presentation itself). For larger content, alternative
+        internal_types like `string_full_utf8` would apply, but at 4000
+        chars the standard `string` type is correct.
+      - choice=0 = "Free-form String, no choice list". Description is
+        unconstrained natural-language text; constraining it to a choice
+        list would defeat its purpose as a free-form narrative.
+      - unique=false: multiple cases may legitimately share the same
+        description (e.g., a recurring complaint pattern across many
+        requesters). Uniqueness at the case level is delegated entirely
+        to the auto-generated `number` field per AAP Section 0.5.7
+        (./x_[scope]_case_number.xml carries unique=true).
+      - text_index=true future-proofs basic full-text search across the
+        case list / dashboards. Description is the highest-content
+        free-form String on x_[scope]_case and is the most likely target
+        for keyword search by internal users investigating recurring
+        themes. The cost of indexing is negligible at POC data volumes
+        (10 demo cases) and AAP gate 6 (Dashboards) does not require
+        keyword search, so text_index is harmless.
+      - spell_check=true is appropriate for a long-form free-form text
+        input. The platform surfaces inline spell-check suggestions on
+        the form text-area, improving UX without affecting persistence.
+      - attributes=edge_encryption_enabled=true per the agent prompt's
+        Phase 6 directive. This dictionary attribute marks the column as
+        eligible for ServiceNow Edge Encryption when the feature is
+        configured at the instance level. On a vanilla PDI without Edge
+        Encryption configured, this attribute is recognized but inactive
+        (it does not affect persistence, form rendering, or Update Set
+        preview), so it is a safe forward-compatibility annotation. It
+        also matches the OOB convention for long-form descriptive
+        columns on platform tables (e.g., task.description, which
+        carries similar attributes on its dictionary row).
+      - No reference target: this is a free-form String field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - No PII: while the field stores synthetic case-narrative phrases
+        in the demo seed data, NO real names, real email addresses,
+        real phone numbers, real organization names, or real case
+        content from the source ArkCase database are placed in this
+        column at any point in the build (per AAP Section 0.3.2
+        synthetic-data-only constraint). Demo seed values are
+        fabricated narratives such as "Synthetic complaint regarding
+        delayed processing of a benefits inquiry" or "General question
+        about service availability".
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_[scope]_case.xml`
+        (parent table), since `<name>x_[scope]_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `description` column:
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+            (the scripted REST submission endpoint - writes this field
+            from the user's portal-form input on every anonymous case
+            submission; AAP Section 0.4.4 lists `description` as one of
+            the five user-supplied inputs the page collects)
+          * ../portal/widgets/sp_widget_x_[scope]_case_submission_widget.xml
+            (the submission widget binds its description text-area input
+            to this field via the scripted REST submission endpoint)
+          * ../script_includes/x_[scope]_CasePortalService.xml
+            (the submitCase() helper method writes this field on behalf
+            of the scripted REST submission endpoint)
+          * ../seed-data/cases/x_[scope]_case_demo_*.xml (synthetic
+            demo cases that MUST populate this mandatory field with
+            realistic non-PII narratives to satisfy AAP Section 0.7.4
+            minimum-data threshold of "at least 10 cases across all
+            statuses, both case types represented")
+
+      - This record is EXPLICITLY NOT consumed by:
+          * ../portal/rest/sys_ws_definition_x_[scope]_case_status_lookup.xml
+            (the scripted REST status-lookup endpoint - per AAP Section
+            0.7.4, the lookup returns ONLY status, subject, opened_date;
+            description is treated as internal and MUST NOT appear in
+            the response payload). Implementations of the lookup endpoint
+            MUST whitelist exactly status, subject, opened_date when
+            constructing the response object - any leakage of description
+            is a portal-data-exposure violation per AAP Section 0.7.4.
+          * ../portal/widgets/sp_widget_x_[scope]_case_lookup_widget.xml
+            (consumes only the three whitelisted fields returned by the
+            lookup endpoint).
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes>edge_encryption_enabled=true</attributes>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Description</column_label>
+        <comments>Mandatory String(4000) capturing the full case description. Populated by the case_submit scripted REST endpoint from the portal submission page. NOT exposed by case_status_lookup per AAP Section 0.7.4. Replaces ArkCase CaseFile.details (@Lob String, intentionally bounded at 4000 chars).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>description</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>4000</max_length>
+        <name>x_[scope]_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>true</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>548ff520bd22f86da39916a86f8cef1e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_description</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>true</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
