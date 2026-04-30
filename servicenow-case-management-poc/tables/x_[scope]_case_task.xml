@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the child-task
+    `x_[scope]_case_task` custom table inside the scoped application
+    `x_[scope]_case_management`.
+
+    This table is the case-task subset of the AAP's three-table data model
+    (AAP Section 0.5.7). It replaces the JPA entity AcmTask defined in
+    com.armedia.acm.plugins.task.model.AcmTask
+    (acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/com/
+    armedia/acm/plugins/task/model/AcmTask.java), specifically the tiny
+    six-field subset enumerated in AAP Section 0.5.7. The vast majority of
+    AcmTask's ~60 fields (priority, attachment metadata, business-process
+    info, percent-complete, workflow request IDs, document-under-review,
+    documents-to-review, ECM container, participants, candidate claim
+    groups, buckslip approval, rework instructions, outcome information,
+    notification receivers, ad-hoc/completion flags, taskDurationInMillis,
+    nextAssignee, legacySystemId, restriction flag, etc.) are intentionally
+    OUT OF SCOPE per AAP Section 0.3.2 (no document management, no
+    Activiti/BPMN workflow engine, no buckslip approval, no ECM, no
+    business-process integration, no Outlook calendar, no ZyLAB matter
+    integration, no notification engine).
+
+    The six in-scope fields and their AcmTask source-field counterparts:
+      - case        (Reference -> x_[scope]_case)         <- attachedToObjectId + attachedToObjectType (when CASE_FILE)
+      - subject     (String 255, mandatory)                <- title (with @Size(min=1) Bean Validation)
+      - type        (Choice)                               <- type (free-form String in source; collapsed to choice)
+      - status      (Choice: Open / In Progress / Closed)  <- status (with pendingStatus companion in source)
+      - assigned_to (Reference -> sys_user, mandatory)     <- assignee (replaced username string lookup with reference)
+      - due_date    (Date, mandatory)                      <- dueDate (with @NotNull)
+
+    These six fields are NOT defined in this record - they are authored as
+    separate sys_dictionary records in the sibling ../dictionary/ folder
+    (../dictionary/x_[scope]_case_task_case.xml, x_[scope]_case_task_subject.xml,
+    x_[scope]_case_task_type.xml, x_[scope]_case_task_status.xml,
+    x_[scope]_case_task_assigned_to.xml, x_[scope]_case_task_due_date.xml).
+    The choice value lists for type and status are authored in
+    ../choices/sys_choice_case_task_type.xml (Investigation, Review,
+    Follow-up, Other) and ../choices/sys_choice_case_task_status.xml (Open,
+    In Progress, Closed) per AAP Section 0.5.1.
+
+    This record authors ONLY table-level metadata (name, labels, parent
+    class, scope linkage, auto-numbering reference, and access flags). The
+    platform automatically inherits the standard sys_* audit columns
+    (sys_id, sys_created_on, sys_created_by, sys_updated_on,
+    sys_updated_by) by virtue of being a sys_db_object record.
+
+    Constraints honored:
+      - Scoped-namespace exclusivity: every cross-reference resolves into
+        the x_[scope]_case_management scope; no global-scope writes.
+      - Zero hardcoded sys_id literals in any reference field; sys_scope,
+        sys_package, and number_ref all resolve by scope name via the
+        `source` attribute. The sys_id element below is THIS record's own
+        primary key (deterministic MD5 of the table name
+        `x_[scope]_case_task` = f9fd58b1a8c6ecc0cf653c0b50ecc5a3) and is
+        not a reference to any other record.
+      - super_class is EMPTY: this table extends NOTHING. Critically, it
+        does NOT extend the OOB `task` table even though the source entity
+        is named AcmTask and the conceptual mapping aligns with task
+        semantics. Extending the OOB `task` table would (a) write to global
+        scope and (b) inherit the OOB task table's ~60 columns (priority,
+        state, due_date, etc.), creating massive scope creep and violating
+        AAP Section 0.3.2's MINIMAL CHANGE CLAUSE. The platform still
+        provides the standard sys_* audit columns because sys_db_object
+        records always do.
+      - extension_model is empty: this is a free-standing user-data table,
+        not an extended table.
+      - is_extendable is false: this POC table is not designed to be
+        sub-classed.
+      - create_access_controls is false: ServiceNow auto-creates a default
+        ACL set when this is true. Since ../acl/x_[scope]_case_task_*.xml
+        enumerates a precise role x table x CRUD matrix that mirrors the
+        case-table ACL pattern (case_manager full access; case_agent
+        restricted to tasks whose parent case has the agent assigned;
+        case_viewer read-only), the auto-generated ACLs would conflict and
+        are explicitly suppressed here.
+      - The reference target sys_user (for `assigned_to`) is an OOB
+        ServiceNow table that this record does NOT modify. It is referenced
+        ONLY via the dictionary entry in
+        ../dictionary/x_[scope]_case_task_assigned_to.xml, never via
+        super_class.
+      - The literal [scope] placeholder is preserved throughout per AAP
+        convention; the PDI auto-assigns the actual scope id at App Engine
+        Studio creation time. At Update Set import time, the platform
+        resolves every `source="x_[scope]_case_management"` reference
+        against the scope's `name` field on sys_scope / sys_app rather than
+        via sys_id, guaranteeing portability across PDIs.
+      - ws_access is public: required because the portal's case-submission
+        Scripted REST endpoint (per AAP Section 0.4.1, although the
+        primary-write target is the parent case table) and any future
+        agent-driven task-creation REST surface need access. The actual
+        anonymous-write path goes through the case_submit endpoint, not
+        directly here, but consistency with the case table's access flags
+        keeps the role-based ACL stack working uniformly.
+
+    Cross-Update-Set load ordering (per AAP Section 0.5.2):
+      - This record MUST be loaded AFTER ../app/sys_scope/x_[scope].xml and
+        ../app/sys_app/x_[scope]_case_management.xml.
+      - This record MUST be loaded AFTER
+        ../numbers/sys_number_x_[scope]_case_task.xml (referenced by
+        number_ref).
+      - This record MUST be loaded AFTER ../tables/x_[scope]_case.xml
+        because ../dictionary/x_[scope]_case_task_case.xml (loaded after
+        this record) creates a Reference column whose target is
+        x_[scope]_case.
+      - This record MUST be loaded BEFORE all
+        ../dictionary/x_[scope]_case_task_*.xml records (they reference
+        this table by `name`).
+      - This record MUST be loaded BEFORE all
+        ../acl/x_[scope]_case_task_*.xml records.
+      - This record MUST be loaded BEFORE the case state-machine flows in
+        ../flows/general_inquiry_state_machine.xml and
+        ../flows/complaint_state_machine.xml because the
+        validate_resolved_transition subflow performs a GlideRecord query
+        against this table to enforce the "All tasks must be closed before
+        resolving this case." rule (AAP Section 0.7.4 verbatim).
+      - This record MUST be loaded BEFORE the
+        ../script_includes/x_[scope]_CaseTransitionValidator.xml Script
+        Include because it queries this table.
+      - This record MUST be loaded BEFORE
+        ../reports/x_[scope]_my_overdue_tasks.xml (the report queries
+        x_[scope]_case_task by due_date and assigned_to).
+      - This record MUST be loaded BEFORE all
+        ../seed-data/tasks/x_[scope]_case_task_demo_*.xml records.
+-->
+<record_update table="sys_db_object">
+    <sys_db_object action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <actions_update>true</actions_update>
+        <alter_access>public</alter_access>
+        <caller_access/>
+        <client_scripts_access>public</client_scripts_access>
+        <configuration_access>public</configuration_access>
+        <create_access>public</create_access>
+        <create_access_controls>false</create_access_controls>
+        <delete_access>public</delete_access>
+        <extension_model/>
+        <is_extendable>false</is_extendable>
+        <label>Case Task</label>
+        <live_feed_enabled>false</live_feed_enabled>
+        <name>x_[scope]_case_task</name>
+        <number_ref display_value="TASK" source="x_[scope]_case_management">x_[scope]_case_task_number</number_ref>
+        <plural>Case Tasks</plural>
+        <provider_class/>
+        <read_access>public</read_access>
+        <scriptable_table>false</scriptable_table>
+        <super_class/>
+        <sys_class_name>sys_db_object</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f9fd58b1a8c6ecc0cf653c0b50ecc5a3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_case_task</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_db_object_x_[scope]_case_task</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <update_access>public</update_access>
+        <user_role/>
+        <ws_access>public</ws_access>
+    </sys_db_object>
+</record_update>
