@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the scoped role
+    `x_[scope]_case_manager` inside the scoped application
+    `x_[scope]_case_management`.
+
+    This is the highest-tier operational user role for the case-management POC.
+    Per AAP Section 0.5.6 (ACL Matrix), it grants FULL ACCESS to the three
+    custom tables: Create + Read All + Write All + Delete on
+    x_[scope]_case, x_[scope]_case_task, and x_[scope]_case_party. Per AAP
+    Section 0.5.5 (State-Machine Transition Map), it is also the ONLY role
+    authorized to transition a case from Resolved to Closed.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/services/
+        users/model/ApplicationRolesConfig.java
+        ArkCase's `application.roles` list pattern, where role names were
+        held as plain strings bound from external configuration.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/com/
+        armedia/acm/plugins/admin/model/RolePrivilegesConstants.java
+        defines the legacy `ROLE_` prefix (intentionally NOT used in the
+        target; replaced by the scope prefix `x_[scope]_`).
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/com/
+        armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        ArkCase's role-normalization logic (uppercase,
+        whitespace-to-underscore, periods-to-double-underscore, prepend
+        `ROLE_`). The ServiceNow target replaces this entire mechanism with
+        named scoped roles whose privileges are enforced declaratively by
+        ACLs in ../acl/.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - Scope-namespace exclusivity: the role's `name` is `x_[scope]_case_manager`
+        (literal `[scope]` placeholder preserved per AAP convention), and the
+        `sys_scope` / `sys_package` fields bind the role to the scoped
+        application by `source` attribute lookup. NO global-scope writes.
+      - Zero hardcoded cross-reference sys_ids: the `sys_scope` and
+        `sys_package` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical role identifier `x_[scope]_case_manager`) and
+        is NOT a reference to any other record.
+      - No role inheritance: `<includes_roles/>` is empty/self-closing. This
+        role does NOT extend or include any out-of-the-box ServiceNow role
+        (e.g., admin, itil, snc_internal, personalize_dictionary,
+        report_admin) and does NOT include the sibling scoped roles
+        (x_[scope]_case_agent, x_[scope]_case_viewer). All privileges flow
+        EXCLUSIVELY from the scoped ACLs in ../acl/ (the case_*_manager.xml
+        ACL records plus field-level ACLs on `assigned_group` and
+        `assigned_agent`).
+      - No PII: the `<description>` is the literal authorization summary;
+        no real names, email addresses, or organization names appear.
+      - Standard role (not scoped admin): `<scoped_admin>` is `false`.
+        Despite being the highest-tier case-management role, this role does
+        NOT grant administration of the scoped application's metadata
+        (table definitions, ACLs, flows). Scoped-app administration remains
+        the responsibility of the OOB `admin` role.
+      - Standard privilege level (not elevated): `<elevated_privilege>` is
+        `false`. No security elevation beyond what scoped ACLs provide.
+      - Not delegable: `<can_delegate>` is `false`. Role grants are managed
+        through `sys_user_has_role` records, not via Delegated Admin.
+      - Grantable: `<grantable>` is `true`, allowing assignment to users
+        through standard role-grant records (e.g., the demo manager seed
+        in ../seed-data/role_assignments/).
+
+    The "Only role allowed to close cases" privilege is NOT encoded in this
+    role record. It is enforced in two adjacent artifacts:
+      1. ../flows/sub_flows/validate_closed_transition.xml: Flow Designer
+         subflow guarded by `gs.getUser().hasRole('x_[scope]_case_manager')`.
+      2. ../business_rules/x_[scope]_set_closed_date.xml: Before-update
+         business rule that auto-sets `closed_date = gs.nowDateTime()` when
+         the role check passes.
+    The role record only declares the role's name; the transition guard
+    consults that name from the flow and business rule.
+-->
+<record_update table="sys_user_role">
+    <sys_user_role action="INSERT_OR_UPDATE">
+        <can_delegate>false</can_delegate>
+        <description>Full create/read/write/delete on x_[scope]_case, x_[scope]_case_task, x_[scope]_case_party. Only role allowed to close cases.</description>
+        <elevated_privilege>false</elevated_privilege>
+        <grantable>true</grantable>
+        <includes_roles/>
+        <name>x_[scope]_case_manager</name>
+        <scoped_admin>false</scoped_admin>
+        <suffix>case_manager</suffix>
+        <sys_class_name>sys_user_role</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>73710b052f274ece1d578c00f4424423</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_case_manager</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_user_role_x_[scope]_case_manager</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_user_role>
+</record_update>
