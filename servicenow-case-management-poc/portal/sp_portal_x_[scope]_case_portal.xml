@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sp_portal` row that
+    defines the Service Portal (Experience Portal) entry-point of the scoped
+    application `x_[scope]`.
+
+    PURPOSE (AAP Section 0.1.1 / Section 0.4.4 / Section 0.7.2):
+      This portal is the ServiceNow target replacement for ArkCase's
+      `acm-service-portal-gateway` anonymous-request pattern - specifically the
+      `submitRequest(...)` and `getRequestStatus(...)` methods of the
+      `PortalRequestService` interface and its `DefaultPluggablePortalRequestService`
+      implementation. Per AAP Section 0.4.4 ("UI Design"), it is the UNAUTHENTICATED
+      Experience Portal that hosts exactly two pages:
+        - x_[scope]_case_submit (anonymous case submission form)
+        - x_[scope]_case_status (anonymous case status lookup)
+      Per AAP Section 0.7.2 ("User Example - Deployment steps", step 3), the
+      deployable URL is:
+        [instance URL]/x_[scope]_case_portal
+      which is precisely the `<url_suffix>` value declared below.
+
+    THE PORTAL IS THE SHELL, THE PAGES ARE THE CONTENT:
+      This file authors ONLY portal-level metadata (URL suffix, theme reference,
+      anonymous-access flag, default homepage, login-page redirect target). The
+      interactive UI elements (form inputs, lookup field, result panel) live in
+      sibling page records under `pages/` and the embedded widget records under
+      `widgets/`. The portal record contains NO widget references and NO embedded
+      script bodies; it is pure metadata.
+
+    UNAUTHENTICATED ANONYMOUS-ACCESS DESIGN (AAP Section 0.4.4 verbatim:
+    "two unauthenticated pages"):
+      Three configuration mechanisms work together to make this a true public,
+      anonymous portal:
+
+        1. `<public>true</public>` - explicit signal to the platform's
+           authorization layer that this portal is exempt from the standard
+           authentication challenge.
+
+        2. `<login_page>x_[scope]_case_submit</login_page>` (and its
+           display-value sibling) - OOB ServiceNow portals default to redirecting
+           unauthenticated callers to a `/login` page. By setting the login_page
+           reference to the SUBMISSION PAGE ITSELF, anonymous users land directly
+           on the case-submission form rather than seeing a username/password
+           prompt. This is the canonical ServiceNow pattern for fully anonymous
+           Service Portals.
+
+        3. `<homepage>x_[scope]_case_submit</homepage>` (and its display-value
+           sibling) - the default page rendered when a caller hits the bare
+           portal URL `[instance URL]/x_[scope]_case_portal`. Because the
+           submission page is the most common entry-point in the user journey
+           ("I want to submit a case -> I land on the form"), the submission
+           page IS the homepage. The status-lookup page (x_[scope]_case_status)
+           is reachable via direct URL `[instance URL]/x_[scope]_case_portal?id=case_status`.
+
+      All three mechanisms are necessary; omitting any one breaks the anonymous-
+      access guarantee. (`<public>true</public>` alone is not enough because
+      OOB redirects still pull anonymous users to the login page; setting only
+      `login_page` is not enough because the platform's authorization layer
+      defaults to deny without the public flag.)
+
+    DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
+    treatment: ServiceNow Experience Portal default theme. No custom CSS,
+    no custom branding."):
+      The `<theme>` and `<theme_dv>` fields are intentionally left as empty
+      self-closing elements. The platform applies its system-default Service
+      Portal theme at render time (the OOB `Stock` theme on most PDIs, or
+      whatever theme the PDI release ships with). This guarantees:
+
+        - Zero custom CSS is authored or referenced.
+        - Zero custom branding is created.
+        - The portal does not depend on a specific theme record's stable name
+          (e.g., `stock` / `Stock` / `default`) which can vary across PDI
+          releases. Leaving the field empty is the only PDI-release-portable
+          choice.
+
+      The agent prompt's Phase 5 explicitly authorizes this fallback:
+      "If the agent cannot confirm a stable OOB theme name, set `<theme_dv/>`
+      and `<theme/>` to empty self-closing elements; the platform uses its
+      built-in default theme."
+
+      Similarly, `<icon>`, `<logo>`, `<background_image>`, and
+      `<background_color>` are all empty self-closing elements - no custom
+      branding artifacts are referenced. Per AAP Section 0.7.2 (Minimal-Change
+      Clause), this is the deliberate, scope-compliant choice.
+
+    OUT-OF-SCOPE FIELDS (deliberately empty):
+      `<knowledge_base>` - empty. Knowledge-base integration is OUT OF SCOPE
+        per AAP Section 0.3.2 ("Document management ... out of scope"). No
+        `kb_knowledge` records are referenced.
+      `<catalog>` - empty. Service-catalog integration is OUT OF SCOPE per
+        AAP Section 0.3.2 (no requirement for ordering catalog items;
+        `acm-service-correspondence` and similar were not in the seven
+        enumerated capabilities). No `sc_catalog` records are referenced.
+      `<quick_start_guide_url>` - empty. No external getting-started URL
+        is provided; the portal is self-explanatory with two pages.
+      `<kb_categories_visible>false</kb_categories_visible>` - reinforces
+        the empty knowledge-base configuration.
+
+    SCOPE BINDING (AAP Sections 0.5.2 and 0.7.2):
+      `<sys_scope>` and `<sys_package>` reference the scoped application by
+      its actual scope NAME (`x_[scope]`), not by sys_id. The actual scope
+      record's `<name>` is `x_[scope]` per `../app/sys_scope/x_[scope].xml`,
+      and `<scope>x_[scope]</scope>` per `../app/sys_app/x_[scope]_case_management.xml`.
+      ALL sibling XMLs in this scoped application reference the scope by that
+      same name (`x_[scope]`). Update Set re-import resolves cross-references
+      by matching the `<sys_scope>` text-node value against the scope record's
+      `<name>`/`<source>` fields, so this MUST match the actual sibling-file
+      convention to avoid preview errors. This is the same convention applied
+      in `../tables/x_[scope]_case.xml`, `../roles/sys_user_role_x_[scope]_case_manager.xml`,
+      and every other sibling record in this scoped application.
+
+      The `display_value="Case Management"` and `source="x_[scope]"` attributes
+      are descriptive metadata that ServiceNow uses for human-readable display
+      on the Update Set preview page; the actual reference resolution uses the
+      text-node values.
+
+    CROSS-REFERENCES BY NAME / NO HARDCODED SYS_IDS (AAP Section 0.7.2):
+      Every cross-reference is a name lookup against a stable identifier:
+        - `<homepage>x_[scope]_case_submit</homepage>` and its
+          `<homepage_dv display_value="Case Submission">x_[scope]_case_submit</homepage_dv>`
+          sibling resolve against the `<id>x_[scope]_case_submit</id>` field
+          of `../portal/pages/sp_page_x_[scope]_case_submit.xml`.
+        - `<login_page>x_[scope]_case_submit</login_page>` and its
+          `<login_page_dv ...>` sibling resolve against the same
+          `<id>x_[scope]_case_submit</id>` field.
+        - `<sys_scope>` / `<sys_package>` resolve against the scope record's
+          `<name>` field (`x_[scope]`).
+
+      The ONLY `sys_id` literal in this file is `<sys_id>` itself (THIS
+      record's own primary key). It is the deterministic 32-char lowercase
+      hex MD5 of `sp_portal_x_[scope]_case_portal`:
+        printf '%s' 'sp_portal_x_[scope]_case_portal' | md5sum | cut -c1-32
+        -> 82079e7877f4f6d09975ab96fc0fa2fa
+      Per AAP Section 0.7.2, the no-hardcoded-sys_id rule applies to
+      references TO OTHER records, not to a record's own identity primary key.
+
+    NO PII, NO EMAIL (AAP Section 0.7.2):
+      The description and short_description below contain ZERO PII (no real
+      names, no real email addresses, no real organization names). Email
+      notifications are explicitly disabled on the PDI per AAP Section 0.7.2
+      Email-disabled constraint - no notification triggers are configured by
+      this portal record (notifications are configured at the table/business-rule
+      level, not at the portal level, and AAP Section 0.7.2 prohibits
+      configuring any of them).
+
+    `[scope]` PLACEHOLDER PRESERVATION (AAP Section 0.7.1 implicit / Section 0.7.2):
+      All `x_[scope]_*` references preserve the literal `[scope]` placeholder
+      in square brackets. The PDI auto-resolves to the actual scope id
+      (e.g., `x_12345_case_portal`) at App Engine Studio creation time when
+      the Update Set is imported. This placeholder convention is observed
+      consistently across every sibling XML in this scoped application.
+
+    URL-SUFFIX UNIQUENESS (ServiceNow platform constraint):
+      `<url_suffix>` has a primary-key constraint on the `sp_portal` table
+      (the platform forbids two portals on the same instance from sharing
+      the same suffix). The scope-prefixed value `x_[scope]_case_portal`
+      ensures global uniqueness even with other scoped portals on the same
+      PDI. The literal `[scope]` placeholder is replaced by the actual scope
+      id at PDI assignment time, so the final URL on a real instance becomes
+      `https://devXXXXXX.service-now.com/x_<actual_scope>_case_portal`.
+
+    XML CONVENTIONS HONORED (matching sibling files in this app):
+      - Wrapper element: `<record_update table="sp_portal">` per the agent
+        prompt's Phase 1 specification, matching the sibling pattern used
+        by `../tables/x_[scope]_case.xml` and other primary-record XMLs.
+      - Indentation: 4 spaces for record fields (matching sibling-file
+        convention).
+      - Element ordering: alphabetical within the record (matching
+        sibling-file convention).
+      - sys_scope text-node value: `x_[scope]` (NOT
+        `x_[scope]_case_management`). The actual scope record's `<name>`
+        is `x_[scope]` per ../app/sys_scope/x_[scope].xml, matching every
+        sibling XML in this scoped app.
+      - sys_package text-node value: `x_[scope]` with `source="x_[scope]"`
+        attribute, matching the sys_app record's `<scope>x_[scope]</scope>`
+        per ../app/sys_app/x_[scope]_case_management.xml.
+      - Deterministic 32-char lowercase hex sys_id: computed as
+        MD5("sp_portal_x_[scope]_case_portal") = 82079e7877f4f6d09975ab96fc0fa2fa.
+        Re-generation of this XML is byte-identical (no random UUIDs).
+      - Audit fields: `<sys_created_by>admin</sys_created_by>` and
+        `<sys_created_on>2025-01-01 00:00:00</sys_created_on>` for stable
+        repeatable timestamps (the same date is used by EVERY sibling
+        record in this scoped app for repeatable XML re-generation).
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview
+        (AAP Section 0.7.3 validation gate 7).
+
+    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.5.1):
+
+      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/acm/
+      portalgateway/service/PortalRequestService.java
+        line 39 - public interface PortalRequestService { ... }
+        line 52 - PortalResponse submitRequest(String portalId, String
+                  externalUserId, PortalRequest request) throws
+                  PortalRequestServiceException;
+        line 71-72 - PortalResponse getRequestStatus(String portalId, String
+                     portalUserId, String requestType, String requestId)
+                     throws PortalRequestServiceException;
+
+      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/acm/
+      portalgateway/service/DefaultPluggablePortalRequestService.java
+        line 48 - public class DefaultPluggablePortalRequestService implements
+                  PortalRequestService { ... }
+        line 60-65 - submitRequest(...) implementation; resolves provider by
+                     request type and forwards.
+        line 86-92 - getRequestStatus(...) implementation; resolves provider
+                     by request type and forwards.
+
+      ArkCase implements anonymous portal access through a Java Spring service
+      that resolves a `PortalRequestServiceProvider` bean by request type
+      (e.g., FOIA) and forwards the call. The ServiceNow target eliminates
+      the Spring bean indirection entirely:
+        - The "anonymous-submit" semantic (PortalRequestService.submitRequest)
+          maps to the SUBMIT scripted REST endpoint backing the
+          x_[scope]_case_submit page (authored in the sibling
+          `../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml`).
+        - The "status-lookup" semantic (PortalRequestService.getRequestStatus)
+          maps to the LOOKUP scripted REST endpoint backing the
+          x_[scope]_case_status page (authored in the sibling
+          `../portal/rest/sys_ws_definition_x_[scope]_case_status_lookup.xml`).
+      THIS portal record does NOT host either scripted REST endpoint - it
+      hosts the PAGES that invoke them. The two scripted REST endpoints are
+      separate records in `../portal/rest/`, and the page widgets in
+      `../portal/widgets/` make the HTTP calls to them.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD MUST LOAD AFTER:
+        - ../app/sys_scope/x_[scope].xml (scope record; `<sys_scope>`
+          cross-reference resolves against this record's `<name>`)
+        - ../app/sys_app/x_[scope]_case_management.xml (scoped application
+          record; `<sys_package>` cross-reference resolves against this
+          record's `<scope>`)
+
+      THIS RECORD SHOULD LOAD AFTER (but ServiceNow's two-pass import
+      tolerates any order within the same Update Set, since references
+      resolve by name):
+        - ../portal/pages/sp_page_x_[scope]_case_submit.xml (homepage
+          and login_page references resolve against this page's `<id>`)
+        - ../portal/pages/sp_page_x_[scope]_case_status.xml (the second
+          page; reachable via `?id=case_status` query parameter at
+          runtime)
+
+      THIS RECORD MUST LOAD BEFORE:
+        - (none - the portal is the entry-point; no other artifact in
+          the scoped application references it. Pages register themselves
+          AGAINST this portal via their own `portal` field; the portal
+          record itself does not enumerate them.)
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation
+    gates):
+      This portal record is the FOUNDATIONAL artifact for two of the seven
+      validation gates:
+
+        Gate 4 ("Portal - submission"): "Case created from unauthenticated
+          portal submission - Case appears in internal list with Draft
+          status and correct case number." The portal's `<public>true</public>`
+          flag and `<login_page>` redirect-target configuration ensure that
+          anonymous users CAN reach the submission page without authentication.
+          Without this portal record, the submission page is unreachable to
+          anonymous users.
+
+        Gate 5 ("Portal - lookup"): "Status lookup returns correct data for
+          valid case number - Correct status/subject/opened_date returned;
+          'No case found with that number.' for invalid number." The same
+          `<public>true</public>` flag plus the `?id=case_status` URL
+          convention covers anonymous access to the lookup page.
+
+      Gates 1 (data model), 2 (workflow), 3 (ACLs), 6 (dashboards), and
+      7 (Update Set integrity) are not affected by this file.
+-->
+<record_update table="sp_portal">
+    <sp_portal action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <background_color/>
+        <background_image/>
+        <background_image_dv/>
+        <catalog/>
+        <catalog_dv/>
+        <description>Unauthenticated Experience Portal for the Case Management scoped application. Provides two pages: case_submit (anonymous case submission) and case_status (anonymous case status lookup). Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern (PortalRequestService.submitRequest and PortalRequestService.getRequestStatus). Per AAP Section 0.4.4 (UI Design - default theme), Section 0.7.2 (deployment step 3 - portal URL), and the seven validation gates (Gate 4 portal-submission, Gate 5 portal-lookup). Public access is enabled via the public flag plus a login_page redirect target that points to the submission page itself, so anonymous callers never see a login prompt. The portal uses the platform default Service Portal theme (no custom CSS, no custom branding) per AAP Section 0.4.4. Knowledge-base and service-catalog integrations are out of scope per AAP Section 0.3.2 and are intentionally empty.</description>
+        <enable_legacy_recents>false</enable_legacy_recents>
+        <hide_portal_name>false</hide_portal_name>
+        <homepage display_value="Case Submission">x_[scope]_case_submit</homepage>
+        <homepage_dv display_value="Case Submission">x_[scope]_case_submit</homepage_dv>
+        <icon/>
+        <icon_dv/>
+        <kb_categories_visible>false</kb_categories_visible>
+        <knowledge_base/>
+        <knowledge_base_dv/>
+        <login_page display_value="Case Submission">x_[scope]_case_submit</login_page>
+        <login_page_dv display_value="Case Submission">x_[scope]_case_submit</login_page_dv>
+        <logo/>
+        <logo_dv/>
+        <public>true</public>
+        <quick_start_guide_url/>
+        <recents_count>0</recents_count>
+        <show_more_threshold>0</show_more_threshold>
+        <sys_class_name>sp_portal</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>82079e7877f4f6d09975ab96fc0fa2fa</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_case_portal</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sp_portal_x_[scope]_case_portal</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <theme/>
+        <theme_dv/>
+        <title>Case Management Portal</title>
+        <typeahead_min_length>3</typeahead_min_length>
+        <url_suffix>x_[scope]_case_portal</url_suffix>
+    </sp_portal>
+</record_update>
