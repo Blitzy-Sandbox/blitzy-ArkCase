@@ -51,7 +51,7 @@
 
       The user journey:
         anonymous user navigates to
-          [instance URL]/x_[scope]_case_portal?id=case_status
+          [instance URL]/x_[scope]_case_portal?id=x_[scope]_case_status
           -> THIS page record renders
           -> page's <page_internal> JSON embeds the lookup widget
           -> lookup widget renders 1-input form (case number) + result panel
@@ -106,41 +106,55 @@
 
       Note: unlike the sibling submission page (which IS the portal's
       <homepage>/<login_page>), THIS status page is reachable ONLY via
-      direct URL `?id=case_status`. The portal does NOT redirect anonymous
-      users here automatically; users must explicitly know they want to look
-      up an existing case and navigate to the URL with the query parameter
-      (typically by clicking a "Look up an existing case" link from the
-      submission page, or by using a bookmark provided in the post-submission
-      confirmation message).
+      direct URL `?id=x_[scope]_case_status`. The portal does NOT redirect
+      anonymous users here automatically; users must explicitly know they
+      want to look up an existing case and navigate to the URL with the
+      query parameter (typically by clicking a "Look up an existing case"
+      link from the submission page, or by using a bookmark provided in
+      the post-submission confirmation message).
 
-    URL ROUTING / PAGE id (DELIBERATE DEPARTURE FROM THE SIBLING SUBMIT PAGE):
+    URL ROUTING / PAGE id (CONSISTENT WITH THE SIBLING SUBMIT PAGE):
       The <id> field is the URL slug used in the ?id= query parameter when
       callers navigate to the portal. The full URL becomes:
-        [instance URL]/x_[scope]_case_portal?id=case_status
+        [instance URL]/x_[scope]_case_portal?id=x_[scope]_case_status
 
-      DELIBERATE CONVENTION DIVERGENCE: Unlike the sibling submission page
-      (which uses <id>x_[scope]_case_submit</id> with scope prefix because
-      the portal record's <homepage>/<login_page>/<homepage_dv>/<login_page_dv>
-      fields all reference the submission page's id - global uniqueness
-      across all sp_page records is required), THIS status page is NOT
-      referenced by ANY field on the portal record. The status page is
-      reachable ONLY via direct URL with `?id=case_status`. Per the AAP
-      Section 0.4.4 prescription and the agent prompt's Phase 2 explicit
-      directive, the status page's <id> is the bare slug `case_status` (NOT
-      `x_[scope]_case_status`). This matches the user prompt's URL contract
-      ("?id=case_status") verbatim.
+      CONVENTION CONSISTENCY (Code Review CP2 MEDIUM finding remediation,
+      Resolution B): Both Service Portal pages in this scoped application
+      use the SCOPE-PREFIXED convention for their <id> fields:
+        - sp_page_x_[scope]_case_submit.xml: <id>x_[scope]_case_submit</id>
+        - sp_page_x_[scope]_case_status.xml: <id>x_[scope]_case_status</id>
+        (THIS file)
 
-      The scope-prefix uniqueness requirement is satisfied at the
-      <sys_update_name> level instead: <sys_update_name>sp_page_x_[scope]_case_status</sys_update_name>
-      is the global cross-record key that ServiceNow's Update Set engine uses
-      to identify this record across all sp_page records on the PDI. Two
-      different concepts, two different fields:
-        - <id> = URL slug, intentionally bare and human-readable
-        - <sys_update_name> = global record key, scope-prefixed for
-          uniqueness across all scoped apps on the PDI
+      The PREFIXED convention is applied uniformly to BOTH pages because:
+        (1) ServiceNow's sp_page table is in the GLOBAL scope, not in the
+            scoped application's scope. Scope prefixes therefore protect
+            against name collisions with other scoped apps that may also
+            land on the same PDI in the future (e.g., another scoped app
+            attempting to author its own `case_status` page would collide
+            with a non-prefixed slug here).
+        (2) The portal record's <homepage>/<login_page>/<homepage_dv>/
+            <login_page_dv> fields require the submit page id to be
+            scope-prefixed (`x_[scope]_case_submit`); applying the same
+            convention to the status page produces an internally
+            consistent code base.
+        (3) ServiceNow's Service Portal URL convention permits any string
+            as the <id> field value. The slug appearing in the `?id=` URL
+            parameter is purely a URL-routing key matched against the
+            <id> field; both BARE and PREFIXED slugs render identically
+            at runtime - the only operational difference is collision
+            safety in the global sp_page namespace.
 
-      This dual-naming pattern is the canonical Service Portal convention
-      and is documented in the agent prompt's Key Insight #2.
+      The <sys_update_name> is also scope-prefixed
+      (<sys_update_name>sp_page_x_[scope]_case_status</sys_update_name>),
+      providing the global cross-record key that ServiceNow's Update Set
+      engine uses to identify this record across all sp_page records on
+      the PDI. The two fields work together:
+        - <id> = URL slug AND collision-safe global identifier
+        - <sys_update_name> = Update Set engine's record-identity key
+
+      This convention matches the canonical Service Portal best practice
+      of scope-prefixing all sp_page <id> values authored by a scoped
+      application.
 
     PAGE LAYOUT (page_internal JSON):
       ServiceNow's Service Portal page layout is JSON stored in the
@@ -193,8 +207,8 @@
     OUT-OF-SCOPE FIELDS (deliberately empty):
       <category/> - empty. The page is NOT added to a navigation menu,
         breadcrumb, or category dropdown. Per AAP Section 0.4.4, the page
-        is reachable only via direct URL (?id=case_status). No navigation
-        chrome integration.
+        is reachable only via direct URL (?id=x_[scope]_case_status). No
+        navigation chrome integration.
       <dynamic_title_structure/> - empty. The static <title>Case Status Lookup</title>
         is sufficient; no dynamic title fragments (e.g., per-case-number
         substituted titles like "Status of CASE0000123") are needed for a
@@ -398,7 +412,7 @@
           else references it directly. The portal record references the
           submission page (as homepage/login_page), but does NOT reference
           this status page directly. This page is reachable only via
-          direct URL `?id=case_status`.
+          direct URL `?id=x_[scope]_case_status`.
 
     VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation
     gates):
@@ -425,11 +439,11 @@
 <record_update table="sp_page">
     <sp_page action="INSERT_OR_UPDATE">
         <category/>
-        <description>Unauthenticated Service Portal page for case status lookup. Embeds the case lookup widget (sp_widget_x_[scope]_case_lookup_widget) which renders a single case-number input plus result panel showing ONLY status, subject, opened_date on match, or the verbatim text 'No case found with that number.' on no-match. Reachable via direct URL [instance URL]/x_[scope]_case_portal?id=case_status. Member of the x_[scope]_case_portal Experience Portal but NOT its homepage (the submission page is the homepage). Replaces ArkCase's GetCaseByNumberService and PortalRequestService.getRequestStatus anonymous-status-lookup pattern. Per AAP Sections 0.4.4 and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <description>Unauthenticated Service Portal page for case status lookup. Embeds the case lookup widget (sp_widget_x_[scope]_case_lookup_widget) which renders a single case-number input plus result panel showing ONLY status, subject, opened_date on match, or the verbatim text 'No case found with that number.' on no-match. Reachable via direct URL [instance URL]/x_[scope]_case_portal?id=x_[scope]_case_status. Member of the x_[scope]_case_portal Experience Portal but NOT its homepage (the submission page is the homepage). Replaces ArkCase's GetCaseByNumberService and PortalRequestService.getRequestStatus anonymous-status-lookup pattern. Per AAP Sections 0.4.4 and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
         <draft>false</draft>
         <dynamic_title_structure/>
         <hide_for_kb>true</hide_for_kb>
-        <id>case_status</id>
+        <id>x_[scope]_case_status</id>
         <internal>false</internal>
         <omit_watcher>true</omit_watcher>
         <page_internal><![CDATA[

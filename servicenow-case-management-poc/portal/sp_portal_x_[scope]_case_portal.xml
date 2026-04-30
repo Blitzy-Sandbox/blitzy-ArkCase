@@ -49,7 +49,7 @@
            submission page is the most common entry-point in the user journey
            ("I want to submit a case -> I land on the form"), the submission
            page IS the homepage. The status-lookup page (x_[scope]_case_status)
-           is reachable via direct URL `[instance URL]/x_[scope]_case_portal?id=case_status`.
+           is reachable via direct URL `[instance URL]/x_[scope]_case_portal?id=x_[scope]_case_status`.
 
       All three mechanisms are necessary; omitting any one breaks the anonymous-
       access guarantee. (`<public>true</public>` alone is not enough because
@@ -237,8 +237,8 @@
         - ../portal/pages/sp_page_x_[scope]_case_submit.xml (homepage
           and login_page references resolve against this page's `<id>`)
         - ../portal/pages/sp_page_x_[scope]_case_status.xml (the second
-          page; reachable via `?id=case_status` query parameter at
-          runtime)
+          page; reachable via `?id=x_[scope]_case_status` query parameter
+          at runtime)
 
       THIS RECORD MUST LOAD BEFORE:
         - (none - the portal is the entry-point; no other artifact in
@@ -262,8 +262,8 @@
         Gate 5 ("Portal - lookup"): "Status lookup returns correct data for
           valid case number - Correct status/subject/opened_date returned;
           'No case found with that number.' for invalid number." The same
-          `<public>true</public>` flag plus the `?id=case_status` URL
-          convention covers anonymous access to the lookup page.
+          `<public>true</public>` flag plus the `?id=x_[scope]_case_status`
+          URL convention covers anonymous access to the lookup page.
 
       Gates 1 (data model), 2 (workflow), 3 (ACLs), 6 (dashboards), and
       7 (Update Set integrity) are not affected by this file.
