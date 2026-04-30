@@ -1,0 +1,602 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Case 01 - Draft / General Inquiry / Low priority
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the FIRST of the 10-case demo dataset; together with
+    cases 02 through 10 (which cover the remaining statuses across both
+    case types) it satisfies the AAP requirement (Section 0.7.4) of
+    "at least 10 demo cases across all six statuses and both case
+    types," and contributes to the dataset matrix:
+
+        Case 01 - Draft       / General Inquiry / Low       ## THIS FILE
+        Case 02 - Open        / General Inquiry / Medium
+        Case 03 - In Progress / General Inquiry / Medium
+        Case 04 - Pending     / General Inquiry / High
+        Case 05 - Resolved    / General Inquiry / Medium
+        Case 06 - Closed      / General Inquiry / Low
+        Case 07 - Open        / Complaint       / High
+        Case 08 - In Progress / Complaint       / Critical
+        Case 09 - Resolved    / Complaint       / High
+        Case 10 - Closed      / Complaint       / Critical
+
+    The 10-case dataset thus exercises:
+      * Every one of the six statuses (Draft, Open, In Progress, Pending,
+        Resolved, Closed) - this case occupies the SOLE Draft slot.
+        It is the canonical Draft case in the dataset; no other demo
+        case has status=Draft. This is intentional: Draft is a transient
+        starting state for new submissions, and a single representative
+        is sufficient for visualization and transition-guard testing.
+      * Both case types (General Inquiry and Complaint) - case 01 is on
+        the General Inquiry side. There is no Complaint counterpart to
+        case 01 because Draft cases are inherently pre-assignment and
+        the demonstration value is identical regardless of case type.
+      * Multiple priorities (Low, Medium, High, Critical) - this case
+        contributes a Low bar to the all_cases_by_priority chart
+        (paired with case 06 Closed General Inquiry Low).
+      * The Draft -> Open TRANSITION-GUARD scenario - this case is the
+        CANONICAL test input for the validate_open_transition subflow's
+        "assigned_group must be populated" gate. With assigned_group
+        intentionally absent on this Draft case, any attempt to
+        advance this case to Open via the form MUST be blocked by the
+        subflow until an assigned_group is selected.
+      * The Any -> Draft PROHIBITED-TRANSITION scenario - this case is
+        the only canonical reference for "still in Draft." Other cases
+        cannot legally be set back to Draft; if an operator attempts
+        to back-transition any non-Draft case to Draft, the
+        x_[scope]_block_draft_backtransition Before-Update business
+        rule MUST surface the verbatim error "Cases cannot be returned
+        to Draft." (per AAP Section 0.7.4 / Section 0.5.5).
+      * The case_count_by_status Agent Workspace donut's Draft slice -
+        this case is the only contributor; without case 01 the donut
+        would show no Draft slice at all, which would mask whether the
+        Draft choice value is even registered.
+
+    Lifecycle position - WHY Draft / General Inquiry / Low is meaningful:
+      A General Inquiry case in Draft status has NOT yet entered the
+      lifecycle. Per AAP Section 0.5.5's transition matrix:
+        - The implicit start state for a new case is Draft: per the
+          dictionary entry at ../../dictionary/x_[scope]_case_status.xml,
+          Draft is the default value for the status field. When a case
+          is created via the internal form OR via the unauthenticated
+          Experience Portal submission widget OR via the seed script
+          OR via a Table-API POST, the case enters Draft until an
+          intake operator promotes it.
+        - The Draft -> Open transition is gated by
+          validate_open_transition: assigned_group must be populated;
+          otherwise the form-level blocking error is surfaced.
+        - Any -> Draft is PROHIBITED ("Cases cannot be returned to
+          Draft." per AAP Section 0.7.4); any attempt to back-
+          transition another case (e.g. case 02 Open) to Draft MUST
+          be blocked by the x_[scope]_block_draft_backtransition
+          Before-Update business rule.
+      This case occupies the Draft side of those gates: assigned_group
+      is INTENTIONALLY ABSENT (the defining feature of Draft in this
+      dataset; there is no Complaint counterpart for the Draft side
+      because Draft has no type-specific behavior), assigned_agent is
+      INTENTIONALLY ABSENT (Draft is pre-assignment and pending_reason
+      is irrelevant outside of Pending status). The Low priority is the
+      canonical "no urgency" priority - the lowest of the four-step
+      priority enum (Low, Medium, High, Critical).
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This case DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this case's <sys_scope>/<sys_package>
+             reference fields resolve via the source attribute against
+             those records)
+        - The case table definition at ../../tables/x_[scope]_case.xml
+            (this record's <sys_class_name>x_[scope]_case</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case table under
+            ../../dictionary/x_[scope]_case_*.xml  (every populated
+            field below requires its dictionary entry to be present)
+        - All choice records under ../../choices/  (the type=General
+            Inquiry, status=Draft, and priority=Low choice values must
+            all be registered; the Draft choice is defined at
+            ../../choices/sys_choice_case_status.xml as the FIRST status
+            choice in the lifecycle order and is the dictionary's
+            default value for the status field)
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_[scope]_case.xml  (defines the
+            CASE0000001 format; this record's <number/> is intentionally
+            absent so the platform auto-generates per that format on
+            insert)
+        - The role records under ../../roles/  (the demo manager's
+            read/write access requires the x_[scope]_case_manager role;
+            the demo viewer's read access requires the
+            x_[scope]_case_viewer role; the demo agent's read access
+            for this Draft case requires the x_[scope]_case_agent role
+            BUT the "Assigned only" ACL clause does NOT match this
+            case since BOTH assigned_agent AND assigned_group are
+            empty - therefore the demo agent cannot see this case
+            via the case_agent ACL; only case_manager and case_viewer
+            see Draft cases by default)
+        - The ACL records under ../../acl/  (table-level and field-
+            level ACLs gate read/write access; Draft cases are visible
+            to case_manager and case_viewer via the unconditional
+            read ACLs but are NOT visible to case_agent under the
+            "Assigned only" ACL since neither clause matches an empty
+            assigned_agent / assigned_group pair)
+        - The business rule records under ../../business_rules/
+            (set_opened_date Before-Insert auto-sets <opened_date> on
+             this case at import time; the
+             x_[scope]_block_draft_backtransition Before-Update rule
+             does NOT fire on this case because this case IS the
+             canonical Draft - the rule fires when OTHER cases are
+             attempted to back-transition to Draft)
+        - The flow records under ../../flows/
+            (../../flows/general_inquiry_state_machine.xml governs this
+             case type; the validate_open_transition subflow at
+             ../../flows/sub_flows/validate_open_transition.xml is the
+             guard that will block any attempt to transition THIS CASE
+             from Draft to Open while assigned_group is empty - this
+             case is the canonical test input for that subflow)
+        - NO group / user / role-assignment dependencies under
+            ../groups/ ../users/ ../role_assignments/ - Draft cases
+            have NO assigned_group, NO assigned_agent, and therefore
+            require no upstream sys_user / sys_user_group / role-
+            assignment records to resolve any reference fields.
+            (The role assignments and demo user/group records are
+             still upstream dependencies of the SCOPED APPLICATION as
+             a whole, but none are referenced by this particular case
+             record.)
+
+      This case IS REFERENCED BY (loaded AFTER this record):
+        - NO demo tasks - per the seed script's task table, Draft cases
+            have NO children in the demo dataset. The dataset
+            convention is that children are created only on cases
+            that have been picked up by an agent (In Progress and
+            beyond, specifically cases 03, 04, 05, 08, 09). This is
+            a deliberate dataset design choice that mirrors a realistic
+            case lifecycle: tasks (sub-investigations) are typically
+            created by the assigned agent during active investigation,
+            not by the queue dispatcher at Draft/Open time.
+        - NO demo parties - per the seed script's party table, Draft
+            cases have NO children in the demo dataset. Same rationale
+            as for tasks: parties (witnesses, respondents, etc.) are
+            typically captured by the assigned agent during active
+            investigation. The polymorphic case_party UI Policy
+            (../../ui_policy/x_[scope]_case_party_conditional_fields.xml)
+            is exercised by cases 03, 04, 05, 08, 09 and not by this
+            case.
+        - The all_cases_by_status Manager View bar chart at
+            ../../reports/x_[scope]_all_cases_by_status.xml  (THIS CASE
+            IS THE SOLE INPUT TO THE DRAFT BAR; without this case the
+            Draft bar would be empty and the chart would visually
+            misrepresent the lifecycle distribution)
+        - The all_cases_by_type Manager View donut at
+            ../../reports/x_[scope]_all_cases_by_type.xml  (this case
+            populates the General Inquiry slice)
+        - The all_cases_by_priority Manager View bar chart at
+            ../../reports/x_[scope]_all_cases_by_priority.xml  (this
+            case populates one of the Low entries alongside case 06
+            Closed General Inquiry Low)
+        - The case_count_by_status Agent Workspace donut at
+            ../../reports/x_[scope]_case_count_by_status.xml  (THIS
+            CASE IS THE SOLE INPUT TO THE DRAFT SLICE; analogous to
+            the all_cases_by_status bar chart above)
+        - The cases_opened_30d Manager View single-score widget at
+            ../../reports/x_[scope]_cases_opened_30d.xml  (since
+            opened_date is auto-set to "now" by the set_opened_date
+            business rule at insert time, this case is included in the
+            count of cases opened within the last 30 days)
+        - The avg_time_to_close Manager View single-score widget at
+            ../../reports/x_[scope]_avg_time_to_close.xml  (this case
+            does NOT contribute because the widget filters on
+            status=Closed and this case is Draft, not Closed; only
+            cases 06 and 10 contribute to the average)
+        - The Agent Workspace's "My Open Cases" list at
+            ../../reports/x_[scope]_my_open_cases.xml does NOT include
+            this case via its primary filter clause: the list filter
+            is "status NOT IN (Resolved, Closed) AND assigned_agent =
+            javascript:gs.getUserID()". Draft is NOT in the (Resolved,
+            Closed) exclusion set, but assigned_agent is EMPTY on this
+            case so the assigned_agent clause does not match the
+            current user. The case is therefore NOT in the demo
+            agent's "My Open Cases" personal list - which is correct,
+            because Draft cases are pre-assignment and have no agent.
+            The case is also NOT visible in the case_agent's ACL-
+            filtered case list because BOTH "Assigned only" clauses
+            (assigned_agent = current.sys_id, assigned_group IN
+            current.user_group_membership) fail when both fields are
+            empty. Only case_manager and case_viewer roles can see
+            this case in their case lists.
+        - The validate_open_transition subflow test in Validation
+            Gate 2 (TRANSITION-BLOCK): THIS CASE IS THE CANONICAL TEST
+            INPUT. When an operator (with case_manager role - case_agent
+            cannot see this case at all under "Assigned only") attempts
+            to transition this case from Draft to Open while
+            assigned_group is still empty, the
+            validate_open_transition subflow MUST throw the form-level
+            blocking error (per AAP Section 0.5.5 the condition
+            "assigned_group populated" is REQUIRED) and the form
+            transition MUST be denied. After assigned_group is manually
+            populated on the form (selecting x_[scope]_demo_team), the
+            same transition attempt MUST succeed and yield case status
+            = Open (matching the post-transition state of sibling
+            case 02).
+        - The block_draft_backtransition Before-Update business rule
+            test in Validation Gate 2 (TRANSITION-BLOCK): this case is
+            the canonical "still in Draft" reference state. When an
+            operator attempts to set ANY OTHER case's status back to
+            Draft (e.g. setting case 02 Open back to Draft via the
+            form), the x_[scope]_block_draft_backtransition rule MUST
+            surface the verbatim error "Cases cannot be returned to
+            Draft." (per AAP Section 0.7.4) and the update MUST be
+            aborted. This case demonstrates the legitimate Draft
+            terminus for net-new cases; OTHER cases cannot return
+            here once they have advanced past Draft.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's ten authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        subject       = "Demo case 01: Draft (General Inquiry)"
+                        (verbatim per the agent prompt's required
+                        idempotent key)
+        description   = "Synthetic Draft case used to verify Draft
+                        status visualization and the Draft -> Open
+                        transition guard." (verbatim per the agent
+                        prompt; the literal `>` is HTML-encoded as
+                        `&gt;` per the agent prompt's Rule 10 XML
+                        convention; no PII; the wording emphasizes
+                        the dual purpose of this case in the dataset:
+                        Draft visualization AND the Draft -> Open
+                        transition guard test)
+        requester_name  = "Synthetic Requester One" (verbatim per the
+                        agent prompt - the explicit "Synthetic" prefix
+                        and the ordinal "One" matching this case's
+                        position in the dataset eliminate any chance
+                        of confusion with a real person; "One" pairs
+                        with "Two" through "Ten" on cases 02 - 10 to
+                        produce a uniform synthetic identity scheme)
+        requester_email = "requester-1@example.invalid" (the .invalid
+                        TLD is RFC 2606 / BCP 32 reserved by IANA and
+                        cannot resolve to any real domain; the
+                        numeric suffix "-1" matches this case's
+                        position; the "requester-" prefix is uniform
+                        across the dataset)
+        No other fields contain PII because no other free-text fields
+        are populated on this Draft case.
+
+      Rule 2 - No Auto-Number Override (AAP Section 0.7.4):
+        The <number/> element is intentionally absent. The auto-number
+        sequence ../../numbers/sys_number_x_[scope]_case.xml will
+        generate CASE0000001 (since this is the first case in the
+        seed dataset, even though the file is named demo_01 the actual
+        platform-generated number depends on insert order; the seed
+        script orders cases by file name so case 01 receives
+        CASE0000001 in the steady-state seed). Presetting <number>
+        would conflict with the auto-numbering counter and may cause
+        Update Set preview errors per AAP Section 0.7.3 Validation
+        Gate 7.
+
+      Rule 3 - Auto-Set Opened Date (AAP Section 0.5.7 / business rule
+        semantics):
+        The <opened_date/> element is intentionally absent. The
+        ../../business_rules/x_[scope]_set_opened_date.xml Before-
+        Insert business rule auto-populates opened_date =
+        gs.nowDateTime() on insert. Demo case 01 leaves this field
+        empty/absent and lets the BR fire. This means demo case 01's
+        opened_date will be the date/time when the Update Set is
+        committed on the destination PDI - which is intentional (it
+        makes case 01 visible in the cases_opened_30d single-score
+        widget). The exception cases (06 and 10) preset opened_date
+        because they are seeded directly as Closed and need a non-
+        trivial gap between opened_date and closed_date for the
+        avg_time_to_close widget; this case does NOT preset
+        opened_date because it is Draft, not Closed.
+
+      Rule 4 - No Closed Date in Draft (AAP Section 0.5.7):
+        The <closed_date/> element is intentionally absent. Per AAP
+        Section 0.5.7's data model table, closed_date is "Auto-set on
+        Close transition" - i.e. it is populated only when the case
+        reaches the Closed status. This case is in Draft status and
+        has not been closed; therefore closed_date is not applicable
+        and is NOT set. The set_closed_date Before-Update business
+        rule (../../business_rules/x_[scope]_set_closed_date.xml) only
+        fires on Resolved -> Closed transitions, which this case has
+        not undergone.
+
+      Rule 5 - No Assigned Group / Agent / Pending Reason in Draft
+        (AAP Section 0.5.5):
+        The <assigned_group/>, <assigned_agent/>, and <pending_reason/>
+        elements are ALL intentionally absent.
+          - <assigned_group/> empty: Draft cases are pre-assignment.
+            The Draft -> Open transition guard validate_open_transition
+            (../../flows/sub_flows/validate_open_transition.xml)
+            requires assigned_group to be populated; this case
+            DELIBERATELY violates that requirement to serve as the
+            canonical test input for the guard.
+          - <assigned_agent/> empty: Draft cases are pre-assignment.
+            Even if an operator pre-populates assigned_agent at Draft
+            time, the case still cannot advance to Open until
+            assigned_group is also populated; the dataset convention
+            is to leave both fields empty on Draft.
+          - <pending_reason/> empty: pending_reason is only relevant
+            on Pending status. Per AAP Section 0.5.7, pending_reason
+            is populated by the validate_pending_transition subflow on
+            In Progress -> Pending transitions and cleared by the
+            x_[scope]_clear_pending_reason_on_inprogress Before-Update
+            business rule on Pending -> In Progress transitions.
+            Neither path applies to a Draft case.
+
+      Rule 6 - Choice Value Precision (AAP Section 0.5.7):
+        type     = "General Inquiry" (capital G, capital I, single
+                   space; matching the choice list at
+                   ../../choices/sys_choice_case_type.xml)
+        status   = "Draft" (capital D, lowercase the rest; matching
+                   the choice list at
+                   ../../choices/sys_choice_case_status.xml; this is
+                   the dictionary's default value for the status
+                   field)
+        priority = "Low" (capital L, lowercase the rest; matching
+                   the choice list at
+                   ../../choices/sys_choice_case_priority.xml as the
+                   first / lowest of the four priority steps)
+        Common mistakes to avoid: "draft", "DRAFT", "general inquiry",
+        "GENERAL_INQUIRY", "general-inquiry", "low", "LOW" - all of
+        these would FAIL choice-value validation against the
+        registered choice lists.
+
+      Rule 7 - Zero Hardcoded sys_id Cross-References (AAP Section
+        0.7.2):
+        The case's OWN <sys_id> below is the record's primary key,
+        deterministically derived as MD5("Demo case 01: Draft (General
+        Inquiry)") = f4b0e89753f41d01ee1bd8dd3c5b41fc. This is the
+        OWN primary key - explicitly NOT a reference to any other
+        record's sys_id (the agent prompt rules permit a record's own
+        sys_id; only references to OTHER records' sys_ids are
+        prohibited). All sibling cases follow this same MD5(subject)
+        convention so the dataset is completely deterministic across
+        re-imports on different PDIs.
+        Since Draft cases have no <assigned_group> or <assigned_agent>
+        populated, no other reference-resolution concerns arise for
+        this case specifically (no group lookups, no user lookups).
+        The <sys_scope> and <sys_package> reference fields resolve by
+        the display_value / source attributes and the element text
+        value, NOT by hardcoded sys_id literals - matching the
+        established sibling convention.
+
+      Rule 8 - Scope Binding (folder requirements):
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_package display_value="Case Management" source="x_[scope]">
+            x_[scope]
+        </sys_package>
+        <sys_scope>   binds this case row to the scoped application via
+        the display_value attribute "Case Management" and the element
+        text "x_[scope]" which the PDI Update-Set engine resolves to
+        the auto-assigned scope record on import.
+        <sys_package> follows the same pattern with the additional
+        source attribute "x_[scope]" identifying the parent scoped
+        application package. This convention is established by the
+        sibling case records (cases 02-10) and matches the resolution
+        pattern used by all other scoped artifacts in this Update Set.
+
+      Rule 9 - Idempotency Anchor (folder requirements):
+        The case's idempotent key is <subject> =
+        "Demo case 01: Draft (General Inquiry)". The companion seed
+        script ../../scripts/seed_demo_data.js ensureCase helper
+        queries by <subject> before inserting, so re-running the seed
+        is idempotent. The <subject> value MUST exactly match the
+        value used in the seed script (Phase D, case 01 entry) and
+        any documentation references in ../../docs/*.md if any. The
+        action="INSERT_OR_UPDATE" attribute on the inner record
+        element ensures the Update Set engine itself is idempotent on
+        re-import - if the record already exists by sys_id, the
+        engine updates it in place; otherwise it inserts.
+
+      Rule 10 - Scoped Update Set XML Conventions:
+        Root element:        <record_update table="x_[scope]_case">
+        Inner element:       <x_[scope]_case action="INSERT_OR_UPDATE">
+        XML prolog:          <?xml version="1.0" encoding="UTF-8"?>
+        Element ordering:    alphabetical (matching the established
+                             sibling convention; cases 02-10 all use
+                             alphabetical element ordering inside
+                             the record element)
+        HTML encoding:       the literal `>` in the description's
+                             "Draft -> Open" phrase is encoded as
+                             `&gt;` to keep the XML well-formed
+        Line endings:        Unix-style LF only (no CRLF)
+        Encoding:            UTF-8 declared in the XML prolog
+
+    Source-side semantic reference (per AAP Section 0.8.1, READ-ONLY):
+
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+      java/com/armedia/acm/plugins/casefile/model/CaseFile.java is the
+      ArkCase JPA entity that informs the case-domain semantics. The
+      ArkCase entity has approximately 80+ fields including identity,
+      numbering, classification, title, status, descriptive details,
+      incident timestamps, audit, disposition, priority, queue/response
+      timing, courtroom/responsibility, ECM container linkage, and
+      child associations. The ServiceNow target replicates ONLY the
+      12 fields plus pending_reason enumerated in AAP Section 0.5.7
+      (number, type, status, priority, subject, description,
+      opened_date, closed_date, assigned_group, assigned_agent,
+      requester_name, requester_email, pending_reason). All other
+      ArkCase fields - cm_class_name, cm_object_type, milestones,
+      participants, ECM container, originator, legacy system ID,
+      restriction flags, courtroom, response/disposition timing - are
+      explicitly OUT OF SCOPE and NOT replicated.
+
+      Key ArkCase semantic anchors that informed the design but are
+      NOT byte-for-byte ported:
+        cm_case_status (the source for our <status>), cm_case_priority
+        (the source for our <priority>), cm_case_type (the source for
+        our <type>), cm_case_title (the source for our <subject>),
+        cm_case_details (the source for our <description>),
+        cm_case_received_date (the source for our <opened_date>),
+        cm_case_assignee (the source for our <assigned_agent>;
+        ArkCase used a single string for the username, ServiceNow
+        uses a Reference field to sys_user resolved by user_name
+        lookup - though this case leaves it empty since it is Draft).
+        ArkCase's CaseFileQueueHandler @PrePersist lifecycle hook
+        (which set cm_case_status = "ACTIVE" pre-save) is replaced
+        by the ServiceNow Flow Designer flows under ../../flows/.
+        ArkCase's @PrePersist default of cm_case_status = "DRAFT" is
+        replaced by the dictionary's default value for the status
+        field (also "Draft"), so this case correctly inherits Draft
+        as its initial status without explicit override (though we
+        DO set status="Draft" explicitly here for record clarity and
+        to prevent any ambiguity in the seed XML).
+
+      The ArkCase acm_case_file table and its surrounding Spring
+      service classes (SaveCaseService, GetCaseService,
+      ChangeCaseFileStateService, CaseFileQueueHandler) are NOT
+      replicated - the ServiceNow target uses a brand-new
+      x_[scope]_case table with auto-generated Glide records and
+      platform-native Flow Designer flows for state-machine logic.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|doe|
+        @gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net) - the
+        synthetic identifiers ("Synthetic Requester One",
+        "requester-1@example.invalid") do not include any PII tokens.
+        The .invalid TLD is RFC 2606 / BCP 32 reserved by IANA so it
+        does not appear in any of the prohibited TLD patterns.
+      - No-extra-fields grep returns zero matches with content for
+        <number>, <opened_date>, <closed_date>, <assigned_group>,
+        <assigned_agent>, <pending_reason> - all of these elements
+        are ABSENT (not self-closing, not empty-string, simply not
+        present in the record element body).
+      - Choice-value validation: <type>General Inquiry</type>,
+        <status>Draft</status>, <priority>Low</priority> - capital G
+        in General, capital I in Inquiry, capital D in Draft, capital
+        L in Low.
+      - sys_id determinism check: <sys_id> equals MD5(subject)
+        exactly: MD5("Demo case 01: Draft (General Inquiry)") =
+        f4b0e89753f41d01ee1bd8dd3c5b41fc. This matches the convention
+        established by the sibling case records (cases 02-10) so the
+        entire 10-case dataset has deterministic primary keys across
+        re-imports on different PDIs.
+      - Cross-reference resolution check: NO reference fields are
+        populated on this Draft case. The only reference-like fields
+        are <sys_scope> and <sys_package> which resolve by
+        display_value / source attributes against the parent scoped
+        application records under ../../app/.
+      - The literal `[scope]` placeholder is preserved verbatim in the
+        sys_class_name, sys_update_name, all reference values, the
+        table attribute on the root element, and the file path; the
+        PDI auto-assigns the actual concrete scope id at App Engine
+        Studio creation time, and the Update-Set apply-time
+        substitution propagates consistently across all bracketed
+        placeholders.
+
+    Key insights (per the agent prompt):
+      1. Demo case 01 is THE canonical Draft case in the dataset.
+         There is exactly one Draft case in the demo dataset (this
+         file); no sibling case is in Draft. This is intentional:
+         Draft is a transient initial state, and a single
+         representative is sufficient for visualization, default-value
+         testing, and Draft -> Open transition-guard testing.
+
+      2. NO <assigned_group> is the DEFINING FEATURE of this case.
+         This is what makes the Draft -> Open transition blocked; the
+         validate_open_transition subflow requires assigned_group to
+         be populated. Until an operator populates assigned_group on
+         the form (selecting x_[scope]_demo_team), any transition
+         attempt to Open MUST surface a form-level blocking error and
+         MUST be denied.
+
+      3. NO <assigned_agent> on this Draft case. Even if an operator
+         pre-populates assigned_agent at Draft time, the case still
+         cannot advance to Open until assigned_group is populated.
+         The dataset convention is to leave both fields empty on
+         Draft so that this case remains canonical for the Draft ->
+         Open transition guard.
+
+      4. The status "Draft" has a single capital D. The exact choice
+         value is "Draft" per AAP Section 0.5.7 and
+         ../../choices/sys_choice_case_status.xml. Common mistakes to
+         avoid: "draft", "DRAFT", "Drafted", "Drft" - all of these
+         would FAIL choice-value validation against the registered
+         choice list. Draft is also the dictionary's default value
+         for the status field, so a record inserted without an
+         explicit status value would also receive "Draft".
+
+      5. The case is visible to case_manager and case_viewer roles
+         via the table-level read ACLs but is NOT visible to
+         case_agent under "Assigned only" since BOTH "Assigned only"
+         clauses (assigned_agent = current.sys_id, assigned_group IN
+         current.user_group_membership) fail when both fields are
+         empty. This is the canonical demonstration that case_agent
+         "Assigned only" excludes pre-assignment Draft cases - which
+         is correct per AAP Section 0.5.6's ACL matrix.
+
+      6. Demo case 01 has NO children in the demo dataset - no demo
+         tasks, no demo parties. This is INTENTIONAL. Per the seed
+         script's task and party tables, children are created only on
+         cases that have been picked up by an agent (In Progress and
+         beyond). This mirrors a realistic case lifecycle: tasks
+         (sub-investigations) and parties (witnesses, respondents)
+         are typically captured by the assigned agent during active
+         investigation, not at Draft time.
+
+      7. This case appears in:
+           - the Draft slice of the case_count_by_status donut (sole
+             Draft contributor)
+           - the Draft bar of the all_cases_by_status bar chart (sole
+             Draft contributor)
+           - the General Inquiry slice of the all_cases_by_type donut
+           - the Low bar of the all_cases_by_priority bar chart
+           - the count of the cases_opened_30d single-score widget
+             (since opened_date is auto-set to "now" on insert by the
+             set_opened_date business rule)
+         This case does NOT appear in:
+           - the avg_time_to_close widget (filters on status=Closed)
+           - the demo agent's "My Open Cases" personal list (filter
+             requires assigned_agent = current user, but
+             assigned_agent is empty)
+           - the case_agent's ACL-filtered case list (BOTH "Assigned
+             only" clauses fail)
+
+      8. The Draft -> Open transition USING this case as the input
+         is the canonical test in Validation Gate 2 (Workflow). When
+         an operator (with case_manager role) attempts to set this
+         case status to Open via the form WITHOUT first populating
+         assigned_group, the validate_open_transition subflow MUST
+         surface a form-level blocking error and the transition MUST
+         be denied. After assigned_group is populated on the form
+         (selecting x_[scope]_demo_team), the same transition attempt
+         MUST succeed and yield case status = Open (matching the
+         post-transition state of sibling case 02).
+
+      9. The Any -> Draft PROHIBITED-TRANSITION rule USING this case
+         as the reference state. This case is the canonical "still in
+         Draft" reference. When an operator attempts to back-
+         transition any non-Draft case (e.g. case 02 Open) to Draft
+         via the form, the x_[scope]_block_draft_backtransition
+         Before-Update business rule MUST surface the verbatim error
+         "Cases cannot be returned to Draft." (per AAP Section 0.7.4)
+         and the update MUST be aborted. This case demonstrates the
+         legitimate Draft terminus for net-new cases.
+
+     10. The literal "[scope]" placeholder is preserved verbatim
+         throughout the file - in the sys_class_name, sys_update_name,
+         table attribute, inner element name, all cross-reference
+         text values, and the file path. The PDI substitutes the
+         auto-assigned concrete scope id at apply-time;
+         pre-substituting here would break the substitution mechanism.
+-->
+<record_update table="x_[scope]_case">
+    <x_[scope]_case action="INSERT_OR_UPDATE">
+        <description>Synthetic Draft case used to verify Draft status visualization and the Draft -&gt; Open transition guard.</description>
+        <priority>Low</priority>
+        <requester_email>requester-1@example.invalid</requester_email>
+        <requester_name>Synthetic Requester One</requester_name>
+        <status>Draft</status>
+        <subject>Demo case 01: Draft (General Inquiry)</subject>
+        <sys_class_name>x_[scope]_case</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>f4b0e89753f41d01ee1bd8dd3c5b41fc</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>x_[scope]_case_demo_01</sys_update_name>
+        <type>General Inquiry</type>
+    </x_[scope]_case>
+</record_update>
