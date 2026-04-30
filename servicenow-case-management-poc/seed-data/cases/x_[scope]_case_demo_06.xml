@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Case 06 - Closed / General Inquiry / Low priority
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the SIXTH of the 10-case demo dataset; together with
+    cases 01 through 05 and cases 07 through 10, it satisfies the AAP
+    requirement (Section 0.7.4) of "at least 10 demo cases across all
+    six statuses and both case types," and contributes to the dataset
+    matrix:
+
+        Case 01 - Draft       / General Inquiry / Medium
+        Case 02 - Open        / General Inquiry / Medium
+        Case 03 - In Progress / General Inquiry / Medium
+        Case 04 - Pending     / General Inquiry / Low
+        Case 05 - Resolved    / General Inquiry / High
+        Case 06 - Closed      / General Inquiry / Low      ## THIS FILE
+        Case 07 - Open        / Complaint       / High
+        Case 08 - In Progress / Complaint       / Critical
+        Case 09 - Resolved    / Complaint       / High
+        Case 10 - Closed      / Complaint       / Critical
+
+    The 10-case dataset thus exercises:
+      * Every one of the six statuses (Draft, Open, In Progress, Pending,
+        Resolved, Closed) - this case occupies the Closed slot for the
+        General Inquiry case type
+      * Both case types (General Inquiry and Complaint) across the
+        full lifecycle - case 06 is the canonical CLOSED GENERAL INQUIRY
+        and is the General-Inquiry-flow analog of case 10 (Closed
+        Complaint)
+      * All four priorities (Low, Medium, High, Critical) - this case
+        contributes to the Low bar in the all_cases_by_priority chart
+        (alongside case 04 which is Pending / Low); these two cases
+        ensure the Low bar has TWO distinct status values represented,
+        demonstrating the dashboard correctly aggregates a single
+        priority across multiple statuses
+
+    Lifecycle position - WHY Closed / General Inquiry / Low is meaningful:
+      A General Inquiry case that has reached Closed status has traversed
+      the COMPLETE happy-path lifecycle:
+        Draft -> Open -> In Progress -> [optionally Pending] -> Resolved
+              -> Closed
+      The case is fully terminated; no further updates are permitted by
+      the block_terminal_closed business rule. The Low priority is
+      appropriate at this lifecycle phase: General Inquiry cases (as
+      opposed to Complaints) tend to be lower-urgency informational
+      requests that get resolved without crisis-level escalation. By
+      assigning Low priority, this case demonstrates that even routine
+      low-urgency cases successfully complete the full lifecycle and
+      contribute meaningful data to the Manager View dashboards.
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This case DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this case's <sys_scope>/<sys_package>
+             reference fields resolve via the source attribute against
+             those records)
+        - The case table definition at ../../tables/x_[scope]_case.xml
+            (this record's <sys_class_name>x_[scope]_case</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case table under
+            ../../dictionary/x_[scope]_case_*.xml  (every populated
+            field below requires its dictionary entry to be present;
+            specifically opened_date and closed_date which carry
+            explicit values rather than relying on auto-population)
+        - All choice records under ../../choices/  (the type=General
+            Inquiry, status=Closed, and priority=Low choice values must
+            be registered)
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_[scope]_case.xml  (defines the
+            CASE0000001 format; this record's <number/> is intentionally
+            absent so the platform auto-generates per that format on
+            insert)
+        - The role records under ../../roles/  (the
+            block_terminal_closed business rule will reference the
+            x_[scope]_case_manager role; the demo agent's read access
+            requires the x_[scope]_case_agent role and its ACLs)
+        - The ACL records under ../../acl/  (table-level and field-level
+            ACLs gate read/write access; the Closed status row is
+            effectively read-only to all roles via the
+            block_terminal_closed business rule even though the role
+            ACLs themselves do not encode the terminality)
+        - The business rule records under ../../business_rules/
+            (block_terminal_closed will fire on subsequent updates;
+            set_closed_date and set_opened_date are bypassed at insert
+            time for this Closed-on-insert case, requiring the explicit
+            date overrides below; validate_assigned_agent_membership
+            will validate that the demo agent is a member of the demo
+            team at insert time)
+        - The flow records under ../../flows/
+            (../../flows/general_inquiry_state_machine.xml governs this
+             case type; for an inserted Closed case the OnUpdate trigger
+             does NOT fire at insert time, so the flow validators do
+             not gate the seeding; subsequent update attempts ARE
+             intercepted by block_terminal_closed)
+        - ../users/sys_user_x_[scope]_demo_agent.xml  (referenced by
+            <assigned_agent>; resolved by user_name lookup)
+        - ../groups/sys_user_group_x_[scope]_demo_team.xml  (referenced
+            by <assigned_group>; resolved by name lookup)
+        - ../role_assignments/sys_user_has_role_x_[scope]_demo_agent.xml
+            (grants the case_agent role to the demo agent so the agent
+            can read this case via the "Assigned only" ACL clause; the
+            agent retains read access to Closed cases for historical
+            review even though write access is blocked by the
+            block_terminal_closed rule)
+
+      This case IS REFERENCED BY (loaded AFTER this record):
+        - NONE under ../tasks/  (closed cases have no demo tasks; the
+            seed-script's task table includes tasks ONLY on cases 03,
+            04, 05, 08, 09 - that is, on the active-lifecycle cases.
+            Closed cases 06 and 10 are fully concluded and have no
+            children in the demo dataset)
+        - NONE under ../parties/  (closed cases have no demo parties;
+            the seed-script's party table includes parties ONLY on
+            cases 03, 04, 05, 08, 09)
+        - The avg_time_to_close Manager View dashboard widget at
+            ../../reports/x_[scope]_avg_time_to_close.xml
+            (THIS CASE IS ONE OF EXACTLY TWO INPUTS: case 06 contributes
+             a ~18-day duration and case 10 contributes a ~14-day
+             duration; together they yield a meaningful average of
+             approximately 16 days for the AVG widget. Without case 06,
+             the average would degenerate to a single-sample constant
+             of case 10's duration. Case 06's role as the General
+             Inquiry-side input mirrors case 10's role as the Complaint-
+             side input - both case types are represented in the
+             closed-case sample.)
+        - The all_cases_by_status Manager View bar chart at
+            ../../reports/x_[scope]_all_cases_by_status.xml  (this case
+            populates the Closed bar)
+        - The case_count_by_status Agent Workspace donut at
+            ../../reports/x_[scope]_case_count_by_status.xml  (this
+            case populates the Closed slice)
+        - The all_cases_by_type Manager View donut at
+            ../../reports/x_[scope]_all_cases_by_type.xml  (this case
+            populates the General Inquiry slice)
+        - The all_cases_by_priority Manager View bar chart at
+            ../../reports/x_[scope]_all_cases_by_priority.xml  (this
+            case populates one of the Low entries; case 04 is the
+            other Low entry)
+        - The cases_opened_30d Manager View single-score widget at
+            ../../reports/x_[scope]_cases_opened_30d.xml  (with
+            opened_date approximately 20 days ago, this case is
+            included in the count of cases opened within the last 30
+            days)
+        - The block_terminal_closed business rule test in Validation
+            Gate 2: THIS CASE IS THE CANONICAL "TERMINAL CLOSED" TEST
+            FOR THE GENERAL INQUIRY FLOW. Case 10 is the analog for the
+            Complaint flow. Attempting to update ANY field on this
+            case must surface the verbatim error "Closed cases are
+            terminal and cannot be modified." (per AAP Section 0.5.5).
+        - The Agent Workspace's "My Open Cases" list at
+            ../../reports/x_[scope]_my_open_cases.xml does NOT include
+            this case: the list filter excludes Closed (and Resolved)
+            cases per "status NOT IN (Resolved, Closed)".
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's ten authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        subject       = "Demo case 06: Closed (General Inquiry)"
+        description   = "Synthetic Closed case - completed lifecycle."
+                        (no PII; the wording emphasizes the lifecycle
+                        position - the case has run to completion and
+                        is now terminal; the dash separator avoids any
+                        em-dash or special characters that could trip
+                        XML parsing)
+        requester_name  = "Synthetic Requester Six" (synthetic
+                          identifier using the literal word "Synthetic"
+                          plus a numeral spelled out for the requester,
+                          NOT a real person's name; consistent with the
+                          peer convention used by cases 07, 08, 09, 10)
+        requester_email = "requester-6@example.invalid"
+                          (RFC 2606 / BCP 32 reserved .invalid TLD never
+                          resolves to a real domain; the local part uses
+                          the NUMERAL "6" matching the file numbering -
+                          consistent with the other demo case files'
+                          NUMERAL convention for the email local part
+                          versus the SPELLED-OUT word for the
+                          requester_name field)
+
+      Rule 2 - No auto-number override:
+        The <number/> element is intentionally absent. The auto-number
+        engine defined in ../../numbers/sys_number_x_[scope]_case.xml
+        generates a CASE0000001-format value on insert per AAP Section
+        0.5.7 (the "number" row of the case schema specifies "Auto-
+        number" with format CASE0000001 and Read-only constraint).
+
+      Rule 3 - Explicit date overrides (CRITICAL FOR THIS CASE):
+        opened_date = "2026-04-10 09:00:00"
+            (computed at file generation time as today UTC minus 20
+             days at 09:00:00; today=2026-04-30, so today-20=2026-04-10;
+             the value is fixed at generation time, NOT evaluated at
+             import time, because Update Set XML is a static document)
+        closed_date = "2026-04-28 17:00:00"
+            (computed at file generation time as today UTC minus 2
+             days at 17:00:00; today=2026-04-30, so today-2=2026-04-28)
+        Duration = approximately 18 days, 8 hours
+            (the small intra-day fraction does not change the AVG
+             materially; the widget rounds to days. The 18-day value
+             is the LARGER of the two avg-input durations; case 10
+             contributes ~14 days, so the two-sample average is ~16
+             days.)
+
+        WHY both fields are explicit XML values and not left to the
+        business rules (per agent prompt Rule 3):
+          * The set_opened_date Before-Insert business rule sets
+            opened_date = gs.nowDateTime() at insert time, which would
+            yield a value ~20 days AFTER the desired opened_date and
+            thereby give a near-zero gap to closed_date.
+          * The set_closed_date Before-Update business rule fires only
+            on Resolved -> Closed transition, NOT on direct insert with
+            status = Closed. So closed_date would remain null on insert
+            without an explicit override.
+          * Without explicit XML values both date fields would be wrong:
+            opened_date would equal "now" (giving zero duration) and
+            closed_date would be null (giving NULL duration, which the
+            avg_time_to_close report excludes via its
+            "closed_date IS NOT NULL" filter).
+          * Therefore the agent prompt mandates explicit overrides for
+            this canonical Closed-on-insert case.
+
+        WHY the duration differs from case 10 (~14 days):
+          The avg_time_to_close widget computes
+            AVG(closed_date - opened_date) over Closed cases.
+          With only one Closed case the AVG is a constant; with two
+          Closed cases having identical durations the AVG is still a
+          constant. To make the widget output meaningful and to mimic
+          real-world variation, case 06 has a (~20 days, ~2 days)
+          opened/closed profile = ~18 days, while case 10 has a
+          (~15 days, ~1 day) profile = ~14 days. The two-sample
+          average is approximately 16 days, demonstrating that the
+          dashboard correctly aggregates across multiple cases with
+          differing durations rather than just reporting a constant.
+
+        NOTE on Update Set behavior (per agent prompt Rule 3):
+          Update Set imports do NOT trigger Before-Insert/Before-Update
+          business rules in the same way as form-based inserts. Some
+          PDI configurations DO fire BRs on Update Set commit; others
+          do not. To be safe regardless of the importing PDI's setting,
+          the explicit opened_date and closed_date values in the XML
+          take precedence over any BR-set values: a Before-Insert BR
+          that sets opened_date = gs.nowDateTime() will be overridden
+          by the XML's explicit value when the XML is imported.
+
+      Rule 4 - Both assignments populated, NO pending_reason:
+        assigned_group = "x_[scope]_demo_team"  (mandatory because the
+                         case had to traverse Open -> ... -> Closed,
+                         and assigned_group is required at Open per
+                         AAP Section 0.5.5; the value persists through
+                         all subsequent statuses including the terminal
+                         Closed status)
+        assigned_agent = "x_[scope]_demo_agent"  (mandatory because the
+                         case had to traverse In Progress -> ... ->
+                         Closed, and assigned_agent is required at In
+                         Progress per AAP Section 0.5.5; the value
+                         persists; the agent is also a member of
+                         x_[scope]_demo_team per the seed script's
+                         group-membership creation, satisfying the
+                         validate_assigned_agent_membership business
+                         rule's pre-update guard)
+        pending_reason = (absent / unpopulated)  (Closed cases never
+                         carry a pending_reason; if the case ever
+                         transitioned through Pending, the
+                         clear_pending_reason_on_inprogress business
+                         rule would have cleared the value when the
+                         case left Pending. This case did not need to
+                         traverse Pending to reach Closed.)
+
+      Rule 5 - Choice value precision:
+        type     = "General Inquiry"  (exactly as registered in
+                   ../../choices/sys_choice_case_type.xml; the FIRST
+                   of the two case types; capital G and capital I
+                   deliberate; the space between "General" and
+                   "Inquiry" is a single ASCII space, NOT an em-space
+                   or other Unicode whitespace)
+        status   = "Closed"     (exactly as registered in
+                   ../../choices/sys_choice_case_status.xml; the
+                   terminal state; capital C deliberate - "Closed"
+                   not "closed" or "CLOSED")
+        priority = "Low"        (exactly as registered in
+                   ../../choices/sys_choice_case_priority.xml; the
+                   lowest priority; capital L deliberate - "Low" not
+                   "low" or "LOW")
+
+      Rule 6 - Zero hardcoded sys_id cross-references (AAP Section
+               0.7.2 "NO sys_id literals anywhere"):
+        The case's OWN <sys_id> below is the record's primary key,
+        which is acceptable per the AAP rule (it is NOT a reference to
+        any other record). It is a deterministic 32-character lowercase
+        hex value computed at file generation time as the MD5 of the
+        idempotent subject "Demo case 06: Closed (General Inquiry)" =
+        f953fffc4b1db9ce23ce47d96f869f8b - so the Update Set engine
+        resolves the same sys_id on every PDI import, making the record
+        idempotent.
+
+        EVERY cross-reference field below uses the stable human-readable
+        lookup key (user_name / name / scope source) as both the
+        display_value attribute AND the text content - NOT a hardcoded
+        sys_id literal. This matches the convention established by every
+        peer file in the scoped Update Set (sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, dictionary/x_[scope]_*, cases 07/08/09/10,
+        etc.) and complies with the AAP Section 0.7.2 "NO sys_id
+        literals anywhere" rule:
+          - <assigned_agent display_value="x_[scope]_demo_agent">
+                x_[scope]_demo_agent
+            </assigned_agent>  resolves by user_name lookup
+          - <assigned_group display_value="x_[scope]_demo_team">
+                x_[scope]_demo_team
+            </assigned_group>  resolves by name lookup
+          - <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+                resolves by scope source-name lookup
+          - <sys_package display_value="Case Management" source="x_[scope]">
+                x_[scope]
+            </sys_package>  resolves by scope source-name lookup
+
+      Rule 7 - Scope binding:
+        <sys_scope>   binds this case row to the scoped application via
+                      the scope source name "x_[scope]" defined in
+                      ../../app/sys_scope/x_[scope].xml at
+                      <source>x_[scope]</source>; the display_value
+                      "Case Management" matches the sys_app's human-
+                      readable name.
+        <sys_package> follows the same pattern with the additional
+                      source="x_[scope]" attribute that is required by
+                      the Update Set engine for scope-package binding.
+        Note: the source attribute value "x_[scope]" matches what every
+        peer file uses; it is the scope's <source> field, NOT the
+        scoped application's sys_update_name. This is the convention
+        used consistently across the project's Update Set artifacts
+        (cases 07/08/09/10, all sys_user_*, sys_user_group_*,
+        sys_user_has_role_* records use the same convention).
+
+      Rule 8 - Idempotency anchor:
+        The case's idempotent key is <subject> =
+        "Demo case 06: Closed (General Inquiry)". The companion seed
+        script ../../scripts/seed_demo_data.js ensureCase() helper
+        queries x_[scope]_case by subject BEFORE inserting; the
+        action="INSERT_OR_UPDATE" attribute on the inner <x_[scope]_case>
+        element ensures the same behavior at Update Set import time.
+        Both the action attribute and the deterministic sys_id make
+        re-imports on a fresh PDI byte-identical and collision-free.
+
+      Rule 9 - Scoped Update Set XML conventions:
+        Root element:  <record_update table="x_[scope]_case">
+        Inner element: <x_[scope]_case action="INSERT_OR_UPDATE"> for
+                       idempotent re-import per AAP Section 0.7.1
+                       round-trip-verification gate (Validation Gate 7).
+        UTF-8 encoding declared in XML prolog.
+        Element ordering: alphabetical (matching the established peer
+        convention used by sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, role records, cases 07/08/09/10, and
+        dictionary entries across the scoped Update Set).
+        Unix-style line endings (LF) per AAP file authoring conventions.
+
+      Rule 10 - Date format strictness:
+        ServiceNow's GlideDateTime parses string dates in the format
+        "YYYY-MM-DD HH:MM:SS" using the instance default time zone (or
+        UTC for system-level imports). The two date values below use:
+          * 24-hour, zero-padded time (09:00:00 not 9:00:00 AM,
+            17:00:00 not 5:00:00 PM)
+          * No timezone suffix (no Z, no offset; the import treats the
+            value as UTC for the system timezone)
+          * Hyphen-separated date (2026-04-10 not 2026/04/10)
+          * Single-space date/time separator (not 'T')
+        These conventions match the GlideDateTime.setDisplayValue()
+        contract documented for ServiceNow scoped applications and
+        match the format used by case 10's date overrides.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java
+        ArkCase's CaseFile JPA entity declares ~80 fields including
+        cm_case_status (the source for our <status>), cm_case_priority
+        (the source for our <priority>), cm_case_type (the source for
+        our <type>), cm_case_title (the source for our <subject>),
+        cm_case_details (Lob; the source for our <description>), and
+        cm_case_closed (Temporal TIMESTAMP; the source for our
+        <closed_date>). The ServiceNow target collapses ArkCase's ~80
+        fields to the user-prompt's 12-field schema (number, type,
+        status, priority, subject, description, opened_date,
+        closed_date, assigned_group, assigned_agent, requester_name,
+        requester_email - plus the optional pending_reason). ArkCase's
+        Disposition.java entity captures closeDate and dispositionType
+        for case closure metadata; the ServiceNow target uses only
+        closed_date (no separate disposition entity per the POC's
+        minimal-scope rule). ArkCase's queue-handler-driven default
+        status flow ("DRAFT" -> "ACTIVE" via CaseFileQueueHandler.java)
+        is replaced in this POC by Flow Designer's
+        general_inquiry_state_machine.xml; ArkCase's
+        ChangeCaseFileStateService.java is replaced by the
+        x_[scope]_CaseTransitionValidator script include.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|doe|
+        @gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net) - the
+        synthetic identifiers ("Synthetic Requester Six",
+        "requester-6@example.invalid", "x_[scope]_demo_agent",
+        "x_[scope]_demo_team") do not include any PII tokens.
+      - Date validation grep:
+          grep -E '<(opened|closed)_date>[0-9]{4}-[0-9]{2}-[0-9]{2}
+                   [0-9]{2}:[0-9]{2}:[0-9]{2}</(opened|closed)_date>'
+        returns exactly 2 matches (both date fields populated with
+        valid YYYY-MM-DD HH:MM:SS values).
+      - Date chronology check: closed_date (2026-04-28 17:00:00) is
+        strictly later than opened_date (2026-04-10 09:00:00); the gap
+        is ~18 days, 8 hours.
+      - Numeral validation grep:
+          grep -E 'requester-6@example\.invalid'
+        returns exactly 1 match (verifying the numeral "6", not the
+        word "six").
+      - Choice-value validation: <type>General Inquiry</type>,
+        <status>Closed</status>, <priority>Low</priority> - capital
+        letters as specified by AAP Section 0.5.7.
+      - Anti-pattern validation: NO <number> element, NO
+        <pending_reason> element present.
+      - sys_id determinism check: <sys_id> equals MD5(subject) exactly
+        = f953fffc4b1db9ce23ce47d96f869f8b
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        case's own primary key); NO sys_id literals appear in any
+        cross-reference field.
+      - Scope-placeholder validation: the literal `[scope]` placeholder
+        is preserved verbatim in the sys_class_name, sys_update_name,
+        all reference values, and the file path; the PDI auto-assigns
+        the actual concrete scope id at App Engine Studio creation
+        time, and the Update-Set apply-time substitution propagates
+        consistently across all bracketed placeholders.
+
+    Key insights (per the agent prompt):
+      1. Demo case 06 is the canonical Closed General Inquiry case; the
+         General-Inquiry-flow analog of demo case 10 (Closed Complaint).
+      2. THIS CASE IS ONE OF EXACTLY TWO INPUTS TO THE avg_time_to_close
+         WIDGET. Without case 06, the widget would have only one sample
+         (case 10) and degenerate to a constant. With both cases, the
+         widget shows a meaningful average of approximately 16 days.
+      3. THIS CASE IS THE CANONICAL block_terminal_closed TEST FOR THE
+         GENERAL INQUIRY FLOW. When the operator attempts ANY update
+         on this case, the verbatim error "Closed cases are terminal
+         and cannot be modified." appears (per AAP Section 0.5.5).
+      4. The status "Closed" has a capital C. Not lowercase, not all
+         caps. The exact choice value is "Closed" per AAP Section 0.5.7.
+      5. Both date fields MUST be explicit XML values. Unlike cases
+         01-05 (which let business rules auto-set dates), this case's
+         dates are explicit because:
+           * Insert with status = Closed does NOT trigger the Resolved
+             -> Closed update path that sets closed_date.
+           * The auto-set opened_date would equal "now", giving a zero
+             gap to closed_date that breaks the avg_time_to_close
+             widget.
+      6. The dates use UTC and 24-hour format per ServiceNow's
+         GlideDateTime convention.
+      7. No tasks, no parties on this case. Closed cases are fully
+         concluded; no children are seeded in the demo dataset.
+      8. The case appears in the Closed slice/bar of dashboards but NOT
+         in the Agent Workspace's "My Open Cases" list (filter excludes
+         Closed and Resolved).
+      9. The cases_opened_30d widget includes this case. With
+         opened_date approximately 20 days ago (within the 30-day
+         window), the case is included in the count.
+     10. The dates are computed at file-generation time based on
+         "today" (2026-04-30 UTC). They are NOT placeholders or
+         template values; they are concrete static datetime literals
+         valid at the time of generation. The Update Set XML is a
+         static document; the values do not re-evaluate at import time.
+     11. The Low priority on this case complements case 04 (Pending /
+         Low) to ensure the all_cases_by_priority bar chart's Low bar
+         contains TWO distinct status values, demonstrating the
+         dashboard correctly aggregates a single priority across
+         multiple statuses (rather than degenerating to a single-
+         status aggregation).
+     12. The General Inquiry type on this case complements case 10
+         (Complaint) to ensure the avg_time_to_close widget computes
+         across BOTH case types, demonstrating the widget filters on
+         status=Closed without further filtering on type.
+-->
+<record_update table="x_[scope]_case">
+    <x_[scope]_case action="INSERT_OR_UPDATE">
+        <assigned_agent display_value="x_[scope]_demo_agent">x_[scope]_demo_agent</assigned_agent>
+        <assigned_group display_value="x_[scope]_demo_team">x_[scope]_demo_team</assigned_group>
+        <closed_date>2026-04-28 17:00:00</closed_date>
+        <description>Synthetic Closed case - completed lifecycle.</description>
+        <opened_date>2026-04-10 09:00:00</opened_date>
+        <priority>Low</priority>
+        <requester_email>requester-6@example.invalid</requester_email>
+        <requester_name>Synthetic Requester Six</requester_name>
+        <status>Closed</status>
+        <subject>Demo case 06: Closed (General Inquiry)</subject>
+        <sys_class_name>x_[scope]_case</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>f953fffc4b1db9ce23ce47d96f869f8b</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>x_[scope]_case_demo_06</sys_update_name>
+        <type>General Inquiry</type>
+    </x_[scope]_case>
+</record_update>
