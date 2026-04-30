@@ -135,11 +135,18 @@
         java/com/armedia/acm/plugins/casefile/model/Disposition.java
         ArkCase's disposition record carrying `closeDate`,
         `dispositionType`, `referExternalDate`. Disposition is the
-        semantic anchor for the `closed_date` field on x_[scope]_case
-        that drives the Average Time to Close calculation in Widget 4
-        (Strategy A in ../reports/x_[scope]_avg_time_to_close.xml uses
-        a calculated `duration_to_close_seconds` field equal to
-        `closed_date - opened_date` over Closed cases).
+        semantic anchor for the `closed_date` field on x_[scope]_case.
+        Widget 4 (Average Time to Close) is intended to consume this
+        field via an AVG aggregation, but per ../reports/x_[scope]_avg_time_to_close.xml
+        the implementation uses Option C (POC LIMITATION): the source
+        report's <aggregation_source/> element is intentionally empty
+        because the AAP-enumerated dictionary entries (Section 0.4.1)
+        do not include a numeric duration column, and adding one would
+        violate the Minimal-Change Clause (Section 0.7.2). Widget 4
+        therefore renders the platform "No data" placeholder rather
+        than a numeric mean. See ../docs/dashboards.md Widget 4 for
+        the documented gap and its follow-up Option A / Option B
+        remediation paths.
 
     None of these Java DTOs is byte-for-byte ported. The ArkCase
     Pentaho/Solr-backed reporting pipeline is replaced wholesale with
@@ -728,8 +735,8 @@
         ===================================================================
         The first single-score widget on row 2 (left-most). Renders the
         ../reports/x_[scope]_avg_time_to_close.xml report (type=single_score)
-        showing the average duration in seconds (or formatted Duration)
-        between opened_date and closed_date over Closed cases.
+        intended to show the average duration in seconds (or formatted
+        Duration) between opened_date and closed_date over Closed cases.
 
         Position math (12-column grid):
           column=1, width=6 -> occupies columns 1-6
@@ -741,20 +748,29 @@
         catching KPI cards. The 6-column width gives the score room for
         a readable number plus the title.
 
-        Per AAP Section 0.7.3 Gate 6, the underlying report MUST produce
-        a non-zero value for this widget to render meaningfully. This
-        depends on:
-          - At least one demo case with status=Closed.
-          - That case's closed_date AND opened_date both populated.
-          - Per AAP Section 0.4.1, demo cases 06 (Closed General Inquiry)
-            and 10 (Closed Complaint) supply the closed-date data.
+        POC LIMITATION (OPTION C) FOR THIS WIDGET ONLY
+        ==============================================
+        The underlying report (../reports/x_[scope]_avg_time_to_close.xml)
+        uses Option C: an EMPTY `<aggregation_source/>` element. This is
+        because the AAP-enumerated dictionary entries (Section 0.4.1) do
+        NOT include a numeric duration column on x_[scope]_case, and
+        adding one would violate the Minimal-Change Clause (Section
+        0.7.2). Per AAP Section 0.7.2's "stop and report" instruction
+        for capability gaps, the report intentionally surfaces this
+        limitation rather than substituting an out-of-scope dictionary
+        field. As a consequence, this widget renders the platform
+        "No data" placeholder instead of a numeric mean. The
+        Update Set imports without preview errors; Validation Gate 6
+        recognizes this as a documented POC limitation, not a broken
+        report reference. See ../docs/dashboards.md Widget 4 for the
+        full description and follow-up Option A / Option B remediation
+        paths. The remaining four Manager View widgets and all three
+        Agent Workspace widgets render normally with seed data.
 
-        The underlying report's aggregation strategy (Strategy A in
-        ../reports/x_[scope]_avg_time_to_close.xml) uses a calculated
-        `duration_to_close_seconds` field on x_[scope]_case equal to
-        `closed_date - opened_date`. The dashboard widget itself is
-        agnostic to the calculation strategy - it just renders the
-        report's computed AVG.
+        The dashboard widget itself is agnostic to the report's
+        aggregation strategy — it just renders whatever the report
+        returns. No change to THIS widget XML is required when the
+        report's aggregation source is amended in the future.
 
         Cross-references:
           - <dashboard>: record [2] in this file.

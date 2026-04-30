@@ -28,8 +28,9 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 
 ### Access
 
-- Visible to: `x_[scope]_case_manager`, `x_[scope]_case_agent`, `x_[scope]_case_viewer`
-- Filtered behavior: All widgets that say "My ..." use `javascript:gs.getUserID()` so the dashboard self-personalizes per logged-in user. A viewer impersonating this dashboard will see empty "My ..." widgets because viewers have no assignments — this is intentional and documented in [`acl-matrix.md`](./acl-matrix.md).
+- Visible to: `x_[scope]_case_manager`, `x_[scope]_case_agent`
+- The `x_[scope]_case_viewer` role is NOT bound to this dashboard. Per AAP Section 0.5.6 the viewer is a read-only audit role with no operational dashboard assignment; viewers retain platform-wide list/form read access governed by the ACL matrix in [`acl-matrix.md`](./acl-matrix.md).
+- Filtered behavior: All widgets that say "My ..." use `javascript:gs.getUserID()` so the dashboard self-personalizes per logged-in user. Because case_agent users are the natural audience for "My open cases" and "My overdue tasks", the dashboard is bound to `x_[scope]_case_agent` and `x_[scope]_case_manager` only. The two `pa_dashboard_role` records that materialize this binding are visible in [`../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml`](../dashboards/pa_dashboards_x_[scope]_agent_workspace.xml) (records 8 and 9).
 
 ### Widgets
 
@@ -37,7 +38,7 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 | --- | --- | --- | --- | --- | --- |
 | 1 | My Open Cases | List | `x_[scope]_my_open_cases.xml` | (none) | `assigned_agent = javascript:gs.getUserID() AND status NOT IN (Resolved, Closed)` |
 | 2 | My Overdue Tasks | List | `x_[scope]_my_overdue_tasks.xml` | (none) | `assigned_to = javascript:gs.getUserID() AND due_date < javascript:gs.daysAgoStart(0) AND status != Closed` |
-| 3 | Case Count by Status | Donut | `x_[scope]_case_count_by_status.xml` | `status` | (none — agent's full visible portfolio per ACL) |
+| 3 | Case Count by Status | Pie/Donut | `x_[scope]_case_count_by_status.xml` | `status` | (none — agent's full visible portfolio per ACL) |
 
 #### Widget 1: My Open Cases
 
@@ -45,8 +46,8 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 - **Source Report:** [`../reports/x_[scope]_my_open_cases.xml`](../reports/)
 - **Underlying Table:** `x_[scope]_case`
 - **Filter Condition:** `assigned_agent = javascript:gs.getUserID() AND status NOT IN (Resolved, Closed)`
-- **Default Sort:** `priority DESC, opened_date DESC`
-- **Display Columns:** `number`, `subject`, `type`, `status`, `priority`, `opened_date`, `requester_name`
+- **Default Sort:** none (the report's `<format/>` element is empty; users can sort columns interactively at view time)
+- **Display Columns (in this order):** `number`, `subject`, `priority`, `status`, `opened_date` — exactly matching the report's `<field_list>number,subject,priority,status,opened_date</field_list>` element
 - **User Action:** clicking a row opens the case form
 
 #### Widget 2: My Overdue Tasks
@@ -55,13 +56,13 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 - **Source Report:** [`../reports/x_[scope]_my_overdue_tasks.xml`](../reports/)
 - **Underlying Table:** `x_[scope]_case_task`
 - **Filter Condition:** `assigned_to = javascript:gs.getUserID() AND due_date < javascript:gs.daysAgoStart(0) AND status != Closed`
-- **Default Sort:** `due_date ASC`
-- **Display Columns:** `number`, `subject`, `case`, `type`, `status`, `due_date`
+- **Default Sort:** none (the report's `<format/>` element is empty; users can sort columns interactively at view time)
+- **Display Columns (in this order):** `subject`, `case`, `due_date`, `status` — exactly matching the report's `<field_list>subject,case,due_date,status</field_list>` element
 - **User Action:** clicking a row opens the task form
 
 #### Widget 3: Case Count by Status
 
-- **Type:** Donut chart
+- **Type:** Pie/Donut chart — the source report uses `<type>pie</type>` (the platform's encoded query value) which is rendered in the donut/pie style by ServiceNow's chart engine. AAP Section 0.4.4 names the visual treatment "donut"; the platform's pie/donut rendering is interchangeable on the Reports + Dashboards stack.
 - **Source Report:** [`../reports/x_[scope]_case_count_by_status.xml`](../reports/)
 - **Underlying Table:** `x_[scope]_case`
 - **Group-By:** `status`
@@ -86,9 +87,9 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 | # | Widget Name | Type | Source Report | Group-By / Aggregate | Filter |
 | --- | --- | --- | --- | --- | --- |
 | 1 | All Cases by Status | Bar | `x_[scope]_all_cases_by_status.xml` | `status` | (none) |
-| 2 | All Cases by Type | Donut | `x_[scope]_all_cases_by_type.xml` | `type` | (none) |
+| 2 | All Cases by Type | Pie/Donut | `x_[scope]_all_cases_by_type.xml` | `type` | (none) |
 | 3 | All Cases by Priority | Bar | `x_[scope]_all_cases_by_priority.xml` | `priority` | (none) |
-| 4 | Average Time to Close | Single Score | `x_[scope]_avg_time_to_close.xml` | `AVG(closed_date - opened_date)` | `status = Closed` |
+| 4 | Average Time to Close | Single Score | `x_[scope]_avg_time_to_close.xml` | `AVG` (POC limitation — see Widget 4 details) | `status = Closed` |
 | 5 | Cases Opened (Last 30 Days) | Single Score | `x_[scope]_cases_opened_30d.xml` | `COUNT(sys_id)` | `opened_date >= javascript:gs.daysAgoStart(30)` |
 
 #### Widget 1: All Cases by Status
@@ -103,7 +104,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 
 #### Widget 2: All Cases by Type
 
-- **Type:** Donut chart
+- **Type:** Pie/Donut chart — the source report uses `<type>pie</type>` (the platform's encoded query value) which is rendered in the donut/pie style by ServiceNow's chart engine. AAP Section 0.4.4 names the visual treatment "donut"; the platform's pie/donut rendering is interchangeable on the Reports + Dashboards stack.
 - **Source Report:** [`../reports/x_[scope]_all_cases_by_type.xml`](../reports/)
 - **Underlying Table:** `x_[scope]_case`
 - **Group-By:** `type`
@@ -127,9 +128,11 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Source Report:** [`../reports/x_[scope]_avg_time_to_close.xml`](../reports/)
 - **Underlying Table:** `x_[scope]_case`
 - **Filter Condition:** `status = Closed`
-- **Aggregate:** `AVG(closed_date - opened_date)` expressed in days (or hours)
-- **Display Format:** "X.Y days" (round to one decimal)
-- **No-Data Behavior:** If no cases have `status = Closed`, display "No data" cleanly (NOT a 500 error)
+- **Aggregate:** `AVG` with an EMPTY `<aggregation_source/>` (Option C)
+- **POC LIMITATION (KNOWN GAP):** The AAP-enumerated dictionary entries (Section 0.4.1) do NOT include a numeric duration column on `x_[scope]_case` (no `duration_to_close_seconds` field, no `glide_duration` calculated field). Per AAP Section 0.7.2 "Minimal-Change Clause" and the "stop and report" requirement for capability gaps, this report's `<aggregation_source/>` element is intentionally LEFT EMPTY rather than referencing an out-of-scope field. As a consequence, this widget renders the platform "No data" placeholder instead of a numeric mean. The remaining four Manager View widgets and all three Agent Workspace widgets render normally with seed data.
+- **Display Format (current):** "No data" (the platform's empty-aggregation placeholder).
+- **Display Format (after future AAP amendment):** Either Option A — a calculated dictionary field of type `integer` / `duration` / `glide_duration` displayed as "X.Y days" — or Option B — a Performance Analytics Indicator. Both options require AAP-approved scope expansion before adoption; see the comment block in [`../reports/x_[scope]_avg_time_to_close.xml`](../reports/x_[scope]_avg_time_to_close.xml) for the full follow-up design.
+- **No-Data Behavior:** "No data" cleanly displayed (NOT a 500 error). The Update Set imports without preview errors.
 
 #### Widget 5: Cases Opened (Last 30 Days)
 
@@ -153,7 +156,7 @@ This section documents how each ServiceNow widget semantically corresponds to an
 | All Cases by Status (bar) | Pentaho status-aggregate report | Replaced by native Report |
 | All Cases by Type (donut) | (no direct equivalent) | Native ServiceNow report |
 | All Cases by Priority (bar) | (no direct equivalent) | Native ServiceNow report |
-| Avg Time to Close (single-score) | `CaseSummaryByStatusAndTimePeriodDto.java` | Native ServiceNow report computes AVG(closed_date - opened_date) over Closed cases |
+| Avg Time to Close (single-score) | `CaseSummaryByStatusAndTimePeriodDto.java` | Native ServiceNow report shell with empty `<aggregation_source/>` (Option C / POC LIMITATION); see Widget 4 above for the documented capability gap and follow-up Option A / Option B remediation paths |
 | Cases Opened 30d (single-score) | (no direct equivalent) | Native ServiceNow report uses `gs.daysAgoStart(30)` filter |
 
 ## Verification
@@ -167,8 +170,8 @@ The following row is preserved verbatim from AAP Section 0.7.3.
 Verification procedure (cross-reference [`validation-gates.md`](./validation-gates.md) Gate 6):
 
 1. Impersonate `x_[scope]_demo_agent` → open Agent Workspace dashboard → confirm 3 widgets render with seed data
-2. Impersonate `x_[scope]_demo_manager` → open Manager View dashboard → confirm 5 widgets render with seed data
-3. Confirm no widget shows "Report not found" or 500 error
+2. Impersonate `x_[scope]_demo_manager` → open Manager View dashboard → confirm 4 widgets render with seed data, and Widget 4 (Average Time to Close) renders the documented "No data" placeholder per the Option C POC LIMITATION described above. This is the expected and documented behavior — NOT a Gate 6 failure.
+3. Confirm no widget shows "Report not found" or 500 error (the Widget 4 "No data" placeholder is distinct from a "Report not found" error — the source report exists and is well-formed; only its aggregation source is intentionally empty per AAP Section 0.7.2 stop-and-report).
 4. Click into each list-widget row to confirm drill-through navigation works
 5. Click into each chart slice/bar to confirm filtered-list drill-through works
 

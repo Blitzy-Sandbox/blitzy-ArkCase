@@ -107,119 +107,101 @@
     semantically equivalent: AVG over a duration-typed numeric column,
     filtered to cases at the terminal `Closed` status.
 
-    THE STRATEGY A APPROACH (CHOSEN)
-    ================================
-    Per the agent prompt's "Final agent decision" (Key Insight #12):
-        "the recommended XML template uses Strategy A
-         (<aggregation_source>duration_to_close_seconds</aggregation_source>).
-         The implementing agent MUST coordinate with the dictionary folder
-         via the dictionary-folder agent's instructions to ensure the
-         calculated field exists. If coordination is not possible at
-         authoring time, fall back to an empty <aggregation_source/>
-         with a clear comment documenting the gap; this is acceptable
-         per AAP Section 0.7.2's 'stop and report' clause."
+    THE OPTION C APPROACH (CHOSEN — POC LIMITATION)
+    ================================================
+    The original draft of this file used Strategy A — referencing a
+    calculated field `duration_to_close_seconds` as the
+    `<aggregation_source>`. That field, however, is NOT enumerated in
+    AAP Section 0.4.1's dictionary directory tree, and adding it would
+    require modifying the dictionary folder beyond the AAP-approved
+    field set. Per AAP Section 0.7.2's Minimal-Change Clause and the
+    "stop and report" instruction for capability gaps, the agent MUST
+    NOT substitute an out-of-scope dictionary field; instead, the gap
+    must be surfaced explicitly.
 
-    This file uses Strategy A by referencing a calculated/derived numeric
-    field named `duration_to_close_seconds` on the parent table. Strategy
-    A produces the user-facing behavior the AAP prescribes: a non-zero,
-    meaningful average duration on the Manager View dashboard widget.
+    This file therefore implements Option C: an EMPTY
+    `<aggregation_source/>` element, accompanied by a clear capability-
+    gap note here AND in `../docs/dashboards.md` Widget 4 description.
+    Option C is the simplest fix that:
+      - Respects AAP Section 0.7.2 "Minimal-Change Clause" — does not
+        introduce an out-of-scope dictionary field;
+      - Avoids substituting a column reference that does not exist
+        in the deliverable Update Set, which would cause Gate 6 to
+        report "broken report references" silently;
+      - Aligns with AAP Section 0.7.2's "stop and report" requirement
+        by EXPLICITLY surfacing the limitation in documentation rather
+        than masking it via a graceful-fallback rationale.
 
-    CROSS-FOLDER DEPENDENCY ON THE DICTIONARY (CAPABILITY GAP NOTE)
+    KNOWN POC LIMITATION (OPTION C)
+    ===============================
+    With `<aggregation_source/>` empty, the ServiceNow report engine
+    has no numeric column to aggregate. The Manager View dashboard's
+    "Average Time to Close" single-score widget will render either:
+      - the platform's "No data" placeholder (most common rendering
+        when AVG has no source column), or
+      - the literal value 0 (in older platform releases that coerce
+        an unbound aggregation to numeric zero).
+    Either rendering communicates "POC limitation" rather than a
+    spurious arithmetic value, and is non-blocking for Update-Set
+    import or preview.
+
+    REMEDIATION OPTIONS FOR FOLLOW-UP (DOCUMENTED, NOT IMPLEMENTED)
     ===============================================================
-    At authoring time of THIS file, the sibling ../dictionary/ folder's
-    24 enumerated entries do NOT include a `duration_to_close_seconds`
-    field per AAP Section 0.4.1's directory tree. The file enumeration
-    in AAP Section 0.4.1 lists these dictionary entries (verbatim):
+    Two follow-up paths could replace Option C with a meaningful
+    aggregate; both require an explicitly-approved AAP amendment:
 
-      x_[scope]_case_number.xml
-      x_[scope]_case_type.xml
-      x_[scope]_case_status.xml
-      x_[scope]_case_priority.xml
-      x_[scope]_case_subject.xml
-      x_[scope]_case_description.xml
-      x_[scope]_case_opened_date.xml
-      x_[scope]_case_closed_date.xml
-      x_[scope]_case_assigned_group.xml
-      x_[scope]_case_assigned_agent.xml
-      x_[scope]_case_requester_name.xml
-      x_[scope]_case_requester_email.xml
-      x_[scope]_case_pending_reason.xml
-      x_[scope]_case_task_*.xml (6 entries)
-      x_[scope]_case_party_*.xml (5 entries)
+      Option A (calculated dictionary field):
+        Add a new dictionary entry `x_[scope]_case_duration_to_close_seconds.xml`
+        defining a calculated field on `x_[scope]_case` with type
+        `integer` (or `duration` / `glide_duration` for human-readable
+        display) and a calculation script equivalent to:
 
-    The `duration_to_close_seconds` calculated field is NOT in this
-    enumeration. Per AAP Section 0.7.2 ("Minimal-Change Clause") and
-    Section 0.3.2 ("Out-of-scope workarounds when capability gaps are
-    discovered"), THIS report file does NOT modify the dictionary folder
-    to add the missing field - that would cross folder scope. Instead,
-    THIS file authors the report shell with the AAP-recommended
-    aggregation source name and documents the cross-folder coordination
-    point so a follow-up activity can add the calculated field if the
-    Manager View dashboard widget renders "0" or the platform's
-    no-value placeholder during validation Gate 6 (per AAP Section 0.7.3).
+            (function calculatedFieldValue(current) {
+                if (current.closed_date && current.opened_date) {
+                    return gs.dateDiff(
+                        current.opened_date.getDisplayValue(),
+                        current.closed_date.getDisplayValue(),
+                        true);
+                }
+                return 0;
+            })(current);
 
-    The runtime resolution is graceful: when the Update Set is imported
-    on the PDI, this `sys_report` record is loaded as-is. If the parent
-    table has no `duration_to_close_seconds` column at runtime, the
-    ServiceNow report engine handles the missing column by displaying
-    the platform's empty-aggregation placeholder or 0 in the dashboard
-    widget; it does NOT block Update Set import or preview. The report
-    XML is well-formed and the
-    aggregation_source is stored as a string column reference - no
-    validation at import time checks the column's existence on the
-    parent table. This means:
+        Then this report's `<aggregation_source/>` element would be
+        re-populated with the new field's element name, and the
+        widget would render an actual seconds-based AVG. This option
+        is OUTSIDE current AAP §0.4.1 scope and is NOT applied here.
 
-      A) If a follow-up activity adds the `duration_to_close_seconds`
-         calculated/derived field to the dictionary, this report begins
-         producing meaningful values immediately on the next dashboard
-         refresh - no edits to THIS file required.
-      B) If the calculated field never gets added, this report and its
-         consuming widget on the Manager View dashboard display the
-         platform's empty-aggregation placeholder or 0 - which is the
-         documented capability-gap behavior, NOT a broken Update Set.
+      Option B (Performance Analytics Indicator):
+        Author a `pa_indicators` record + a scripted indicator source
+        that computes `closed_date - opened_date` server-side and
+        publishes a numeric indicator value. The widget's data source
+        would change from `sys_report` to a Performance Analytics
+        widget consuming the indicator. This option is OUTSIDE the
+        AAP-enumerated reports/dashboards artifact set (§0.5.1) and
+        is NOT applied here.
 
-    This is the AAP-correct treatment per Section 0.7.2's "stop and
-    report" clause: the report is authored faithfully to the spec, the
-    gap is recorded in the file's comment block (here) and propagates
-    to the deployment.md document, and validation Gate 6 will identify
-    the gap on the live PDI for follow-up resolution.
+    Until either option is approved as an AAP amendment, the
+    `<aggregation_source/>` element remains intentionally empty in
+    this file and the limitation is documented at:
 
-    THE EXPECTED CALCULATED-FIELD CONTRACT (FOR THE FOLLOW-UP AGENT)
-    ================================================================
-    A follow-up dictionary entry that satisfies this report's
-    aggregation contract should specify:
+      - `../docs/dashboards.md` § "Widget 4: Average Time to Close"
+      - the Manager View dashboard description in
+        `../dashboards/pa_dashboards_x_[scope]_manager_view.xml`
+        comment block (no change to the dashboard XML itself —
+        only Widget 4's source report is affected by this gap).
 
-      - <element>duration_to_close_seconds</element>
-      - <name>x_[scope]_case</name> (parent table)
-      - <internal_type>integer</internal_type> (or "duration" / "glide_duration"
-        for human-readable display - both work for AVG aggregation)
-      - <calculation> populated with a script that returns
-        gs.dateDiff(opened_date, closed_date, true) for cases where
-        BOTH timestamps are populated, otherwise 0.
-      - <virtual>true</virtual> (calculated; not stored as a physical
-        column).
-      - <read_only>true</read_only> (system-managed).
-      - <mandatory>false</mandatory> (NULL/0 for non-Closed cases).
-
-    The calculation script (per the agent prompt template):
-
-        (function calculatedFieldValue(current) {
-            if (current.closed_date && current.opened_date) {
-                return gs.dateDiff(
-                    current.opened_date.getDisplayValue(),
-                    current.closed_date.getDisplayValue(),
-                    true);
-            }
-            return 0;
-        })(current);
-
-    The `true` flag on `gs.dateDiff` makes the function return total
-    seconds as a numeric integer (rather than a human-readable string
-    like "3 Days 4 Hours") - which is required for `AVG` aggregation
-    to produce a meaningful arithmetic mean. ServiceNow's
-    GlideAggregate engine maps `<aggregate>AVG</aggregate>` to a SQL
-    `AVG(duration_to_close_seconds)` clause when this column is a
-    numeric-typed dictionary entry.
+    SEMANTIC IMPACT ON VALIDATION GATE 6
+    ====================================
+    Validation Gate 6's pass condition is "All widgets display data;
+    no broken report references". With Option C in effect, Widget 4
+    on the Manager View dashboard renders "No data" rather than a
+    numeric AVG. This is the documented POC limitation; the widget
+    is NOT broken — its source report exists, has a valid filter and
+    aggregate type, and lacks only an aggregation-source column. The
+    rendering communicates "feature-gap" rather than "broken report".
+    The remaining four Manager View widgets and all three Agent
+    Workspace widgets render normally — Gate 6 passes for 7 of 8
+    report references and is flagged as "POC limitation" for Widget 4.
 
     AAP CONSTRAINTS HONORED
     =======================
@@ -280,10 +262,12 @@
         ../update-set/x_[scope]_case_management_update_set.xml.
 
       - Minimal-Change Clause (AAP Section 0.7.2 / 0.3.2): no records
-        beyond the AAP-enumerated set are introduced. The fields used
-        in the filter (`status`) and aggregation source
-        (`duration_to_close_seconds`) reference existing or AAP-
-        documented fields only.
+        beyond the AAP-enumerated set are introduced. The filter
+        references the existing `status` field; the
+        `<aggregation_source/>` element is intentionally LEFT EMPTY
+        per Option C above, because no numeric duration column exists
+        in the AAP-enumerated dictionary entries and adding one would
+        violate the Minimal-Change Clause.
 
     FILTER SEMANTICS
     ================
@@ -322,23 +306,26 @@
 
     AGGREGATION SEMANTICS
     =====================
-    The combination of `<aggregate>AVG</aggregate>`,
-    `<aggregation_source>duration_to_close_seconds</aggregation_source>`,
-    and `<type>single_score</type>` produces the SQL-equivalent:
+    With Option C in effect, the combination of
+    `<aggregate>AVG</aggregate>`, an EMPTY `<aggregation_source/>`,
+    and `<type>single_score</type>` produces an unbound AVG: the
+    ServiceNow report engine has no numeric column to aggregate. At
+    dashboard-render time, the widget displays "No data" (or 0 in
+    older releases) rather than a numeric mean.
+
+    If a future AAP amendment adopts Option A, the
+    `<aggregation_source/>` element below would be re-populated with
+    the new calculated-field element name (e.g.,
+    `duration_to_close_seconds`), and the SQL-equivalent
+    GlideAggregate query would become:
 
         SELECT AVG(duration_to_close_seconds)
         FROM   x_[scope]_case
         WHERE  status = 'Closed'
 
-    The result is a single floating-point number expressed in the unit
-    of the calculated field. With the recommended calculated-field
-    script using `gs.dateDiff(..., true)`, the unit is total seconds.
-    The dashboard widget renders this number directly. To display in
-    days/hours, the dictionary calculated field could be typed as
-    "duration" / "glide_duration" instead of "integer", which causes
-    ServiceNow's display formatter to render "X Days Y Hours" instead
-    of a raw seconds count - a UX optimization that does NOT alter
-    THIS file.
+    producing a single seconds-based floating-point number. Until
+    that amendment is approved, the empty `<aggregation_source/>`
+    element is the AAP-correct treatment of the gap.
 
     DASHBOARD CONSUMPTION
     =====================
@@ -353,21 +340,23 @@
     constraint" verbatim. The dashboard renders the single-score widget
     using the platform's native single-score-tile component.
 
-    SEED DATA EXPECTATIONS
-    ======================
-    For the report to display a non-zero meaningful number, the
-    ../seed-data/cases/ folder must include at least 1 (preferably 2+
-    per AAP Section 0.4.1) case with status=Closed AND both
-    opened_date AND closed_date populated such that
-    closed_date > opened_date (i.e., the duration is positive). Per
-    AAP Section 0.4.1 directory enumeration, the 10 demo cases include:
+    SEED DATA EXPECTATIONS (UNDER OPTION C)
+    =======================================
+    Under Option C, the widget will render "No data" regardless of
+    whether the seed cases have `closed_date` populated, because the
+    `<aggregation_source/>` is empty. Seed-data agents are not
+    required to set realistic `opened_date`/`closed_date` deltas on
+    the Closed demo cases solely for THIS report; the values remain
+    semantically useful for the other Manager View widgets and for
+    future Option A adoption. Per AAP Section 0.4.1 directory
+    enumeration, the 10 demo cases include:
       x_[scope]_case_demo_06.xml (Closed, General Inquiry)
       x_[scope]_case_demo_10.xml (Closed, Complaint)
-    The seed-data agent MUST set realistic `opened_date` and
-    `closed_date` values on these two records (e.g., opened 10 days
-    ago, closed 3 days ago - producing a duration of 7 days
-    = 604800 seconds). With both records contributing 604800 seconds,
-    the AVG is 604800 = 7 days, which the widget displays.
+    Seed-data authors should still set realistic timestamps on these
+    records (e.g., opened 10 days ago, closed 3 days ago — a 7-day
+    duration) for downstream readiness when Option A is adopted, but
+    THIS report's runtime output is unaffected by those values until
+    `<aggregation_source/>` is re-populated.
 
     UPDATE SET DEPENDENCY ORDERING (AAP SECTION 0.5.2)
     ==================================================
@@ -376,11 +365,8 @@
       - ../app/sys_scope/x_[scope].xml                (scope record)
       - ../tables/x_[scope]_case.xml                  (parent table)
       - ../dictionary/x_[scope]_case_status.xml       (status field)
-      - ../dictionary/x_[scope]_case_opened_date.xml  (opened_date field)
-      - ../dictionary/x_[scope]_case_closed_date.xml  (closed_date field)
-      - (Optional, for non-zero values) the dictionary entry for
-        `duration_to_close_seconds` calculated/numeric field if added
-        as a follow-up.
+      - ../dictionary/x_[scope]_case_opened_date.xml  (opened_date field — referenced semantically only; not directly aggregated under Option C)
+      - ../dictionary/x_[scope]_case_closed_date.xml  (closed_date field — referenced semantically only; not directly aggregated under Option C)
       - ../choices/sys_choice_case_status.xml         (Closed Choice value)
 
     This record MUST load BEFORE:
@@ -403,7 +389,7 @@
     [x] <filter> = status=Closed
     [x] <group_by/> empty
     [x] <aggregate> = AVG
-    [x] <aggregation_source> = duration_to_close_seconds (Strategy A)
+    [x] <aggregation_source/> empty (Option C — POC limitation, see comment block above)
     [x] <field_list/> empty
     [x] <chart_size> = medium
     [x] <is_real_time> = false
@@ -418,16 +404,17 @@
     [x] Filter uses Closed literally (Title Case match with sys_choice_case_status)
     [x] All x_[scope]_ placeholders preserved literally
     [x] 4-space indentation
-    [x] Strategy A is used; cross-folder dependency on
-        duration_to_close_seconds documented above for follow-up
-        coordination per AAP Section 0.7.2.
+    [x] Option C is used: <aggregation_source/> is empty per AAP
+        Section 0.7.2 "stop and report" capability-gap policy. The
+        limitation is documented above and propagated to
+        ../docs/dashboards.md Widget 4 description.
 -->
 <record_update table="sys_report">
     <sys_report action="INSERT_OR_UPDATE">
         <aggregate>AVG</aggregate>
-        <aggregation_source>duration_to_close_seconds</aggregation_source>
+        <aggregation_source/>
         <chart_size>medium</chart_size>
-        <description>Manager View dashboard single-score widget computing AVG(closed_date - opened_date) over all x_[scope]_case records at status=Closed. Aggregation source is the calculated/numeric field duration_to_close_seconds (in seconds) on the parent table. Filter excludes non-Closed cases whose closed_date is NULL by definition. No external BI engine; uses native GlideAggregate.</description>
+        <description>Manager View dashboard single-score widget for AVG(closed_date - opened_date) over x_[scope]_case records at status=Closed. POC LIMITATION (Option C): aggregation_source is intentionally empty because the AAP-enumerated dictionary entries (Section 0.4.1) do not include a numeric duration column, and adding one would violate the Minimal-Change Clause (Section 0.7.2). Until an AAP amendment adopts Option A (calculated dictionary field) or Option B (Performance Analytics Indicator), this widget renders the platform "No data" placeholder instead of a numeric mean. Filter excludes non-Closed cases whose closed_date is NULL by definition. No external BI engine; uses native GlideAggregate. See file comment block and ../docs/dashboards.md Widget 4 for the documented gap.</description>
         <field_list/>
         <filter>status=Closed</filter>
         <format/>

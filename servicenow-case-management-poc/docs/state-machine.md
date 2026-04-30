@@ -199,7 +199,8 @@ CaseTransitionValidator.prototype = {
     canTransitionToResolved: function(caseSysId) {
         var taskGr = new GlideRecord('x_[scope]_case_task');
         taskGr.addQuery('case', caseSysId);
-        taskGr.addQuery('status', '!=', 'closed');
+        // Choice value is Title Case 'Closed' per ../choices/sys_choice_case_task_status.xml
+        taskGr.addQuery('status', '!=', 'Closed');
         taskGr.setLimit(1);
         taskGr.query();
         return !taskGr.next();
