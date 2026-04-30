@@ -1,0 +1,579 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the table-level READ ACL that
+    grants the scoped role `x_[scope]_case_manager` UNCONDITIONAL read access
+    on records of the `x_[scope]_case_party` custom table inside the scoped
+    application `x_[scope]`. This is the READ companion to the case_manager
+    create / write / delete ACLs whose granting ACLs are materialized by the
+    sibling files:
+        - ../acl/x_[scope]_case_party_create_agent.xml
+          (creation is granted to BOTH manager AND agent; the manager grant
+           is folded into a multi-role ACL that lists case_manager alongside
+           case_agent so a single ACL covers the union of both creation rights
+           per AAP Section 0.5.6 case_manager Create=Yes and case_agent
+           Create=Yes for the case_party table)
+        - ../acl/x_[scope]_case_party_write_manager.xml
+          (manager write-all on case_party - unconditional WRITE companion
+           to this READ ACL; together they implement the manager row's
+           Write=All and Read=All cells per AAP Section 0.5.6)
+        - ../acl/x_[scope]_case_party_delete_manager.xml
+          (manager delete on case_party - the only role permitted to
+           delete party records per AAP Section 0.5.6)
+    Together those four files materialize the AAP Section 0.5.6 manager row
+    mirrored at the case_party table level per AAP Section 0.5.1 row
+    "servicenow-case-management-poc/acl/x_[scope]_case_party_*.xml"
+    ("Mirror ACL pattern at party level"):
+        | Role                    | Create | Read | Write | Delete |
+        | x_[scope]_case_manager  |  Yes   | All  |  All  |  Yes   |
+
+    The case_manager role is the highest-tier scoped role for case-management
+    operations; per AAP Section 0.5.6 the manager has UNRESTRICTED read
+    privileges on every case_party row regardless of which case the party is
+    associated with, regardless of who is currently assigned to that parent
+    case, regardless of whether the party is a Person or an Organization,
+    and regardless of any other operational predicate. Read is the foundation
+    privilege on which every other manager privilege builds: a manager cannot
+    triage, route, or resolve a case without first being able to see the
+    parties associated with it (the "who is involved" facts), they cannot
+    decide whether to add or remove a party association without first reading
+    the existing party list, and they cannot drive the Resolved -> Closed
+    transition (reserved to the manager role per AAP Section 0.5.5) without
+    first reading the case AND its associated parties to confirm completeness
+    of the record. This file is therefore the prerequisite ACL for every
+    other manager-tier capability on the case_party domain.
+
+    AAP cross-references:
+      - Section 0.5.6 (ACL Matrix) - case_manager row, mirrored at the
+        case_party table level per AAP Section 0.5.1 row
+        "servicenow-case-management-poc/acl/x_[scope]_case_party_*.xml"
+        ("Mirror ACL pattern at party level"):
+            | Role                    | Create | Read | Write | Delete |
+            | x_[scope]_case_manager  |  Yes   | All  |  All  |  Yes   |
+        This file authors the single "Read = All" cell of the manager row
+        for the case_party table. The "Yes" Create cell is authored (in
+        union form alongside agent create) by
+        ../acl/x_[scope]_case_party_create_agent.xml; the "All" Write cell
+        by ../acl/x_[scope]_case_party_write_manager.xml; the "Yes" Delete
+        cell by ../acl/x_[scope]_case_party_delete_manager.xml. Each row of
+        the ACL matrix maps to exactly one or zero ACL XML files - this
+        per-cell granularity is what lets the Update Set add or remove role
+        privileges independently without entangling roles or operations.
+      - Section 0.5.6 (ACL Matrix) - all-roles read coverage on case_party:
+            - case_manager: Read=All            -> THIS FILE
+            - case_agent:   Read=Assigned only  -> ../acl/x_[scope]_case_party_read_agent_assigned.xml
+                                                   (carries the row-level filter that
+                                                    dereferences current.case to apply
+                                                    the parent-case "Assigned only"
+                                                    predicate via parent case's
+                                                    assigned_agent and assigned_group)
+            - case_viewer:  Read=All            -> ../acl/x_[scope]_case_party_read_viewer.xml
+                                                   (also unconditional - viewer is the
+                                                    audit / supervisor tier with org-wide
+                                                    visibility into every case_party for
+                                                    oversight purposes)
+        Together these three facts implement the user prompt's contract: the
+        manager and viewer both see every case_party unconditionally (manager
+        for operational oversight and routing, viewer for audit / compliance
+        review); the agent's read scope is narrowed to "Assigned only" so
+        agents see only the parties associated with cases they are entitled
+        to work on. The deny-by-default nature of ServiceNow record ACLs
+        means a user with NO scoped role sees zero rows on the case_party
+        table; the three read ACLs combined give each role exactly its
+        prescribed visibility.
+      - Section 0.5.6 (ACL Matrix) - relationship between this table-level
+        read ACL and the field-level write ACLs on the parent case table:
+            - ../acl/x_[scope]_case_assigned_group_field_acl.xml restricts
+              WRITE on the parent case's assigned_group column.
+            - ../acl/x_[scope]_case_assigned_agent_field_acl.xml restricts
+              WRITE on the parent case's assigned_agent column.
+        Those field-level ACLs apply to the parent case table only and have
+        NO case_party analog because the case_party table - by AAP design -
+        carries no role-based field-level write restrictions; all five party
+        fields (case, party_type, person, organization, role_label) are
+        governed solely by the table-level ACLs. Per the AAP matrix every
+        role with Read=All can see every column on every visible row,
+        including the polymorphic person and organization reference columns
+        and the parent case reference. This is intentional: managers must
+        see the full party association graph to triage, re-route, and close
+        cases; viewers must see the full party graph for compliance and
+        oversight. Therefore this READ ACL is unconditional at both the
+        table level (no row filter) and the field level (no per-column read
+        restriction).
+      - Section 0.5.5 (State-Machine Transition Map) - manager-driven
+        transitions that depend on this ACL:
+            - "Resolved -> Closed: Caller has x_[scope]_case_manager role;
+               auto-set closed_date." Closing a case requires the manager to
+               first read the parent case to confirm Resolved status, the
+               child task list to confirm task closure, AND the party list
+               to confirm the historical party association record is intact
+               (the audit trail of "who was involved" must be observable at
+               the moment of closure). Reading the party list is authorized
+               by THIS ACL.
+            - "Any forward transition" by the manager: every UI Action and
+               flow-driven transition begins with the manager opening the
+               case form, which auto-loads the case_party Related List per
+               AAP Section 0.4.4 ("Related Lists on the case form for both
+               case_task and case_party"). That auto-load is a READ
+               operation against this table - without this ACL the related
+               list would render empty even though parties exist, which
+               would mislead the manager during transitions.
+        The transition rules are validated by the two case-type Flow Designer
+        flows ../flows/general_inquiry_state_machine.xml and
+        ../flows/complaint_state_machine.xml plus the supporting subflows
+        under ../flows/sub_flows/; those flows fire AFTER the platform's
+        ACL evaluator has authorized the underlying read, so this ACL is a
+        prerequisite to the case-form related-list rendering that precedes
+        any transition.
+      - Section 0.7.3 (Validation Framework, Gate 3 - ACLs):
+            "Role-based access enforced - case_viewer cannot write;
+             case_agent cannot access unassigned cases; case_manager has
+             full access."
+        The clause "case_manager has full access" requires the manager role
+        to be able to perform every CRUD operation on every table in the
+        scoped application, including the case_party table. This ACL
+        satisfies that clause for the read operation on case_party; the
+        parallel clauses about case_viewer (which also reads all per the
+        matrix - the AAP only restricts case_viewer from WRITE / CREATE /
+        DELETE) and case_agent (read-restricted to "Assigned only") are
+        unaffected by this ACL and are enforced by separate sibling ACL
+        files.
+      - Section 0.7.3 (Validation Framework, Gate 1 - Data model):
+            "All 3 custom tables created with correct fields and types -
+             Zero missing mandatory fields."
+        This validation is performed in part by a logged-in test user
+        opening the case form to inspect the field set on each related
+        table. The validation plan in ../docs/validation-gates.md exercises
+        the demo manager (../seed-data/users/sys_user_x_[scope]_demo_manager.xml)
+        reading each demo case's party related-list to verify all five
+        case_party fields render correctly (case, party_type, person,
+        organization, role_label - per AAP Section 0.5.7). Every one of
+        those reads is authorized by THIS ACL.
+      - Section 0.7.3 (Validation Framework, Gate 6 - Dashboards):
+            "Both dashboards render with synthetic data - All widgets
+             display data; no broken report references."
+        Although neither the Agent Workspace dashboard nor the Manager View
+        dashboard directly aggregates over case_party (the eight reports in
+        ../reports/ all aggregate over x_[scope]_case or x_[scope]_case_task
+        per AAP Section 0.4.4), the manager's ability to drill INTO any
+        case from a dashboard widget and inspect its parties is part of the
+        end-to-end dashboard usability story. The drill-through navigates
+        from the case row to the case form whose case_party Related List
+        loads under THIS ACL.
+      - Section 0.4.3 (Design Pattern Applications - Scoped role-based
+        access control): "Three named roles paired with table-level and
+        field-level ACLs whose conditions are encoded as scripted ACL
+        expressions, replacing ArkCase's ApplicationRolesToPrivilegesConfig
+        map." This ACL is the table-level READ binding for the highest-tier
+        scoped role on the party domain and is one of the declarative facts
+        the platform's sys_security_acl evaluator consumes when authorizing
+        a row read at runtime against the case_party table.
+      - Section 0.4.3 (Polymorphic association via single-table choice + UI
+        Policy): the case_party table collapses ArkCase's two separate
+        association tables (acm_person_assoc, acm_person_org_assoc) into a
+        single polymorphic ServiceNow table with a `party_type` Choice
+        discriminator (Person | Organization). Because both polymorphic
+        sub-shapes are stored in a single physical table, a single ACL
+        record (this one) governs read access for the manager role across
+        BOTH variants - there is no need for separate Person / Organization
+        manager-read ACLs. This is a deliberate simplification of the source
+        ArkCase model and is consistent with the project-wide convention of
+        one ACL per (role, operation) tuple per scoped table.
+      - Section 0.1.2 (Technical Interpretation - Access-control
+        transformation): "ApplicationRolesConfig + RolesPrivilegesService +
+        URL-based privilege metadata -> scoped roles + ACLs." In ArkCase the
+        equivalent of THIS file would have been TWO entries in the
+        rolesToPrivileges map (because ArkCase modeled person-association
+        and organization-association in TWO separate tables, acm_person_assoc
+        and acm_person_org_assoc) binding the manager-equivalent role to
+        read privilege identifiers such as `acm-person-association-read`
+        and `acm-organization-association-read`, evaluated at HTTP request
+        time by AcmPluginUrlPrivilege against the GET verb on the person
+        plugin's REST endpoints. The ServiceNow target replaces both map
+        bindings AND the URL-privilege evaluator with this single
+        declarative ACL record - because the target's case_party table is
+        polymorphic per AAP Section 0.4.3, one ACL governs read for both
+        Person and Organization variants.
+
+    Why advanced=false (no scripted condition for manager read):
+      Per AAP Section 0.5.6, the case_manager role's privileges are
+      unconditional ("All", "Full access") - there is no "Assigned only"
+      or other row-level filter on the manager's read scope. The manager is
+      intentionally NOT scoped to a subset of case_party records; they have
+      org-wide read authority because their job function is exactly to
+      oversee, route, and close cases across all assignment boundaries
+      including the parties associated with those cases. Therefore:
+        - <advanced>false</advanced>      - no scripted condition
+        - <condition/>                    - empty encoded query (no row filter)
+        - <script/>                       - empty server-side script
+      With no condition and no script, the ACL evaluates to "permit" for
+      any caller who carries the x_[scope]_case_manager role. This is the
+      correct semantic for the AAP's "manager has full read" requirement.
+      Setting advanced=true with an empty script would be functionally
+      equivalent but stylistically incorrect - the ServiceNow convention
+      is to reserve advanced=true for ACLs that actually carry a scripted
+      body (see, for contrast,
+      ../acl/x_[scope]_case_party_read_agent_assigned.xml where
+      advanced=true and the script encodes the disjunctive ownership check
+      that dereferences current.case up to the parent case row to apply
+      `current.case.assigned_agent == gs.getUserID() ||
+      gs.getUser().isMemberOf(current.case.assigned_group)`).
+
+    Why this ACL is INDEPENDENT of the parent case's read ACL:
+      ServiceNow ACL evaluation is per-table, not transitively inherited.
+      Even though x_[scope]_case_party carries a reference to a
+      x_[scope]_case row via its "case" field, the platform does NOT
+      automatically apply the parent case's ACLs to child party records.
+      Each table requires its own role-bound ACLs to govern access.
+      Therefore this file is REQUIRED in addition to
+      ../acl/x_[scope]_case_read_manager.xml - both must apply for a
+      manager to be able to (a) open a case and (b) see its associated
+      parties on the related list. Removing this file would break
+      Validation Gate 3 (ACLs) for the case_party table even if the
+      case-level manager ACL is present, because the case form's
+      case_party Related List would silently render empty under
+      deny-by-default semantics.
+
+    Why READ is granted to manager unconditionally (design rationale):
+      - Operational oversight: managers must see every party association
+        across every case to triage intake, identify mis-classified parties
+        (e.g., a person mistakenly entered as an organization), reconcile
+        duplicate associations across cases, and pull aggregate views of
+        which external persons or organizations recur across the case load.
+        Restricting manager read on case_party to "Assigned only" would
+        defeat the entire purpose of having a manager tier - they would
+        only see parties on cases someone else had already routed to them,
+        and by definition they could not perform cross-case party reviews.
+      - State-machine entry point: per AAP Section 0.5.5 the
+        Resolved -> Closed transition is reserved to the manager role and
+        requires the manager to inspect the case form before approving the
+        close. The case form auto-loads the case_party Related List - that
+        list-load is a READ authorized by this ACL. Without this ACL the
+        Related List would render empty and the manager would be unable to
+        confirm the audit trail before closure.
+      - Audit and compliance support: managers may be called upon to
+        produce a list of every external person or organization associated
+        with a given case for legal, compliance, or executive review at
+        any time. The unconditional read ensures they can answer those
+        requests without privilege escalation requests to platform admins.
+      - Reporting accuracy: although the AAP's eight reports in ../reports/
+        do not aggregate over case_party directly, future ad-hoc reports
+        (created at runtime by a manager on the PDI within scope) would
+        require manager-tier read access to case_party. Granting Read=All
+        here pre-authorizes any future manager-authored case_party report
+        without needing additional ACL changes.
+      - Demo-data lifecycle: the seed script ../scripts/seed_demo_data.js
+        creates demo party rows under each demo case (a Person and an
+        Organization variant per case per AAP Section 0.4.1). The smoke-
+        test phase requires the demo manager
+        (../seed-data/users/sys_user_x_[scope]_demo_manager.xml) to read
+        all seeded parties to confirm seed completeness; that read is
+        authorized by THIS ACL.
+      - Polymorphic UI policy interaction: the UI Policy in
+        ../ui_policy/x_[scope]_case_party_conditional_fields.xml
+        conditionally shows the person field when party_type=Person and
+        the organization field when party_type=Organization. The UI Policy
+        evaluates AFTER the platform has authorized the row read; this ACL
+        is therefore the prerequisite to the UI Policy ever firing for a
+        manager-tier user.
+
+    Semantic source-side reference (read-only context per AAP Section
+    0.3.2; no code or configuration is byte-for-byte ported from these
+    files):
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesToPrivilegesConfig.java
+        ArkCase mapped roles to privileges through a single configuration
+        map (`Map<String, List<Object>> rolesToPrivileges`) keyed by the
+        property `application.rolesToPrivileges`. The class declares the
+        constant `ROLES_TO_PRIVILEGES_PROP_KEY = "application.rolesToPrivileges"`
+        and exposes the map via `@MapValue(value = "application.rolesToPrivileges")
+        getRolesToPrivileges()`. In that model, a "manager-equivalent"
+        role (e.g., ROLE_PERSON_MANAGER, ROLE_ORG_MANAGER) would have been
+        associated with read privilege identifiers such as
+        `acm-person-association-read` and `acm-organization-association-read`
+        (one identifier per association table, since ArkCase used two
+        separate tables). The ServiceNow target replaces this map-based
+        privilege association with declarative, scoped record-level ACLs -
+        this XML record is the direct equivalent of the union of those two
+        ArkCase map cells: the (case_manager, READ) pairing on the
+        polymorphic case_party domain that subsumes both Person and
+        Organization variants.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/com/
+        armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        Encapsulated role-CRUD and privilege-paging behavior in ArkCase
+        (`retrieveRoles()`, `retrievePrivileges()`,
+        `retrievePrivilegesByAuthorization(...)`,
+        `retrievePrivilegesByRole(...)`, `updateRolePrivileges(...)`,
+        `addRolesPrivileges(...)`, `removeRolesPrivileges(...)`). The
+        service held injected dependencies on `UserDao`,
+        `ApplicationRolesConfig`, `ApplicationPrivilegesConfig`,
+        `ApplicationRolesToPrivilegesConfig`, `ConfigurationPropertyService`,
+        `CollectionPropertiesConfigurationService`, and
+        `FunctionalAccessService` - a complex Spring/JPA stack that managed
+        the role <-> privilege relationship at runtime. All of this Java
+        service surface is replaced in the ServiceNow target by the
+        platform's built-in sys_security_acl evaluator; no scripted
+        privilege resolver is needed. Notably, ArkCase's
+        `retrievePrivilegesByRole(roleName)` method paginated through the
+        rolesToPrivileges map to return a role's privileges - the
+        ServiceNow analog is the platform's "Roles" related list on
+        sys_security_acl, which is automatically derived from the <roles>
+        field of every ACL record like THIS one; no explicit query service
+        is needed.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - Scope-namespace exclusivity: every cross-reference resolves into
+        the x_[scope] scope (sys_scope = x_[scope], sys_package source =
+        x_[scope]). No global-scope ACLs are written. The <name> field
+        references the scoped table x_[scope]_case_party (not any OOB
+        global table such as `task` or `incident_task`), and <roles>
+        references the scoped role x_[scope]_case_manager. There are zero
+        global writes from this file.
+      - Zero hardcoded cross-reference sys_id literals: <name>, <roles>,
+        <sys_scope>, and <sys_package> all resolve their targets by name /
+        source attribute lookup at Update Set apply time. The <sys_id>
+        below is THIS record's own deterministic primary key (32-char
+        lowercase hex MD5 of the canonical string
+        "x_[scope]_case_party.read.case_manager", a stable canonical
+        identifier for this exact ACL) and is not a cross-reference to
+        any other record. Computing the sys_id deterministically
+        guarantees the ACL is re-applyable / idempotent across fresh PDIs
+        and round-trip Update Set previews per AAP Section 0.7.3 Gate 7,
+        and matches the sibling-ACL convention:
+            - ../acl/x_[scope]_case_read_manager.xml uses
+              MD5("x_[scope]_case.read.case_manager") =
+              113c23bfb587d172b83db7ac8961ade2
+            - ../acl/x_[scope]_case_task_read_manager.xml uses
+              MD5("x_[scope]_case_task.read.case_manager") =
+              c97e1d074ba86bf16b3a10cb4851e562
+            - ../acl/x_[scope]_case_party_read_viewer.xml uses
+              MD5("x_[scope]_case_party.read.case_viewer") =
+              4aee16ed8c8df82c455f073e92498c7a
+            - ../acl/x_[scope]_case_party_write_manager.xml uses
+              MD5("x_[scope]_case_party.write.case_manager") =
+              fc7c07fba024d5b59b782d83d22156b4
+            - ../acl/x_[scope]_case_party_delete_manager.xml uses
+              MD5("x_[scope]_case_party.delete.case_manager") =
+              1f8bdcb79b5060d68ca63d034186c83a
+            - this file uses
+              MD5("x_[scope]_case_party.read.case_manager") =
+              eebbc1bbf1aeab598e7ba377e1e6604b
+      - Table-level (not field-level): <name> is `x_[scope]_case_party`
+        with NO dot. Field-level read restrictions are NOT specified by
+        the AAP for the case_manager role on case_party; the manager
+        reads the entire party row including party_type, person,
+        organization, role_label, and the case reference. Unlike the
+        parent case table (which carries field-level write ACLs on
+        assigned_group and assigned_agent - see sibling files
+        ../acl/x_[scope]_case_assigned_group_field_acl.xml and
+        ../acl/x_[scope]_case_assigned_agent_field_acl.xml), the
+        case_party table has no field-level ACLs at all by AAP design.
+        The <type>record</type> field below confirms this is a row-level
+        (table-level) ACL, not a UI/REST/SOAP-flavored ACL.
+      - Operation = read: corresponds exactly to the "Read = All" cell in
+        the AAP matrix for the case_manager role mirrored to the
+        case_party table. This is the table-level read binding; there are
+        deliberately NO field-level read restrictions on x_[scope]_case_party
+        for any role.
+      - admin_overrides = true: standard ServiceNow pattern that allows
+        the platform `admin` role to bypass this ACL. This is required so
+        platform administrators can troubleshoot, repair, or re-seed
+        scoped party data (per AAP Section 0.7.4 the
+        ../scripts/seed_demo_data.js script runs as admin to populate
+        demo party rows with mixed Person and Organization variants per
+        AAP Section 0.4.1 to exercise the polymorphic UI policy). It does
+        NOT widen case_manager privileges - non-admin managers see
+        exactly what this ACL permits, which is full table-level read.
+      - active = true: ACL is in force the moment the Update Set commits.
+      - advanced = false: see "Why advanced=false" rationale above. The
+        platform skips the empty <script/> body entirely.
+      - condition (empty): the <condition/> encoded-query field is empty;
+        no row-level filter applies to manager reads (manager has "All"
+        access, not "Assigned only").
+      - script (empty): the <script/> field is empty; the platform skips
+        it because advanced=false.
+
+    Difference from sibling ACLs - quick reference:
+      vs ../acl/x_[scope]_case_party_create_agent.xml (manager+agent
+      CREATE on case_party - the case_party create ACL is a multi-role
+      union granting both manager and agent create privileges):
+        - <operation>     read              vs create
+        - <roles>         x_[scope]_case_manager
+                                            vs x_[scope]_case_manager,x_[scope]_case_agent
+                                            (the create ACL lists BOTH roles
+                                             since both have Create=Yes per
+                                             AAP Section 0.5.6; this READ
+                                             ACL lists ONLY the manager
+                                             because the agent's read scope
+                                             is "Assigned only" and is
+                                             therefore handled by a separate
+                                             scripted ACL file, not by
+                                             folding into this one)
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs MD5("x_[scope]_case_party.create.case_manager.case_agent")
+                                            (or whatever canonical key the
+                                             create-union ACL uses)
+        - <sys_update_name> *_read_manager  vs *_create_agent
+      vs ../acl/x_[scope]_case_party_write_manager.xml (manager WRITE on
+      case_party):
+        - <operation>     read              vs write
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs fc7c07fba024d5b59b782d83d22156b4
+        - <sys_update_name> *_read_manager  vs *_write_manager
+        - <description>                     differs in operation wording
+      vs ../acl/x_[scope]_case_party_delete_manager.xml (manager DELETE
+      on case_party):
+        - <operation>     read              vs delete
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs 1f8bdcb79b5060d68ca63d034186c83a
+        - <sys_update_name> *_read_manager  vs *_delete_manager
+      vs ../acl/x_[scope]_case_party_read_viewer.xml (viewer READ on
+      case_party - same operation, same table, different role):
+        - <roles>         x_[scope]_case_manager
+                                            vs x_[scope]_case_viewer
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs 4aee16ed8c8df82c455f073e92498c7a
+        - <sys_update_name> *_read_manager  vs *_read_viewer
+        - <description>                     refers to manager           vs viewer
+        Both files have advanced=false, empty condition, and empty script
+        because both manager and viewer have unconditional read per the
+        AAP matrix. The two files are functionally parallel and together
+        give the manager and viewer roles identical row-level read scope
+        on x_[scope]_case_party (every row); the AAP intentionally puts
+        manager and viewer in the same Read=All bucket because both serve
+        org-wide oversight functions, while the case_agent role is the
+        operational worker tier whose read is narrowed.
+      vs ../acl/x_[scope]_case_party_read_agent_assigned.xml (agent READ
+      assigned-only on case_party):
+        - <roles>         x_[scope]_case_manager
+                                            vs x_[scope]_case_agent
+        - <advanced>      false             vs true (the agent ACL carries
+                                              a scripted condition that
+                                              dereferences current.case to
+                                              apply the parent-case
+                                              "Assigned only" predicate;
+                                              the manager ACL is
+                                              unconditional)
+        - <condition>     empty             vs encoded query that asserts
+                                              parent-case "Assigned only"
+        - <script>        empty             vs server-side dereference of
+                                              current.case followed by
+                                              disjunction of parent-case
+                                              assigned_agent / assigned_group
+                                              checks
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs MD5("x_[scope]_case_party.read.case_agent.assigned")
+        - <sys_update_name> *_read_manager  vs *_read_agent_assigned
+      vs ../acl/x_[scope]_case_read_manager.xml (manager READ on parent
+      case table):
+        - <name>          x_[scope]_case_party
+                                            vs x_[scope]_case
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs 113c23bfb587d172b83db7ac8961ade2
+        - <sys_update_name> *_case_party_read_manager
+                                            vs *_case_read_manager
+        - <description>                     references case_party table
+                                            vs case table
+        Both ACLs have identical <operation>=read,
+        <roles>=x_[scope]_case_manager, <advanced>=false,
+        <condition/>=empty, <script/>=empty - the only differences are
+        the table name (case_party vs case) and the deterministic sys_id
+        derived from that table name. This parallelism is what
+        materializes the AAP rule "case_manager has full access" across
+        BOTH the parent case table and the child case_party table.
+      vs ../acl/x_[scope]_case_task_read_manager.xml (manager READ on
+      sibling case_task table):
+        - <name>          x_[scope]_case_party
+                                            vs x_[scope]_case_task
+        - <sys_id>        eebbc1bbf1aeab598e7ba377e1e6604b
+                                            vs c97e1d074ba86bf16b3a10cb4851e562
+        - <sys_update_name> *_case_party_read_manager
+                                            vs *_case_task_read_manager
+        - <description>                     references case_party table
+                                            vs case_task table
+        Both ACLs have identical <operation>=read,
+        <roles>=x_[scope]_case_manager, <advanced>=false,
+        <condition/>=empty, <script/>=empty - the only differences are
+        the table name (case_party vs case_task) and the deterministic
+        sys_id derived from that table name. This parallelism completes
+        the "case_manager has full access" mirror across all three
+        custom tables (case, case_task, case_party).
+      All other XML elements are identical between the manager-tier ACLs;
+      the deterministic sys_id, the table name, and the operation/role
+      triplet are the defining differences.
+
+    Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
+      MUST be loaded AFTER:
+        - ../app/sys_app/x_[scope]_case_management.xml (scoped app record)
+        - ../app/sys_scope/x_[scope].xml (scope record - resolves
+          sys_scope and sys_package source="x_[scope]")
+        - ../tables/x_[scope]_case_party.xml (resolves
+          <name>x_[scope]_case_party</name> by table name lookup at apply
+          time)
+        - ../roles/sys_user_role_x_[scope]_case_manager.xml (resolves
+          <roles>x_[scope]_case_manager</roles> by role name lookup at
+          apply time)
+      MUST be loaded BEFORE:
+        - ../seed-data/role_assignments/sys_user_has_role_x_[scope]_demo_manager.xml
+          (the demo manager's case_party-read access during round-trip
+          verification depends on this ACL being applied first)
+        - ../seed-data/parties/x_[scope]_case_party_demo_*.xml (so the
+          demo manager immediately sees the seeded synthetic parties -
+          both Person and Organization variants - once the Update Set
+          commits and the demo manager logs in)
+        - ../flows/general_inquiry_state_machine.xml,
+          ../flows/complaint_state_machine.xml,
+          ../flows/sub_flows/validate_resolved_transition.xml (Flow
+          Designer flows on the parent case fire on update; their inline
+          GlideRecord lookups against x_[scope]_case_party - if added by
+          a future agent for party-related transition guards - and any
+          parent-case dereferences inside subflows depend on this ACL
+          having authorized the read)
+        - any cleanup or re-seed activity in
+          ../scripts/seed_demo_data.js that may post-validate prior demo
+          party rows; while seed_demo_data.js itself runs as admin and
+          bypasses this ACL via admin_overrides, post-seed smoke tests
+          against the demo dataset depend on this ACL being applied so a
+          logged-in demo manager can validate end-to-end party-read
+          capability.
+      The deny-by-default sibling pair that this file works with:
+        - There is NO equivalent "deny" ACL needed for any role;
+          ServiceNow ACLs are deny-by-default. A user without the
+          case_manager role (and without case_agent or case_viewer) sees
+          zero rows on x_[scope]_case_party regardless of any per-role
+          ACL state.
+
+    The literal `[scope]` placeholder is preserved verbatim per AAP
+    convention (Section 0.7.2 "Scoped-namespace-only constraint"); the
+    Personal Developer Instance auto-assigns the actual concrete scope
+    id at App Engine Studio creation time, and the Update-Set apply-time
+    renaming propagates consistently across all bracketed placeholders
+    in this artifact. The deterministic sys_id below is computed against
+    the `[scope]` literal and remains stable across re-imports onto
+    fresh PDIs.
+-->
+<record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <admin_overrides>true</admin_overrides>
+        <advanced>false</advanced>
+        <condition/>
+        <description>Allows users with the x_[scope]_case_manager role to read all case_party records (unconditional). Per AAP Section 0.5.6, manager Read=All on case_party. NO field-level ACLs exist on case_party; this table-level grant fully governs manager read authority on every column (case, party_type, person, organization, role_label) for both Person and Organization polymorphic variants.</description>
+        <name>x_[scope]_case_party</name>
+        <operation>read</operation>
+        <roles>x_[scope]_case_manager</roles>
+        <script/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>eebbc1bbf1aeab598e7ba377e1e6604b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_[scope]_case_party</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_security_acl_x_[scope]_case_party_read_manager</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>record</type>
+    </sys_security_acl>
+</record_update>
