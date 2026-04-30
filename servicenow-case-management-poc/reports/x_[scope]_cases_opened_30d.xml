@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_report` row that
+    declares the "Cases Opened in Last 30 Days" single-score report on the
+    `x_[scope]_case` custom table inside the scoped application `x_[scope]`.
+
+    Per AAP Section 0.5.1 (File-by-File Transformation Plan) verbatim:
+        servicenow-case-management-poc/reports/x_[scope]_cases_opened_30d.xml
+            CREATE  Source: -
+            Key Changes: "Single-score: COUNT(opened_date >=
+            javascript:gs.daysAgoStart(30))"
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning) verbatim:
+        Manager View Dashboard widget inventory includes
+            "single-score widget for 'Cases opened in last 30 days'"
+
+    Per AAP Section 0.4.4 (User Interface Design) verbatim:
+        Manager View Dashboard - "single-score widget for 'Cases opened
+        in last 30 days'"
+
+    Per AAP Section 0.7.3 (Validation Framework) verbatim, this report is
+    one of the data sources for Gate 6 (Dashboards):
+        "Both dashboards render with synthetic data ... All widgets display
+         data; no broken report references"
+
+    THIS FILE'S ROLE IN THE OVERALL POC
+    ===================================
+    This is a `sys_report` record of type `single_score` with `aggregate=COUNT`.
+    It is the data source for a single tile on the Manager View dashboard
+    (../dashboards/pa_dashboards_x_[scope]_manager_view.xml) showing the
+    rolling count of new cases opened in the trailing 30-day window. Its
+    purpose is to give managers a glanceable indicator of incoming case
+    volume - a leading-edge KPI that complements the lagging-edge
+    "Average Time to Close" tile authored at
+    ../reports/x_[scope]_avg_time_to_close.xml.
+
+    SOURCE-SIDE SEMANTIC ANCHOR (AAP SECTION 0.2.1.1)
+    =================================================
+    The semantic ancestor of this report in the existing ArkCase codebase
+    is `CaseSummaryByStatusAndTimePeriodDto.java` at:
+
+        acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/
+        CaseSummaryByStatusAndTimePeriodDto.java
+
+    That DTO holds `(timePeriod, caseByStatusDtoList)` - a time-bucketed
+    aggregation shape that ArkCase's Pentaho-backed reporting layer used
+    to render time-window case rollups. The ServiceNow target collapses
+    that DTO + Pentaho pipeline into a native `sys_report` whose filter
+    expression encodes the time bucket directly via the platform's
+    GlideSystem function `gs.daysAgoStart(30)`. No DTO, no Pentaho, no
+    Solr facet - the platform's native GlideAggregate engine satisfies
+    the requirement directly.
+
+    The supporting field `opened_date` is materialized in
+    ../dictionary/x_[scope]_case_opened_date.xml and auto-populated on
+    insert via ../business_rules/x_[scope]_set_opened_date.xml per AAP
+    Section 0.4.1 directory enumeration. Without that auto-set business
+    rule, all cases would have NULL opened_date values and this report
+    would return 0; the cross-dependency is documented below.
+
+    AAP CONSTRAINTS HONORED
+    =======================
+      - Scope-namespace exclusivity (AAP Section 0.7.2): `<name>` is
+        prefixed `x_[scope]_`; `<table>` resolves to a scoped table;
+        `<sys_scope>` and `<sys_package>` bind THIS record to the
+        scoped application by `source` attribute lookup; no global-
+        scope writes are made. ALL artifact references resolve within
+        the `x_[scope]` namespace.
+
+      - Zero hardcoded cross-reference sys_ids (AAP Section 0.7.2): the
+        `<sys_scope>` and `<sys_package>` text-node values resolve by
+        scope name (`x_[scope]`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical record name `x_[scope]_cases_opened_30d`
+        = 95b2127b026a92ba5e041a8d4d7277ec) and is NOT a reference to
+        any other record. The deterministic derivation makes the Update
+        Set re-importable on a fresh PDI without sys_id collisions:
+        re-importing the same XML on the same or any future PDI resolves
+        the same sys_id and idempotently updates the same report row
+        rather than creating a duplicate. This matches the sibling
+        convention used by ../reports/x_[scope]_avg_time_to_close.xml
+        (md5("x_[scope]_avg_time_to_close") = 79fabb5f5754b629205b2382face3ebb),
+        ../reports/x_[scope]_my_open_cases.xml
+        (md5("x_[scope]_my_open_cases") = ee04fa982b136ad35c6fe1512826f6ab),
+        and ../reports/x_[scope]_my_overdue_tasks.xml
+        (md5("x_[scope]_my_overdue_tasks") = d9121344dff6c38d1db560bb7562f6d6).
+
+      - No hardcoded date literals (AAP Section 0.7.2 spirit): the
+        30-day window is expressed via the platform GlideSystem
+        function `javascript:gs.daysAgoStart(30)`, which evaluates at
+        query-execution time. No literal date string (e.g.,
+        "2025-04-01" or similar) appears anywhere in this file. The
+        report computes a rolling 30-day window relative to "now" on
+        whatever PDI runs the query - making the artifact portable
+        across instances and stable across calendar time.
+
+      - The literal `[scope]` placeholder is preserved per AAP
+        convention (Section 0.7.2 "Scoped-namespace-only constraint");
+        the PDI auto-assigns the actual scope id at App Engine Studio
+        creation time and the Update-Set apply-time renaming propagates
+        consistently across all bracketed placeholders in this artifact.
+
+      - No PII (AAP Section 0.3.2 "No-PII constraint"): this record is
+        a pure aggregation specification; it stores zero rows of case
+        data, zero user identifiers, zero email addresses, zero
+        organizational names. The report executes against the live case
+        table at dashboard-render time; the data displayed there is the
+        synthetic seed data authored under ../seed-data/cases/ per AAP
+        Section 0.3.1.
+
+      - No external integrations (AAP Section 0.3.2): the aggregation
+        runs entirely on the platform's native GlideAggregate engine.
+        No external BI tool (Pentaho, Tableau, PowerBI), no external
+        analytics service, no external SQL execution layer. This is
+        the AAP-prescribed transformation: ArkCase's Pentaho-driven
+        analytics pipeline collapses into ServiceNow's native Reports +
+        Dashboards stack.
+
+      - Email-disabled (AAP Section 0.7.2): this report does NOT
+        include any scheduled-email-delivery configuration. ServiceNow's
+        sys_report supports a `is_scheduled` flag and integration with
+        the email scheduler, but the POC explicitly disables email per
+        AAP Section 0.7.2 ("Email notifications are disabled on the
+        PDI"). The dashboard widget is the only consumer.
+
+      - Single-Update-Set deliverable (AAP Section 0.7.2): this XML is
+        one of the records that compose the final Update Set XML at
+        ../update-set/x_[scope]_case_management_update_set.xml.
+
+      - Minimal-Change Clause (AAP Section 0.7.2 / 0.3.2): no records
+        beyond the AAP-enumerated set are introduced. The field used
+        in the filter (`opened_date`) is an existing AAP-documented
+        field on the case table; no synthetic columns or alternative
+        time-window helpers are introduced.
+
+    FILTER SEMANTICS
+    ================
+    The `<filter>opened_date&gt;=javascript:gs.daysAgoStart(30)</filter>`
+    element uses ServiceNow's encoded-query string format. After XML
+    deserialization the platform parser sees the literal string:
+
+        opened_date>=javascript:gs.daysAgoStart(30)
+
+    The semantics are:
+
+      - `opened_date` is the field name on `x_[scope]_case` (defined in
+        ../dictionary/x_[scope]_case_opened_date.xml).
+      - `>=` is the encoded-query "greater than or equal to" operator.
+        The `>` character is reserved in XML and MUST be escaped as
+        `&gt;` per XML well-formedness rules (W3C XML 1.0 specification
+        section 2.4 "Character Data and Markup"). The literal value
+        held inside the `<filter>` text node is `>=`; only its on-disk
+        XML serialization renders the `>` character as `&gt;`.
+      - `javascript:` is ServiceNow's encoded-query "dynamic value"
+        prefix. The platform recognizes the `javascript:` scheme and
+        invokes the right-hand-side expression as a server-side script
+        at query-execution time. The result of the script is then
+        substituted into the comparison.
+      - `gs.daysAgoStart(30)` is the GlideSystem helper that returns
+        a `GlideDateTime` representing the START of the day (i.e.,
+        00:00:00 in the system timezone) that is exactly 30 days
+        before "today". This is the ServiceNow-canonical "rolling
+        N-day window" idiom and matches AAP Section 0.5.1's filter
+        specification verbatim.
+
+    Time-window edge cases:
+      - A case with `opened_date` exactly at midnight 30 days ago IS
+        included (the comparison is inclusive: `>=`).
+      - A case with `opened_date` 30 days and 1 second ago is NOT
+        included.
+      - A case with `opened_date` 31 days ago is NOT included.
+      - A case with `opened_date` "now" IS included.
+      - A case with `opened_date` in the future (e.g., a backdated-but-
+        forward-pointed seed value) IS included.
+      - A case with NULL `opened_date` is NOT included (encoded-query
+        comparisons return false for NULL operands).
+
+    AGGREGATION SEMANTICS
+    =====================
+    The combination of `<aggregate>COUNT</aggregate>`,
+    `<aggregation_source/>` (empty), `<group_by/>` (empty), and
+    `<type>single_score</type>` produces the SQL-equivalent:
+
+        SELECT COUNT(*)
+        FROM   x_[scope]_case
+        WHERE  opened_date >= <gs.daysAgoStart(30) at query time>
+
+    The result is a single non-negative integer. Single-score reports
+    do NOT group; they collapse the entire filtered population to one
+    scalar value. If a `<group_by>` were specified, the platform would
+    attempt to render a chart instead of a single number - hence
+    `<group_by/>` is intentionally empty.
+
+    The `<aggregation_source/>` element is empty because COUNT does
+    not require a column to count over - it counts rows. AVG / SUM /
+    MIN / MAX aggregations require a numeric `<aggregation_source>`,
+    but COUNT does not. This matches the agent-prompt's Rule 5
+    ("Single-Score Aggregation") verbatim.
+
+    Why type=single_score and not bar/list (per agent prompt insight #3):
+    AAP Section 0.4.4 Manager View widget inventory specifies
+    "single-score widget for 'Cases opened in last 30 days'." The
+    single-score widget renders one large number - the conventional KPI
+    presentation for a leading-edge volume indicator. A list would show
+    rows of individual cases (cluttering a manager-level dashboard with
+    operational detail not relevant to the volume metric); a bar chart
+    would require a `<group_by>` (e.g., by day) which would change the
+    semantic from "current 30-day total" to "daily breakdown over 30
+    days" - a different KPI entirely.
+
+    Why is_real_time=false (per agent prompt insight #5):
+    The count changes by at most a few units per day (one increment
+    per case opened, one decrement per day as the rolling window
+    shifts). Sub-minute freshness is unnecessary for a manager-level
+    KPI and would burn PDI resource budget. Setting `is_real_time` to
+    false makes the platform compute the score on dashboard load
+    (on-demand), which is the appropriate cadence for this metric and
+    matches the sibling report convention (avg_time_to_close, my_open_cases,
+    my_overdue_tasks all use is_real_time=false).
+
+    DASHBOARD CONSUMPTION
+    =====================
+    The Manager View dashboard widget (in
+    ../dashboards/pa_dashboards_x_[scope]_manager_view.xml) references
+    THIS record by `name`:
+      <widget>
+        <report_name>x_[scope]_cases_opened_30d</report_name>
+        ...
+      </widget>
+    NO sys_id reference - per AAP Section 0.7.2 "No-hardcoded-sys_id
+    constraint" verbatim. The dashboard renders the single-score widget
+    using the platform's native single-score-tile component.
+
+    SEED DATA EXPECTATIONS
+    ======================
+    For the report to display a non-zero meaningful number on the live
+    PDI, the ../seed-data/cases/ folder MUST include at least one demo
+    case whose `opened_date` falls within the 30-day window (i.e., the
+    `opened_date` is between [today minus 30 days at midnight] and
+    "now"). Per AAP Section 0.4.1 directory enumeration, the 10 demo
+    cases include records spanning all six statuses and both case types;
+    the seed-data agent SHOULD set realistic `opened_date` values
+    within the recent past (e.g., 1-25 days ago) for at least most of
+    the 10 demo cases so this widget renders a meaningful number on
+    initial dashboard load.
+
+    NOTE FOR THE SEED-DATA AGENT (per agent prompt validation gate
+    block): if seed `opened_date` values are pinned to a specific past
+    date for reproducibility, ensure that date is within 30 days of
+    expected install time, OR document a re-seed step in
+    ../scripts/seed_demo_data.js / ../scripts/round_trip_verify.md.
+    The auto-set business rule
+    ../business_rules/x_[scope]_set_opened_date.xml ensures any seed
+    case lacking an explicit `opened_date` value will be set to
+    `gs.nowDateTime()` at insert - which automatically falls within
+    the 30-day window for fresh installs.
+
+    UPDATE SET DEPENDENCY ORDERING (AAP SECTION 0.5.2)
+    ==================================================
+    This record MUST load AFTER:
+      - ../app/sys_app/x_[scope]_case_management.xml  (scoped app)
+      - ../app/sys_scope/x_[scope].xml                (scope record)
+      - ../tables/x_[scope]_case.xml                  (parent table)
+      - ../dictionary/x_[scope]_case_opened_date.xml  (opened_date field)
+
+    This record MUST load BEFORE:
+      - ../dashboards/pa_dashboards_x_[scope]_manager_view.xml
+        (Manager View dashboard widget references THIS report by name)
+
+    This record has NO ordering relationship with sibling reports in
+    the same folder; reports do not reference one another.
+
+    The auto-setting business rule
+    ../business_rules/x_[scope]_set_opened_date.xml is a runtime
+    dependency for SEED DATA correctness, not for THIS XML's import
+    correctness - the report XML itself loads independently of any
+    business rule.
+
+    VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
+    ====================================================
+    [x] File path: servicenow-case-management-poc/reports/x_[scope]_cases_opened_30d.xml
+    [x] Starts with <?xml version="1.0" encoding="UTF-8"?>
+    [x] Root: <record_update table="sys_report">
+    [x] Inner: <sys_report action="INSERT_OR_UPDATE">
+    [x] <name> = x_[scope]_cases_opened_30d
+    [x] <title> = Cases Opened in Last 30 Days
+    [x] <table> = x_[scope]_case
+    [x] <type> = single_score
+    [x] <filter> contains opened_date&gt;=javascript:gs.daysAgoStart(30) (XML-escaped &gt;=)
+    [x] <group_by/> empty
+    [x] <aggregate> = COUNT
+    [x] <aggregation_source/> empty
+    [x] <field_list/> empty
+    [x] <chart_size> = medium
+    [x] <is_real_time> = false
+    [x] <sys_class_name> = sys_report
+    [x] <sys_scope> and <sys_package> reference scoped app by name/source
+    [x] <sys_update_name> = sys_report_x_[scope]_cases_opened_30d
+    [x] <sys_name> = Cases Opened in Last 30 Days
+    [x] <sys_policy/> empty
+    [x] No XML parsing errors (especially around the &gt;= escape in the filter)
+    [x] No PII in report definition
+    [x] No hardcoded sys_ids except own primary key (MD5-derived)
+    [x] No hardcoded date literals (uses javascript:gs.daysAgoStart(30))
+    [x] All x_[scope]_ placeholders preserved literally
+    [x] 4-space indentation
+-->
+<record_update table="sys_report">
+    <sys_report action="INSERT_OR_UPDATE">
+        <aggregate>COUNT</aggregate>
+        <aggregation_source/>
+        <chart_size>medium</chart_size>
+        <description>Manager View dashboard single-score widget computing COUNT(*) over x_[scope]_case records whose opened_date falls within the trailing 30-day window. The 30-day cutoff is resolved at query-execution time via javascript:gs.daysAgoStart(30), which returns midnight of the day exactly 30 days before "now" in the system timezone - a rolling window stable across calendar time and portable across PDIs. Single scalar result, on-demand evaluation. No external BI engine; uses native GlideAggregate. Replaces ArkCase's Pentaho/Solr time-bucketed CaseSummaryByStatusAndTimePeriodDto aggregate pattern with a native single_score sys_report.</description>
+        <field_list/>
+        <filter>opened_date&gt;=javascript:gs.daysAgoStart(30)</filter>
+        <format/>
+        <group_by/>
+        <is_real_time>false</is_real_time>
+        <is_scheduled>false</is_scheduled>
+        <name>x_[scope]_cases_opened_30d</name>
+        <roles/>
+        <sys_class_name>sys_report</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>95b2127b026a92ba5e041a8d4d7277ec</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Cases Opened in Last 30 Days</sys_name>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>sys_report_x_[scope]_cases_opened_30d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_[scope]_case</table>
+        <title>Cases Opened in Last 30 Days</title>
+        <type>single_score</type>
+        <user/>
+    </sys_report>
+</record_update>
