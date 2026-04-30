@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `role_label` String field on the `x_[scope]_case_party`
+    custom table inside the scoped application `x_[scope]_case_management`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_party:
+
+        Field        Type           Constraints
+        role_label   String(100)    Mandatory (e.g., Requester, Respondent, Witness)
+
+    Per AAP Section 0.4.3 (Design Pattern Applications):
+        "Polymorphic association via single-table choice + UI Policy -
+         case_party collapses ArkCase's two association tables
+         (acm_person_assoc, acm_person_org_assoc) into one ServiceNow table
+         with a Choice discriminator (party_type) and a UI Policy that
+         conditionally shows person (reference -> sys_user) or organization
+         (reference -> core_company)."
+
+    THIS FIELD CAPTURES THE BUSINESS-DOMAIN ROLE that the linked party plays
+    relative to its parent case - e.g., "Requester", "Respondent", "Witness",
+    "Subject of Inquiry", "Notified Party", "Counsel", etc. It is the SEMANTIC
+    LABEL that operators use to make sense of why a particular Person or
+    Organization is associated to a particular case. Without role_label, a
+    party row would only carry the polymorphism discriminator (party_type =
+    Person | Organization) and the reference (person -> sys_user OR
+    organization -> core_company), but NOT the answer to "in what capacity
+    is this party associated to this case?". role_label answers that
+    question and is therefore mandatory: every party association MUST
+    declare its role.
+
+    role_label IS DELIBERATELY A FREE-FORM String, NOT A Choice. Even
+    though the user prompt and AAP Section 0.5.7 give three example values
+    ("Requester, Respondent, Witness"), the field type is String(100) -
+    NOT Choice. This is intentional per AAP Section 0.5.7 verbatim and
+    enables three usage patterns that a Choice field would block:
+      1. EXTENSIBILITY: New role labels can be introduced ad-hoc by
+         operators without requiring a sys_choice update or an Update
+         Set re-deployment. AAP Section 0.5.7 lists three examples but
+         does NOT enumerate an exhaustive set; real-world case-management
+         vocabularies routinely include additional roles (e.g., "Co-
+         Complainant", "Authorized Representative", "Legal Guardian",
+         "Beneficiary", "Vendor of Record") that vary by jurisdiction
+         and case type. Free-form String accommodates this without
+         schema changes.
+      2. JURISDICTION-SPECIFIC LOCALIZATION: A scoped POC deployed in
+         one country may use "Witness" while another uses "Witness/Bystander"
+         or a translated label - free-form String permits this without
+         per-jurisdiction sys_choice maintenance.
+      3. ARKCASE PARITY: The source-side ArkCase fields that role_label
+         collapses are also free-form Strings, not enumerated Choices
+         (see source-side reference below). Forcing a Choice list on the
+         POC would be a tighter constraint than ArkCase imposed, which
+         would require active justification per AAP Section 0.7.1
+         ("Preserve the user-prompt's data-model field set verbatim -
+         no additions, no renames, no type relaxations"). The verbatim
+         AAP type "String(100)" is honored here.
+
+    Operationally, the field surfaces in the following places:
+      - On the auto-generated x_[scope]_case_party form (AAP Section 0.4.4
+        Internal user UI), as a single-line text input below party_type
+        and beside person/organization. The platform renders an asterisk
+        because mandatory=true.
+      - On the auto-generated x_[scope]_case_party list view, as a column
+        showing role at-a-glance (e.g., a list filtered to "all parties
+        on case CASE0000007" might show three rows with role_labels
+        "Requester", "Respondent", "Witness").
+      - On the parent x_[scope]_case form's Related List of parties (per
+        AAP Section 0.4.4), where role_label appears beside party_type
+        and the resolved person/organization display value so an
+        operator reviewing a case sees both WHAT KIND of party each
+        association is (Person vs Organization) AND IN WHAT CAPACITY
+        (the role_label).
+      - In the seed data scripts at
+        ../seed-data/parties/x_[scope]_case_party_demo_*.xml and
+        ../scripts/seed_demo_data.js (AAP Section 0.7.4 minimum demo-
+        data thresholds: "at least one Person and one Organization
+        party per demo case to exercise the polymorphic UI policy"),
+        every fabricated party row populates role_label with a
+        synthetic, non-PII role string (e.g., "Requester",
+        "Respondent", "Witness", "Subject", "Notified Party").
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonAssociation.java
+        line 93-94:
+            @Column(name = "cm_person_assoc_person_type", nullable = false)
+            private String personType;
+        ArkCase's PersonAssociation entity carried a free-form, mandatory
+        String column `personType` whose values were domain-specific
+        labels indicating the role of a person relative to a parent
+        object. Examples observed in the ArkCase corpus include
+        "Initiator", "Originator", "Witness", "Subject", "Custodian".
+        See acm-plugins/acm-default-plugins/acm-case-file-plugin's
+        usage of `getPersonAssociations()` filtered by personType to
+        derive originator (case requester), reviewer, etc. Note that
+        ArkCase's column was nullable=false (i.e., mandatory at the
+        JPA level), which the POC honors via `mandatory=true` on this
+        ServiceNow dictionary entry.
+      - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java
+        lines 93-97:
+            @Column(name = "cm_person_to_org_assoc_type")
+            private String personToOrganizationAssociationType;
+
+            @Column(name = "cm_org_to_person_assoc_type")
+            private String organizationToPersonAssociationType;
+        ArkCase's PersonOrganizationAssociation entity carried TWO
+        free-form String columns describing the bidirectional role of
+        a person relative to an organization: how the person related
+        TO the organization (e.g., "Employee", "Officer", "Member") and
+        how the organization related TO the person (e.g., "Employer",
+        "Sponsor", "Affiliate"). The bidirectional model was useful for
+        the full ArkCase domain but is intentionally simplified for the
+        POC: the ServiceNow target collapses both ArkCase association
+        tables into one polymorphic table (x_[scope]_case_party) per
+        AAP Section 0.4.3, and the bidirectional pair of relationship-
+        type columns collapses into ONE role_label column representing
+        the role of the party relative to the CASE (not relative to
+        another party). This is a deliberate simplification per AAP
+        Section 0.1.1 ("proof-of-concept (POC) functional re-platforming,
+        not a one-to-one feature port") and AAP Section 0.4.3
+        ("polymorphic association via single-table choice + UI Policy").
+      - The ServiceNow target therefore COLLAPSES THREE ArkCase concepts
+        (PersonAssociation.personType, PersonOrganizationAssociation
+        .personToOrganizationAssociationType, PersonOrganizationAssociation
+        .organizationToPersonAssociationType) into ONE role_label String
+        column. This is consistent with AAP Section 0.4.3's
+        "polymorphic association via single-table choice + UI Policy"
+        pattern and AAP Section 0.1.2's "Persistence transformation:
+        JPA/Hibernate -> Glide records" rule.
+      - The field name is `role_label` (lowercase, snake_case, two words
+        joined by underscore; NOT `roleLabel`, NOT `role`, NOT
+        `personType`, NOT `association_type`, NOT `relationship_role`)
+        per AAP Section 0.5.7 verbatim. Snake_case aligns with
+        ServiceNow's platform-native column-naming convention and
+        matches the snake_case used by every other field on this
+        scoped table (case, party_type, person, organization).
+      - The label "Role Label" (Title Case, two words separated by space)
+        per the agent prompt's Phase 2 verbatim. The two-word label
+        matches the two-word internal name and reads naturally as a
+        form field label and list column header.
+
+    Constraints honored (AAP Sections 0.5.7, 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_[scope]_case_party` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. NO global-scope
+        writes - the OOB tables `task`, `incident`, `sys_user`,
+        `core_company`, etc. are never modified by this dictionary
+        entry or any other artifact in the Update Set. The `[scope]`
+        placeholder is preserved per AAP convention; the PDI auto-
+        assigns the actual scope id at App Engine Studio creation time.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_[scope]_case_management`), not by literal sys_id. The
+        `<sys_id>` text-node value is THIS record's own deterministic
+        primary key (MD5 of the canonical field identifier
+        `x_[scope]_case_party.role_label`) and is NOT a reference to
+        any other record. The MD5 derivation guarantees that re-
+        generation of this Update Set on any agent run produces a
+        byte-identical `<sys_id>` (no random UUIDs), which is required
+        for clean Update-Set re-import on a fresh PDI without creating
+        duplicate sys_dictionary rows. The same derivation pattern is
+        used by every sys_dictionary record in this Update Set (e.g.,
+        x_[scope]_case_party.party_type     -> 5e02afdbd2f05f407e986015e93d1238,
+        x_[scope]_case.requester_name       -> 696e73e041d826fe2d43a3f259acd1f1).
+        Verified:
+            python3 -c "import hashlib; print(hashlib.md5(b'x_[scope]_case_party.role_label').hexdigest())"
+        prints 04c189886307f35757d6fc5f94b9074f (matches sys_id below).
+      - mandatory=true at the dictionary level. AAP Section 0.5.7
+        verbatim marks role_label as Mandatory ("Mandatory (e.g.,
+        Requester, Respondent, Witness)"). A party row without a
+        role_label is semantically incomplete: it identifies WHO is
+        associated to a case (via the person or organization reference)
+        but not WHY - leaving the row uninterpretable to anyone who
+        reads it later. The mandatory flag enforces this at the
+        dictionary level so the platform's mandatory-flag enforcement
+        runs at every entry point: the auto-generated form (where the
+        user sees a red asterisk and cannot save without a value), the
+        Table API (which rejects POST/PATCH bodies that omit
+        role_label), the GlideRecord.insert() path used by
+        ../scripts/seed_demo_data.js (which throws if the field is
+        unset), and any future scripted REST endpoints that touch
+        case_party. ArkCase's source-side equivalent
+        PersonAssociation.personType also carried nullable=false at
+        the JPA level, so this constraint preserves source-side intent
+        per AAP Section 0.7.1.
+      - read_only=false: case_manager and case_agent (the latter only
+        within their "Assigned only" cases per AAP Section 0.5.6)
+        MAY edit role_label after initial creation - for example, to
+        correct a row erroneously created with role_label="Witness"
+        when the actual capacity was "Subject", or to evolve the
+        labeling convention as a case progresses (e.g., a person
+        initially labeled "Witness" who later becomes a "Co-Respondent"
+        once additional facts emerge). The read_only=false setting
+        permits the write through the standard form, the Table API,
+        and the seed scripts. Field-level write authorization is
+        governed by the table-level ACLs in
+        ../acl/x_[scope]_case_party_*.xml; AAP Section 0.5.6 does NOT
+        list role_label among the field-level-ACL-required fields
+        (only case.assigned_group and case.assigned_agent carry
+        field-level ACLs).
+      - default_value is EMPTY (no implicit default). AAP Section 0.5.7
+        does NOT specify a default for role_label, and forcing the
+        user to choose makes the role-assignment intent EXPLICIT. A
+        silent default (e.g., "Requester") would silently commit
+        rows whose actual role differs, polluting Related List
+        renderings and making it impossible to distinguish "the
+        operator chose Requester" from "the operator forgot to fill
+        in role_label and the system defaulted". The agent prompt's
+        Phase 4 explicitly mandates `<default_value/>` empty.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and
+        the agent prompt's Phase 4. Role-label changes are descriptive
+        metadata corrections, not regulated lifecycle events. The
+        standard sys_* audit columns at the table level
+        (sys_created_on, sys_created_by, sys_updated_on,
+        sys_updated_by) capture record-level changes; per-field audit
+        on role_label is unnecessary overhead for a POC.
+      - max_length=100 EXACTLY per AAP Section 0.5.7 verbatim. NOT
+        4000 (description, the long-form free-text body), NOT 255
+        (subject, the case summary line), NOT 40 (party_type, status,
+        priority - the controlled-vocabulary identifier-style strings).
+        100 chars comfortably accommodates the example labels
+        ("Requester" 9 chars, "Respondent" 10 chars, "Witness" 7
+        chars) plus longer real-world variants ("Authorized Legal
+        Representative" 32 chars, "Co-Complainant Designee" 23 chars,
+        "Subject of Inquiry / Investigation" 35 chars), and matches
+        the sibling x_[scope]_case.requester_name column's 100-char
+        ceiling for symmetric storage of identity-and-role strings.
+      - internal_type=string is correct for free-form text fields up
+        to 4000 chars in ServiceNow. The platform's form engine
+        renders a String column with max_length<=255 as a single-line
+        text input (no `attributes` override required for this
+        presentation), which matches the single-line label expected
+        on the party form and Related List.
+      - choice=0 = "Free-form String, no choice list" (NOT 3 like the
+        sibling party_type field at ../dictionary/x_[scope]_case_party_party_type.xml,
+        and NOT 1 like a choice-with-suggestions field). This is the
+        explicit configuration that distinguishes role_label as a
+        free-form text field. Despite the example values ("Requester",
+        "Respondent", "Witness") appearing in AAP Section 0.5.7, the
+        field is INTENTIONALLY free-form per the AAP's verbatim type
+        annotation "String(100)" - not "Choice". Free-form supports
+        the extensibility, localization, and ArkCase-parity arguments
+        described above.
+      - unique=false: multiple parties on multiple cases (or even on
+        the same case) may legitimately share the same role_label
+        (e.g., a case with two witnesses both labeled "Witness", or
+        a class action with many "Co-Complainant" parties).
+        Uniqueness at the row level is delegated to the auto-
+        generated `sys_id` of each x_[scope]_case_party row.
+      - text_index=false per the agent prompt's Phase 6 verbatim.
+        Unlike subject (text_index=true, the primary search target
+        across the case list) and description (text_index=true, the
+        long-form searchable body), role_label is a short categorical
+        label that does not need to participate in the case-list
+        quick-search index for the POC. Internal users wanting to
+        filter by role_label can still do so via the standard list-
+        view condition builder (which works without a text index for
+        short String columns at POC data volumes).
+      - spell_check=false per the agent prompt's Phase 6 verbatim.
+        Role labels are domain-specific terminology (often capitalized
+        proper nouns and compound terms like "Co-Complainant") that
+        are not amenable to dictionary-based spell-checking - any
+        spell-check suggestions on a role-label field would generate
+        false-positive squiggles that degrade UX without adding value.
+      - attributes is EMPTY per the agent prompt's Phase 6 verbatim.
+        Edge Encryption support is intentionally out of POC scope.
+      - No reference target: this is a free-form String field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`. The POC
+        deliberately does NOT model role_label as a Reference to a
+        catalog table because:
+          (i) AAP Section 0.5.7's literal type for role_label is
+              "String(100)" - NOT a reference. The exact field type
+              and constraint matrix is preserved verbatim per AAP
+              Section 0.7.1 ("Preserve the user-prompt's data-model
+              field set verbatim - no additions, no renames, no type
+              relaxations").
+          (ii) A Reference target would require introducing a NEW
+              parent table (e.g., x_[scope]_case_party_role_catalog)
+              that holds the canonical role labels - which AAP
+              Section 0.3.2 (Minimal-Change Clause: "MUST NOT add
+              modules, workflows, portal pages, tables, or
+              integrations beyond the defined scope") explicitly
+              prohibits. The POC has exactly THREE custom tables:
+              x_[scope]_case, x_[scope]_case_task, x_[scope]_case_party.
+              No fourth table for role catalogs is permitted.
+      - No PII: per AAP Section 0.7.2 (No-PII constraint, "Synthetic
+        data only"). NO real role labels tied to identifiable
+        individuals are placed in this column at any point in the
+        build. Demo seed values are domain-generic role strings such
+        as "Requester", "Respondent", "Witness", "Subject", "Notified
+        Party" - none of which are tied to real individuals or real
+        cases.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_[scope]_case_party.xml (parent table, since
+            `<name>x_[scope]_case_party</name>` references the table
+            by name and the platform refuses to materialize a
+            sys_dictionary row whose `name` refers to a non-existent
+            table).
+          * ../app/sys_app/x_[scope]_case_management.xml and
+            ../app/sys_scope/x_[scope].xml (the scoped-application
+            and scope records, since `<sys_scope>` and `<sys_package>`
+            resolve via `source` attribute lookup against the scope
+            source name `x_[scope]_case_management` - both records
+            must exist before this dictionary entry can resolve them).
+
+      - This record MUST load BEFORE:
+          * ../seed-data/parties/x_[scope]_case_party_demo_*.xml
+            (every fabricated demo party row populates role_label
+            via setValue('role_label', '...'), which requires the
+            column to exist in the dictionary).
+          * ../scripts/seed_demo_data.js (the idempotent server-
+            side seed script writes role_label on every demo party
+            row; the column must exist in the dictionary before the
+            script can run successfully).
+          * ../ui_policy/x_[scope]_case_party_conditional_fields.xml
+            (does not directly reference role_label, but is part of
+            the same form layout; the platform's form-rendering
+            engine inspects all dictionary entries on the table when
+            rendering the form, so role_label must be registered
+            before the UI Policy is activated).
+
+    Validation Gate (AAP Section 0.7.3, Gate 1):
+        "Data model: All 3 custom tables created with correct fields
+         and types - Zero missing mandatory fields"
+      This field is one of FIVE mandatory dictionary entries on the
+      x_[scope]_case_party table (the others being case, party_type,
+      person, organization - though person and organization are
+      conditionally mandatory via the UI Policy). It MUST be present
+      with mandatory=true, internal_type=string, max_length=100
+      EXACTLY per AAP Section 0.5.7. Any deviation will fail Gate 1
+      of the validation framework and prevent the Update Set from
+      being exported.
+
+    Round-trip integrity (AAP Section 0.7.1):
+      - The `<sys_id>` is deterministic (MD5-derived), so re-generation
+        of this Update Set always produces the same primary key. This
+        means re-importing the Update Set on a fresh PDI updates the
+        existing sys_dictionary row in place rather than creating a
+        duplicate, which is the only way to satisfy AAP Section 0.7.3
+        Gate 7 ("Update Set: Scoped app exported - Update Set loads
+        without errors on a fresh PDI instance").
+      - All XML element values use straight ASCII quotes; no smart
+        quotes that would break XML parsing on import.
+      - All boolean fields use lowercase `true` / `false` per
+        ServiceNow XML serialization convention.
+      - The `<active>true</active>` flag is REQUIRED for the field
+        to be visible/usable on the form per the agent prompt's
+        Phase 4. An inactive dictionary entry would not appear on
+        the form despite mandatory=true, leading to a
+        contradictory/broken state.
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Role Label</column_label>
+        <comments>Mandatory string field capturing the role this party plays for the linked case (e.g., Requester, Respondent, Witness). Replaces ArkCase's PersonAssociation.personType.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>role_label</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>100</max_length>
+        <name>x_[scope]_case_party</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>04c189886307f35757d6fc5f94b9074f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_[scope]_case_management">x_[scope]_case_management</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_[scope]_case_management</sys_scope>
+        <sys_update_name>sys_dictionary_x_[scope]_case_party_role_label</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>
