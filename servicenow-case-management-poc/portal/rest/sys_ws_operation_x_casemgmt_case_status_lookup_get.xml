@@ -1,0 +1,449 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sys_ws_operation`
+    row that defines the **GET handler** of the Case Status Lookup Scripted
+    REST API for the scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.1.1 / Section 0.4.3 / Section 0.4.4 / Section 0.5.1
+    / Section 0.7.4):
+      This Scripted REST API operation is the actual HTTP-method handler that
+      processes anonymous case-status-lookup requests from the Experience
+      Portal's lookup widget. It is the ServiceNow target replacement for
+      ArkCase's anonymous case-status-lookup capability. ArkCase exposes this
+      capability through a Spring service interface
+        com.armedia.acm.plugins.casefile.service.GetCaseByNumberService
+          - line 38: CaseFile getCaseByNumber(String caseNumber);
+      with an implementation
+        com.armedia.acm.plugins.casefile.service.GetCaseByNumberServiceImpl
+          - line 47: public CaseFile getCaseByNumber(String caseNumber) {
+                       return getCaseFileDao().findByCaseNumber(caseNumber);
+                     }
+      that delegates to a JPA DAO and returns a full `CaseFile` JPA entity
+      (or null). ArkCase's portal gateway
+      (acm-services/acm-service-portal-gateway/.../DefaultPluggablePortalRequestService.java
+       lines 86-92: getRequestStatus(...) delegates to a request-type-
+                    specific provider) wraps this behind a pluggable
+      Spring-bean indirection.
+
+      The ServiceNow target eliminates the Spring-bean indirection AND
+      replaces the JPA-entity-return contract with a strict 3-field
+      whitelist (status, subject, opened_date - NEVER the full case row).
+      The semantic surface is preserved (lookup by case number -> status);
+      the technical surface is restructured to fit ServiceNow's REST
+      conventions and adds the privacy whitelist that ArkCase did not have.
+
+      Per AAP Section 0.4.4 verbatim: "Page 2 - Case Status Lookup: a
+      single input (case number) and a result panel that shows status,
+      subject, opened_date when found, or the literal text 'No case found
+      with that number.' when not found. No internal fields (assigned_group,
+      assigned_agent, description, closed_date, requester_*) are exposed."
+
+      Per AAP Section 0.7.4 verbatim: "the literal text 'No case found
+      with that number.' MUST appear when the lookup case number does
+      not match." Character-for-character: capital "N", lowercase
+      elsewhere, trailing period, ASCII straight quotes - non-negotiable.
+
+    DEFINITION VS. OPERATION SEPARATION:
+      ServiceNow's Scripted REST API data model splits each endpoint into
+      two records:
+
+        1. `sys_ws_definition` (sibling record at
+           ./sys_ws_definition_x_casemgmt_case_status_lookup.xml) - the API
+           "namespace" container. Declares the URL prefix
+           (`/api/x_casemgmt/case_status_lookup`) and the global authentication
+           policy (anonymous-allowed). Contains NO handler scripts.
+
+        2. `sys_ws_operation` (THIS RECORD) - the actual HTTP-method
+           handler. Declares the HTTP method (GET), the relative path
+           within the API namespace (empty - serves the API base URL
+           itself), the consumed/produced content types
+           (application/json), and the inline operation script that
+           returns the response body.
+
+      The two records reference each other: this operation references
+      its parent definition via `<web_service_definition>` (a reference
+      field that resolves to the `sys_ws_definition` record by its
+      stable identifier `x_casemgmt_case_status_lookup`).
+
+    URL PATH RESOLUTION:
+      The full URL served by this operation is composed by the platform:
+
+        URL = /api/<definition.namespace>/<definition.api_id><operation.relative_path>
+            = /api/x_casemgmt/case_status_lookup
+
+      Components:
+        - <definition.namespace>x_casemgmt</definition.namespace> - from
+          the parent definition record. Uses the scope id directly so
+          the URL is unique on the PDI even if multiple scoped apps
+          define endpoints with the same `api_id`.
+        - <definition.api_id>case_status_lookup</definition.api_id> -
+          from the parent definition record. Bare endpoint name (NO
+          scope prefix; the platform automatically prepends namespace).
+        - <operation.relative_path/> - empty self-closing element on
+          THIS record. Per AAP Section 0.5.1 verbatim ("GET anonymously
+          allowed; queries by number"), the operation handles requests
+          to the API base URL itself, NOT a sub-resource path. An empty
+          relative_path means "match the definition's base URL exactly".
+
+      The lookup widget at
+        ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml
+      invokes this URL via a client-side $http.get() / fetch() call with
+      a `?number=<caseNumber>` query parameter. The widget URL composition
+      matches THIS operation's URL routing.
+
+    ANONYMOUS ACCESS (AAP Section 0.4.4 verbatim: "two unauthenticated
+    pages"; AAP Section 0.7.4 verbatim: "the literal text 'No case found
+    with that number.' MUST appear when the lookup case number does not
+    match"):
+      Three configuration mechanisms work together at THIS operation
+      record (mirroring the parent definition's anonymous-access settings)
+      to permit unauthenticated callers:
+
+        1. <requires_authentication>false</requires_authentication> -
+           explicit signal to the platform's authentication layer that
+           this operation does NOT require an authenticated session.
+           This is the cornerstone of the anonymous-access design: the
+           platform checks this flag FIRST when routing the request; if
+           it were `true`, the platform would reject anonymous callers
+           with HTTP 401 BEFORE the operation script runs.
+
+        2. <requires_acl_authorization>false</requires_acl_authorization>
+           - signal that the platform's ACL-evaluation layer should NOT
+           run table-level ACLs against the scripted REST request. The
+           privacy perimeter for anonymous lookup is the field-whitelist
+           in the Script Include's return value (status, subject,
+           opened_date only) - NOT table-level ACLs. If table-level ACLs
+           ran, the anonymous "system_anonymous" caller would be denied
+           by the case-table read ACL (which requires one of three
+           scoped roles), breaking the lookup endpoint entirely.
+
+        3. <requires_snc_internal_role>false</requires_snc_internal_role>
+           - signal that this operation does NOT require the SNC
+           internal role (a special platform role). For non-internal
+           scoped apps this is always false; mentioned here for
+           explicitness.
+
+        4. <enforce_acl/> - empty value. When set, this would force
+           additional ACL enforcement; leaving it empty defers entirely
+           to the requires_acl_authorization=false setting above.
+
+      Together, these four settings tell the platform: "let unauthenticated
+      callers reach the operation script; the script (via its Script
+      Include delegation) is responsible for any data-protection logic."
+
+    FIELD-WHITELIST PRIVACY PERIMETER:
+      Even with anonymous access enabled, this endpoint cannot leak
+      internal case data. The privacy perimeter is enforced in the
+      Script Include `x_casemgmt.CasePortalService.lookupCase()`, which
+      builds the return object with EXACTLY three fields:
+
+        return {
+            status:      String(caseGr.getValue('status')      || ''),
+            subject:     String(caseGr.getValue('subject')     || ''),
+            opened_date: String(caseGr.getValue('opened_date') || '')
+        };
+
+      Internal fields that MUST NOT be exposed (per AAP Section 0.4.4):
+        - assigned_group, assigned_agent (case ownership PII)
+        - description (full case body, may contain sensitive content)
+        - closed_date (resolution timing PII)
+        - requester_name, requester_email (submitter PII)
+        - priority, type, pending_reason (internal triage state)
+        - sys_id, sys_created_*, sys_updated_*, sys_mod_count (audit fields)
+
+      THIS operation script does NOT perform field selection - it trusts
+      the Script Include's return shape. The handler explicitly extracts
+      the three whitelisted fields from the result object via
+        String(result.status || ''), String(result.subject || ''),
+        String(result.opened_date || '')
+      which serves as a defense-in-depth measure: even if the Script
+      Include accidentally returned additional fields, this extraction
+      drops anything not explicitly listed.
+
+    HANDLER SCRIPT DESIGN (AAP Key Insights):
+      The handler is INTENTIONALLY THIN - all business logic lives in
+      the Script Include. The handler's only responsibilities are
+      HTTP-layer concerns:
+        1. Extract the `number` query parameter from the request
+        2. Call x_casemgmt.CasePortalService.lookupCase(caseNumber)
+        3. Map the Script Include's return value to HTTP status codes
+           and response bodies:
+             null      -> HTTP 404 + { error: 'No case found with that number.' }
+             {status,
+              subject,
+              opened_date} -> HTTP 200 + { status, subject, opened_date }
+
+      Defensive coding patterns:
+        - Empty/missing `number` parameter -> same 404 response as
+          no-match (information-leakage hardening: don't differentiate
+          "missing parameter" from "case not found"; if attackers
+          received "Missing parameter 'number'" they would learn the
+          API's parameter name, useful for crafting attacks).
+        - Array-shaped queryParams.number (when ?number=A&number=B is
+          sent) -> normalize to first element. ServiceNow's URL parser
+          deduplicates parameters by default but this defensive code
+          handles both shapes for robustness.
+        - String coercion via String(result.<field> || '') -> ensures
+          GlideElement values become plain strings in the JSON response.
+          Without this, ServiceNow's auto-serialization may produce
+          GlideElement object metadata rather than primitive strings.
+        - No try/catch with HTTP 500 - the Script Include's contract is
+          simple (returns null or a valid object), so internal exception
+          paths are extremely unlikely. Returning HTTP 500 with stack
+          traces would leak system internals to anonymous callers.
+
+    NO HARDCODED sys_id REFERENCES (AAP Section 0.7.2):
+      All cross-references in THIS file resolve to target records by
+      stable, human-readable keys at Update Set import time:
+
+        - <web_service_definition>x_casemgmt_case_status_lookup</web_service_definition>
+          resolves against the parent definition's stable identifier
+          (`namespace_apiid` concatenation matches the parent's
+          sys_update_name = `sys_ws_definition_x_casemgmt_case_status_lookup`).
+        - <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+          resolves against the scope record's `<name>x_casemgmt</name>`
+          (per ../../app/sys_scope/x_casemgmt.xml).
+        - <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+          resolves against the application record's name (per
+          ../../app/sys_app/x_casemgmt_case_management.xml).
+
+      The handler script invokes the Script Include via the scope-
+      qualified API name `new x_casemgmt.CasePortalService()`, NOT by
+      sys_id. This conforms to AAP Section 0.7.2 ("No-hardcoded-sys_id
+      constraint. Anywhere - flows, ACL conditions, scripts, seed data,
+      UI Policies, UI Actions, Business Rules. Every cross-reference is
+      resolved by GlideRecord lookup against a stable human-readable
+      key (`name`, `user_name`, `number`, `role_label`).").
+
+      The ONLY sys_id literal in this file is <sys_id> on THIS record
+      itself - this is its own deterministic primary key. AAP Section
+      0.7.2 prohibits literal sys_ids in REFERENCE FIELDS, not on a
+      record's own identity primary key.
+
+    RECORD IDENTITY:
+      Three identifiers anchor this record:
+        - <sys_id>f3b3b39ceb9115bf7bf40e3eaf042b4f</sys_id> - 32-char
+          deterministic hex primary key. Reused from the existing
+          update-set wrapper to maintain identity continuity.
+        - <sys_update_name>sys_ws_operation_x_casemgmt_case_status_lookup_get</sys_update_name>
+          - the Update Set engine's logical record key. Pattern is
+          <table_name>_<scope>_<api_id>_<http_method_lower>.
+        - <name>Case Status Lookup GET</name> - human-readable label
+          shown in the System Web Services -> Scripted REST API list
+          view. Pattern is <api_human_name> <HTTP_METHOD>.
+
+    UPDATE SET ORDERING (AAP Section 0.5.2):
+      THIS operation record MUST be loaded AFTER:
+        - ./sys_ws_definition_x_casemgmt_case_status_lookup.xml
+          (parent definition - <web_service_definition> resolves to it)
+        - ../../script_includes/x_casemgmt_CasePortalService.xml
+          (Script Include called by the handler script)
+        - ../../tables/x_casemgmt_case.xml (transitively, since the
+          Script Include queries this table)
+        - ../../dictionary/x_casemgmt_case_number.xml (transitively,
+          since lookupCase queries by `number`)
+        - ../../dictionary/x_casemgmt_case_status.xml,
+          ../../dictionary/x_casemgmt_case_subject.xml,
+          ../../dictionary/x_casemgmt_case_opened_date.xml
+          (transitively, since these are the three returned fields)
+        - ../../numbers/sys_number_x_casemgmt_case.xml (transitively,
+          since the case-number format is determined here)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped app)
+        - ../../app/sys_scope/x_casemgmt.xml (scope record)
+
+      THIS operation record MUST be loaded BEFORE:
+        - ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml
+          (the lookup widget calls GET /api/x_casemgmt/case_status_lookup,
+          which routes to this operation; without this operation, the
+          widget would receive HTTP 404 from the platform's routing
+          layer, not the verbatim 404 message defined here).
+
+    VALIDATION GATE 5 (AAP Section 0.7.3):
+      "Portal - lookup: Status lookup returns correct data for valid
+       case number - Correct status / subject / opened_date returned;
+       'No case found with that number.' for invalid number"
+
+      THIS file is the foundational artifact for Gate 5. Without this
+      operation, the parent definition would have no HTTP-method
+      handler, and the lookup widget would fail with HTTP 404 from the
+      platform's routing layer. Gate 5 explicitly requires the verbatim
+      404 text "No case found with that number." which is implemented
+      in the operation script below.
+
+      Gates 1-4, 6, 7 are not directly affected by THIS file (Gate 7
+      requires this file to be well-formed XML, which it is, and to
+      preview without errors when re-imported on a fresh PDI).
+
+    THIS RECORD'S CONTRIBUTION:
+      Configures the platform's routing and authentication layers to:
+        - Accept anonymous (unauthenticated) GET requests
+        - Route them to the inline handler script
+        - Allow the handler to delegate to the CasePortalService
+          Script Include for the actual data-layer query
+        - Enforce the field whitelist via the Script Include's
+          return shape (NOT via this operation directly)
+        - Return the verbatim 404 text per AAP Section 0.7.4 on no-match
+        - Return ONLY status/subject/opened_date on match
+-->
+<record_update table="sys_ws_operation">
+    <sys_ws_operation action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <consumes>application/json</consumes>
+        <consumes_customized>false</consumes_customized>
+        <default_operation_uri>/api/x_casemgmt/case_status_lookup</default_operation_uri>
+        <description>GET handler for the Case Status Lookup scripted REST API. Anonymously accepts a case number via the 'number' query parameter from the Experience Portal lookup widget. Delegates to x_casemgmt.CasePortalService.lookupCase() which queries x_casemgmt_case by number and returns ONLY the whitelisted fields { status, subject, opened_date } - never assigned_group, assigned_agent, description, closed_date, requester_* fields, priority, type, pending_reason, or any audit field. On match, returns HTTP 200 with body { status, subject, opened_date }. On no match (or empty/missing query parameter), returns HTTP 404 with the verbatim body { error: 'No case found with that number.' } per AAP Section 0.7.4. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() Spring service. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
+        <enforce_acl/>
+        <http_method>GET</http_method>
+        <name>Case Status Lookup GET</name>
+        <operation_script><![CDATA[(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+    // Per AAP Section 0.4.4 + Section 0.7.4 (Other User-Provided Rules):
+    // Anonymous case-status-lookup endpoint. The whitelisted-field discipline
+    // (response contains ONLY status, subject, opened_date) lives in the
+    // Script Include x_casemgmt.CasePortalService.lookupCase(). This handler
+    // is intentionally thin: only HTTP-layer concerns (status codes, body
+    // shapes, query-parameter extraction) live here.
+    //
+    // Per AAP Section 0.7.4 (verbatim, non-negotiable): when the case number
+    // does NOT match, return HTTP 404 with the verbatim body
+    //   { error: 'No case found with that number.' }
+    // The EXACT text (capital N, lowercase elsewhere, trailing period,
+    // ASCII straight single quotes) is mandated by AAP Sections 0.4.4 and
+    // 0.7.4. The lookup widget displays this text verbatim.
+
+    // ----------------------------------------------------------------------
+    // 1. Extract the 'number' query parameter defensively.
+    //
+    //    request.queryParams may be undefined (no query string supplied).
+    //    request.queryParams.number may be undefined (parameter absent),
+    //    a String (single value supplied), or an Array (when the URL has
+    //    duplicate parameter names, e.g. ?number=A&number=B - the platform
+    //    typically deduplicates but defensive code handles both shapes).
+    // ----------------------------------------------------------------------
+    var caseNumber = '';
+    if (request.queryParams && request.queryParams.number) {
+        var raw = request.queryParams.number;
+        if (Array.isArray(raw)) {
+            // URL had ?number=A&number=B (rare). Take the first value.
+            // Returning an error ("multiple values supplied") would leak
+            // information about the API's parameter shape; instead,
+            // silently honor the first value to maintain the simple
+            // 200/404 response surface.
+            raw = raw.length > 0 ? raw[0] : '';
+        }
+        // Coerce-to-String defensively (raw may arrive as Number on some
+        // platform versions when the query value is numeric-looking) and
+        // trim leading/trailing whitespace.
+        caseNumber = String(raw || '').trim();
+    }
+
+    // ----------------------------------------------------------------------
+    // 2. Empty/missing parameter -> verbatim 404 (information-leakage
+    //    hardening). DO NOT differentiate "missing parameter" from "case
+    //    not found": returning HTTP 400 with "Missing 'number' parameter"
+    //    would tell anonymous callers (potential attackers) the parameter
+    //    name and shape, useful for crafting follow-on attacks. Returning
+    //    the same 404 response gives no information about the API's
+    //    parameter expectations beyond what is already documented in the
+    //    public widget code.
+    // ----------------------------------------------------------------------
+    if (!caseNumber) {
+        response.setStatus(404);
+        response.setBody({ error: 'No case found with that number.' });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 3. Delegate to the Script Include. The Script Include is the single
+    //    source of truth for:
+    //      - The GlideRecord query against x_casemgmt_case
+    //      - The field whitelist (returns ONLY status, subject, opened_date)
+    //      - The lookup-by-number contract (matches AAP Section 0.7.2's
+    //        no-hardcoded-sys_id rule by querying the public 'number' field)
+    //
+    //    Contract:
+    //      - lookupCase(<non-empty trimmed string>) returns:
+    //          * null       - no case matches the supplied number
+    //          * { status: String, subject: String, opened_date: String }
+    //                       - case found, all values pre-coerced to strings
+    //
+    //    The Script Include is invoked via the scope-qualified API name
+    //    `x_casemgmt.CasePortalService` (NOT by sys_id), which complies
+    //    with AAP Section 0.7.2's no-hardcoded-sys_id constraint.
+    // ----------------------------------------------------------------------
+    var svc = new x_casemgmt.CasePortalService();
+    var result = svc.lookupCase(caseNumber);
+
+    // ----------------------------------------------------------------------
+    // 4. No-match -> verbatim 404. Per AAP Section 0.7.4, the literal text
+    //    'No case found with that number.' MUST appear in the response.
+    //    This is the SAME response shape returned in step 2 for empty/
+    //    missing parameters - intentional uniformity prevents anonymous
+    //    callers from distinguishing "parameter absent" from "case not found".
+    // ----------------------------------------------------------------------
+    if (result === null || result === undefined) {
+        response.setStatus(404);
+        response.setBody({ error: 'No case found with that number.' });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 5. Match -> HTTP 200 with the three whitelisted fields.
+    //
+    //    The Script Include already coerces to String(...) and applies
+    //    `|| ''` defaults; THIS extraction is a defense-in-depth layer
+    //    that:
+    //      a. Re-coerces in case the Script Include's contract changes
+    //         (e.g., a future refactor accidentally returns GlideElement
+    //         instances, which would serialize unpredictably).
+    //      b. Drops any additional fields the Script Include may return
+    //         (defense against accidental field exposure in future edits).
+    //      c. Replaces null/undefined with empty string (cleaner JSON
+    //         than `null` or the literal text "undefined" for missing
+    //         field values).
+    //
+    //    Response body shape (exactly three keys, no others):
+    //      {
+    //        status:      "<value or empty string>",
+    //        subject:     "<value or empty string>",
+    //        opened_date: "<value or empty string>"
+    //      }
+    //
+    //    Internal fields that MUST NOT appear in this response (per AAP
+    //    Section 0.4.4):
+    //      assigned_group, assigned_agent, description, closed_date,
+    //      requester_name, requester_email, priority, type, pending_reason,
+    //      sys_id, sys_created_by, sys_created_on, sys_updated_by,
+    //      sys_updated_on, sys_mod_count, sys_class_name, sys_domain.
+    // ----------------------------------------------------------------------
+    response.setStatus(200);
+    response.setBody({
+        status:      String(result.status      || ''),
+        subject:     String(result.subject     || ''),
+        opened_date: String(result.opened_date || '')
+    });
+})(request, response);]]></operation_script>
+        <operation_uri>/api/x_casemgmt/case_status_lookup</operation_uri>
+        <produces>application/json</produces>
+        <produces_customized>false</produces_customized>
+        <relative_path/>
+        <request_example/>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <short_description>Anonymous GET handler for case status lookup. Returns HTTP 200 with whitelisted fields { status, subject, opened_date } on match, or HTTP 404 with verbatim body { error: 'No case found with that number.' } on no-match per AAP Section 0.7.4.</short_description>
+        <sys_class_name>sys_ws_operation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f3b3b39ceb9115bf7bf40e3eaf042b4f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Status Lookup GET</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_ws_operation_x_casemgmt_case_status_lookup_get</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <web_service_definition display_value="Case Status Lookup">x_casemgmt_case_status_lookup</web_service_definition>
+        <web_service_version/>
+    </sys_ws_operation>
+</record_update>
