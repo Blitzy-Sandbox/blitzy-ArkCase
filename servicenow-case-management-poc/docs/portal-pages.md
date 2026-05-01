@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the wireframe-level specifications for the two unauthenticated Experience Portal pages: Case Submission and Case Status Lookup. Both pages are delivered as Service Portal records under [`../portal/pages/`](../portal/pages/) with widgets under `../portal/widgets/` (subdirectory created in a subsequent checkpoint) and scripted REST endpoints under [`../portal/rest/`](../portal/rest/). Anonymous access is enforced by the platform's portal/widget configuration. The lookup page enforces strict field whitelisting at the scripted REST layer to prevent exposure of internal data.
+This document captures the wireframe-level specifications for the two unauthenticated Experience Portal pages: Case Submission and Case Status Lookup. Both pages are delivered as Service Portal records under [`../portal/pages/`](../portal/pages/) with widgets under [`../portal/widgets/`](../portal/widgets/) and scripted REST endpoints under [`../portal/rest/`](../portal/rest/). Anonymous access is enforced by the platform's portal/widget configuration. The lookup page enforces strict field whitelisting at the scripted REST layer to prevent exposure of internal data.
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -14,7 +14,7 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 - Both pages use the platform default theme — no custom CSS, no custom branding (per AAP Section 0.4.4).
 - Both pages call scripted REST endpoints under `/api/x_casemgmt/...`.
 - The scripted REST endpoints execute with platform-default elevated privilege but the request/response shapes whitelist exactly the fields specified by AAP Section 0.7.4.
-- No PII in any example record; all examples reference synthetic data consistent with `../seed-data/` (subdirectory created in a subsequent checkpoint).
+- No PII in any example record; all examples reference synthetic data consistent with [`../seed-data/`](../seed-data/).
 
 ## Page 1: Case Submission
 
@@ -256,7 +256,7 @@ The numbered procedure below cross-references [`validation-gates.md`](./validati
 - [`validation-gates.md`](./validation-gates.md) — Gates 4 and 5 (Portal submission and lookup).
 - [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml) — Service Portal record.
 - [`../portal/pages/`](../portal/pages/) — `sp_page_x_casemgmt_case_submit.xml`, `sp_page_x_casemgmt_case_status.xml`.
-- `../portal/widgets/` — three widget records (`sp_widget_x_casemgmt_case_submission_widget.xml`, `sp_widget_x_casemgmt_case_lookup_widget.xml`, `sp_widget_x_casemgmt_case_confirmation_widget.xml`) — created in a subsequent checkpoint.
+- [`../portal/widgets/`](../portal/widgets/) — three widget records (`sp_widget_x_casemgmt_case_submission_widget.xml`, `sp_widget_x_casemgmt_case_lookup_widget.xml`, `sp_widget_x_casemgmt_case_confirmation_widget.xml`).
 - [`../portal/rest/`](../portal/rest/) — two scripted REST endpoint records (`sys_ws_definition_x_casemgmt_case_submit.xml`, `sys_ws_definition_x_casemgmt_case_status_lookup.xml`).
-- `../script_includes/` — `x_casemgmt_CasePortalService.xml` server-side helper that backs both scripted REST endpoints (created in a subsequent checkpoint).
+- [`../script_includes/`](../script_includes/) — `x_casemgmt_CasePortalService.xml` server-side helper that backs both scripted REST endpoints.
 

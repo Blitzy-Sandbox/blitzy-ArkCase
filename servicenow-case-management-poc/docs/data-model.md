@@ -6,7 +6,7 @@ This document captures the three-table schema for the ServiceNow scoped applicat
 
 The three tables are:
 
-- **`x_casemgmt_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state).
+- **`x_casemgmt_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total).
 - **`x_casemgmt_case_task`** — child tasks linked to a parent case via the `case` reference field (6 fields).
 - **`x_casemgmt_case_party`** — polymorphic party associations linked to a parent case (5 fields, `party_type` discriminator + conditional `person`/`organization` reference fields).
 
@@ -62,7 +62,7 @@ erDiagram
 
 ## Table 1: x_casemgmt_case
 
-The case-file table replicates ArkCase's `acm_case_file` (mapped to the `CaseFile.java` JPA entity). It is the parent record for all case-management workflows in the POC. Each case has 12 user-prompt-specified fields plus a `pending_reason` choice field used for the Pending state.
+The case-file table replicates ArkCase's `acm_case_file` (mapped to the `CaseFile.java` JPA entity). It is the parent record for all case-management workflows in the POC. Each case has 12 user-prompt-specified fields plus a `pending_reason` choice field used for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total.
 
 | Field | Type | Constraints |
 | --- | --- | --- |
@@ -86,6 +86,16 @@ Per AAP Section 0.4.1 (under choices) and AAP Section 0.5.5 (transition matrix),
 | Field | Type | Constraints |
 | --- | --- | --- |
 | pending_reason | Choice | Awaiting Info, Awaiting Third Party, Other (mandatory only when status = Pending) |
+
+### Additional field: duration_to_close (Function Field)
+
+Per AAP Section 0.4.4, the Manager View dashboard's Widget 4 ("Average Time to Close") is required to display the average of `closed_date - opened_date` over Closed cases. ServiceNow's Reports + Dashboards stack can aggregate (`AVG`) only over native database columns and Function Fields; it cannot aggregate over JavaScript "Calculated Value" fields because those run per-row at read time. To satisfy AAP Section 0.4.4 and AAP Section 0.7.3 Validation Gate 6 ("All widgets display data; no broken report references") the case table includes one additional virtual field — `duration_to_close` — typed as a `glide_duration` **Function Field** computed at query time by the platform-native operator `glidefunction:datediff(closed_date,opened_date)`. The field is virtual (not stored on the row), read-only by definition, hidden from the form/list views (`display = false`), and not auditable (`audit = false`). When `closed_date` is empty (i.e., the case has not yet been closed) the function returns `NULL`; the report's `status = Closed` filter excludes those rows so the AVG is computed only over actually-closed cases.
+
+| Field | Type | Constraints |
+| --- | --- | --- |
+| duration_to_close | Function Field (`glide_duration`) | Virtual / read-only / not displayed; `glidefunction:datediff(closed_date,opened_date)` |
+
+The dictionary record file is [`../dictionary/x_casemgmt_case_duration_to_close.xml`](../dictionary/x_casemgmt_case_duration_to_close.xml). The field is consumed exclusively by [`../reports/x_casemgmt_avg_time_to_close.xml`](../reports/) and surfaced on [`../dashboards/pa_dashboards_x_casemgmt_manager_view.xml`](../dashboards/) Widget 4. See [`dashboards.md`](./dashboards.md) Widget 4 details for the full implementation rationale, including why a Function Field (not a Calculated Value field) is required for `sys_report` aggregation and how this satisfies AAP Section 0.7.2 Minimal-Change Clause (no new module, workflow, portal page, parent table, or external integration — only a query-time derivation from existing AAP-enumerated columns `opened_date` and `closed_date`).
 
 ### Choice values reference
 
@@ -214,7 +224,7 @@ This section documents how the three ServiceNow tables semantically correspond t
 
 | ServiceNow Table | ArkCase Source Concept | Notes |
 | --- | --- | --- |
-| `x_casemgmt_case` | `CaseFile.java` JPA entity (`acm_case_file` MySQL table) | Replaces 80+ ArkCase fields with the user-prompt-specified 12 + pending_reason; eliminates Activiti BPMN linkage, ECM container linkage, queue/response timing, milestones, courtroom/responsibility, child associations, audit, disposition |
+| `x_casemgmt_case` | `CaseFile.java` JPA entity (`acm_case_file` MySQL table) | Replaces 80+ ArkCase fields with the user-prompt-specified 12 + `pending_reason` choice + `duration_to_close` Function Field (14 total); eliminates Activiti BPMN linkage, ECM container linkage, queue/response timing, milestones, courtroom/responsibility, child associations, audit, disposition |
 | `x_casemgmt_case_task` | `AcmTask.java` JPA entity | Replaces 30+ ArkCase fields with user-prompt-specified 6; eliminates buckslip/approval, percent completion, candidate claim groups, ad-hoc/completion flags, workflow IDs, ECM container, business-process info |
 | `x_casemgmt_case_party` | `PersonAssociation.java` (`acm_person_assoc`) AND `PersonOrganizationAssociation.java` (`acm_person_org_assoc`) | Collapses two ArkCase tables into one polymorphic table per AAP Section 0.1.1; replaces JPA single-table inheritance with `cm_class_name` discriminator with a Choice field (`party_type`) and UI Policy-driven conditional reference fields |
 
@@ -235,6 +245,7 @@ This section documents how the three ServiceNow tables semantically correspond t
 | `requester_name` | `originator.fullName` (derived from PersonAssociations) | Captured directly on case (synthesized from FOIA portal pattern) |
 | `requester_email` | `originator.email` (derived from PersonAssociations) | Captured directly on case |
 | `pending_reason` | (no direct ArkCase equivalent) | New POC field per AAP Section 0.5.5 transition matrix |
+| `duration_to_close` | `CaseSummaryByStatusAndTimePeriodDto.java` (Pentaho-side `TIMESTAMPDIFF(SECOND, cm_case_created, cm_case_closed)`) | Replaced with native query-time Function Field `glidefunction:datediff(closed_date,opened_date)`; preserves ArkCase's "duration is computed, not stored" semantic |
 
 ## Constraints
 
@@ -259,7 +270,7 @@ The following verification gate is reproduced verbatim from AAP Section 0.7.3:
 Verification procedure (cross-reference [`validation-gates.md`](./validation-gates.md) Gate 1):
 
 1. Open System Definition → Tables → filter `Name CONTAINS x_casemgmt_case`. Confirm exactly 3 records: `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
-2. Open `x_casemgmt_case` → confirm 13 fields (12 + `pending_reason`). For each Mandatory field per the schema table, confirm `mandatory = true`. For each Choice field, confirm choice values match verbatim.
+2. Open `x_casemgmt_case` → confirm 14 fields (12 + `pending_reason` + `duration_to_close`). The `duration_to_close` Function Field is virtual/read-only/hidden and will appear in the dictionary list but not on the default form/list layout. For each Mandatory field per the schema table, confirm `mandatory = true`. For each Choice field, confirm choice values match verbatim.
 3. Open `x_casemgmt_case_task` → confirm 6 fields. Confirm reference targets and Mandatory flags.
 4. Open `x_casemgmt_case_party` → confirm 5 fields. Confirm `party_type` Choice values, conditional `person`/`organization` reference targets.
 5. Open the `x_casemgmt_case_party_conditional_fields` UI Policy → confirm conditional show/hide rules.

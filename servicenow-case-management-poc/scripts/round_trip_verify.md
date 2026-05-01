@@ -16,7 +16,7 @@ Before starting this procedure, all of the following MUST hold. If ANY prerequis
 - On the **source PDI**, all of Validation Gates 1–6 have passed (per [`../docs/validation-gates.md`](../docs/validation-gates.md)).
 - On the **source PDI**, both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
 - On the **source PDI**, all 10+ demo cases are visible in the case list spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), per AAP Section 0.7.4 minimum demo-data thresholds.
-- The seed data was committed via `./seed_demo_data.js` (created in a subsequent checkpoint) and is captured in the same Update Set OR is packaged as a Fix Script in the Update Set so that seed data is generated on import. Document which approach was used so the verifier knows whether seed data is expected to appear automatically post-commit or whether the seed script must be re-run on the verification PDI after commit.
+- The seed data was committed via [`./seed_demo_data.js`](./seed_demo_data.js) and is captured in the same Update Set OR is packaged as a Fix Script in the Update Set so that seed data is generated on import. Document which approach was used so the verifier knows whether seed data is expected to appear automatically post-commit or whether the seed script must be re-run on the verification PDI after commit.
 - A **fresh, separate PDI** is available with an admin account ready (the verification PDI must NOT be the same instance as the source PDI). Re-importing on the source PDI does not exercise the portability gate and is not a valid round-trip-verify.
 - Admin login to the verification PDI succeeds (URL + admin username + admin password verified). Per AAP Section 0.7.2 Pre-build instance verification: if login fails, **stop and report — do not proceed**.
 - Network connectivity allows the operator to upload an XML file of approximately 0.5–5 MB to the verification PDI without timeout.
@@ -127,13 +127,13 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 
 The Update Set is committed but not yet **delivered**. The final step is to re-run each functional gate on the verification PDI to confirm the application behaves identically to the source PDI. This catches any subtle deployment differences (missing seed data, broken references, role assignment gaps).
 
-If the seed data was packaged as a Fix Script inside the Update Set, the Fix Script will have already executed during commit and the demo cases/tasks/parties/users/groups should already be present. If the seed data was NOT packaged into the Update Set, run `./seed_demo_data.js` (created in a subsequent checkpoint) on the verification PDI as a Background Script before proceeding with the gate re-verification below.
+If the seed data was packaged as a Fix Script inside the Update Set, the Fix Script will have already executed during commit and the demo cases/tasks/parties/users/groups should already be present. If the seed data was NOT packaged into the Update Set, run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script before proceeding with the gate re-verification below.
 
 ### Gate 1 — Data Model (Re-Verify)
 
 - [ ] Open **System Definition → Tables**. Filter `Name CONTAINS x_casemgmt_case`.
 - [ ] Confirm exactly 3 records: `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
-- [ ] Open each table and confirm the field set matches [`../docs/data-model.md`](../docs/data-model.md) (12+1 / 6 / 5 fields).
+- [ ] Open each table and confirm the field set matches [`../docs/data-model.md`](../docs/data-model.md) — `x_casemgmt_case` has 14 fields (12 user-prompt-specified + `pending_reason` + virtual `duration_to_close` Function Field), `x_casemgmt_case_task` has 6, `x_casemgmt_case_party` has 5 — 25 fields total.
 - [ ] Confirm `x_casemgmt_case.number` auto-numbering format is `CASE0000001` and the field is Read-only.
 - [ ] Confirm reference targets resolve correctly: `assigned_group → sys_user_group`, `assigned_agent → sys_user`, `case_task.case → x_casemgmt_case`, `case_task.assigned_to → sys_user`, `case_party.case → x_casemgmt_case`, `case_party.person → sys_user`, `case_party.organization → core_company`.
 
@@ -159,7 +159,7 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 
 ### Gate 4 — Portal Submission (Re-Verify)
 
-- [ ] Log out of the PDI. Open the portal URL `[verification instance URL]/x_casemgmt_portal` in an incognito browser window.
+- [ ] Log out of the PDI. Open the portal URL `[verification instance URL]/x_casemgmt_case_portal` in an incognito browser window. The slug `x_casemgmt_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml); AAP Section 0.7.2 verbatim wording uses the generic placeholder `x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"). See [`../docs/portal-pages.md`](../docs/portal-pages.md) for the full discrepancy explanation.
 - [ ] Submit a case via the submission page with synthetic values (subject, type=General Inquiry, description, requester_name, requester_email).
 - [ ] Confirm the confirmation panel displays the auto-generated case number in `CASE0000001` format.
 - [ ] Log in as `x_casemgmt_demo_manager`. Open the case list. Find the new case by number.
@@ -233,6 +233,6 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 - [`../docs/acl-matrix.md`](../docs/acl-matrix.md) — Gate 3 re-verify reference (role × table × CRUD matrix).
 - [`../docs/portal-pages.md`](../docs/portal-pages.md) — Gates 4 and 5 re-verify reference (verbatim "not found" text).
 - [`../docs/dashboards.md`](../docs/dashboards.md) — Gate 6 re-verify reference (widget inventory for both dashboards).
-- `./seed_demo_data.js` — idempotent server-side seed script that must run on the verification PDI if seed data was not captured in the Update Set itself (created in a subsequent checkpoint).
-- `../update-set/` — destination directory for the exported XML deliverable (created in a subsequent checkpoint).
+- [`./seed_demo_data.js`](./seed_demo_data.js) — idempotent server-side seed script that must run on the verification PDI if seed data was not captured in the Update Set itself.
+- [`../update-set/`](../update-set/) — destination directory for the exported XML deliverable.
 - [`../README.md`](../README.md) — overall POC overview and entry point.

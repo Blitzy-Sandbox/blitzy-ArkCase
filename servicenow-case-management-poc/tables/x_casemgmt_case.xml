@@ -12,12 +12,14 @@
     Choice rather than a class-name discriminator column.
 
     This record authors ONLY table-level metadata (name, labels, parent class,
-    scope linkage, auto-numbering reference, and access flags). The 13 fields
-    enumerated in the AAP (number, type, status, priority, subject, description,
+    scope linkage, auto-numbering reference, and access flags). The 14 fields
+    on this table (number, type, status, priority, subject, description,
     opened_date, closed_date, assigned_group, assigned_agent, requester_name,
-    requester_email, plus the internal pending_reason) are authored as
-    sys_dictionary records in the sibling ../dictionary/ folder. The platform
-    automatically inherits the standard sys_* audit columns (sys_id,
+    requester_email — the 12 AAP-enumerated user-prompt fields — plus the
+    internal pending_reason choice and the virtual duration_to_close Function
+    Field) are authored as sys_dictionary records in the sibling
+    ../dictionary/ folder. The platform automatically inherits the standard
+    sys_* audit columns (sys_id,
     sys_created_on, sys_created_by, sys_updated_on, sys_updated_by) by virtue
     of being a sys_db_object record.
 

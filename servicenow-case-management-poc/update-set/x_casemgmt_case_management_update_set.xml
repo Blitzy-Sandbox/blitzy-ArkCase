@@ -2,7 +2,7 @@
 <!--
     ServiceNow Case Management POC : Update Set XML
     ===============================================
-    Deliverable Path: servicenow-case-management-poc/update-set/x_case_mgmt_case_management_update_set.xml
+    Deliverable Path: servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml
     Scope:            x_casemgmt
     Application:      x_casemgmt_case_management
     Application Name: Case Management
@@ -22,14 +22,18 @@
 
     SCOPE IDENTIFIER NOTE
     .....................
-    The agent prompt suggested the scope identifier `x_case_mgmt` and
-    proposed file name `x_case_mgmt_case_management_update_set.xml`.
-    The actual scope identifier consistently used throughout every
-    sibling artifact is `x_casemgmt` (no underscore between case and
-    mgmt). The file name has been preserved per the assigned-path
-    requirement, but every IN-XML reference to scope, application, and
-    record names uses the consistent sibling-folder identifier
-    `x_casemgmt` / `x_casemgmt_case_management`.
+    The scope identifier consistently used throughout every sibling
+    artifact is `x_casemgmt` (no underscore between case and mgmt).
+    The deliverable file name follows the AAP Section 0.3.1 / 0.4.1
+    canonical pattern `x_[scope]_case_management_update_set.xml`,
+    which with `[scope] = casemgmt` resolves to
+    `x_casemgmt_case_management_update_set.xml`. Every IN-XML
+    reference to scope, application, and record names uses the
+    consistent sibling-folder identifier `x_casemgmt` /
+    `x_casemgmt_case_management`. (An earlier draft of this file
+    used the variant filename `x_case_mgmt_case_management_update_set.xml`;
+    that filename has been corrected to align with the AAP-canonical
+    path used throughout the documentation.)
 
     STRUCTURE
     .........

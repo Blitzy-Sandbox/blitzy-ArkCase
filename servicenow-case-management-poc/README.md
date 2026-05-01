@@ -113,7 +113,7 @@ Detailed schemas live in `docs/data-model.md`. This section is a one-glance summ
 | `requester_name` | String(100) | Mandatory — captures external requester |
 | `requester_email` | String(100) | Optional |
 
-A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, Other) field also exists on the same table and is set/cleared by the state-machine flows during the Pending state.
+A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, Other) field also exists on the same table and is set/cleared by the state-machine flows during the Pending state. A virtual `duration_to_close` Function Field (`glide_duration` typed; computed at query time as `glidefunction:datediff(closed_date,opened_date)`) also exists on the same table; it is read-only, hidden from the form/list views, and consumed exclusively by the Manager View "Average Time to Close" widget per AAP Section 0.4.4. See `docs/data-model.md` for the full additional-fields rationale.
 
 **`x_casemgmt_case_task`** (6 fields):
 
@@ -177,7 +177,7 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 ## Deliverables
 
 - **Update Set XML:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
-- **Portal URL:** `[instance URL]/x_casemgmt_portal` (or the equivalent portal URL chosen at portal-record creation time).
+- **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation.
 - **Dashboards:** Agent Workspace + Manager View (visible in the PDI under Performance Analytics → Dashboards after commit).
 - **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group.
 
@@ -185,7 +185,7 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 
 1. **Export Update Set:** Navigate to System Update Sets → Local Update Sets. Locate the scoped application Update Set. Set status to Complete. Export as XML.
 2. **Verify Update Set integrity:** Re-import the exported XML on the same instance via System Update Sets → Retrieved Update Sets → Upload. Preview the Update Set. Zero errors required before proceeding. If preview errors exist, resolve them in the source application before re-exporting.
-3. **Confirm deployed state:** After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); both dashboards accessible to users with correct roles; synthetic demo data visible in case list.
+3. **Confirm deployed state:** After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or the equivalent portal URL chosen at portal-record creation time — for this implementation the actual portal slug is `x_casemgmt_case_portal`, see [`docs/portal-pages.md`](docs/portal-pages.md)); both dashboards accessible to users with correct roles; synthetic demo data visible in case list.
 4. **Deliver:** Provide the exported Update Set XML file path and the portal URL as final deliverables alongside confirmation that all validation gates passed.
 
 Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification procedure in `scripts/round_trip_verify.md`.

@@ -209,4 +209,4 @@ The following ACL constraints from AAP Section 0.7.1 are non-negotiable:
 - [`validation-gates.md`](./validation-gates.md) — Gate 3 (ACLs)
 - [`../roles/`](../roles/) — three role records: `sys_user_role_x_casemgmt_case_manager.xml`, `sys_user_role_x_casemgmt_case_agent.xml`, `sys_user_role_x_casemgmt_case_viewer.xml`
 - [`../acl/`](../acl/) — all ACL records (table-level and field-level)
-- `../seed-data/role_assignments/` — `sys_user_has_role_x_casemgmt_*.xml` records assigning roles to demo users (subdirectory created in a subsequent checkpoint)
+- [`../seed-data/role_assignments/`](../seed-data/role_assignments/) — `sys_user_has_role_x_casemgmt_*.xml` records assigning roles to demo users

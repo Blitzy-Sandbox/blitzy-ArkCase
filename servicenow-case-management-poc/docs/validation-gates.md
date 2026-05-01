@@ -39,7 +39,7 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
 - **Pass Condition:** Zero missing mandatory fields
 - **Detailed Verification Procedure:**
     1. Open ServiceNow → System Definition → Tables → filter `Name CONTAINS x_casemgmt_case`. Confirm exactly 3 records: `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
-    2. Open each table and verify the field set matches `docs/data-model.md` verbatim — `x_casemgmt_case` has 12 fields (plus `pending_reason`), `x_casemgmt_case_task` has 6, `x_casemgmt_case_party` has 5.
+    2. Open each table and verify the field set matches `docs/data-model.md` verbatim — `x_casemgmt_case` has 14 fields (12 user-prompt-specified plus `pending_reason` plus the virtual `duration_to_close` Function Field), `x_casemgmt_case_task` has 6, `x_casemgmt_case_party` has 5 — 25 fields total.
     3. For each Mandatory column in `data-model.md`, confirm the dictionary entry has `mandatory = true`.
     4. For each Choice column, confirm the choices on the choice list match the Choice Values column verbatim.
     5. For each Reference column, confirm the reference target matches verbatim (`sys_user_group`, `sys_user`, `core_company`, `x_casemgmt_case`).
@@ -91,7 +91,7 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
 - **Criterion:** Case created from unauthenticated portal submission
 - **Pass Condition:** Case appears in internal list with Draft status and correct case number
 - **Detailed Verification Procedure:**
-    1. Log out of the PDI. Open the portal URL `[instance URL]/x_casemgmt_portal` in an incognito browser window.
+    1. Log out of the PDI. Open the portal URL `[instance URL]/x_casemgmt_case_portal` in an incognito browser window. The slug `x_casemgmt_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml); AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"). See [`portal-pages.md`](./portal-pages.md) for full discussion.
     2. Navigate to the Case Submission page.
     3. Fill in the 5 fields: subject, type (General Inquiry), description, requester_name, requester_email.
     4. Click Submit. Confirm a confirmation panel appears displaying the auto-generated case number in `CASE0000001` format.

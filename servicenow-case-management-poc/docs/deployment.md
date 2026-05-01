@@ -12,7 +12,7 @@ The following prerequisites MUST hold before starting the export step. They alig
 
 - Source PDI is accessible and admin login succeeds at `[instance URL]`. If login fails, stop and report — do not proceed.
 - Validation Gates 1–6 have all passed on the source PDI (see [`validation-gates.md`](./validation-gates.md)).
-- All seed data has been committed via the seed script in `../scripts/seed_demo_data.js` (created in a subsequent checkpoint) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
+- All seed data has been committed via the seed script in [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
 - Both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
 - Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references.
 - Portal pages submit + lookup correctly on the source PDI: the submission page returns an auto-generated case number in `CASE0000001` format; the lookup page returns `status`/`subject`/`opened_date` for valid case numbers and the verbatim text `"No case found with that number."` for invalid ones.
@@ -33,7 +33,7 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
 
    - **1 sys_app + 1 sys_scope record** — the scoped-application metadata records.
    - **3 sys_db_object table records** — `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
-   - **All sys_dictionary records for the 23 fields total (12 + 6 + 5)** — covering every field on every custom table per [`data-model.md`](./data-model.md). The case table contributes 12 user-prompt fields plus a `pending_reason` choice field; the case_task table contributes 6 fields; the case_party table contributes 5 fields.
+   - **All sys_dictionary records for the 25 fields total (14 + 6 + 5)** — covering every field on every custom table per [`data-model.md`](./data-model.md). The case table contributes 12 user-prompt fields plus a `pending_reason` choice field plus a `duration_to_close` virtual Function Field (14 total); the case_task table contributes 6 fields; the case_party table contributes 5 fields.
    - **All sys_choice records for every Choice field** — `case.type`, `case.status`, `case.priority`, `case.pending_reason`, `case_task.type`, `case_task.status`, `case_party.party_type`.
    - **3 sys_user_role records** — `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`.
    - **All sys_security_acl records** — one per role × table × CRUD combination plus field-level ACLs on `assigned_group` and `assigned_agent` and parallel ACLs on `case_task` and `case_party`. See [`acl-matrix.md`](./acl-matrix.md) for the full inventory.
@@ -50,7 +50,7 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
 
 ### Notes
 
-- The exported file MUST be the only Update Set XML in the `../update-set/` subdirectory (created in a subsequent checkpoint). Do not include intermediate or partial exports — overwrite previous exports rather than versioning them in-place.
+- The exported file MUST be the only Update Set XML in the [`../update-set/`](../update-set/) subdirectory. Do not include intermediate or partial exports — overwrite previous exports rather than versioning them in-place.
 - If the export downloads multiple files (this can happen when the Update Set is unusually large), the export operation has split the artifact. This is a hard failure for this POC because the AAP requires a **single** Update Set deliverable. Resolve by reducing the Update Set scope to only the scoped application and re-exporting.
 
 ## Step 2: Verify Update Set Integrity
@@ -101,7 +101,7 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
    - `general_inquiry_state_machine`
    - `complaint_state_machine`
    Subflows under `flows/sub_flows/` should also be Active.
-4. Open the Experience Portal at `[instance URL]/x_casemgmt_portal` (or the equivalent portal URL chosen at portal-record creation time). Open the URL in a private/incognito browser window so that no admin session interferes — both pages must work anonymously.
+4. Open the Experience Portal at `[instance URL]/x_casemgmt_case_portal`. The slug `x_casemgmt_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml); the AAP verbatim wording quoted in the section above uses the generic placeholder `x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"). Open the URL in a private/incognito browser window so that no admin session interferes — both pages must work anonymously.
 5. Confirm both pages render anonymously:
    - The case submission page (5 input fields: subject, type, description, requester_name, requester_email).
    - The case status lookup page (1 input field: case number).
@@ -129,16 +129,16 @@ Per AAP Section 0.7.2: "Provide the exported Update Set XML file path and the po
 ### Detailed Sub-Procedure
 
 1. Confirm the exported XML file is at `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` (the canonical path from AAP Sections 0.3.1 and 0.4.1).
-2. Note the actual portal URL (e.g., `https://devXXXXXX.service-now.com/x_casemgmt_portal`). The host portion is the actual PDI hostname assigned at PDI provisioning; the path portion is the portal URL chosen at portal-record creation time.
+2. Note the actual portal URL (e.g., `https://devXXXXXX.service-now.com/x_casemgmt_case_portal`). The host portion is the actual PDI hostname assigned at PDI provisioning; the path portion is the portal URL chosen at portal-record creation time and matches the `<url_suffix>` value in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml). The AAP verbatim wording uses the generic placeholder `x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time").
 3. Compile a delivery summary that includes:
    - **Update Set XML path:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
-   - **Portal URL:** the actual `https://devXXXXXX.service-now.com/x_casemgmt_portal` URL recorded in step 2.
+   - **Portal URL:** the actual `https://devXXXXXX.service-now.com/x_casemgmt_case_portal` URL recorded in step 2.
    - **Validation gates:** confirmation that all 7 validation gates passed (see [`validation-gates.md`](./validation-gates.md)).
    - **Demo users:** the three demo users and their assigned roles:
      - `x_casemgmt_demo_manager` → `x_casemgmt_case_manager`
      - `x_casemgmt_demo_agent` → `x_casemgmt_case_agent`
      - `x_casemgmt_demo_viewer` → `x_casemgmt_case_viewer`
-   - **Sample case number:** at least one case number from the seed data (e.g., the case generated in [Step 3](#step-3-confirm-deployed-state) sub-step 6, or a known seed case from `../seed-data/cases/` — directory created in a subsequent checkpoint).
+   - **Sample case number:** at least one case number from the seed data (e.g., the case generated in [Step 3](#step-3-confirm-deployed-state) sub-step 6, or a known seed case from [`../seed-data/cases/`](../seed-data/cases/)).
 
 This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifacts beyond what is enumerated in AAP Section 0.3.1 are produced; per AAP Section 0.7.2 (Minimal-Change Clause), no additional capabilities are added.
 
@@ -178,10 +178,10 @@ The following constraints apply throughout deployment. They derive from AAP Sect
 
 - [`validation-gates.md`](./validation-gates.md) — Gate 7 (Update Set) is what this document operationalizes; the Pre-Deployment Checklist references Gates 1–6 as prerequisites.
 - [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md) — manual procedure for the fresh-PDI re-import preview gate referenced by [Step 2](#step-2-verify-update-set-integrity).
-- `../scripts/seed_demo_data.js` — idempotent server-side seed script used for post-commit data verification in [Step 3](#step-3-confirm-deployed-state) sub-step 11 (created in a subsequent checkpoint).
-- `../update-set/` — destination directory for the exported XML; only one file (`x_casemgmt_case_management_update_set.xml`) lives here (created in a subsequent checkpoint).
+- [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) — idempotent server-side seed script used for post-commit data verification in [Step 3](#step-3-confirm-deployed-state) sub-step 11.
+- [`../update-set/`](../update-set/) — destination directory for the exported XML; only one file (`x_casemgmt_case_management_update_set.xml`) lives here.
 - [`../README.md`](../README.md) — overall POC overview with quick deployment summary; this file is the authoritative detailed walkthrough referenced from there.
-- [`./data-model.md`](./data-model.md) — schema reference for the 23 fields verified in [Step 1](#step-1-export-the-update-set) sub-step 3.
+- [`./data-model.md`](./data-model.md) — schema reference for the 25 fields verified in [Step 1](#step-1-export-the-update-set) sub-step 3.
 - [`./state-machine.md`](./state-machine.md) — transition matrix and blocking-error messages exercised by the seed data in [Step 3](#step-3-confirm-deployed-state) sub-step 11.
 - [`./acl-matrix.md`](./acl-matrix.md) — role × table × CRUD matrix verified by impersonating the three demo users in [Step 3](#step-3-confirm-deployed-state) sub-steps 9–10.
 - [`./portal-pages.md`](./portal-pages.md) — wireframe-level specs for the submission and lookup pages exercised in [Step 3](#step-3-confirm-deployed-state) sub-steps 5–8.

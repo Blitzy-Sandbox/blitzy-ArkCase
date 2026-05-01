@@ -16,7 +16,7 @@ The following conventions apply to every widget and every dashboard delivered by
 - Filter conditions reference the current user via `javascript:gs.getUserID()` — no hard-coded user `sys_id`s. This is the platform-standard self-personalization pattern.
 - Date filters use `javascript:gs.daysAgoStart(N)` for relative-date filtering — no hard-coded dates. This guarantees the dashboards remain accurate without manual reconfiguration.
 - Group-by uses the choice-field display label (e.g., status display label "In Progress" — not the internal value "in_progress"). This keeps chart legends human-readable.
-- All widgets render with synthetic seed data committed via `../scripts/seed_demo_data.js` (created in a subsequent checkpoint). No PII appears in any rendered chart or list.
+- All widgets render with synthetic seed data committed via [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js). No PII appears in any rendered chart or list.
 - Dashboards use the platform default theme; no custom CSS, no custom branding (per AAP Section 0.7.2).
 - No widget depends on any ServiceNow Store application. Every widget is built from the standard Reports + Dashboards toolset bundled with the PDI release.
 
@@ -183,4 +183,4 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 - [`../dashboards/`](../dashboards/) — `pa_dashboards_x_casemgmt_agent_workspace.xml` and `pa_dashboards_x_casemgmt_manager_view.xml`
 - [`../reports/`](../reports/) — eight `x_casemgmt_*.xml` report records
 - [`../dictionary/x_casemgmt_case_duration_to_close.xml`](../dictionary/x_casemgmt_case_duration_to_close.xml) — Function Field that powers Widget 4 (`AVG(duration_to_close)`) on the Manager View dashboard
-- `../seed-data/` — synthetic data the dashboards render (subdirectory created in a subsequent checkpoint)
+- [`../seed-data/`](../seed-data/) — synthetic data the dashboards render
