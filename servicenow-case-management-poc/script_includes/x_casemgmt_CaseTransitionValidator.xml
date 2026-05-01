@@ -1,0 +1,767 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_include`
+    record `x_casemgmt.CaseTransitionValidator` inside the scoped
+    application `x_casemgmt` (Case Management).
+
+    PURPOSE (AAP Sections 0.4.3, 0.5.1, 0.5.5, 0.7.4):
+
+        Central, reusable transition-guard helper for the case
+        state-machine. ServiceNow-native equivalent of ArkCase's
+        ChangeCaseFileStateService (acm-plugins/acm-default-plugins/
+        acm-case-file-plugin/src/main/java/com/armedia/acm/plugins/
+        casefile/service/ChangeCaseFileStateService.java). The
+        ArkCase Java service exposed a single changeCaseState(auth,
+        caseId, newState, ipAddress) method that string-matched the
+        target state and dispatched to per-state branches; the
+        ServiceNow target deliberately RESTRUCTURES the API into
+        per-transition guards (canTransitionTo*) because Flow Designer
+        is per-transition rather than per-orchestration. The semantic
+        intent (encapsulate transition rules in one reusable place) is
+        preserved.
+
+        This Script Include is the MOST CROSS-REFERENCED helper in
+        the entire scoped application. It is consumed by:
+
+          - All Flow Designer flows in ../flows/:
+              * general_inquiry_state_machine.xml
+              * complaint_state_machine.xml
+            and their five subflows in ../flows/sub_flows/:
+              * validate_open_transition.xml      -> canTransitionToOpen
+              * validate_inprogress_transition.xml -> canTransitionToInProgress
+              * validate_pending_transition.xml   (no guard call - unconditional)
+              * validate_resolved_transition.xml  -> canTransitionToResolved
+                                                     and getOpenTaskCountForCase
+              * validate_closed_transition.xml    -> canTransitionToClosed
+
+          - All Business Rules in ../business_rules/:
+              * x_casemgmt_block_draft_backtransition.xml
+                  -> validateNoBacktransition
+              * x_casemgmt_block_terminal_closed.xml
+                  -> validateNoBacktransition
+              * x_casemgmt_set_closed_date.xml
+                  (uses gs.getUser().hasRole(...) directly; could call
+                   canTransitionToClosed if a Business Rule needed
+                   a unified guard)
+              * x_casemgmt_validate_assigned_agent_membership.xml
+                  -> isAgentInGroup
+              * x_casemgmt_set_opened_date.xml         (no guard call)
+              * x_casemgmt_clear_pending_reason_on_inprogress.xml
+                  (no guard call)
+
+          - All UI Actions in ../ui_action/ for state transitions
+            (the visibility `condition` field may consult these methods
+            via Script Include calls).
+
+    SEMANTIC SOURCE-SIDE REFERENCES (read-only, NOT byte-for-byte ported):
+
+        - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+          java/com/armedia/acm/plugins/casefile/service/
+          ChangeCaseFileStateService.java
+            * line 79-114 changeCaseState(auth, caseId, newState,
+              ipAddress) - the canonical reference for the
+              transition-guard concept. The Java method:
+                1) Loaded the CaseFile by ID
+                2) Returned early if status unchanged
+                3) Set the new status on the entity (line 95)
+                4) For "CLOSED" status, set the close timestamp (97-100)
+                5) Saved the entity (102)
+                6) Raised an event for downstream notification listeners
+                   (106 - intentionally NOT replicated in the ServiceNow
+                   target because email is disabled per AAP Section 0.7.2)
+              The ServiceNow target splits this single method into
+              per-transition guards that return a unified
+              { ok: boolean, error?: string } shape. Status PERSISTENCE
+              is handled by the platform's GlideRecord update pipeline;
+              this Script Include provides only the GATING logic.
+
+        - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+          java/com/armedia/acm/plugins/casefile/service/
+          CaseFileTasksService.java (interface) and
+          CaseFileTasksServiceImpl.java (implementation)
+            * The ArkCase implementation delegates to a Solr
+              ChildDocumentsSearchService.searchForChildrenAndGrandchildrenTasks
+              call. The ServiceNow target replaces this entirely with a
+              direct GlideAggregate query against the scoped
+              x_casemgmt_case_task table. Solr is not present in the
+              POC scope (AAP Section 0.3.2 lists Solr as out of scope);
+              the platform's GlideAggregate executes a SQL COUNT(*)
+              which is more efficient than fetching rows for a
+              count-only check.
+
+    STATE-MACHINE TRANSITION MAP (AAP Section 0.5.5 verbatim):
+
+        From: Draft        To: Open         Required: assigned_group populated
+                                            Failure:  Surface form-level error
+        From: Open         To: In Progress  Required: assigned_agent populated AND member of assigned_group
+                                            Failure:  Surface form-level error
+        From: In Progress  To: Pending      Required: None; sets pending_reason
+                                            Failure:  n/a
+        From: Pending      To: In Progress  Required: None; clears pending_reason
+                                            Failure:  n/a
+        From: In Progress  To: Resolved     Required: All linked x_casemgmt_case_task have status=Closed
+                                            Failure:  "All tasks must be closed before resolving this case."
+        From: Resolved     To: Closed       Required: Caller has x_casemgmt_case_manager role; set closed_date
+                                            Failure:  Surface form-level error
+        From: Any          To: Draft        Required: PROHIBITED
+                                            Failure:  "Cases cannot be returned to Draft."
+        From: Closed       To: any other    Required: PROHIBITED (terminal state)
+                                            Failure:  "Closed cases are terminal and cannot be modified."
+
+    VERBATIM ERROR MESSAGES (AAP Section 0.7.4 - non-negotiable):
+
+        Three error strings MUST appear character-for-character in the
+        script body. They are surfaced on the form by the calling flow
+        / Business Rule via gs.addErrorMessage(<message>) plus
+        current.setAbortAction(true):
+
+          1. 'All tasks must be closed before resolving this case.'
+             (canTransitionToResolved)
+          2. 'Cases cannot be returned to Draft.'
+             (validateNoBacktransition - any non-Draft -> Draft)
+          3. 'Closed cases are terminal and cannot be modified.'
+             (validateNoBacktransition - Closed -> anything)
+
+        Four additional error messages used in this Script Include are
+        NOT verbatim from the AAP; they are reasonable defaults for
+        non-AAP-specified failure modes:
+
+          - 'Required field assigned_group is empty.'
+                (canTransitionToOpen)
+          - 'Assigned agent must be set and must be a member of the assigned group.'
+                (canTransitionToInProgress)
+          - 'Only case managers can close cases.'
+                (canTransitionToClosed)
+          - 'Case record is missing.'
+                (defensive guard in all canTransition* methods)
+
+        These four messages may be revised in future iterations without
+        breaking the AAP contract; the three verbatim messages above
+        MUST NOT be paraphrased.
+
+    PUBLIC API (per the assigned-folder requirements doc):
+
+        Method                                 Returns
+        canTransitionToOpen(caseGr)            { ok: true } or { ok: false, error: string }
+        canTransitionToInProgress(caseGr)      { ok: true } or { ok: false, error: string }
+        canTransitionToResolved(caseGr)        { ok: true } or { ok: false, error: string } (verbatim msg)
+        canTransitionToClosed(caseGr, userId)  { ok: true } or { ok: false, error: string }
+        validateNoBacktransition(prev, next)   { ok: true } or { ok: false, error: string } (verbatim msgs)
+        isAgentInGroup(userSysId, groupSysId)  boolean
+        getOpenTaskCountForCase(caseSysId)     integer
+
+        The unified { ok: boolean, error?: string } return shape on
+        the can*/validate* methods lets callers write:
+
+            var v = new x_casemgmt.CaseTransitionValidator();
+            var result = v.canTransitionToOpen(current);
+            if (!result.ok) {
+                gs.addErrorMessage(result.error);
+                current.setAbortAction(true);
+            }
+
+        The boolean return on isAgentInGroup is appropriate for
+        directly-conditional callers (Business Rules that simply
+        gate behavior on group membership). The integer return on
+        getOpenTaskCountForCase enables diagnostic logging while still
+        supporting the boolean predicate the caller computes
+        (if (count > 0) { reject; }).
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <name>CaseTransitionValidator</name>                    bare class name
+        - <api_name>x_casemgmt.CaseTransitionValidator</api_name>  scope-qualified
+        - <sys_update_name>sys_script_include_x_casemgmt_CaseTransitionValidator</sys_update_name>
+        - <sys_scope>x_casemgmt</sys_scope>                        scoped namespace
+        - <sys_package>x_casemgmt</sys_package>                    scoped application
+        - script body references new GlideRecord('sys_user_grmember')
+          (an OOB ServiceNow table - reads only, no writes; this is
+          the standard membership-lookup pattern used by every
+          ServiceNow scoped application)
+        - script body references new GlideAggregate('x_casemgmt_case_task')
+          and gs.getUser().hasRole('x_casemgmt_case_manager') -
+          both scoped references resolved by NAME, not by sys_id.
+        - Zero global-scope writes. Zero modifications to OOB tables.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal. Every sys_id used is supplied at runtime by the
+          CALLER (caseGr.getUniqueValue(), caseGr.getValue('assigned_*'),
+          gs.getUserID(), or the userId / userSysId / groupSysId
+          parameters passed in by the calling flow / Business Rule).
+        - Role membership is checked by ROLE NAME via
+          gs.getUser().hasRole('x_casemgmt_case_manager'); this method
+          accepts the role's name (a stable human-readable key per
+          AAP Section 0.7.2) and resolves it internally.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_CaseTransitionValidator" =
+          1151d194bc97cb3757738dc61623599d), which is permitted because
+          the AAP "no hardcoded sys_id" rule applies to REFERENCE FIELDS
+          pointing at OTHER records, not to a record's own primary key.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This
+        Script Include contains zero gs.eventQueue() calls, zero
+        gs.email() calls, and zero gs.notificationEngine() calls.
+        ArkCase's ChangeCaseFileStateService line 106 raised an event
+        via getCaseFileEventUtility().raiseEvent(...) that downstream
+        listeners ultimately translated into email notifications; the
+        ServiceNow POC omits this entirely - transitions are silent at
+        the server side, and any user-facing feedback is surfaced
+        through the calling flow's Throw Error step or the Business
+        Rule's gs.addErrorMessage() / current.setAbortAction(true)
+        pair.
+
+    NO-PII CONSTRAINT (AAP Section 0.7.2):
+        Code comments, error messages, and any future gs.error() /
+        gs.info() log messages contain ZERO real names, real email
+        addresses, real phone numbers, real organizational identifiers,
+        or any other personally identifiable information. Error
+        messages are intentionally GENERIC (e.g., "Only case managers
+        can close cases.") rather than user-identifying (e.g., "User
+        john.doe is not a manager"); the latter would leak user
+        identifiers via blocking-error UI to any caller who could
+        provoke the message.
+
+    ACCESS-LEVEL JUSTIFICATION:
+        <access>package_private</access> - this Script Include is
+        callable ONLY from code inside the same x_casemgmt scope. Per
+        AAP Section 0.5.2 cross-dependency rules, all callers (flows,
+        Business Rules, UI Actions) live in the SAME scope, so
+        package_private is sufficient and is the safer default per
+        ServiceNow scoped-application best practices. If a future
+        cross-scope caller needed to invoke this Script Include, the
+        access could be elevated to "public", but the POC has no such
+        requirement.
+
+        <client_callable>false</client_callable> - this Script Include
+        is SERVER-SIDE only. Transition guards must NOT be exposed to
+        client scripts (where a malicious client could probe them via
+        GlideAjax to discover transition rules).
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script_include record MUST be loaded AFTER:
+            - ../app/sys_app/x_casemgmt_case_management.xml   (scoped app)
+            - ../app/sys_scope/x_casemgmt.xml                 (scope record)
+            - ../tables/x_casemgmt_case.xml                   (case table; caseGr.getValue() reads its fields)
+            - ../tables/x_casemgmt_case_task.xml              (task table; queried via GlideAggregate)
+            - ../dictionary/x_casemgmt_case_status.xml        (read by validateNoBacktransition)
+            - ../dictionary/x_casemgmt_case_assigned_group.xml (read by canTransitionToOpen / canTransitionToInProgress)
+            - ../dictionary/x_casemgmt_case_assigned_agent.xml (read by canTransitionToInProgress)
+            - ../dictionary/x_casemgmt_case_task_case.xml     (parent reference filtered in GlideAggregate)
+            - ../dictionary/x_casemgmt_case_task_status.xml   (status filter in GlideAggregate)
+            - ../roles/sys_user_role_x_casemgmt_case_manager.xml (role checked by canTransitionToClosed)
+        And BEFORE:
+            - ../flows/general_inquiry_state_machine.xml
+            - ../flows/complaint_state_machine.xml
+            - ../flows/sub_flows/validate_open_transition.xml
+            - ../flows/sub_flows/validate_inprogress_transition.xml
+            - ../flows/sub_flows/validate_resolved_transition.xml
+            - ../flows/sub_flows/validate_closed_transition.xml
+            - ../business_rules/x_casemgmt_block_draft_backtransition.xml
+            - ../business_rules/x_casemgmt_block_terminal_closed.xml
+            - ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+            - All ../ui_action/x_casemgmt_case_*.xml records that gate
+              their visibility on transition validity.
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_CaseTransitionValidator")
+               = 1151d194bc97cb3757738dc61623599d
+        32-character lowercase hex. The PDI accepts any valid 32-char
+        hex sys_id; deriving from the record name guarantees idempotent
+        re-import on a fresh PDI: re-importing the same Update Set
+        produces the same sys_id, which collides on the existing record
+        and updates it in place rather than creating a duplicate. This
+        is the same convention used by the sibling Script Include
+        ../script_includes/x_casemgmt_CasePortalService.xml (sys_id =
+        MD5("x_casemgmt_CasePortalService") = 95e90fa18471e42875f5f956ec7949d1).
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition." This Script
+          Include is the CENTRAL implementation behind Gate 2. Every
+          callable transition guard returns a uniform shape; the
+          calling flow / Business Rule surfaces the {error} string
+          on the form.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance." The deterministic
+          sys_id, reference-by-name pattern, and well-formed XML
+          structure ensure this record re-imports cleanly with zero
+          preview errors.
+-->
+<record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_casemgmt.CaseTransitionValidator</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Central transition-guard helper for the case state-machine. Provides canTransitionToOpen/canTransitionToInProgress/canTransitionToResolved/canTransitionToClosed, validateNoBacktransition, isAgentInGroup, and getOpenTaskCountForCase. Called by all Flow Designer flows, Business Rules, and UI Actions in the x_casemgmt scope. ServiceNow-native equivalent of ArkCase ChangeCaseFileStateService. All transition rules and verbatim error messages are traced to AAP Section 0.5.5 and 0.7.4. canTransitionToResolved blocks the In Progress -&gt; Resolved transition with the verbatim message "All tasks must be closed before resolving this case." when any child x_casemgmt_case_task has status != Closed. validateNoBacktransition blocks any -&gt; Draft with the verbatim message "Cases cannot be returned to Draft." and Closed -&gt; * with the verbatim message "Closed cases are terminal and cannot be modified." Role checks use gs.getUser().hasRole(role_name) only. Group-membership checks use GlideRecord on sys_user_grmember (read-only). Open-task counting uses GlideAggregate on x_casemgmt_case_task. Contains zero hardcoded sys_id literals in references and zero gs.eventQueue() calls per the email-disabled constraint.</description>
+        <name>CaseTransitionValidator</name>
+        <script><![CDATA[var CaseTransitionValidator = Class.create();
+CaseTransitionValidator.prototype = {
+    /**
+     * No-arg initializer. The class holds no per-instance state across
+     * calls (each guard call from a flow/Business Rule/UI Action is
+     * stateless), so initialize() is intentionally empty. Keeping the
+     * empty initializer lets callers use the platform-canonical
+     * `new x_casemgmt.CaseTransitionValidator()` instantiation pattern.
+     */
+    initialize: function() {
+    },
+
+    /**
+     * Validates the Draft -> Open transition.
+     *
+     * Per AAP Section 0.5.5 (verbatim):
+     *     | From  | To   | Required condition         | Failure handling          |
+     *     | Draft | Open | assigned_group populated   | Surface form-level error  |
+     *
+     * The caller (the validate_open_transition.xml subflow or a
+     * before-update Business Rule) surfaces the returned {error} string
+     * via gs.addErrorMessage() + current.setAbortAction(true) so the
+     * blocking-error message appears on the form per AAP Section 0.7.1
+     * ("Surface all blocking errors on the form").
+     *
+     * @param {GlideRecord} caseGr - the case record being transitioned
+     *     (typically the platform-injected `current` GlideRecord in a
+     *     before-update Business Rule, or the case record loaded by the
+     *     Flow Designer subflow).
+     * @return {Object} { ok: true } when valid, or
+     *     { ok: false, error: 'Required field assigned_group is empty.' }
+     *     when assigned_group is null/empty/whitespace, or
+     *     { ok: false, error: 'Case record is missing.' } when caseGr
+     *     is null/undefined.
+     */
+    canTransitionToOpen: function(caseGr) {
+        if (!caseGr) {
+            return { ok: false, error: 'Case record is missing.' };
+        }
+        // GlideRecord.getValue() returns the column's string value or
+        // null. Coerce to String defensively (some platform releases
+        // return GlideElement objects instead of primitives) and trim
+        // whitespace. An assigned_group that is a single space character
+        // is functionally empty for the purposes of this guard.
+        var assignedGroup = caseGr.getValue('assigned_group');
+        if (!assignedGroup || String(assignedGroup).trim() === '') {
+            return { ok: false, error: 'Required field assigned_group is empty.' };
+        }
+        return { ok: true };
+    },
+
+    /**
+     * Validates the Open -> In Progress transition.
+     *
+     * Per AAP Section 0.5.5 (verbatim):
+     *     | From | To          | Required condition                                      | Failure handling          |
+     *     | Open | In Progress | assigned_agent populated AND member of assigned_group   | Surface form-level error  |
+     *
+     * Both conditions are checked. If assigned_agent is unset, OR
+     * assigned_group is unset, OR the assigned_agent is set but is not a
+     * member of the assigned_group (verified by isAgentInGroup), the
+     * transition is blocked. The single error message is intentionally
+     * uniform across all three failure modes so a probing client cannot
+     * distinguish which precondition failed (defense against
+     * privilege-escalation reconnaissance).
+     *
+     * @param {GlideRecord} caseGr - the case record being transitioned.
+     * @return {Object} { ok: true } when valid, or
+     *     { ok: false, error: 'Assigned agent must be set and must be a member of the assigned group.' }
+     *     when any precondition fails, or
+     *     { ok: false, error: 'Case record is missing.' } when caseGr
+     *     is null/undefined.
+     */
+    canTransitionToInProgress: function(caseGr) {
+        if (!caseGr) {
+            return { ok: false, error: 'Case record is missing.' };
+        }
+        // Same defensive String() coercion + trim() as canTransitionToOpen.
+        var assignedAgent = caseGr.getValue('assigned_agent');
+        var assignedGroup = caseGr.getValue('assigned_group');
+        if (!assignedAgent || String(assignedAgent).trim() === '') {
+            return { ok: false, error: 'Assigned agent must be set and must be a member of the assigned group.' };
+        }
+        if (!assignedGroup || String(assignedGroup).trim() === '') {
+            return { ok: false, error: 'Assigned agent must be set and must be a member of the assigned group.' };
+        }
+        // Membership check delegated to isAgentInGroup. The sys_ids
+        // passed in are RUNTIME values (read from the case record), NOT
+        // hardcoded literals - this complies with AAP Section 0.7.2's
+        // no-hardcoded-sys_id constraint.
+        if (!this.isAgentInGroup(String(assignedAgent), String(assignedGroup))) {
+            return { ok: false, error: 'Assigned agent must be set and must be a member of the assigned group.' };
+        }
+        return { ok: true };
+    },
+
+    /**
+     * Validates the In Progress -> Resolved transition.
+     *
+     * Per AAP Section 0.5.5 (verbatim):
+     *     | From        | To       | Required condition                                  | Failure handling                                          |
+     *     | In Progress | Resolved | All linked x_casemgmt_case_task have status=Closed | "All tasks must be closed before resolving this case."    |
+     *
+     * Per AAP Section 0.7.4 (verbatim error message):
+     *     "All tasks must be closed before resolving this case."
+     *
+     * The string above MUST appear character-for-character in the return
+     * value when at least one child task has status != 'Closed'. The
+     * caller (validate_resolved_transition.xml subflow or a future
+     * before-update Business Rule) passes this message to
+     * gs.addErrorMessage(), which surfaces it on the form.
+     *
+     * Implementation delegates to getOpenTaskCountForCase, which uses
+     * GlideAggregate for an efficient COUNT(*) query rather than
+     * fetching task rows. The boolean predicate (count > 0) is computed
+     * here so the validator's API stays uniform.
+     *
+     * Semantic source-side reference: ArkCase
+     * CaseFileTasksServiceImpl.java line 45-50
+     * (acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+     *  java/com/armedia/acm/plugins/casefile/service/
+     *  CaseFileTasksServiceImpl.java) delegated to a Solr
+     * ChildDocumentsSearchService for a comparable count; the
+     * ServiceNow target uses the platform-native GlideAggregate
+     * because Solr is out of POC scope per AAP Section 0.3.2.
+     *
+     * @param {GlideRecord} caseGr - the case record being transitioned.
+     * @return {Object} { ok: true } when zero open child tasks remain,
+     *     or { ok: false, error: 'All tasks must be closed before resolving this case.' }
+     *     when at least one child task has status != Closed, or
+     *     { ok: false, error: 'Case record is missing.' } when caseGr
+     *     is null/undefined.
+     */
+    canTransitionToResolved: function(caseGr) {
+        if (!caseGr) {
+            return { ok: false, error: 'Case record is missing.' };
+        }
+        // GlideRecord.getUniqueValue() returns the sys_id of the current
+        // row. This sys_id is a RUNTIME value (computed by the platform
+        // when the case row was inserted), NOT a hardcoded literal.
+        var openCount = this.getOpenTaskCountForCase(String(caseGr.getUniqueValue()));
+        if (openCount > 0) {
+            // VERBATIM AAP Section 0.7.4 error message - DO NOT paraphrase.
+            return { ok: false, error: 'All tasks must be closed before resolving this case.' };
+        }
+        return { ok: true };
+    },
+
+    /**
+     * Validates the Resolved -> Closed transition.
+     *
+     * Per AAP Section 0.5.5 (verbatim):
+     *     | From     | To     | Required condition                                          | Failure handling          |
+     *     | Resolved | Closed | Caller has x_casemgmt_case_manager role; auto-set closed_date | Surface form-level error  |
+     *
+     * The role check uses gs.getUser().hasRole(role_name) which accepts
+     * the role's NAME ('x_casemgmt_case_manager') as a stable
+     * human-readable key per AAP Section 0.7.2. This is the canonical
+     * pattern for role checks in scoped applications - it does NOT
+     * require a hardcoded role sys_id.
+     *
+     * The closed_date side-effect is NOT performed here. It is the
+     * responsibility of two separate artifacts:
+     *   - ../business_rules/x_casemgmt_set_closed_date.xml (catches
+     *     direct DB updates: Table API, scripted REST, GlideRecord
+     *     scripts, bulk imports)
+     *   - ../flows/sub_flows/validate_closed_transition.xml (catches
+     *     interactive transitions through the form/UI)
+     * Defense in depth between these two writers is intentional;
+     * see set_closed_date.xml's documentation for details.
+     *
+     * Dual-mode userId argument:
+     *   - When userId is empty/null OR equals gs.getUserID() - use
+     *     gs.getUser() (the current session user) - this is the
+     *     standard interactive-form-update path.
+     *   - When userId is non-empty AND differs from gs.getUserID() -
+     *     look up the named user by sys_id, then call
+     *     gs.getUser(user_name).hasRole(role_name) - this supports
+     *     scheduled flows or system-context calls that validate
+     *     transitions on behalf of a specific user (e.g., "did
+     *     [requested user] have the case_manager role at request
+     *     time?").
+     *
+     * @param {GlideRecord} caseGr - the case record being transitioned.
+     * @param {String} userId - sys_id of the user attempting the
+     *     transition. Typically gs.getUserID() (the current session
+     *     user); may be a different sys_id for system-context calls.
+     *     If null/empty, defaults to the current session user.
+     * @return {Object} { ok: true } when the user has the case_manager
+     *     role, or { ok: false, error: 'Only case managers can close cases.' }
+     *     when the role check fails, or
+     *     { ok: false, error: 'Case record is missing.' } when caseGr
+     *     is null/undefined.
+     */
+    canTransitionToClosed: function(caseGr, userId) {
+        if (!caseGr) {
+            return { ok: false, error: 'Case record is missing.' };
+        }
+        // hasManagerRole resolves the case_manager role membership for
+        // the user identified by userId. Three branches:
+        //   (a) userId is provided and equals the current session user
+        //       -> gs.getUser() is the most efficient path.
+        //   (b) userId is provided and differs from the current user
+        //       -> look up the named user by sys_id, then resolve
+        //          their roles via gs.getUser(user_name).
+        //   (c) userId is null/empty -> default to current session user.
+        var hasManagerRole;
+        if (userId && String(userId).trim() !== '' && String(userId) === String(gs.getUserID())) {
+            hasManagerRole = gs.getUser().hasRole('x_casemgmt_case_manager');
+        } else if (userId && String(userId).trim() !== '') {
+            // Non-current-user context: look up the user record by the
+            // RUNTIME sys_id passed in by the caller (NOT a hardcoded
+            // literal). The user_name is the stable human-readable key
+            // that gs.getUser() accepts; this satisfies the AAP Section
+            // 0.7.2 stable-key constraint.
+            var userGr = new GlideRecord('sys_user');
+            if (userGr.get(String(userId))) {
+                hasManagerRole = gs.getUser(String(userGr.getValue('user_name'))).hasRole('x_casemgmt_case_manager');
+            } else {
+                // Unknown user sys_id -> deny by default. Returning
+                // false rather than throwing keeps the validator's
+                // failure modes uniform (always {ok:false,error:string}).
+                hasManagerRole = false;
+            }
+        } else {
+            hasManagerRole = gs.getUser().hasRole('x_casemgmt_case_manager');
+        }
+        if (!hasManagerRole) {
+            return { ok: false, error: 'Only case managers can close cases.' };
+        }
+        return { ok: true };
+    },
+
+    /**
+     * Validates that a status change does not violate the prohibited
+     * transitions enumerated in AAP Section 0.5.5.
+     *
+     * Two prohibited patterns - both with VERBATIM error messages
+     * per AAP Section 0.7.4:
+     *
+     *   1. Closed -> anything (except staying Closed). Closed is the
+     *      terminal state. The verbatim error message:
+     *           "Closed cases are terminal and cannot be modified."
+     *
+     *   2. Any non-Draft state -> Draft. Backtransitioning to Draft is
+     *      prohibited because Draft is reserved for new cases (the
+     *      portal submission and dictionary default both produce Draft;
+     *      no transition path returns to it). The verbatim error
+     *      message:
+     *           "Cases cannot be returned to Draft."
+     *
+     * The method is designed to be called from before-update Business
+     * Rules where:
+     *     previousStatus = String(previous.status)  // value BEFORE update
+     *     newStatus      = String(current.status)   // proposed value
+     * Flow Designer subflows can pass equivalent values via flow
+     * variables.
+     *
+     * Edge cases handled gracefully:
+     *   - Insert (previousStatus is null/empty): no transition to
+     *     validate -> { ok: true }. This lets the same method be called
+     *     from before-INSERT Business Rules (where previous is null)
+     *     without producing false rejections.
+     *   - newStatus is null/empty: no proposed value -> { ok: true }.
+     *   - Closed -> Closed: not a real transition (no field change) ->
+     *     { ok: true }.
+     *   - Whitespace-only inputs: trimmed before comparison.
+     *
+     * @param {String} previousStatus - the previous status (e.g.,
+     *     'Open', 'In Progress', 'Pending', 'Resolved', 'Closed', or
+     *     '' on insert).
+     * @param {String} newStatus - the new/proposed status. Must be one
+     *     of the choice values in
+     *     ../choices/sys_choice_case_status.xml.
+     * @return {Object} { ok: true } when the proposed transition is
+     *     allowed, or { ok: false, error: 'Closed cases are terminal and cannot be modified.' }
+     *     when transitioning out of Closed, or
+     *     { ok: false, error: 'Cases cannot be returned to Draft.' }
+     *     when transitioning to Draft from any non-Draft state.
+     */
+    validateNoBacktransition: function(previousStatus, newStatus) {
+        // Defensive coercion. The caller may pass GlideElement objects,
+        // primitives, null, or undefined. String() of null/undefined
+        // produces 'null' / 'undefined' which would otherwise compare
+        // unexpectedly; the explicit ternary covers that case.
+        var prev = previousStatus ? String(previousStatus).trim() : '';
+        var next = newStatus ? String(newStatus).trim() : '';
+
+        // Case 1: Closed is terminal - no transitions out.
+        // The (next !== 'Closed' && next !== '') guard avoids false
+        // rejections for:
+        //   - Closed -> Closed (no field change; not a real transition)
+        //   - Closed -> '' (proposed value is empty/cleared; not a
+        //     real transition; the caller's other guards or dictionary
+        //     mandatory flag will reject the empty value separately)
+        if (prev === 'Closed' && next !== 'Closed' && next !== '') {
+            // VERBATIM AAP Section 0.7.4 error message - DO NOT paraphrase.
+            return { ok: false, error: 'Closed cases are terminal and cannot be modified.' };
+        }
+
+        // Case 2: Any non-Draft -> Draft is prohibited.
+        // The (prev !== '' && prev !== 'Draft') guard avoids false
+        // rejections for:
+        //   - INSERT (prev is empty -> no transition to validate; the
+        //     dictionary default value places new rows in Draft and
+        //     this is the canonical entry point)
+        //   - Draft -> Draft (no field change; harmless no-op)
+        if (prev !== '' && prev !== 'Draft' && next === 'Draft') {
+            // VERBATIM AAP Section 0.7.4 error message - DO NOT paraphrase.
+            return { ok: false, error: 'Cases cannot be returned to Draft.' };
+        }
+
+        return { ok: true };
+    },
+
+    /**
+     * Helper: returns true when the user is a member of the group.
+     *
+     * Implementation queries the OOB sys_user_grmember table, the
+     * canonical group-membership join table in ServiceNow. Each
+     * sys_user_grmember row links a `user` field (reference ->
+     * sys_user) to a `group` field (reference -> sys_user_group); a
+     * single matching row is sufficient evidence of membership.
+     *
+     * No hardcoded sys_ids: the userSysId and groupSysId arguments are
+     * RUNTIME values supplied by the caller (typically read from the
+     * case record's assigned_agent / assigned_group fields). This
+     * helper never embeds a literal sys_id.
+     *
+     * setLimit(1) is a defensive optimization. At most one membership
+     * row exists per (user, group) pair, but setting an explicit limit
+     * tells the database engine to short-circuit at the first hit and
+     * eliminates any potential for a misconfiguration to fetch all
+     * membership rows of a populous group.
+     *
+     * Used by:
+     *   - this.canTransitionToInProgress (Open -> In Progress validation)
+     *   - ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+     *     (before-update guard on the case row that re-validates
+     *     membership any time assigned_agent changes)
+     *
+     * @param {String} userSysId - sys_id of a sys_user record. May be
+     *     null, undefined, empty, or whitespace-only - all of which
+     *     are treated as "not a member" without throwing.
+     * @param {String} groupSysId - sys_id of a sys_user_group record.
+     *     Same null/empty handling as userSysId.
+     * @return {Boolean} true if at least one sys_user_grmember row
+     *     links the given user to the given group; false otherwise
+     *     (including when either argument is null/empty).
+     */
+    isAgentInGroup: function(userSysId, groupSysId) {
+        if (!userSysId || !groupSysId) {
+            return false;
+        }
+        // Normalize whitespace-only strings to empty so the GlideRecord
+        // query never receives a meaningless filter value.
+        var userVal = String(userSysId).trim();
+        var groupVal = String(groupSysId).trim();
+        if (userVal === '' || groupVal === '') {
+            return false;
+        }
+        var memberGr = new GlideRecord('sys_user_grmember');
+        memberGr.addQuery('user', userVal);
+        memberGr.addQuery('group', groupVal);
+        memberGr.setLimit(1);
+        memberGr.query();
+        return memberGr.next() ? true : false;
+    },
+
+    /**
+     * Helper: returns the count of OPEN child tasks for the given
+     * case (i.e., child case_task rows where status != 'Closed').
+     *
+     * Implementation uses GlideAggregate, which executes a SQL
+     * COUNT(*) directly in the database rather than fetching task
+     * rows into the application layer. This is meaningfully more
+     * efficient than GlideRecord.getRowCount() for cases with many
+     * tasks, and is the correct pattern for count-only checks.
+     *
+     * No hardcoded sys_ids: the caseSysId argument is a RUNTIME value
+     * supplied by the caller (typically caseGr.getUniqueValue()). This
+     * helper never embeds a literal sys_id.
+     *
+     * The status filter uses the literal Title Case value 'Closed' -
+     * this matches the choice list defined in
+     * ../choices/sys_choice_case_task_status.xml (Open, In Progress,
+     * Closed). ServiceNow Choice fields persist the LABEL string by
+     * default, not an integer ID, so the != filter compares the
+     * stored string value directly.
+     *
+     * Used by:
+     *   - this.canTransitionToResolved (the In Progress -> Resolved
+     *     gate; per AAP Section 0.5.5, the transition is allowed only
+     *     when this method returns 0).
+     *   - Diagnostic logging in calling flows (e.g., the
+     *     validate_resolved_transition subflow may log the count
+     *     when blocking the transition, although the user-facing
+     *     error message is fixed verbatim per AAP Section 0.7.4).
+     *
+     * @param {String} caseSysId - sys_id of the parent
+     *     x_casemgmt_case row. May be null, undefined, empty, or
+     *     whitespace-only - all of which return 0 without throwing.
+     * @return {Number} count of x_casemgmt_case_task rows where
+     *     case = caseSysId AND status != 'Closed'. Returns 0 when
+     *     caseSysId is invalid or no rows match.
+     */
+    getOpenTaskCountForCase: function(caseSysId) {
+        if (!caseSysId || String(caseSysId).trim() === '') {
+            return 0;
+        }
+        var caseVal = String(caseSysId).trim();
+        // GlideAggregate constructor takes the table name. The scoped
+        // table x_casemgmt_case_task is defined in
+        // ../tables/x_casemgmt_case_task.xml and its `case` field is
+        // the parent reference (defined in
+        // ../dictionary/x_casemgmt_case_task_case.xml).
+        var agg = new GlideAggregate('x_casemgmt_case_task');
+        agg.addQuery('case', caseVal);
+        // 'Closed' is the literal Title Case choice value from
+        // ../choices/sys_choice_case_task_status.xml. The != operator
+        // selects all OPEN tasks (Open, In Progress, and any future
+        // non-Closed choice values added without breaking this guard).
+        agg.addQuery('status', '!=', 'Closed');
+        agg.addAggregate('COUNT');
+        agg.query();
+        if (agg.next()) {
+            // getAggregate returns a string; parseInt with radix 10 is
+            // the canonical numeric coercion. The defensive isNaN check
+            // covers the unlikely case where the platform returns a
+            // non-numeric string for an empty result set.
+            var n = parseInt(agg.getAggregate('COUNT'), 10);
+            return isNaN(n) ? 0 : n;
+        }
+        return 0;
+    },
+
+    /**
+     * Class-name marker. ServiceNow's Class.create() pattern conventionally
+     * exposes a `type` property whose value matches the class name
+     * (without the scope prefix). This is used by the platform's
+     * introspection tooling and by some debug logging. It MUST be
+     * 'CaseTransitionValidator' (NOT 'x_casemgmt_CaseTransitionValidator')
+     * - the scope prefix lives only in the <api_name> element above,
+     * not in the class name itself.
+     */
+    type: 'CaseTransitionValidator'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>1151d194bc97cb3757738dc61623599d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CaseTransitionValidator</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_include_x_casemgmt_CaseTransitionValidator</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_script_include>
+</record_update>
