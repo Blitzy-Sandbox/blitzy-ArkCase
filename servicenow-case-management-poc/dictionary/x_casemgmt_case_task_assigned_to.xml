@@ -1,0 +1,501 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `assigned_to` Reference field on the `x_casemgmt_case_task`
+    custom table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
+
+        Field         Type                    Constraints
+        assigned_to   Reference -> sys_user   Mandatory
+
+    THIS FIELD IS THE PER-TASK OWNERSHIP COLUMN. It captures the single
+    sys_user who is responsible for completing the task. Every task in the
+    POC scoped application MUST have exactly one assignee at all times -
+    there is no concept of "unassigned" tasks (in contrast to AAP Section
+    0.5.7's parent x_casemgmt_case.assigned_agent column, which is
+    explicitly Optional so that Draft and Open cases may be created
+    without an owner). Tasks are atomic units of work created BY a
+    case_manager or case_agent specifically to delegate to a known user;
+    creating a task with no assignee would be semantically meaningless
+    in this POC's workflow model.
+
+    Critical behaviors that depend on this field (AAP Sections 0.4.1,
+    0.4.4, 0.5.7, 0.7.4):
+
+      1. "MY OVERDUE TASKS" REPORT FOR AGENT WORKSPACE DASHBOARD
+         (../reports/x_casemgmt_my_overdue_tasks.xml,
+          ../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml)
+         Per AAP Section 0.4.1 the Agent Workspace dashboard surfaces a
+         "My overdue tasks" list widget that filters x_casemgmt_case_task
+         rows by:
+             due_date < javascript:gs.daysAgoStart(0)
+               AND status != Closed
+               AND assigned_to = javascript:gs.getUserID()
+         The third filter clause (`assigned_to = javascript:gs.getUserID()`)
+         REQUIRES this dictionary entry to exist with `<reference>sys_user`
+         so the platform's report engine can dot-walk
+         current.assigned_to.sys_id and compare it against the current
+         session's user sys_id. Without this dictionary record, the
+         report's WHERE-clause would fail to compile and the dashboard
+         widget would render empty or error. The "My Overdue Tasks"
+         widget is one of the three core components of the Agent
+         Workspace dashboard - alongside "My Open Cases" (filtered by
+         x_casemgmt_case.assigned_agent) and "Case count by status" - so
+         this field is central to the day-to-day case_agent persona's
+         operational view.
+
+      2. AUTOMATIC FORM-LAYOUT INCLUSION ON x_casemgmt_case_task
+         (parent table ../tables/x_casemgmt_case_task.xml automatic form
+          layout per AAP Section 0.4.4 "Internal user UI" requirements)
+         Per AAP Section 0.4.4 ("ServiceNow's automatic native list and
+         form views for the three custom tables"), when an internal user
+         opens a x_casemgmt_case_task record, the form auto-renders every
+         dictionary field in declared order. This entry contributes the
+         "Assigned To" picker (a sys_user reference picker that lets the
+         task creator search by display name, user_name, email, or
+         partial match against the sys_user table). It is one of the
+         four user-facing input fields a case_agent fills in when
+         creating a new task from the parent case's Related List (the
+         others being Subject, Type, Due Date - with Status defaulting
+         to Open at insert time and Case auto-populated from the
+         Related List context).
+
+      3. RELATED-LIST DISPLAY COLUMN ON THE PARENT CASE FORM
+         (parent table ../tables/x_casemgmt_case.xml automatic Related
+          List rendering per AAP Section 0.4.4)
+         Per AAP Section 0.4.4 the parent case form auto-renders a
+         Related List of x_casemgmt_case_task rows filtered by
+         `case = current.sys_id`. The default columns surfaced in the
+         related list - Subject, Type, Status, Assigned To, Due Date -
+         allow a manager or agent reviewing the case to see at-a-glance
+         WHO is responsible for each pending task. The "Assigned To"
+         column dereferences this field's sys_id pointer to the user's
+         display column (typically `name` on sys_user) for the related
+         list rendering, which is a platform-native capability provided
+         by virtue of declaring `<reference>sys_user</reference>` here.
+
+      4. ACL "ASSIGNED ONLY" CASCADE FOR CASE_AGENT
+         (../acl/x_casemgmt_case_task_*.xml)
+         Per AAP Section 0.5.6: case_agent has "Assigned only" CRUD
+         access. While the AAP defines "Assigned only" at the case level
+         as `assigned_agent = current user OR assigned_group contains
+         current user`, the case_task table inherits a parallel
+         per-task gate: a case_agent may read/write a task ONLY IF the
+         agent is the task's `assigned_to` user OR the parent case's
+         assigned_agent / assigned_group resolves to the agent's
+         identity. The first half of that condition uses THIS field
+         directly:
+             current.assigned_to == gs.getUserID()
+         The second half uses the `case` reference field declared in
+         ../dictionary/x_casemgmt_case_task_case.xml to dot-walk to the
+         parent case's assigned_agent / assigned_group. This dictionary
+         entry's `<reference>sys_user</reference>` makes the first
+         condition expressible because the platform's reference engine
+         resolves `current.assigned_to` to a sys_user sys_id at ACL
+         evaluation time.
+
+      5. SEED-DATA POPULATION VIA user_name LOOKUP
+         (../seed-data/tasks/x_casemgmt_case_task_demo_*.xml,
+          ../scripts/seed_demo_data.js)
+         Per AAP Section 0.5.2 reference-resolution rules: "User
+         references (e.g., on assigned_agent, assigned_to, seed data) ->
+         look up sys_user by `user_name`." The seed-data XMLs and the
+         idempotent seed_demo_data.js script resolve the assignee
+         sys_id at seed time via:
+             var userGr = new GlideRecord('sys_user');
+             userGr.addQuery('user_name', 'x_casemgmt_demo_agent');
+             userGr.query();
+             if (userGr.next()) { taskGr.assigned_to = userGr.sys_id; }
+         There are NO hard-coded sys_id literals in any seed file
+         pointing into this column - all references resolve by the
+         human-readable user_name attribute, per AAP Section 0.7.2 "no
+         hardcoded sys_id constraint" applied to seed data. AAP Section
+         0.7.4's minimum demo-data thresholds require "at least one
+         open and one closed task per demo case in 'In Progress' or
+         'Pending' state, to exercise the 'all-tasks-closed' gate" -
+         all such seed tasks resolve their assigned_to via this lookup
+         pattern against the synthetic demo users at
+         ../seed-data/users/sys_user_x_casemgmt_demo_*.xml.
+
+      6. CASCADE-DELETE BEHAVIOR (DEFAULT - NO CASCADE)
+         (this dictionary entry's `<reference_cascade_rule/>` element)
+         Per the agent prompt's Phase 3 instruction
+         (`<reference_cascade_rule/>` - empty (no cascade behavior on
+         user deletion)), the platform's default reference-deletion
+         semantics apply: when a sys_user is deleted (a rare global-
+         admin operation), tasks retain the orphaned reference rather
+         than being auto-deleted. This is the POC-safe default because
+         user deletion is gated by global ACLs not modified by this
+         scoped application (per AAP Section 0.3.2 "No global ACLs"),
+         and silent cascade-deletion of every task assigned to a
+         deactivated user would be a destructive action with no audit
+         signal. Manual cleanup or reassignment of orphaned tasks is
+         acceptable and surfaces operator awareness. The empty element
+         (in contrast to the explicit "none" literal used on the
+         sibling x_casemgmt_case_task.case field) is functionally
+         equivalent and is what the agent prompt's Phase 3 specifies
+         for THIS field.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java line 75:
+            private String assignee;
+        ArkCase's AcmTask used a free-form String column to capture the
+        assignee. The String value was the LDAP id (a username
+        attribute resolvable against the OpenLDAP directory backing
+        ArkCase) - NOT a foreign key to a user table. The companion
+        getter/setter at lines 252-260
+            public String getAssignee()  { return assignee; }
+            public void   setAssignee(String assignee) { this.assignee = assignee; }
+        materialised the assignee as a free-form String at every
+        access; the application layer was responsible for treating it
+        as a user identifier and resolving it (when needed) through the
+        AcmUser DAO to fetch the user's display name, email, manager,
+        etc. This was a known pain point: the LDAP id could be
+        misspelled, could refer to a deactivated user, or could fail to
+        map to a sys_user-equivalent row entirely - the String field
+        was the only authority and was free-form.
+
+        AcmTask.java line 122 documents the runtime semantic of the
+        assignee column:
+            "When a user claims a task, then the task is assigned to
+             that user, and is not part of the group bucket any more."
+        The ArkCase pattern combined the `assignee` String column with
+        a `candidateGroups` List<String> column (line 125) such that a
+        task could be in one of two states: claim-pending (assignee
+        empty, candidateGroups populated) or claimed (assignee set,
+        candidateGroups irrelevant). The ServiceNow target SIMPLIFIES
+        this two-stage pattern into a single mandatory `assigned_to`
+        column - per AAP Section 0.3.1's MINIMAL CHANGE CLAUSE the POC
+        does not replicate the candidate-group claiming mechanism (it
+        is an Activiti BPM feature not enumerated in AAP Section
+        0.5.7's six-field target schema), and therefore does not need
+        the optional/empty assignee state that arkcase needed for
+        unclaimed tasks.
+
+        The ServiceNow target replaces the participants-list-as-source-
+        of-truth pattern with a single proper foreign-key Reference
+        column on the task row, gaining four critical capabilities:
+          * Referential integrity: only existing, active sys_user rows
+            may be chosen (the platform's reference picker enforces
+            this; no scripted REST or background-script bypass exists
+            for case_task creation since AAP Section 0.4.1 specifies no
+            anonymous-task-submission portal endpoint).
+          * Single source of truth: the same `sys_user` table that
+            ServiceNow uses for all OOB authentication, role
+            assignment, notification delivery, and dashboard scoping is
+            now the canonical user backing task ownership.
+          * Dot-walk dereferencing: ACL conditions, form layouts, and
+            list views can traverse `current.assigned_to.name`,
+            `current.assigned_to.email`, or `current.assigned_to.manager`
+            because the column is a typed reference rather than a
+            free-form String.
+          * Cascade safety: the platform's reference-deletion semantics
+            (cascade rule, controlled by the `<reference_cascade_rule/>`
+            element below - left empty for default "no cascade"
+            behavior) prevent accidental orphaning of tasks when a user
+            is deactivated. ArkCase's String-username pattern silently
+            broke when LDAP entries were renamed or removed.
+
+      - The field name is `assigned_to` (lowercase, snake_case; NOT
+        `assignee`, NOT `assignedTo`, NOT `assigneeLdapId`, NOT
+        `assigned_user`, NOT `assigned_agent`) per AAP Section 0.5.7
+        verbatim. This is an INTENTIONAL rename from ArkCase's
+        `assignee` String column to align with the ServiceNow
+        convention used by OOB tables (incident.assigned_to,
+        sc_request.assigned_to, change_request.assigned_to all use
+        `assigned_to` for the per-record-assignee column). The
+        asymmetry with the parent x_casemgmt_case table's
+        `assigned_agent` field name is intentional: at the case level
+        the AAP chose the domain-specific "agent" terminology to evoke
+        the case-management persona; at the task level the OOB
+        convention is preserved verbatim because tasks are generic
+        work items that may be assigned to any user (case_manager,
+        case_agent, or case_viewer alike, though case_viewer cannot
+        be assigned by ACL since they have no write access).
+
+      - ArkCase's `assignee` String had no explicit length cap
+        (defaulting to the database-engine VARCHAR(255) for MySQL
+        InnoDB). The ServiceNow target uses the standard 32-character
+        Reference-field width to store the sys_id of the chosen
+        sys_user row; the platform's auto-generated form picker, list
+        view, and report builder all dereference to the user's display
+        column (typically `name` or `user_name`) for human-readable
+        display via the OOB sys_user dictionary's display=true column.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_casemgmt_case_task` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. The `<reference>`
+        element resolves to OOB `sys_user` by table name (NOT by
+        sys_id), preserving zero-hardcoded-sys_id compliance. NO
+        global-scope writes - the OOB `sys_user` table is REFERENCED
+        but never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>`,
+        `<sys_package>`, and `<reference>` text-node values resolve by
+        scope source name and table name respectively, not by literal
+        sys_id. The `<sys_id>` text-node value is THIS record's own
+        deterministic primary key (MD5 of the canonical field
+        identifier `x_casemgmt_case_task.assigned_to` =
+        388df21ea3ca149d70916144f84ecf42) and is NOT a reference to
+        any other record. Per AAP Section 0.7.2 this scheme guarantees
+        that a fresh PDI re-import of the Update Set produces byte-
+        identical sys_id values, which is necessary for round-trip-
+        verify (../scripts/round_trip_verify.md) zero-error preview.
+      - The concrete scope identifier `casemgmt` is used per AAP convention. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in the XML before export.
+      - mandatory=true at the dictionary level: AAP Section 0.5.7
+        verbatim declares the `assigned_to` field on x_casemgmt_case_task
+        as Mandatory with no qualifying suffix (in contrast to
+        x_casemgmt_case.assigned_group which says "Mandatory on Open
+        transition" - a transition-level constraint NOT enforced at
+        the dictionary level - and x_casemgmt_case.assigned_agent which
+        says "Optional" outright). For case_task.assigned_to,
+        mandatoriness is absolute: a task without an assignee is
+        semantically meaningless (the entire raison d'etre of creating
+        a task is to delegate work to a specific user), and the
+        platform's mandatory flag enforces the constraint at every
+        entry point - manual save in the form, GlideRecord.insert()
+        from server-side scripts, and Table API POST. There is NO
+        submission path in this scoped application that legitimately
+        creates a task without an assignee (no portal-anonymous task
+        creation, no bulk-import of headless tasks, etc.), so a hard
+        mandatory flag produces zero false-positive rejections.
+      - read_only=false: case_manager and the case_agent (when the
+        case is "Assigned only" to them) both edit this field directly
+        when creating tasks under a case. The auto-generated New Task
+        form on the case's Related List leaves `assigned_to` empty by
+        default (AAP does not specify a default assignee), prompting
+        the creator to explicitly choose a user. Field-level write
+        access is governed by the table-level ACLs at
+        ../acl/x_casemgmt_case_task_*.xml (no separate field-level ACL
+        is needed for `assigned_to` since AAP Section 0.5.6 enumerates
+        the field-level-ACL-required fields as `assigned_group` and
+        `assigned_agent` on the case table only - the case_task
+        table's per-field protection is delegated to the table-level
+        "Assigned only" condition).
+      - default_value (empty): no automatic assignee assignment. The
+        task creator (case_manager or case_agent) explicitly picks the
+        responsible user at insert time. AAP does not specify a
+        default assignee.
+      - audit=false: per AAP Section 0.3.1 minimal-change clause and
+        consistent with the sibling Reference / DateTime / Choice /
+        String fields in this same dictionary set (only the `status`
+        field on x_casemgmt_case carries audit=true since it is the
+        most important field for state-machine forensics). Per-task
+        assignee changes are logged through the standard
+        sys_history_set / sys_audit infrastructure on demand but do
+        not trigger the per-field audit overhead by default. The
+        agent prompt's Phase 4 explicitly directs `audit=false` for
+        this field.
+      - max_length=32: the standard ServiceNow Reference-field width.
+        The dictionary stores the 32-character lowercase-hex sys_id of
+        the referenced sys_user row as the actual column value; the
+        platform's auto-generated form picker, list view, and report
+        builder all dereference to the user's display column (name)
+        for human-readable display via the OOB sys_user dictionary's
+        display=true column. The agent prompt's Phase 3 verbatim
+        specifies "max_length=32 because reference fields store
+        32-char sys_id values internally".
+      - choice=0: this is a Reference field, NOT a Choice field. The
+        sibling sys_choice_* records under ../choices/ apply only to
+        the `type`, `status`, `priority`, `pending_reason`,
+        `case_task.type`, `case_task.status`, and `case_party.party_type`
+        columns - none are needed here.
+      - choice_field, choice_table empty: same reason as choice=0
+        above.
+      - reference=sys_user: OOB ServiceNow user table. AAP Section
+        0.5.7 specifies this exact target table by name. No scoped
+        wrapper or facade is needed; tasks reference users directly
+        across the scoped/global boundary, which ServiceNow permits
+        for OOB tables (the reverse direction - global tables
+        referencing scoped tables - would require a Cross-Scope
+        Privilege record, but is not needed for this POC).
+      - reference_cascade_rule (empty): default platform behavior,
+        which is "do nothing on referenced-record deletion." If a
+        user is deleted (a rare global-admin operation), tasks retain
+        the orphaned reference; this is acceptable for the POC since
+        user deletion is gated by global ACLs not modified by this
+        scoped application (per AAP Section 0.3.2). AAP does not
+        specify a cascade rule. The empty element is functionally
+        equivalent to "none" and matches what the agent prompt's
+        Phase 3 specifies for THIS field.
+      - reference_qual, reference_qual_condition (empty): no filter on
+        which users may be selected. ANY active sys_user is eligible
+        as an assignee at the picker level. AAP does not require
+        filtering by user role, group membership, active status, or
+        any other criterion. (One could envision a future-state
+        qualifier preventing assignment to inactive users, e.g.,
+        `<reference_qual>active=true</reference_qual>`, but that is
+        OUT OF SCOPE per AAP Section 0.3.1's MINIMAL CHANGE CLAUSE.
+        The agent prompt's Key Insight #5 explicitly notes: "If a
+        future enhancement wants to restrict assignment to active
+        users only, add `<reference_qual>active=true</reference_qual>`.
+        AAP doesn't require this.")
+      - use_reference_qualifier=simple: standard ServiceNow setting
+        when no advanced (scripted) reference qualifier is in use.
+      - dynamic_ref_qual (empty): no dynamic reference qualifier.
+      - reference_floor, reference_key, reference_type (empty):
+        standard defaults for a basic table-to-table reference; no
+        advanced reference semantics (typeahead override, reference
+        floor table, document reference, etc.) are needed here.
+      - element_reference=false: this is a TABLE reference, not an
+        ELEMENT reference (which would point at a specific dictionary
+        column on another table). AAP specifies a row-level reference
+        target (a user as a whole, not a particular column on that
+        user's record).
+      - table_reference=false: this is NOT a "Document ID" / "Table"
+        polymorphic reference (which is what `glide_var` style fields
+        on the OOB task table use to reference any-table-any-row). It
+        is a fixed-target reference to sys_user only.
+      - text_index=false: Reference fields are not full-text-indexed.
+        Searches by user are performed via GlideRecord addJoinQuery
+        against sys_user on its sys_id column; full-text indexing of
+        the 32-char sys_id has no value.
+      - unique=false: a single user is correctly responsible for many
+        tasks (that is the entire point of agent-based task routing -
+        a case_agent's "My Overdue Tasks" workspace is meant to display
+        many tasks with the agent's sys_id in this column), so
+        uniqueness on this column would be semantically wrong and
+        would break AAP Section 0.7.4's minimum demo-data thresholds
+        which require "at least one open and one closed task per demo
+        case" - implying many tasks share a single assignee.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation. The actual sys_id of the chosen sys_user
+        row is persisted on every task record (in contrast to
+        ArkCase's free-form String pattern that re-resolved the
+        assignee at every access).
+      - spell_check=false: Reference fields hold a 32-char sys_id and
+        the platform renders the dereferenced display value at view
+        time; spell-check is meaningless for the persisted value and
+        would be misapplied to the dereferenced human-name display.
+      - No PII: the field stores a 32-char sys_id pointer to a user
+        record; the user record itself stores categorical
+        organizational identity (synthetic user_name, fabricated
+        display name, fabricated email at the demo seed level only)
+        per AAP Section 0.7.2 ("synthetic only"). The seed users at
+        ../seed-data/users/sys_user_x_casemgmt_demo_*.xml are
+        fabricated synthetic accounts (one per role: case_manager,
+        case_agent, case_viewer); no real names, real email
+        addresses, or PII derived from the source ArkCase database
+        are placed in this column at any point in the build.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case_task.xml (parent table; `<name>`
+            here references the scoped task table by name; the
+            platform requires the table to exist before its dictionary
+            entries can be created)
+          * sys_user (OOB; always present on every PDI; never modified
+            by this Update Set per AAP Section 0.3.2 "No global ACLs
+            ... No global business rules, no global script includes,
+            no global UI policies")
+      - This record MUST load BEFORE the consumers that read or write
+        the `assigned_to` column on x_casemgmt_case_task:
+          * ../reports/x_casemgmt_my_overdue_tasks.xml (the Agent
+            Workspace dashboard's overdue-tasks list widget; filters
+            by `due_date < javascript:gs.daysAgoStart(0) AND status
+            != Closed AND assigned_to = javascript:gs.getUserID()`)
+          * ../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml
+            (the Agent Workspace dashboard that surfaces the overdue-
+            tasks report widget)
+          * ../acl/x_casemgmt_case_task_*.xml (table-level ACLs on the
+            case_task table; the case_agent "Assigned only" condition
+            uses `current.assigned_to == gs.getUserID()` as one half
+            of the access check, with the other half dot-walking
+            `current.case.assigned_agent` / `current.case.assigned_group`
+            via the sibling `case` reference field)
+          * ../seed-data/users/sys_user_x_casemgmt_demo_*.xml (the
+            synthetic demo users - one per role - that the demo tasks
+            will reference; this dictionary entry must precede the
+            seed users for the preview engine to reconcile the field
+            schema)
+          * ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml
+            (synthetic demo tasks that populate this field by lookup
+            of the demo user's `user_name` attribute via the
+            seed_demo_data.js script - never via hard-coded sys_id,
+            per AAP Section 0.7.2 the no-hardcoded-sys_id constraint
+            applies to flows, ACL conditions, scripts, seed data, UI
+            Policies, UI Actions, Business Rules, and client scripts)
+          * ../scripts/seed_demo_data.js (the idempotent seed script
+            that creates the demo task rows; for each demo task it
+            performs:
+                var userGr = new GlideRecord('sys_user');
+                userGr.addQuery('user_name', '<demo-user-name>');
+                userGr.query();
+                if (userGr.next()) { taskGr.assigned_to = userGr.sys_id; }
+            to resolve the assignee sys_id at seed time, never via
+            hard-coded literals)
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Assigned To</column_label>
+        <comments>Mandatory reference to sys_user - the user responsible for this task. Filter for the My Overdue Tasks report (../reports/x_casemgmt_my_overdue_tasks.xml) on the Agent Workspace dashboard, which queries assigned_to = javascript:gs.getUserID() AND due_date &lt; javascript:gs.daysAgoStart(0) AND status != Closed. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_task as one half of the access check (current.assigned_to == gs.getUserID()), with the other half dot-walking current.case.assigned_agent / current.case.assigned_group. Replaces ArkCase AcmTask.assignee (String username, resolved at runtime via OpenLDAP id; the target uses a proper foreign key to sys_user). Cascade rule is empty (default "no cascade" - deleting a sys_user does NOT auto-cascade-delete tasks; manual cleanup or reassignment of orphaned tasks is acceptable).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>assigned_to</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>reference</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>32</max_length>
+        <name>x_casemgmt_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference>sys_user</reference>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>388df21ea3ca149d70916144f84ecf42</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_task_assigned_to</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

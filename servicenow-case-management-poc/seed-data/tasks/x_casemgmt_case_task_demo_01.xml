@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Task 01 - Investigate request scope (Open / Investigation)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the FIRST of the 8-task demo dataset; together with
+    tasks 02-08, it satisfies the AAP requirement (Section 0.7.4) of
+    providing demo tasks that exercise the resolve-blocker and resolve-
+    success gates on both case-type flows. The complete 8-task fixture
+    matrix:
+
+        Task 01 - Open        / Investigation / parent case 03 (In Progress GI)        ## THIS FILE
+        Task 02 - Closed      / Review        / parent case 03 (In Progress GI)
+        Task 03 - Open        / Follow-up     / parent case 04 (Pending GI)
+        Task 04 - Closed      / Review        / parent case 05 (Resolved GI)
+        Task 05 - Closed      / Other         / parent case 05 (Resolved GI)
+        Task 06 - In Progress / Investigation / parent case 08 (In Progress Complaint)
+        Task 07 - Open        / Investigation / parent case 08 (In Progress Complaint)
+        Task 08 - Closed      / Review        / parent case 09 (Resolved Complaint)
+
+    The 8-task dataset thus exercises:
+      * All 4 task types - this task is the FIRST of FOUR Investigation-
+        typed demonstrators (tasks 01, 02 on case 03 use Investigation
+        in the original 8-task plan; the agent prompt for THIS file
+        specifies type Investigation for the open-investigation child
+        of case 03; tasks 06 and 07 are also Investigation on case 08).
+        Per AAP Section 0.5.7 the case_task type Choice list defines
+        exactly four values - Investigation, Review, Follow-up, Other -
+        and Investigation is the FIRST value, positioned as the
+        canonical fact-gathering activity that drives a case from its
+        Open intake through the body of investigative work that
+        ultimately produces a resolution. The "Investigate request
+        scope" subject makes this lifecycle role explicit: the agent
+        is performing the deeper investigation that defines the
+        substance of case 03's In Progress phase.
+      * All 3 task statuses (Open, In Progress, Closed) - this task
+        contributes the FIRST of two Open tasks (the other being
+        task 03 on case 04 with type Follow-up). The Open status is
+        the initial, not-yet-started status that signals the agent
+        has scheduled the work but has not yet begun execution. THIS
+        task's Open status is THE LOAD-BEARING DEMONSTRATION that the
+        validate_resolved_transition subflow's GlideRecord query
+        addQuery('status', '!=', 'Closed') correctly identifies non-
+        Closed children as resolve-blockers. Pairing this Open task
+        with sibling task 02 (Closed) on the same parent case 03
+        creates the canonical blocker pair: case 03 has TWO child
+        tasks but only ONE blocker (this task), proving the gate
+        filters by status rather than counting all child tasks.
+      * 5 unique parent cases (03, 04, 05, 08, 09) - this task is the
+        FIRST child of case 03 (In Progress General Inquiry). With
+        sibling task 02 (Closed), case 03 has EXACTLY ONE non-Closed
+        child task (this task). The case-03 fixture is the canonical
+        demonstration of the General Inquiry resolve-BLOCKER path:
+        when the operator attempts case 03 In Progress -> Resolved,
+        the validate_resolved_transition subflow finds THIS row in
+        its GlideRecord query and aborts the transition with the
+        verbatim error "All tasks must be closed before resolving
+        this case." THIS TASK IS THE CANONICAL RESOLVE-BLOCKER
+        ANCHOR for the entire 8-task dataset; without this Open task
+        the General Inquiry blocker path could not be exercised.
+      * Both flow paths (General Inquiry and Complaint) - this task
+        sits on a General Inquiry case (case 03). The General Inquiry
+        flow's resolve-BLOCKER path is exercised by this Open task
+        on case 03; the Complaint flow's resolve-BLOCKER path is
+        exercised by tasks 06 (In Progress) and 07 (Open) on case 08;
+        the General Inquiry flow's resolve-SUCCESS path is exercised
+        by tasks 04 + 05 (both Closed) on case 05; the Complaint
+        flow's resolve-SUCCESS path is exercised by task 08 (Closed)
+        on case 09. THIS task is THE General Inquiry blocker anchor.
+      * Both resolve outcomes (BLOCKED via at least one non-Closed
+        task, and SUCCESS via zero non-Closed tasks) - this task
+        directly enables the BLOCKED outcome on case 03. Per AAP
+        Section 0.5.5 the General Inquiry flow's resolve-blocker
+        behavior MUST surface the exact verbatim error message
+        "All tasks must be closed before resolving this case." (per
+        AAP Section 0.7.4) when the operator attempts In Progress ->
+        Resolved with this Open task as a child of the parent case.
+
+    Lifecycle position - WHY Open / Investigation / parent General
+    Inquiry case In Progress is meaningful:
+      Per AAP Section 0.5.5 the resolve gate's GlideRecord query
+      executed inside the validate_resolved_transition subflow is:
+
+          var gr = new GlideRecord('x_casemgmt_case_task');
+          gr.addQuery('case', current.sys_id);
+          gr.addQuery('status', '!=', 'Closed');
+          gr.query();
+          if (gr.next()) {
+              // BLOCK: surface the verbatim error message
+              //   "All tasks must be closed before resolving this case."
+          } else {
+              // ALLOW: zero non-Closed tasks - case may be Resolved
+          }
+
+      Case 03 is in In Progress status with type=General Inquiry. With
+      sibling task 02 (Closed) plus THIS task 01 (Open), the query
+      "case = case 03 AND status != Closed" returns ONE row (THIS task -
+      task 02 is filtered out by the status != Closed qualifier). The
+      subflow blocks any attempt to transition case 03 to Resolved and
+      surfaces the verbatim error "All tasks must be closed before
+      resolving this case." THIS TASK IS THE CANONICAL ROW THAT
+      TRIGGERS THE BLOCKER. After an operator manually closes this
+      task (status Open -> status Closed), the resolve gate's query
+      returns ZERO rows and the In Progress -> Resolved transition is
+      allowed.
+
+      The Investigation task type captures the agent's primary fact-
+      gathering activity - the substantive investigative work that
+      defines what an "in-progress" case feels like operationally.
+      Per the AAP's Section 0.5.7 Choice list for case_task type,
+      Investigation is the first of four values (Investigation,
+      Review, Follow-up, Other), positioned to capture the body of
+      work between case intake (Open transition) and case resolution
+      (Resolved transition). The "Investigate request scope" subject
+      makes this lifecycle role explicit: the agent has been assigned
+      the case and is now defining/executing the scope of the
+      investigation that will produce the case outcome.
+
+      The Open status is consistent with this not-yet-completed
+      semantic: the agent has scheduled the investigation, has begun
+      preliminary preparation (sibling task 02's initial review is
+      already Closed indicating the agent has decided what scope to
+      pursue), but has not yet finished the substantive investigative
+      work. The status will progress to Closed once the investigation
+      concludes, at which point the resolve gate on case 03 unblocks
+      and the case may be transitioned to Resolved.
+
+      The +5 day due_date (2026-05-06, relative to the build environment
+      date 2026-05-01) reflects that this investigation work is
+      scheduled to complete five days from now - a near-term, time-
+      sensitive activity that is NOT yet overdue. The relative date
+      pattern uses positive offsets (5 days hence) for active,
+      scheduled tasks, consistent with Open status semantics (a task
+      that has been scheduled but not yet started, with a target
+      completion date in the near future). Per the agent prompt for
+      this file, the +5 day window is also LOAD-BEARING for the
+      dashboard's "My Overdue Tasks" report contract: the date
+      qualifier (due_date < today) is NOT satisfied (2026-05-06 is in
+      the future relative to today 2026-05-01), so this task
+      correctly does NOT appear on the Agent Workspace's "My Overdue
+      Tasks" widget. This demonstrates that the report's date filter
+      correctly excludes future-dated active tasks rather than
+      flagging them as overdue. The +5 day offset positions this task
+      as a not-yet-overdue Open task - present, active, blocking the
+      resolve gate, but not yet flagged as past due.
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This task DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app at ../../app/sys_app/x_casemgmt_case_management.xml
+             and sys_scope at ../../app/sys_scope/x_casemgmt.xml; this
+             task's <sys_scope>/<sys_package> reference fields resolve
+             via the source attribute against those records, with the
+             source value x_casemgmt matching the sys_scope record's
+             scope identifier)
+        - The case_task table definition at
+            ../../tables/x_casemgmt_case_task.xml
+            (this record's <sys_class_name>x_casemgmt_case_task</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case_task table under
+            ../../dictionary/x_casemgmt_case_task_*.xml  (every populated
+            field below requires its dictionary entry to be present:
+            case, subject, type, status, assigned_to, due_date)
+        - All choice records for case_task under ../../choices/
+            (specifically sys_choice_case_task_type.xml and
+             sys_choice_case_task_status.xml; the type=Investigation
+             and status=Open choice values must be registered;
+             "Investigation" with capital I, NOT "investigation" or
+             "INVESTIGATION"; "Open" with capital O, NOT "open" or
+             "OPEN")
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_casemgmt_case_task.xml  (the
+             platform may auto-generate a TASK0000001-format value if
+             the table is configured for auto-numbering; this record
+             does not specify <number/> explicitly and relies on the
+             platform's auto-number maintenance to assign one at
+             import time)
+        - The role records under ../../roles/  (the demo agent's
+             assigned-only access requires the x_casemgmt_case_agent
+             role and its task-table ACLs; the demo manager's full
+             access requires the x_casemgmt_case_manager role)
+        - The ACL records under ../../acl/ for case_task (table-level
+             read/write/create/delete ACLs gate access for the demo
+             agent and demo manager; the demo viewer reads via the
+             read-all ACL)
+        - ../users/sys_user_x_casemgmt_demo_agent.xml  (referenced by
+             <assigned_to>; resolved by user_name lookup against the
+             sys_user table; this agent is the canonical assignee for
+             ALL demo tasks per the unified-agent fixture pattern)
+        - ../cases/x_casemgmt_case_demo_03.xml  (referenced by <case>;
+             resolved by number lookup against x_casemgmt_case; this
+             is the parent In Progress General Inquiry case for which
+             this task is the FIRST child in load order, paired with
+             sibling task 02 as the closed-initial-review SECOND
+             child)
+
+      This task IS REFERENCED BY (loaded AFTER this record):
+        - The validate_resolved_transition subflow at
+            ../../flows/sub_flows/validate_resolved_transition.xml
+            DOES count this task as a non-Closed child of case 03
+            (the subflow's query filters on status != Closed, and
+            this task's status IS Open, which != Closed). Together
+            with sibling task 02 (Closed on case 03), the subflow's
+            query returns EXACTLY ONE row (THIS task only - task 02
+            is filtered out by the status != Closed qualifier),
+            BLOCKING any In Progress -> Resolved transition attempt
+            on case 03 with the verbatim error "All tasks must be
+            closed before resolving this case." THIS TASK IS THE
+            CANONICAL RESOLVE-BLOCKER ROW.
+        - The x_casemgmt_CaseTransitionValidator Script Include at
+            ../../script_includes/x_casemgmt_CaseTransitionValidator.xml -
+            its canTransitionToResolved(currentCase) static method
+            performs the same GlideRecord query against
+            x_casemgmt_case_task and returns false (with the verbatim
+            error message attached) when this row is present.
+        - Dashboard report ../../reports/x_casemgmt_my_open_cases.xml
+            does NOT directly include this task (the report is keyed
+            on cases, not tasks); but case 03 (this task's parent) IS
+            in the report when assigned_agent = current user (the
+            demo agent), demonstrating the Agent Workspace dashboard's
+            list-of-my-cases widget.
+        - Dashboard report ../../reports/x_casemgmt_my_overdue_tasks.xml
+            does NOT include this task in its "My Overdue Tasks"
+            list. The report's filter is "due_date < today AND
+            status != Closed AND assigned_to = current user". This
+            task's status (Open) and assigned_to (demo agent)
+            satisfy two of the three qualifiers, but the date
+            qualifier is NOT satisfied: due_date 2026-05-06 is in
+            the FUTURE relative to today 2026-05-01. Correctly
+            excluded - this is a not-yet-overdue active task.
+        - The Agent Workspace dashboard's "My Overdue Tasks" widget
+            similarly excludes this task for the same reason.
+        - The Agent Workspace dashboard's "Case count by status" donut
+            counts case 03 (this task's parent) in the In Progress
+            slice, not this task; the donut is keyed off case.status,
+            not case_task.status.
+        - The validate_closed_transition subflow checks at case-level
+            (manager role, set closed_date), not task-level; this
+            task does not directly participate in that subflow's
+            logic. However, after THIS task is manually closed by an
+            operator (Open -> Closed), the resolve gate on case 03
+            unblocks; case 03 may then be transitioned In Progress ->
+            Resolved (allowed) and subsequently Resolved -> Closed
+            (which fires the validate_closed_transition subflow).
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER:
+            * The scoped application records under ../../app/
+            * The case_task table at ../../tables/x_casemgmt_case_task.xml
+            * All dictionary entries under ../../dictionary/
+              x_casemgmt_case_task_*.xml
+            * The choice records sys_choice_case_task_type.xml and
+              sys_choice_case_task_status.xml (Investigation and Open
+              values must be registered as accepted choices)
+            * The demo agent user record at
+              ../users/sys_user_x_casemgmt_demo_agent.xml  (assigned_to
+              resolves by user_name lookup)
+            * The parent case at
+              ../cases/x_casemgmt_case_demo_03.xml  (case field
+              resolves by number lookup; CASE0000003 is the parent
+              case's auto-generated number when loaded in order on a
+              fresh PDI)
+        - This record may be loaded in any order relative to:
+            * Sibling task records (tasks 02-08) - the 8-task batch
+              has no inter-task references; tasks reference cases
+              and users only
+            * Demo party records under ../parties/  - parties
+              reference cases, not tasks; no cross-references exist
+              between case_task and case_party
+        - This record MUST be loaded BEFORE: (none) - tasks have no
+          children in the demo dataset. The subflow / Script Include /
+          report / dashboard records that reference this task all
+          resolve their references at runtime via GlideRecord queries;
+          they do not statically depend on this task's sys_id.
+
+    Anti-pattern verification (per agent prompt Phase 5):
+      [x] NO <sys_id> literal references in any cross-reference field
+          (the <sys_id> element below is THIS record's primary key, NOT
+          a reference; references TO OTHER records all use display_value
+          / inner-text canonical-key lookup patterns: <case>,
+          <assigned_to>, <sys_scope>, <sys_package>)
+      [x] <status>Open</status>  (capital O, Title Case, NOT "open" or
+          "OPEN" - matches the choice list registered in
+          ../../choices/sys_choice_case_task_status.xml)
+      [x] <type>Investigation</type>  (capital I, single Title Case
+          word, NOT "investigation" or "INVESTIGATION" - matches the
+          choice list registered in
+          ../../choices/sys_choice_case_task_type.xml)
+      [x] <due_date> is a Date  (YYYY-MM-DD format, NO time component,
+          NO timezone suffix - per AAP Section 0.5.7 due_date is a Date
+          field, not a DateTime; the value 2026-05-06 is computed at
+          file generation time as today (2026-05-01) + 5 days)
+      [x] <case> references CASE0000003  (display_value attribute and
+          inner text both equal CASE0000003 - the parent case 03's
+          auto-generated number when loaded in order on a fresh PDI;
+          no sys_id literal)
+      [x] <assigned_to> references demo agent  (display_value attribute
+          and inner text both equal x_casemgmt_demo_agent - the demo
+          agent user's user_name; no sys_id literal)
+      [x] NO PII  (the subject "Investigate request scope" is generic;
+          no real names, no real emails, no real organizations; the
+          assigned user's user_name is a synthetic casemgmt-prefixed
+          identifier)
+      [x] casemgmt placeholder preserved verbatim in sys_class_name,
+          sys_update_name, all reference values, and the file path
+      [x] UTF-8 encoding declared  (the XML prolog above)
+      [x] Unix-style line endings  (LF, not CRLF; ensured by the file
+          authoring tool)
+      [x] Idempotency-key validation: (case, subject) =
+          (CASE0000003, "Demo task 01: Investigate request scope") is
+          unique across the 8-task dataset - no other task on case 03
+          has subject "Demo task 01: Investigate request scope"
+          (sibling task 02 is on case 03 but with a different subject)
+
+    Key insights (per the agent prompt):
+      1. THIS TASK IS THE RESOLVE-BLOCKER ANCHOR. Combined with sibling
+         task 02 (Closed) on the same case 03, the pair demonstrates
+         that the resolve gate fires when ANY child task is non-Closed
+         (specifically THIS Open task). The validate_resolved_
+         transition subflow's GlideRecord query against
+         x_casemgmt_case_task where case=case_03 AND status != Closed
+         returns EXACTLY ONE row (THIS task) and aborts the
+         In Progress -> Resolved transition on case 03 with the
+         verbatim error "All tasks must be closed before resolving
+         this case." per AAP Section 0.7.4.
+      2. THE STATUS Open (Title Case) matches the choice list and is
+         the EXACT comparand value for the resolve-gate's GlideRecord
+         query addQuery('status', '!=', 'Closed') - any case variant
+         ("open", "OPEN", "OpEn") would either fail the choice
+         dictionary validation OR (if accepted somehow) would not
+         match the exact string comparison performed by the gate's
+         query, producing incorrect resolve behavior.
+      3. THE TYPE Investigation IS THE MOST THEMATIC for early-
+         lifecycle work on a case under investigation. The case is
+         "In Progress" because the agent is actively investigating;
+         this task tracks that work. Investigation is the first of
+         four task type Choice values (Investigation, Review,
+         Follow-up, Other), positioned to capture the body of work
+         between case intake and case resolution.
+      4. THE due_date IS FUTURE-DATED (+5 days, 2026-05-06). A future
+         due_date excludes this task from the "My Overdue Tasks"
+         widget on the Agent Workspace dashboard (filter:
+         due_date < Today AND status != Closed). This task IS in the
+         "My Open Tasks" surface (status != Closed AND assigned_to =
+         current user) but NOT in the "My Overdue Tasks" surface (due
+         date qualifier not satisfied). The +5 day window is the
+         negative-test fixture for the My Overdue Tasks widget,
+         demonstrating that the report's date filter excludes future-
+         dated active tasks rather than flagging them as overdue.
+      5. THE <case> REFERENCE USES display_value=CASE0000003. This is
+         the predictable auto-generated number when cases are loaded
+         in order on a fresh PDI per AAP Section 0.5.2. The inner
+         text equals the display_value (CASE0000003) for canonical-
+         key resolution; the resolve mechanism on a fresh PDI is
+         "find x_casemgmt_case where number = CASE0000003" performed
+         at import time by the platform.
+      6. THE Date FORMAT IS YYYY-MM-DD. Per AAP Section 0.5.7,
+         due_date is a Date, NOT a DateTime. ServiceNow's GlideDate
+         accepts this ISO-8601 format with no time component.
+         Including a time component or timezone suffix would either
+         fail validation or be silently truncated, both of which are
+         undesirable for the demo fixture.
+      7. THE DETERMINISTIC sys_id (md5 hash of the subject string
+         "Demo task 01: Investigate request scope" =
+         52bf35d626cf81334c73e397f63522d8) ensures idempotent re-
+         imports per AAP Section 0.7.1 round-trip-verification. If
+         this record is re-imported (e.g., during the round-trip-
+         verify validation gate), the platform recognizes the
+         existing sys_id and applies action="INSERT_OR_UPDATE" by
+         updating the existing record in place rather than creating
+         a duplicate. The hash input is the literal subject string;
+         the resulting hex value is exactly 32 lowercase hexadecimal
+         characters as required by the sys_id contract.
+      8. NO <priority>, <percent_complete>, <details>, <pending_status>,
+         OR OTHER ArkCase-only fields. The minimum 6-field set
+         (case, subject, type, status, assigned_to, due_date) is
+         strictly enforced per the AAP Section 0.5.7 verbatim
+         definition. Bloating the schema with additional fields is
+         forbidden by the MINIMAL CHANGE CLAUSE in AAP Section 0.7.2.
+         Per the source-side semantic reference at
+         acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+         com/armedia/acm/plugins/task/model/AcmTask.java, ArkCase's
+         AcmTask entity has approximately 60 fields (taskId, priority,
+         title with @Size(min=1) validation, dueDate with @NotNull,
+         attachedToObjectType, attachedToObjectName, attachedToObjectId,
+         assignee, owner, businessProcessName, businessProcessId,
+         adhocTask, completed, status, pendingStatus, percentComplete,
+         details, type, createDate, taskStartDate, taskFinishedDate,
+         taskDurationInMillis, workflowRequestType, workflowRequestId,
+         reviewDocumentPdfRenditionId, reviewDocumentFormXmlId,
+         documentUnderReview, documentsToReview, childObjects,
+         reworkInstructions, outcomeName, participants, notification
+         receivers, ECM container, parent metadata, candidate claim
+         groups, next assignee, legacy system ID, buckslip approval
+         data, and restriction flags). The ServiceNow target replicates
+         ONLY 6 of those fields, mapped as: ArkCase title (@Size(min=1))
+         -> ServiceNow subject (Mandatory String(255)), ArkCase dueDate
+         (@NotNull Date) -> ServiceNow due_date (Mandatory Date),
+         ArkCase assignee (free-form String) -> ServiceNow assigned_to
+         (Reference to sys_user), ArkCase status (free-form String) ->
+         ServiceNow status (Choice: Open, In Progress, Closed),
+         ArkCase type (free-form String) -> ServiceNow type (Choice:
+         Investigation, Review, Follow-up, Other), ArkCase
+         attachedToObjectId -> ServiceNow case (Reference to
+         x_casemgmt_case). The remaining ~54 fields are out of scope
+         per AAP Section 0.3.2 (Outlook/Activiti/ECM/Buckslip
+         integrations) or replaced by ServiceNow platform features
+         (sys_created_on subsumes createDate; sys_updated_on subsumes
+         taskFinishedDate for closed tasks; auto-numbering subsumes
+         taskId).
+      9. THE BUILD AGENT COMPUTES due_date DYNAMICALLY at file-
+         generation time so that the relative offset (+5 days) is
+         preserved across importation timeframes. The actual stored
+         value (2026-05-06) is the static result of today + 5 days
+         evaluated at this file's generation time (today = 2026-05-01
+         per the build environment date).
+     10. THE VERBATIM ERROR MESSAGE "All tasks must be closed before
+         resolving this case." MUST appear (per AAP Section 0.7.4)
+         when the operator attempts case 03 -> Resolved while THIS
+         task is Open. The error message string is owned by the
+         validate_resolved_transition subflow (and the
+         CaseTransitionValidator Script Include); this task record
+         merely contributes the row that triggers the error path.
+     11. THE casemgmt PLACEHOLDER IS PRESERVED VERBATIM in
+         sys_class_name, sys_update_name, sys_scope, sys_package,
+         all reference display_values that include the scope prefix
+         (assigned_to display_value), and the file path. The
+         placeholder is intended for downstream substitution by the
+         build pipeline at the time of PDI scope assignment - the
+         substitution is global across the entire scoped application
+         output (every file under servicenow-case-management-poc/).
+-->
+<record_update table="x_casemgmt_case_task">
+    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
+        <case display_value="CASE0000003">CASE0000003</case>
+        <due_date>2026-05-06</due_date>
+        <status>Open</status>
+        <subject>Demo task 01: Investigate request scope</subject>
+        <sys_class_name>x_casemgmt_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>52bf35d626cf81334c73e397f63522d8</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>x_casemgmt_case_task_demo_01</sys_update_name>
+        <type>Investigation</type>
+    </x_casemgmt_case_task>
+</record_update>

@@ -1,0 +1,476 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `party_type` Choice field on the `x_casemgmt_case_party`
+    custom table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_party:
+
+        Field        Type     Constraints
+        party_type   Choice   Person, Organization
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning):
+        choices/sys_choice_case_party_party_type.xml -> Person, Organization
+
+    Per AAP Section 0.4.3 (Design Pattern Applications):
+        "Polymorphic association via single-table choice + UI Policy -
+         case_party collapses ArkCase's two association tables
+         (acm_person_assoc, acm_person_org_assoc) into one ServiceNow table
+         with a Choice discriminator (party_type) and a UI Policy that
+         conditionally shows person (reference -> sys_user) or organization
+         (reference -> core_company)."
+
+    THIS DICTIONARY ENTRY ONLY DECLARES THAT THE `party_type` CHOICE FIELD
+    EXISTS ON THE PARENT TABLE. The choice values themselves (Person,
+    Organization) are authored as separate sys_choice records in
+    ../choices/sys_choice_case_party_party_type.xml. This separation is a
+    deliberate consequence of the ServiceNow Choice-field design pattern: a
+    sys_dictionary row declares the column shape; sibling sys_choice rows
+    declare the allowed string-label values keyed by `name` + `element`
+    lookup against this entry. The set of two labels (Person, Organization)
+    is intentionally minimal and authoritative for the entire POC; per AAP
+    Section 0.5.7 verbatim, no third party_type is supported and the field
+    explicitly does NOT carry the "extensible" qualifier that some other
+    Choice fields (e.g., x_casemgmt_case.type per its "General Inquiry,
+    Complaint - extensible" annotation in AAP Section 0.5.7) carry. New
+    party types beyond Person and Organization are out of POC scope per AAP
+    Section 0.3.2.
+
+    THIS FIELD IS THE DISCRIMINATOR FOR THE POLYMORPHISM COLLAPSE. Per AAP
+    Section 0.1.2 verbatim: "The case_party polymorphic conditional fields
+    (person shown when party_type = Person; organization shown when
+    party_type = Organization) are implemented via UI Policies on the form."
+    The conditional visibility logic lives in
+    ../ui_policy/x_casemgmt_case_party_conditional_fields.xml - NOT in this
+    dictionary entry. THIS entry only DECLARES that party_type is a Choice
+    field; the UI Policy READS the chosen value at runtime to drive show/hide
+    of the sibling reference fields.
+
+    OPERATIONAL ROLE OF THE `party_type` FIELD ON CASE_PARTY ROWS:
+      - Acts as the run-time switch between two mutually exclusive sub-shapes
+        of a party row:
+          * party_type = Person       -> the `person` reference field
+                                         (Reference -> sys_user) is required
+                                         and visible; `organization` is
+                                         hidden and ignored.
+          * party_type = Organization -> the `organization` reference field
+                                         (Reference -> core_company) is
+                                         required and visible; `person` is
+                                         hidden and ignored.
+        This conditional pairing is the entire purpose of collapsing
+        ArkCase's two physical tables (acm_person_assoc and
+        acm_person_org_assoc) into ONE ServiceNow table - and party_type
+        is the sole field that makes the collapse semantically lossless.
+      - Surfaces on the auto-generated x_casemgmt_case_party list view per
+        AAP Section 0.4.4 ("Internal user UI" requires "ServiceNow's
+        automatic native list and form views for the three custom tables")
+        as a categorical column letting an operator scan parties by type
+        at-a-glance ("Person" vs "Organization") without dereferencing
+        each row.
+      - Surfaces on the auto-generated form layout when a user opens an
+        individual party record. The user picks Person or Organization
+        FIRST, and the UI Policy then reveals exactly one of the two
+        reference fields beneath it. Without an explicit choice the form
+        cannot finish rendering its conditional sub-section, which is why
+        mandatory=true is enforced at the dictionary level.
+      - Surfaces in the parent case's Related List of parties (rendered
+        via the `case` reference field declared in
+        ../dictionary/x_casemgmt_case_party_case.xml). The Party Type
+        column appears beside the role_label so that an internal user
+        reviewing a case sees what KIND of association each row
+        represents (Person vs Organization) without opening each party
+        individually. AAP Section 0.7.4 minimum demo-data thresholds
+        explicitly require "at least one Person and one Organization
+        party per demo case to exercise the polymorphic UI policy" -
+        which, by definition, exercises this column on every demo case.
+      - Powers the seed-data scripts at
+        ../seed-data/parties/x_casemgmt_case_party_demo_*.xml and
+        ../scripts/seed_demo_data.js: every fabricated party row sets
+        party_type to either "Person" or "Organization" via
+        GlideRecord.setValue('party_type', ...) and then sets either
+        person or organization (but NEVER both) accordingly. The seed
+        data thus exercises both polymorphism branches and the UI Policy
+        rendering on every demo case.
+      - Is INTENTIONALLY a Choice (controlled vocabulary), not a free-form
+        String. Free-form String values would defeat the discriminator
+        intent: a typo like "person" (lowercase) or "Persons" (plural) or
+        "Organisation" (British spelling) would break the UI Policy's
+        equality test and leave both reference fields hidden. The
+        Choice-field configuration (`<choice>3</choice>`) plus the sibling
+        sys_choice records guarantee exact-match semantics for the two
+        supported labels.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonAssociation.java
+        lines 69-72:
+            @Entity
+            @Table(name = "acm_person_assoc")
+            @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+            @DiscriminatorColumn(name = "cm_class_name",
+                                 discriminatorType = DiscriminatorType.STRING)
+            @DiscriminatorValue("com.armedia.acm.plugins.person.model.PersonAssociation")
+        ArkCase used JPA single-table inheritance with a string-typed
+        discriminator column `cm_class_name` carrying the fully-qualified
+        Java class name of the row's runtime type. PersonAssociation rows
+        carried discriminator value
+        "com.armedia.acm.plugins.person.model.PersonAssociation"; sibling
+        Person subtypes carried their own class names. The discriminator
+        was a class-name string that was NEVER exposed to end users; it
+        was a JPA persistence concern only.
+      - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java
+        lines 64-68 used the SAME @DiscriminatorColumn(name = "cm_class_name")
+        annotation but on a DIFFERENT physical table (acm_person_org_assoc)
+        with its own row population. So ArkCase actually had TWO tables
+        each with internal sub-typing, not one table with a
+        person-vs-organization discriminator.
+      - The ServiceNow target REPLACES this ArkCase pattern with a HUMAN-
+        READABLE DISCRIMINATOR per AAP Section 0.1.2 ("Transformation rule
+        for inheritance and polymorphism. ArkCase's JPA single-table
+        inheritance with discriminator (cm_class_name) on PersonAssociation
+        / OrganizationAssociation is collapsed into one table
+        (x_casemgmt_case_party) with a Choice field (party_type) plus
+        conditional reference fields (person -> sys_user, organization ->
+        core_company)."). The transformation is two-fold:
+          * cm_class_name (Java FQN string) -> party_type (human Choice
+            "Person" / "Organization"). The end-user sees the chosen value;
+            it drives both the form-layer UI Policy and the user's mental
+            model.
+          * Two physical tables (acm_person_assoc, acm_person_org_assoc) ->
+            ONE physical table (x_casemgmt_case_party) per AAP Section 0.4.3
+            collapse pattern. The two are no longer distinguished by table
+            identity; they are distinguished by THIS field's value.
+        This is a deliberate DOWNGRADE of ArkCase's polymorphic richness in
+        exchange for ServiceNow-native clarity: there are no plugin sub-
+        types, no class-name discriminators, no separate physical tables -
+        just one column with two allowed string labels. AAP Section 0.3.2
+        marks every other ArkCase party-type variant (e.g., the ZyLAB
+        matter-witness association, the FOIA portal-requester association)
+        as out of scope, so the collapse is functionally complete for the
+        POC's universe.
+      - The field name is `party_type` (lowercase, snake_case, two words
+        joined by underscore; NOT `partyType`, NOT `type`, NOT
+        `party_kind`, NOT `class_name`, NOT `discriminator`) per AAP
+        Section 0.5.7 verbatim. The intentional naming difference from
+        x_casemgmt_case.type and x_casemgmt_case_task.type (which both use
+        bare `type`) is to make absolutely clear that this column is the
+        polymorphism discriminator, NOT a categorical descriptor in the
+        same sense as case.type or case_task.type. AAP Section 0.5.7
+        spells it `party_type` precisely to emphasize the semantic
+        difference.
+      - The label "Party Type" (Title Case, two words separated by space)
+        per the agent prompt's Phase 2 verbatim. The two-word label
+        matches the two-word internal name and reads naturally as a form
+        field label and list column header.
+
+    Constraints honored (AAP Sections 0.5.7, 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_casemgmt_case_party` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. NO global-scope
+        writes - the OOB tables `task`, `incident`, `sys_user`, etc.
+        are never modified by this dictionary entry or any other
+        artifact in the Update Set. The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_casemgmt`), not by literal sys_id. The
+        `<sys_id>` text-node value is THIS record's own deterministic
+        primary key (MD5 of the canonical field identifier
+        `x_casemgmt_case_party.party_type`) and is NOT a reference to any
+        other record. The MD5 derivation guarantees that re-generation
+        of this Update Set on any agent run produces a byte-identical
+        `<sys_id>` (no random UUIDs), which is required for clean
+        Update-Set re-import on a fresh PDI without creating duplicate
+        sys_dictionary rows. The same derivation pattern is used by
+        every sys_dictionary record in this Update Set (e.g.,
+        x_casemgmt_case_party.case      -> fbd5378ac5055b3db843042ff20777b5,
+        x_casemgmt_case_task.type       -> 180d00dda06c4b93e4c2c106b621d153,
+        x_casemgmt_case_task.status     -> af19c46ec8457885c75512edec980172,
+        x_casemgmt_case.type            -> 9a49190f6a6b8f2b4100073c53631168,
+        x_casemgmt_case.status          -> 5f0be2eaed29d45b1d63d64e876d22c4,
+        x_casemgmt_case.priority        -> 7584a06a06745f24e42efb27f0ae5975).
+      - mandatory=true at the dictionary level. AAP Section 0.5.7 verbatim
+        marks party_type as Mandatory (the "Choice | Person, Organization"
+        constraint column carries no qualifier - it is unconditionally
+        required for every row). The polymorphism strategy in AAP Section
+        0.4.3 makes this requirement absolute: a row with party_type=null
+        cannot drive the UI Policy correctly (the UI Policy condition
+        `party_type == 'Person'` evaluates false on null, and the parallel
+        condition `party_type == 'Organization'` also evaluates false on
+        null - so BOTH reference fields would be hidden, leaving the row
+        in an indeterminate state with no visible content). The platform's
+        mandatory-flag enforcement runs at every entry point: the
+        auto-generated form (where the user sees a red asterisk and
+        cannot save without choosing), the Table API (which rejects
+        POST/PATCH bodies that omit party_type), the GlideRecord.insert()
+        path used by ../scripts/seed_demo_data.js (which throws if the
+        field is unset), and the scripted REST endpoints (none of which
+        touch case_party in this POC, but the same enforcement would
+        apply if they did).
+      - read_only=false: case_manager and case_agent (the latter only
+        within their "Assigned only" cases per AAP Section 0.5.6) MAY
+        edit party_type after initial creation - for example, to correct
+        a row erroneously created as "Person" when the actual associate
+        is an organization. The read_only=false setting permits the
+        write through the standard form, the Table API, and the seed
+        scripts. Note that changing party_type after creation will
+        ALSO require clearing the no-longer-applicable reference field
+        (e.g., changing Person -> Organization requires clearing the
+        person reference and setting the organization reference) - the
+        UI Policy at ../ui_policy/x_casemgmt_case_party_conditional_fields.xml
+        handles this by hiding (and on save, optionally clearing) the
+        non-applicable reference field. Field-level write authorization
+        is governed by the table-level ACLs in
+        ../acl/x_casemgmt_case_party_*.xml; AAP Section 0.5.6 does NOT
+        list party_type among the field-level-ACL-required fields (only
+        case.assigned_group and case.assigned_agent carry field-level
+        ACLs).
+      - default_value is EMPTY (no implicit default). Even though
+        "Person" might seem like a sensible default (most case parties
+        are likely individuals), AAP Section 0.5.7 does NOT specify a
+        default, and forcing the user to choose makes the polymorphic
+        intent EXPLICIT. A silent default to Person would silently
+        commit type-misclassified rows when an operator forgot to
+        consider whether the associate was actually an organization;
+        making the user pick prevents that class of data-quality bug.
+        This is intentionally STRICTER than x_casemgmt_case.status (which
+        defaults to "Draft" per AAP Section 0.4.1) and
+        x_casemgmt_case_task.status (which defaults to "Open" per AAP
+        Section 0.4.1) - those defaults reflect status-machine starting
+        states, whereas party_type is a polymorphism discriminator with
+        no semantic "starting state".
+      - audit=false per AAP Section 0.3.1 minimal-change clause and the
+        agent prompt's Phase 4. Party-type changes are descriptive
+        metadata corrections, not regulated lifecycle events. The
+        standard sys_* audit columns at the table level (sys_created_on,
+        sys_created_by, sys_updated_on, sys_updated_by) capture record-
+        level changes; per-field audit on party_type is unnecessary
+        overhead for a POC.
+      - max_length=40 per the agent prompt's Phase 3 verbatim. The
+        longest defined label is "Organization" (12 characters) and the
+        shortest is "Person" (6 characters). The 40-character ceiling
+        accommodates extensible future labels without a schema migration
+        even though no extension is currently planned per AAP Section
+        0.3.2 ("any modules, workflows, portal pages, tables, or
+        integrations beyond the defined scope" are out of scope - which
+        includes new party types). The same 40-character ceiling is
+        used on every Choice field in this Update Set (case.type,
+        case.status, case.priority, case.pending_reason,
+        case_task.type, case_task.status) for consistency.
+      - choice=3 = "Choice list, no description column" per the agent
+        prompt's Phase 3 verbatim. This is the standard Choice-field
+        configuration when a sibling sys_choice record set defines the
+        allowed values; the form renderer presents the field as a
+        select dropdown sourced from the matching sys_choice rows.
+        choice=0 (free-form String) would defeat the purpose of
+        constraining the field to a controlled vocabulary; choice=1
+        (Choice list with description) would impose a description
+        column that AAP Section 0.5.7 does not specify; choice=2
+        (Suggestion list) would let users input arbitrary strings
+        adjacent to the suggested ones, contradicting the intent and
+        breaking the UI Policy's equality tests for "Person" / "Organization".
+      - internal_type=string: ServiceNow Choice fields are STORED as
+        their underlying type (string for label-based choices, integer
+        for integer-keyed choices). The "Choice" semantics come from
+        `<choice>3</choice>`, NOT from internal_type. Setting
+        internal_type=choice would be incorrect - that internal type
+        does not exist in the platform's dictionary type registry. The
+        actual value persisted in the column is the string label
+        ("Person" or "Organization") chosen by the user.
+      - choice_field, choice_table empty: the choice values are sourced
+        from sibling sys_choice rows keyed by `name`+`element` lookup,
+        not by an alternate field-level override (choice_field) and not
+        by lookup against another table (choice_table). Same pattern as
+        the other Choice fields in this Update Set.
+      - unique=false: multiple parties with the same party_type are
+        explicitly permitted, both within a single case (per AAP
+        Section 0.7.4 "at least one Person and one Organization party
+        per demo case" - which means each demo case has at least one
+        party_type=Person row AND at least one party_type=Organization
+        row, but a real case might have multiple Person parties such
+        as a Requester, a Witness, and a Respondent simultaneously) and
+        across cases. Uniqueness is not a meaningful concept for a
+        polymorphism-discriminator Choice field.
+      - text_index=false per the agent prompt's Phase 6 verbatim. A
+        Choice field with two labels does not benefit from a text
+        index; users navigate party_type via the Choice dropdown and
+        list-view filters, not free-form full-text search.
+      - spell_check=false per the agent prompt's Phase 6 verbatim. A
+        controlled Choice vocabulary is by definition correctly spelled;
+        spell_check on a Choice field would produce false positives on
+        label tokens that the platform dictionary might not recognize
+        (e.g., the word "Organization" with American spelling vs the
+        platform's potentially British-flavored dictionary).
+      - No reference target: this is a String-backed Choice field, NOT
+        a Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`. The field does NOT
+        reference an external lookup table; the choice values live as
+        sys_choice rows keyed by element name. (Note that the SIBLING
+        fields person and organization, declared in
+        ../dictionary/x_casemgmt_case_party_person.xml and
+        ../dictionary/x_casemgmt_case_party_organization.xml respectively,
+        ARE Reference fields - but party_type itself is not.)
+      - element_reference=false: this is not an element-level reference
+        either. AAP specifies a Choice column at the row level, not a
+        column-level reference into another dictionary entry's choices.
+      - dependent (empty): the platform's "Dependent" mechanism is for
+        cascading Choice fields (where the available values of field B
+        depend on the chosen value of field A in the same record). For
+        case_party, the polymorphism-conditional behavior is implemented
+        via UI Policy (../ui_policy/x_casemgmt_case_party_conditional_fields.xml),
+        NOT via Dependent Choice. UI Policies operate at the form-render
+        layer (showing/hiding fields, marking required) whereas Dependent
+        Choice operates at the data layer (filtering available choices).
+        AAP Section 0.4.3 explicitly designates "UI Policies on the form"
+        as the polymorphism implementation mechanism - so dependent /
+        dependent_on_field are EMPTY here. The UI Policy reads party_type
+        and toggles person and organization independently; party_type
+        itself is not dependent on any other field.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation. The actual chosen string label ("Person" or
+        "Organization") is persisted on every party record and queried
+        directly by the UI Policy and by reports.
+      - No PII: the field stores only categorical labels chosen from a
+        controlled two-element vocabulary; no real names, email
+        addresses, organizational identifiers, or any source-side
+        ArkCase production data are derived from or stored in this
+        column at any point in the build (per AAP Section 0.3.2
+        synthetic-data-only constraint). The vocabulary itself
+        ("Person", "Organization") contains no PII either - they are
+        generic English nouns.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case_party.xml (parent table; the
+            `<name>x_casemgmt_case_party</name>` element below references
+            the table by name, and the table must exist before any of
+            its dictionary entries can be attached)
+          * ../app/sys_app/x_casemgmt_case_management.xml and
+            ../app/sys_scope/x_casemgmt.xml (scoped application records;
+            <sys_scope> and <sys_package> resolve against them by source
+            name)
+      - This record MUST load BEFORE:
+          * ../choices/sys_choice_case_party_party_type.xml (the choice
+            values Person, Organization which reference this dictionary
+            entry by `name` + `element` lookup against the strings
+            `x_casemgmt_case_party` and `party_type`. The two sys_choice
+            rows would fail to install if this dictionary entry were
+            absent because their name/element foreign-keys would resolve
+            to nothing.)
+          * ../ui_policy/x_casemgmt_case_party_conditional_fields.xml
+            (the UI Policy that drives conditional visibility of the
+            person and organization fields based on the value of
+            party_type. The UI Policy's condition uses the column name
+            `party_type` and would be undefined without this dictionary
+            entry. The UI Policy's actions read THIS field's chosen
+            value at every form render.)
+          * ../seed-data/parties/x_casemgmt_case_party_demo_*.xml (every
+            demo party row must specify party_type; the seed data
+            would fail to insert if this dictionary record were absent
+            because GlideRecord.setValue('party_type', ...) would have
+            no target column. AAP Section 0.7.4 mandates "at least one
+            Person and one Organization party per demo case" - which by
+            definition exercises this column on every demo case.)
+          * ../scripts/seed_demo_data.js (the idempotent server-side
+            seed script writes synthetic party_type labels via
+            GlideRecord.setValue('party_type', ...) for both branches
+            of the polymorphism)
+          * ../acl/x_casemgmt_case_party_*.xml (table-level ACLs on the
+            case_party table; the ACLs reference this column indirectly
+            via list-view filters rendered in the auto-generated UI,
+            though the table-level ACL conditions themselves do not
+            dot-walk through party_type)
+
+    Source for the deterministic sys_id derivation:
+        echo -n "x_casemgmt_case_party.party_type" | md5sum
+        => 5e02afdbd2f05f407e986015e93d1238
+
+    The MD5 input is the canonical field identifier <name>.<element>,
+    matching the same derivation pattern used across all other
+    sys_dictionary records in this Update Set.
+
+    Critical naming notes carried forward to
+    ../choices/sys_choice_case_party_party_type.xml:
+        The two labels are EXACTLY "Person" (capitalized P, 6 chars) and
+        "Organization" (capitalized O, American spelling, 12 chars). NOT
+        "person" (lowercase), NOT "Persons" (plural), NOT "Organisation"
+        (British spelling), NOT "Org" (abbreviated). AAP Section 0.5.7
+        verbatim spells the labels "Person, Organization". The Update Set
+        re-import gate per AAP Section 0.7.3 will detect any deviation as
+        a preview error because the sys_choice rows must reference this
+        dictionary entry exactly, AND the UI Policy's condition strings
+        ('party_type == "Person"' and 'party_type == "Organization"')
+        must match the persisted label exactly.
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>3</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Party Type</column_label>
+        <comments>Mandatory Choice discriminator field for polymorphic case_party rows. Values: Person, Organization. Authored as separate sys_choice rows in ../choices/sys_choice_case_party_party_type.xml. Drives conditional visibility and requiredness of the sibling person (Reference -&gt; sys_user) and organization (Reference -&gt; core_company) fields via the UI Policy at ../ui_policy/x_casemgmt_case_party_conditional_fields.xml. Replaces ArkCase's cm_class_name JPA discriminator on acm_person_assoc / acm_person_org_assoc with a human-readable Choice; collapses the two ArkCase association tables (PersonAssociation, PersonOrganizationAssociation) into a single ServiceNow polymorphic table per AAP Section 0.4.3. No default value - user MUST explicitly choose Person or Organization, ensuring the polymorphic intent is always explicit.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>party_type</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>40</max_length>
+        <name>x_casemgmt_case_party</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5e02afdbd2f05f407e986015e93d1238</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_party_party_type</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

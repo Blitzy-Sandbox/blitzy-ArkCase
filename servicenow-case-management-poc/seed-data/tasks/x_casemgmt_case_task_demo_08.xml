@@ -1,0 +1,419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Task 08 - Final complaint review (Closed / Review)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the EIGHTH and FINAL of the 8-task demo dataset; together
+    with tasks 01 through 07, it satisfies the AAP requirement (Section
+    0.7.4) of providing demo tasks that exercise the resolve-blocker and
+    resolve-success gates on both case-type flows. The complete 8-task
+    fixture matrix:
+
+        Task 01 - Open        / Investigation / parent case 03 (In Progress GI)
+        Task 02 - Closed      / Investigation / parent case 03 (In Progress GI)
+        Task 03 - Open        / Follow-up     / parent case 04 (Pending GI)
+        Task 04 - Closed      / Investigation / parent case 05 (Resolved GI)
+        Task 05 - Closed      / Review        / parent case 05 (Resolved GI)
+        Task 06 - In Progress / Investigation / parent case 08 (In Progress Complaint)
+        Task 07 - Open        / Other         / parent case 08 (In Progress Complaint)
+        Task 08 - Closed      / Review        / parent case 09 (Resolved Complaint)  ## THIS FILE
+
+    The 8-task dataset thus exercises:
+      * All 4 task types (Investigation, Review, Follow-up, Other) - this
+        task contributes the second of two Review-type tasks (the other is
+        task 05); the Review type semantically represents an agent's
+        review action prior to resolving a case.
+      * All 3 task statuses (Open, In Progress, Closed) - this task
+        contributes the FOURTH of the four Closed tasks (the others are
+        tasks 02, 04, and 05); the Closed status is the only status that
+        the validate_resolved_transition subflow tolerates without
+        blocking the case's Resolved transition.
+      * 5 unique parent cases (03, 04, 05, 08, 09) - this task is the
+        SOLE child of case 09; while case 05 has TWO Closed child tasks
+        (04 + 05) demonstrating the multi-task resolve-success path on
+        the General Inquiry flow, this task alone demonstrates the
+        SINGLE-TASK resolve-success path on the Complaint flow.
+      * Both flow paths (General Inquiry and Complaint) - this task tests
+        the COMPLAINT flow's resolve-success path; tasks 04 and 05
+        together test the GENERAL INQUIRY flow's resolve-success path;
+        tasks 01 and 02 test the GENERAL INQUIRY flow's resolve-blocker
+        path; tasks 06 and 07 test the COMPLAINT flow's resolve-blocker
+        path.
+      * Both resolve outcomes (BLOCKED via at least one non-Closed task,
+        and SUCCESS via zero non-Closed tasks) - this task contributes
+        to the SUCCESS outcome on the Complaint flow side.
+
+    Lifecycle position - WHY Closed / Review / parent Complaint case
+    Resolved is meaningful:
+      Per AAP Section 0.5.5 the resolve gate's GlideRecord query
+      executed inside the validate_resolved_transition subflow is:
+
+          var gr = new GlideRecord('x_casemgmt_case_task');
+          gr.addQuery('case', current.sys_id);
+          gr.addQuery('status', '!=', 'Closed');
+          gr.query();
+          if (gr.next()) {
+              // BLOCK: surface the verbatim error message
+              //   "All tasks must be closed before resolving this case."
+          } else {
+              // ALLOW: zero non-Closed tasks - case may be Resolved
+          }
+
+      Case 09 is in Resolved status. With this single Closed child task,
+      the query "case = case 09 AND status != Closed" returns ZERO rows.
+      The subflow allows the In Progress -> Resolved transition.
+
+      The Review task type captures the agent's final review action
+      before signing off and submitting to the manager for closure. Per
+      the AAP's Complaint case-handling pattern, the agent's last action
+      before resolving is a comprehensive review of all gathered
+      evidence and prior tasks. The "Final complaint review" subject
+      makes this lifecycle phase explicit.
+
+      The -2 days due_date is appropriate for a recently-due-then-
+      completed task: due 2 days ago, marked Closed within the last 2
+      days, and now case 09 has been Resolved. This contrasts with task
+      05 (-3 days due, also Closed) where the Final review was completed
+      slightly earlier in the General Inquiry flow's lifecycle. The
+      relative date pattern uses negative offsets (yesterday/last week)
+      to keep the demo data plausible regardless of when the Update Set
+      is imported.
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This task DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this task's <sys_scope>/<sys_package>
+             reference fields resolve via the source attribute against
+             those records)
+        - The case_task table definition at
+            ../../tables/x_casemgmt_case_task.xml
+            (this record's <sys_class_name>x_casemgmt_case_task</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case_task table under
+            ../../dictionary/x_casemgmt_case_task_*.xml  (every populated
+            field below requires its dictionary entry to be present)
+        - All choice records for case_task under ../../choices/
+            (specifically sys_choice_case_task_type.xml and
+             sys_choice_case_task_status.xml; the type=Review and
+             status=Closed choice values must be registered)
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_casemgmt_case_task.xml  (the
+             platform may auto-generate a TASK0000008-format value if
+             the table is configured for auto-numbering; this record
+             does not specify <number/> explicitly)
+        - The role records under ../../roles/  (the demo agent's
+             assigned-only access requires the x_casemgmt_case_agent
+             role and its task-table ACLs; the demo manager's full
+             access requires the x_casemgmt_case_manager role)
+        - The ACL records under ../../acl/ for case_task (table-level
+             read/write/create/delete ACLs gate access for the demo
+             agent and demo manager; the demo viewer reads via the
+             read-all ACL)
+        - ../users/sys_user_x_casemgmt_demo_agent.xml  (referenced by
+             <assigned_to>; resolved by user_name lookup)
+        - ../cases/x_casemgmt_case_demo_09.xml  (referenced by <case>;
+             resolved by number lookup; this is the parent Resolved
+             Complaint case whose resolve-success path this single
+             Closed task exercises)
+
+      This task IS REFERENCED BY (loaded AFTER this record):
+        - The validate_resolved_transition subflow at
+            ../../flows/sub_flows/validate_resolved_transition.xml
+            FILTERS THIS TASK OUT of its non-Closed query. Because this
+            task's status is Closed, the subflow's GlideRecord query
+            for non-Closed child tasks of case 09 returns zero rows,
+            allowing the In Progress -> Resolved transition. THIS TASK
+            IS THE CANONICAL ENABLER OF THE COMPLAINT-FLOW RESOLVE-
+            SUCCESS PATH FOR CASE 09. Where tasks 04 + 05 perform this
+            role for case 05 on the General Inquiry flow, this task
+            performs it ALONE for case 09 on the Complaint flow.
+        - Dashboard report ../../reports/x_casemgmt_my_overdue_tasks.xml
+            EXCLUDES this task from its "My Overdue Tasks" list; the
+            list filter is "due_date < Today AND status != Closed AND
+            assigned_to = current user", and this task's status=Closed
+            disqualifies it. This is the correct behavior for a
+            completed task.
+        - The Agent Workspace dashboard's "Case count by status" donut
+            counts case 09 (this task's parent) in the Resolved slice,
+            not this task; the donut is keyed off case.status, not
+            case_task.status.
+        - The validate_closed_transition subflow checks at case-level
+            (manager role, set closed_date), not task-level; this task
+            does not directly participate in that subflow's logic.
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER:
+            * The scoped application records under ../../app/
+            * The case_task table at ../../tables/x_casemgmt_case_task.xml
+            * All dictionary entries under ../../dictionary/
+              x_casemgmt_case_task_*.xml
+            * The choice records sys_choice_case_task_type.xml and
+              sys_choice_case_task_status.xml
+            * The demo agent user record at
+              ../users/sys_user_x_casemgmt_demo_agent.xml  (assigned_to
+              resolves by user_name lookup)
+            * The parent case at
+              ../cases/x_casemgmt_case_demo_09.xml  (case field resolves
+              by number lookup; that case must exist before this task
+              can reference it)
+        - This record can be loaded BEFORE or AFTER its sibling task
+          records (01 through 07) since they are mutually independent
+          (each task's only outbound references are to a case and a
+          user, not to other tasks).
+        - This record is the LAST-NUMBERED demo task; nothing in the
+          Update Set is loaded after this task that depends on it.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's eight authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        subject = "Demo task 08: Final complaint review"
+                  (synthetic identifier using the literal word "Demo"
+                   plus a numeral plus a generic agent action; no PII;
+                   the wording emphasizes the task's lifecycle role -
+                   the agent's final review action prior to resolving
+                   the parent Complaint case)
+        NO description / NO details / NO comments fields populated;
+        the task's primary content is captured in the subject alone.
+        NO assignee email, phone, or other PII-bearing fields.
+
+      Rule 2 - Choice value precision:
+        type   = "Review"  (exactly as registered in
+                 ../../choices/sys_choice_case_task_type.xml; the second
+                 of the four task types - Investigation, Review,
+                 Follow-up, Other; capital R deliberate - "Review" not
+                 "review" or "REVIEW")
+        status = "Closed"  (exactly as registered in
+                 ../../choices/sys_choice_case_task_status.xml; the
+                 third and terminal of the three task statuses - Open,
+                 In Progress, Closed; capital C deliberate - "Closed"
+                 not "closed" or "CLOSED"; THIS VALUE IS LOAD-BEARING
+                 because the validate_resolved_transition subflow's
+                 GlideRecord query filters on status='Closed' (case-
+                 sensitive equality); a typo would BREAK the resolve-
+                 success path for the Complaint flow)
+
+      Rule 3 - Date format:
+        due_date = "2026-04-29"  (YYYY-MM-DD format per AAP Section
+                  0.5.7 "due_date" row of case_task schema specifying
+                  Date type; the value is computed as today minus 2
+                  days at file-generation time. This is the standard
+                  ServiceNow Date field format - NOT DateTime; no
+                  timezone, no time-of-day component. The relative -2
+                  days offset places the due_date in the recent past,
+                  consistent with a recently-due-then-completed task
+                  pattern. The build-time computation ensures the
+                  value remains semantically meaningful regardless of
+                  when the Update Set is imported.)
+
+      Rule 4 - Reference resolution by stable human-readable key (AAP
+              Section 0.7.2 "NO sys_id literals anywhere"):
+        case        : <case display_value="CASE0000009">CASE0000009
+                      </case>  resolves to demo case 09 by the case
+                      table's idempotent number lookup. CASE0000009 is
+                      the auto-numbered value the platform generates
+                      for demo case 09 since cases 01 through 09 import
+                      in order with the CASE0000001-format auto-number
+                      counter (case 01 -> CASE0000001, case 02 ->
+                      CASE0000002, ..., case 09 -> CASE0000009). This
+                      task's parent therefore resolves to the demo case
+                      09 record at ../cases/x_casemgmt_case_demo_09.xml.
+        assigned_to : <assigned_to display_value="x_casemgmt_demo_agent">
+                      x_casemgmt_demo_agent</assigned_to>  resolves to
+                      the demo agent user by user_name lookup. The
+                      demo agent is the assigned_to on every one of
+                      the 8 demo tasks per the seed-script's task
+                      table (the agent is the primary case worker; the
+                      manager approves/closes; the viewer observes).
+
+      Rule 5 - All 6 mandatory case_task fields populated:
+        case        - mandatory parent reference - CASE0000009
+        subject     - mandatory String(255) - "Demo task 08: Final
+                      complaint review"
+        type        - mandatory Choice - "Review"
+        status      - mandatory Choice - "Closed"
+        assigned_to - mandatory Reference->sys_user - x_casemgmt_demo_agent
+        due_date    - mandatory Date - 2026-04-29
+        Per AAP Section 0.5.7 case_task schema, these 6 fields are
+        the ENTIRE schema; this record populates every field, leaves
+        no null required values, and adds no extra fields.
+
+      Rule 6 - Scope binding:
+        <sys_scope>   binds this task row to the scoped application
+                      via the scope source name "x_casemgmt" defined in
+                      ../../app/sys_scope/x_casemgmt.xml at
+                      <source>x_casemgmt</source>; the display_value
+                      "Case Management" matches the sys_app's human-
+                      readable name.
+        <sys_package> follows the same pattern with the additional
+                      source="x_casemgmt" attribute that is required by
+                      the Update Set engine for scope-package binding.
+        Note: the source attribute value "x_casemgmt" matches what
+        every peer file uses (cases 01-10, sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, dictionary entries, ACL records, role
+        records); it is the scope's <source> field, NOT the scoped
+        application's sys_update_name. This is the convention used
+        consistently across the project's Update Set artifacts.
+
+      Rule 7 - Idempotency anchor:
+        The task's idempotent key is the (case, subject) tuple:
+        (CASE0000009, "Demo task 08: Final complaint review"). The
+        companion seed script ../../scripts/seed_demo_data.js
+        ensureTask() helper queries x_casemgmt_case_task by (case,
+        subject) BEFORE inserting; the action="INSERT_OR_UPDATE"
+        attribute on the inner <x_casemgmt_case_task> element ensures
+        the same behavior at Update Set import time.
+        The task's OWN <sys_id> below is the record's primary key and
+        is a deterministic 32-character lowercase hex value (MD5 of
+        the canonical idempotent subject "Demo task 08: Final complaint
+        review" = d51bc249a0c7fb692f621f9983df978d) - so the Update
+        Set engine resolves the same sys_id on every PDI import,
+        making the record byte-identical and collision-free across
+        re-imports per AAP Section 0.7.1 round-trip-verification gate
+        (Validation Gate 7).
+
+      Rule 8 - Scoped Update Set XML conventions:
+        Root element:  <record_update table="x_casemgmt_case_task">
+        Inner element: <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+                       for idempotent re-import.
+        UTF-8 encoding declared in XML prolog.
+        Element ordering: alphabetical (matching the established peer
+        convention used by sys_user_*, sys_user_group_*, sys_user_has_
+        role_*, role records, all 10 case demo records, and dictionary
+        entries across the scoped Update Set).
+        Unix-style line endings (LF) per AAP file authoring conventions.
+        Scope-placeholder preservation: the literal `casemgmt` token is
+        preserved verbatim throughout the file - in the sys_class_name,
+        sys_update_name, table attribute, inner element name, all
+    cross-reference text values, and the file path. ServiceNow Update
+    Set imports use a standard XML parser, so the scope id must be
+    concrete in the XML before export. The concrete scope identifier
+    `casemgmt` is used consistently throughout this file.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java
+        ArkCase's AcmTask JPA entity declares ~30+ fields including
+        title (the source for our <subject>), dueDate (the source for
+        our <due_date>; @NotNull-annotated for Bean Validation - we
+        preserve the mandatory constraint via the dictionary entry's
+        mandatory flag), assignee (the source for our <assigned_to>),
+        status (the source for our <status>; with values like OPEN,
+        ASSIGNED, IN_PROGRESS, COMPLETE, CLOSED in ArkCase - we collapse
+        these to the user-prompt's three-value choice list Open / In
+        Progress / Closed), type (the source for our <type>; in
+        ArkCase a free-form String - we constrain to the four-value
+        choice list Investigation / Review / Follow-up / Other), and
+        attachedToObjectId (semantic source for our <case> - in ArkCase
+        a generic parent-object FK pattern; here narrowed to a typed
+        reference to x_casemgmt_case). ArkCase's percentComplete /
+        pendingStatus / adhocTask / completed / buckslip / outlook /
+        ECM / participants / candidate-claim-groups / next-assignee /
+        legacy-system-id / business-process / workflow-request /
+        document-under-review / documents-to-review / child-objects /
+        rework-instructions / outcome / restriction / Activiti BPMN
+        engine integration are all OUT OF POC SCOPE per AAP Section
+        0.3.2 and are intentionally absent from the target schema.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|doe|
+        @gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net) - the
+        synthetic identifiers ("Demo task 08: Final complaint review",
+        "x_casemgmt_demo_agent", "CASE0000009") do not include any PII
+        tokens.
+      - Choice-value validation: <type>Review</type> (capital R),
+        <status>Closed</status> (capital C) - exact-case match against
+        the registered choice records.
+      - Date-format validation: <due_date>2026-04-29</due_date> is
+        YYYY-MM-DD with no time-of-day component.
+      - All-mandatory-fields-populated validation: all 6 mandatory
+        case_task fields (case, subject, type, status, assigned_to,
+        due_date) are present and non-empty.
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        task's own primary key); NO sys_id literals appear in any
+        cross-reference field; <case> and <assigned_to> use the human-
+        readable lookup keys CASE0000009 and x_casemgmt_demo_agent
+        respectively as both the display_value attribute AND the text
+        content.
+      - Scope-identifier validation: the concrete scope identifier `casemgmt` is used verbatim in the sys_class_name, sys_update_name,
+        all reference values, and the file path.
+
+    Key insights (per the agent prompt):
+      1. Demo task 08 is the EIGHTH AND FINAL demo task. The 8-task
+         fixture is now complete:
+           Tasks 01-02: Case 03 In Progress GI (Open + Closed) ->
+                        resolve-blocker test (GI flow)
+           Task 03   : Case 04 Pending GI (Open) -> Pending case with
+                        active task
+           Tasks 04-05: Case 05 Resolved GI (Closed + Closed) ->
+                        resolve-success test (GI flow, multi-task)
+           Tasks 06-07: Case 08 In Progress Complaint (In Progress +
+                        Open) -> resolve-blocker test (Complaint flow)
+           Task 08   : Case 09 Resolved Complaint (Closed only) ->
+                        resolve-success test (Complaint flow, single-
+                        task)  ## THIS FILE
+      2. THIS TASK IS THE SINGLE-TASK CASE EXAMPLE. Unlike case 05
+         which has 2 child tasks (4 + 5), case 09 has only this single
+         task. Both are valid resolve-success paths per the AAP Section
+         0.5.5 transition rules; the resolve gate's GlideRecord query
+         is satisfied as long as the count of non-Closed child tasks
+         is zero, regardless of whether the total task count is one or
+         many.
+      3. THE COMPLAINT FLOW IS PARALLEL TO THE GENERAL INQUIRY FLOW.
+         Per AAP Section 0.5.5, both flows enforce identical rules.
+         This task's Closed status proves the Complaint flow correctly
+         handles the resolve-success path. Tasks 04 and 05 do the same
+         for the General Inquiry flow.
+      4. The "Final complaint review" subject semantically represents
+         the agent's last review action before signing off the parent
+         Complaint case. The case is then in Resolved status awaiting
+         manager closure.
+      5. The -2 days due_date offset matches the recently-due-then-
+         completed pattern - the task was due 2 days ago, completed
+         within the past 2 days, and the parent case is now Resolved
+         and awaiting manager close.
+      6. No PII. Synthetic data only. The subject uses generic agent-
+         action wording ("Final complaint review"); the assigned_to
+         and case references are scoped synthetic identifiers.
+      7. Build agent computes due_date dynamically at file-generation
+         time so that the relative offset (-2 days) is preserved
+         across importation timeframes.
+      8. The complete 8-task fixture exercises:
+           * All 4 task types (Investigation x4, Review x2, Follow-up
+             x1, Other x1) - this task contributes one of the two
+             Review entries.
+           * All 3 task statuses (Open x3, In Progress x1, Closed x4)
+             - this task contributes one of the four Closed entries.
+           * 5 unique parent cases (03, 04, 05, 08, 09) - this task is
+             the sole child of case 09.
+           * Both flow paths (General Inquiry and Complaint) - this
+             task is on the Complaint side.
+           * Both resolve outcomes (blocked via non-Closed tasks, and
+             success via zero non-Closed tasks) - this task is the
+             enabler of the Complaint-flow success outcome.
+      9. THIS IS THE LAST DEMO TASK FILE. With this file authored, the
+         8-task seed-data fixture is complete and Validation Gate 2
+         (Workflow) can proceed to verify the resolve-blocker and
+         resolve-success paths on both flow types.
+-->
+<record_update table="x_casemgmt_case_task">
+    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
+        <case display_value="CASE0000009">CASE0000009</case>
+        <due_date>2026-04-29</due_date>
+        <status>Closed</status>
+        <subject>Demo task 08: Final complaint review</subject>
+        <sys_class_name>x_casemgmt_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>d51bc249a0c7fb692f621f9983df978d</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>x_casemgmt_case_task_demo_08</sys_update_name>
+        <type>Review</type>
+    </x_casemgmt_case_task>
+</record_update>

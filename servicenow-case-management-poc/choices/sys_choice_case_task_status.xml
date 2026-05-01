@@ -2,10 +2,10 @@
 <!--
     ServiceNow Update Set record-definition for the THREE `sys_choice` rows
     that enumerate the legal values of the `status` Choice field on the
-    `x_[scope]_case_task` custom table inside the scoped application
-    `x_[scope]`.
+    `x_casemgmt_case_task` custom table inside the scoped application
+    `x_casemgmt`.
 
-    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_task:
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
 
         Field    Type     Constraints
         status   Choice   Open, In Progress, Closed
@@ -28,16 +28,16 @@
 
     THIS CHOICE LIST IS THE LINCHPIN OF THE CASE-RESOLUTION GUARD.
     Per AAP Section 0.5.5 ("In Progress -> Resolved: All linked
-    x_[scope]_case_task records have status = Closed") and AAP Section
+    x_casemgmt_case_task records have status = Closed") and AAP Section
     0.7.4 verbatim, the case state-machine flow surfaces the literal
     blocking error message
         "All tasks must be closed before resolving this case."
     when ANY child task on the case has status != Closed. The query that
     drives the gate, executed by ../flows/sub_flows/validate_resolved_transition.xml
     and by the canTransitionToResolved() static method on
-    ../script_includes/x_[scope]_CaseTransitionValidator.xml, is:
+    ../script_includes/x_casemgmt_CaseTransitionValidator.xml, is:
 
-        var gr = new GlideRecord('x_[scope]_case_task');
+        var gr = new GlideRecord('x_casemgmt_case_task');
         gr.addQuery('case', current.sys_id);
         gr.addQuery('status', '!=', 'Closed');
         gr.setLimit(1);
@@ -63,12 +63,12 @@
 
       One Script Include exposing reusable transition guards used by both
       flows and business rules:
-        ../script_includes/x_[scope]_CaseTransitionValidator.xml
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml
             (canTransitionToResolved() iterates child tasks via the
             same GlideRecord query against this Choice list)
 
       Two reports rendered as Agent Workspace dashboard widgets:
-        ../reports/x_[scope]_my_overdue_tasks.xml
+        ../reports/x_casemgmt_my_overdue_tasks.xml
             (list filtered by `due_date < javascript:gs.daysAgoStart(0)
             AND status != Closed AND assigned_to = javascript:gs.getUserID()`;
             the `status != Closed` clause uses the exact Title Case label
@@ -80,7 +80,7 @@
       minimum-data threshold ("at least one open and one closed task per
       demo case in `In Progress` or `Pending` state, to exercise the
       all-tasks-closed gate"):
-        ../seed-data/tasks/x_[scope]_case_task_demo_*.xml
+        ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml
             (mix of Open and Closed labels deterministically exercises
             the case-resolution gate during fresh-PDI re-import
             validation per AAP Section 0.7.3)
@@ -160,7 +160,7 @@
         label - no integer state codes, no enum ordinals, no separate
         machine-key. This is a standard ServiceNow Choice-field idiom
         and matches the pattern used by the sibling Choice list in this
-        app for x_[scope]_case.status (Draft, Open, In Progress, Pending,
+        app for x_casemgmt_case.status (Draft, Open, In Progress, Pending,
         Resolved, Closed) in ../choices/sys_choice_case_status.xml. The
         intentional naming overlap on the `Open`, `In Progress`, and
         `Closed` labels means cross-table reports can render a unified
@@ -194,24 +194,22 @@
         agent prompt explicitly suppresses helper text per the POC
         scope.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]`
+        `<sys_package>` resolve into the `x_casemgmt`
         scoped application by `source` attribute lookup. NO global-
         scope writes - the OOB tables sys_user, sys_user_group,
         sys_user_role, core_company, task, incident, etc. are never
         modified.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]`), not by literal sys_id. Each
+        (`x_casemgmt`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
-        identifier `x_[scope]_case_task.status.<Value>` so that re-
+        identifier `x_casemgmt_case_task.status.<Value>` so that re-
         generation of this XML yields byte-identical output (no random
         UUIDs). This is the same derivation pattern used by the sibling
         ../choices/sys_choice_case_status.xml file. The sys_id is NOT
         a reference to any other record.
-      - The literal `[scope]` placeholder is preserved per AAP
-        convention; the PDI auto-assigns the actual scope id at App
-        Engine Studio creation time, which the import process resolves
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves
         into the final scope namespace.
       - English language only: `<language>en</language>` on every
         record per the POC scope. The platform supports localization
@@ -225,11 +223,11 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_[scope]_case_management.xml (scoped application)
-        - ../app/sys_scope/x_[scope].xml (scope record)
-        - ../tables/x_[scope]_case_task.xml (parent table; status field's
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../tables/x_casemgmt_case_task.xml (parent table; status field's
           host)
-        - ../dictionary/x_[scope]_case_task_status.xml (parent dictionary
+        - ../dictionary/x_casemgmt_case_task_status.xml (parent dictionary
           entry; declares the column shape, choice=3,
           default_value=Open, mandatory=true. Without this entry the
           sys_choice records below have no column to attach to. Per
@@ -244,11 +242,11 @@
       record dependency-resolution pass.
 
     Source for the deterministic sys_id derivations:
-        echo -n "x_[scope]_case_task.status.Open"        | md5sum
+        echo -n "x_casemgmt_case_task.status.Open"        | md5sum
             => db2d244d7bce6bd6a9b0984fa4f67d66
-        echo -n "x_[scope]_case_task.status.In Progress" | md5sum
+        echo -n "x_casemgmt_case_task.status.In Progress" | md5sum
             => 3127c03954bedb860746122fdb78d244
-        echo -n "x_[scope]_case_task.status.Closed"      | md5sum
+        echo -n "x_casemgmt_case_task.status.Closed"      | md5sum
             => 3e06456307a50567a8aaf02e62bda209
 
     The MD5 input is the canonical identifier <table>.<element>.<value>,
@@ -267,7 +265,7 @@
     <inactive>false</inactive>
     <label>Open</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>100</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -276,8 +274,8 @@
     <sys_id>db2d244d7bce6bd6a9b0984fa4f67d66</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Open</value>
@@ -289,7 +287,7 @@
     <inactive>false</inactive>
     <label>In Progress</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>200</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -298,8 +296,8 @@
     <sys_id>3127c03954bedb860746122fdb78d244</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>In Progress</value>
@@ -311,7 +309,7 @@
     <inactive>false</inactive>
     <label>Closed</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>300</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -320,8 +318,8 @@
     <sys_id>3e06456307a50567a8aaf02e62bda209</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Closed</value>

@@ -4,15 +4,15 @@
 
 This document captures the wireframe-level specifications for the two unauthenticated Experience Portal pages: Case Submission and Case Status Lookup. Both pages are delivered as Service Portal records under [`../portal/pages/`](../portal/pages/) with widgets under `../portal/widgets/` (subdirectory created in a subsequent checkpoint) and scripted REST endpoints under [`../portal/rest/`](../portal/rest/). Anonymous access is enforced by the platform's portal/widget configuration. The lookup page enforces strict field whitelisting at the scripted REST layer to prevent exposure of internal data.
 
-The placeholder string `x_[scope]_` is preserved as written throughout this repository; the actual scope identifier is auto-assigned by the ServiceNow Personal Developer Instance (PDI) when the scoped application is created. No other token replaces this placeholder.
+The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
 ## Common Conventions
 
-- Both pages live under a single Service Portal record [`../portal/sp_portal_x_[scope]_case_portal.xml`](../portal/sp_portal_x_[scope]_case_portal.xml).
-- Portal URL: `[instance URL]/x_[scope]_case_portal`. The portal slug `x_[scope]_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_[scope]_case_portal.xml`](../portal/sp_portal_x_[scope]_case_portal.xml). AAP Section 0.7.2 verbatim wording uses `[instance URL]/x_[scope]_portal` as a generic placeholder ("or the equivalent portal URL chosen at portal-record creation time"); this document uses the actual implementation slug to keep the per-page URL examples below accurate.
+- Both pages live under a single Service Portal record [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml).
+- Portal URL: `[instance URL]/x_casemgmt_case_portal`. The portal slug `x_casemgmt_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses `[instance URL]/x_casemgmt_portal` as a generic placeholder ("or the equivalent portal URL chosen at portal-record creation time"); this document uses the actual implementation slug to keep the per-page URL examples below accurate.
 - Both pages are anonymous (no login required).
 - Both pages use the platform default theme — no custom CSS, no custom branding (per AAP Section 0.4.4).
-- Both pages call scripted REST endpoints under `/api/x_[scope]/...`.
+- Both pages call scripted REST endpoints under `/api/x_casemgmt/...`.
 - The scripted REST endpoints execute with platform-default elevated privilege but the request/response shapes whitelist exactly the fields specified by AAP Section 0.7.4.
 - No PII in any example record; all examples reference synthetic data consistent with `../seed-data/` (subdirectory created in a subsequent checkpoint).
 
@@ -24,7 +24,7 @@ Allows an unauthenticated external requester to submit a new case. On successful
 
 ### URL
 
-- `[instance URL]/x_[scope]_case_portal?id=x_[scope]_case_submit` — the portal slug `x_[scope]_case_portal` is the `<url_suffix>` from [`../portal/sp_portal_x_[scope]_case_portal.xml`](../portal/sp_portal_x_[scope]_case_portal.xml), and the page slug `x_[scope]_case_submit` is the `<id>` from [`../portal/pages/sp_page_x_[scope]_case_submit.xml`](../portal/pages/sp_page_x_[scope]_case_submit.xml).
+- `[instance URL]/x_casemgmt_case_portal?id=x_casemgmt_case_submit` — the portal slug `x_casemgmt_case_portal` is the `<url_suffix>` from [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml), and the page slug `x_casemgmt_case_submit` is the `<id>` from [`../portal/pages/sp_page_x_casemgmt_case_submit.xml`](../portal/pages/sp_page_x_casemgmt_case_submit.xml).
 
 ### Wireframe
 
@@ -68,17 +68,17 @@ Allows an unauthenticated external requester to submit a new case. On successful
 
 | Field | HTML Type | Maps To | Mandatory | Validation |
 | --- | --- | --- | --- | --- |
-| Subject | text input | `x_[scope]_case.subject` | Yes | non-empty, max 255 chars |
-| Case Type | dropdown | `x_[scope]_case.type` | Yes | one of `General Inquiry`, `Complaint` |
-| Description | textarea | `x_[scope]_case.description` | Yes | non-empty, max 4000 chars |
-| Your Name | text input | `x_[scope]_case.requester_name` | Yes | non-empty, max 100 chars |
-| Your Email | text input | `x_[scope]_case.requester_email` | No | optional; if provided, max 100 chars |
+| Subject | text input | `x_casemgmt_case.subject` | Yes | non-empty, max 255 chars |
+| Case Type | dropdown | `x_casemgmt_case.type` | Yes | one of `General Inquiry`, `Complaint` |
+| Description | textarea | `x_casemgmt_case.description` | Yes | non-empty, max 4000 chars |
+| Your Name | text input | `x_casemgmt_case.requester_name` | Yes | non-empty, max 100 chars |
+| Your Email | text input | `x_casemgmt_case.requester_email` | No | optional; if provided, max 100 chars |
 
 ### Submit Behavior
 
 1. Form-level client-side validation runs first (mandatory fields, max-length).
-2. On client validation pass, the widget calls scripted REST endpoint POST `/api/x_[scope]/case_submit`.
-3. The scripted REST handler validates the payload server-side, creates a new `x_[scope]_case` record with `status = Draft` (the default), populates `subject`, `type`, `description`, `requester_name`, `requester_email` from the payload, and DOES NOT populate `assigned_group`, `assigned_agent`, or `closed_date`.
+2. On client validation pass, the widget calls scripted REST endpoint POST `/api/x_casemgmt/case_submit`.
+3. The scripted REST handler validates the payload server-side, creates a new `x_casemgmt_case` record with `status = Draft` (the default), populates `subject`, `type`, `description`, `requester_name`, `requester_email` from the payload, and DOES NOT populate `assigned_group`, `assigned_agent`, or `closed_date`.
 4. Auto-numbering populates `number` in `CASE0000001` format.
 5. Business rule `set_opened_date` populates `opened_date = gs.nowDateTime()` on insert.
 6. The endpoint returns a JSON payload `{ "number": "<auto-generated case number>" }`.
@@ -128,7 +128,7 @@ Allows an unauthenticated external requester to look up the current status of a 
 
 ### URL
 
-- `[instance URL]/x_[scope]_case_portal?id=x_[scope]_case_status` — the portal slug `x_[scope]_case_portal` is the `<url_suffix>` from [`../portal/sp_portal_x_[scope]_case_portal.xml`](../portal/sp_portal_x_[scope]_case_portal.xml), and the page slug `x_[scope]_case_status` is the `<id>` from [`../portal/pages/sp_page_x_[scope]_case_status.xml`](../portal/pages/sp_page_x_[scope]_case_status.xml).
+- `[instance URL]/x_casemgmt_case_portal?id=x_casemgmt_case_status` — the portal slug `x_casemgmt_case_portal` is the `<url_suffix>` from [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml), and the page slug `x_casemgmt_case_status` is the `<id>` from [`../portal/pages/sp_page_x_casemgmt_case_status.xml`](../portal/pages/sp_page_x_casemgmt_case_status.xml).
 
 ### Wireframe
 
@@ -162,13 +162,13 @@ Allows an unauthenticated external requester to look up the current status of a 
 
 | Field | HTML Type | Sent To | Mandatory | Validation |
 | --- | --- | --- | --- | --- |
-| Case Number | text input | URL parameter on GET `/api/x_[scope]/case_status_lookup?number=<value>` | Yes | non-empty, format must match `CASE\d{7}` (regex client-side hint, server-side enforced) |
+| Case Number | text input | URL parameter on GET `/api/x_casemgmt/case_status_lookup?number=<value>` | Yes | non-empty, format must match `CASE\d{7}` (regex client-side hint, server-side enforced) |
 
 ### Lookup Behavior
 
 1. Client-side validates the case number format (regex `^CASE\d{7}$`) and shows hint if malformed.
-2. On valid format, the widget calls scripted REST endpoint GET `/api/x_[scope]/case_status_lookup?number=<value>`.
-3. The endpoint queries `x_[scope]_case` by `number = <value>` using a `GlideRecord` lookup.
+2. On valid format, the widget calls scripted REST endpoint GET `/api/x_casemgmt/case_status_lookup?number=<value>`.
+3. The endpoint queries `x_casemgmt_case` by `number = <value>` using a `GlideRecord` lookup.
 4. **If found:** returns 200 OK with body `{ "number": "...", "status": "...", "subject": "...", "opened_date": "..." }` — only those four fields, NOTHING else.
 5. **If not found:** returns 404 Not Found with body `{ "message": "No case found with that number." }` (verbatim).
 6. The widget renders the result panel with the four returned fields, OR the verbatim "not found" message.
@@ -200,7 +200,7 @@ Fields explicitly EXCLUDED from the response (per AAP Section 0.7.4 — "lookup 
 
 ### Not-Found Behavior (VERBATIM)
 
-When the supplied case number does not match any record in `x_[scope]_case`, the lookup endpoint MUST return the following text character-for-character in both the JSON response body's `message` field AND the rendered widget:
+When the supplied case number does not match any record in `x_casemgmt_case`, the lookup endpoint MUST return the following text character-for-character in both the JSON response body's `message` field AND the rendered widget:
 
 ```text
 No case found with that number.
@@ -224,8 +224,8 @@ This section documents how the two ServiceNow portal pages semantically correspo
 | Page 1 — Case Submission | `acm-services/acm-service-portal-gateway/` (FOIA portal anonymous-submission pattern) | Replaces Java REST + Angular template with Service Portal page + widget + scripted REST endpoint |
 | Page 1 — Case Submission widget | `acm-standard-applications/arkcase/src/main/webapp/resources/modules/cases/services/case-info.client.service.js` (`Case.InfoService.save`) | The case payload shape (subject, type, description, requester_*) is informed by the AngularJS service contract, but the implementation is fully ServiceNow-native |
 | Page 2 — Case Status Lookup | `acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/armedia/acm/plugins/casefile/service/GetCaseByNumberService.java` | Java service that fetches a case by case number; ServiceNow uses GlideRecord lookup by `number` |
-| Scripted REST endpoint `/api/x_[scope]/case_submit` | `acm-services/acm-service-portal-gateway/.../foiaPortalRequestServiceProvider.java` | Replaces Java REST controller |
-| Scripted REST endpoint `/api/x_[scope]/case_status_lookup` | `GetCaseByNumberService.java` | Replaces Java service-layer surface |
+| Scripted REST endpoint `/api/x_casemgmt/case_submit` | `acm-services/acm-service-portal-gateway/.../foiaPortalRequestServiceProvider.java` | Replaces Java REST controller |
+| Scripted REST endpoint `/api/x_casemgmt/case_status_lookup` | `GetCaseByNumberService.java` | Replaces Java service-layer surface |
 
 ## Verification
 
@@ -241,7 +241,7 @@ The numbered procedure below cross-references [`validation-gates.md`](./validati
 1. Log out of the PDI; open the portal URL in an incognito browser.
 2. Navigate to the submission page; fill all 5 fields with synthetic values; submit.
 3. Confirm the confirmation panel displays the auto-generated case number in `CASE0000001` format.
-4. Log in as `x_[scope]_demo_manager`; locate the new case in the case list.
+4. Log in as `x_casemgmt_demo_manager`; locate the new case in the case list.
 5. Confirm `status = Draft`, `subject` and `requester_name` match submitted values, and `opened_date` is set.
 6. Confirm `assigned_group`, `assigned_agent`, `closed_date` are empty.
 7. Log out; open the lookup page; enter the new case number; click Look Up.
@@ -254,9 +254,9 @@ The numbered procedure below cross-references [`validation-gates.md`](./validati
 - [`state-machine.md`](./state-machine.md) — describes why submitted cases start in `Draft` status.
 - [`acl-matrix.md`](./acl-matrix.md) — explains why anonymous submission is permitted (scripted REST runs at platform-default privilege).
 - [`validation-gates.md`](./validation-gates.md) — Gates 4 and 5 (Portal submission and lookup).
-- [`../portal/sp_portal_x_[scope]_case_portal.xml`](../portal/sp_portal_x_[scope]_case_portal.xml) — Service Portal record.
-- [`../portal/pages/`](../portal/pages/) — `sp_page_x_[scope]_case_submit.xml`, `sp_page_x_[scope]_case_status.xml`.
-- `../portal/widgets/` — three widget records (`sp_widget_x_[scope]_case_submission_widget.xml`, `sp_widget_x_[scope]_case_lookup_widget.xml`, `sp_widget_x_[scope]_case_confirmation_widget.xml`) — created in a subsequent checkpoint.
-- [`../portal/rest/`](../portal/rest/) — two scripted REST endpoint records (`sys_ws_definition_x_[scope]_case_submit.xml`, `sys_ws_definition_x_[scope]_case_status_lookup.xml`).
-- `../script_includes/` — `x_[scope]_CasePortalService.xml` server-side helper that backs both scripted REST endpoints (created in a subsequent checkpoint).
+- [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml) — Service Portal record.
+- [`../portal/pages/`](../portal/pages/) — `sp_page_x_casemgmt_case_submit.xml`, `sp_page_x_casemgmt_case_status.xml`.
+- `../portal/widgets/` — three widget records (`sp_widget_x_casemgmt_case_submission_widget.xml`, `sp_widget_x_casemgmt_case_lookup_widget.xml`, `sp_widget_x_casemgmt_case_confirmation_widget.xml`) — created in a subsequent checkpoint.
+- [`../portal/rest/`](../portal/rest/) — two scripted REST endpoint records (`sys_ws_definition_x_casemgmt_case_submit.xml`, `sys_ws_definition_x_casemgmt_case_status_lookup.xml`).
+- `../script_includes/` — `x_casemgmt_CasePortalService.xml` server-side helper that backs both scripted REST endpoints (created in a subsequent checkpoint).
 

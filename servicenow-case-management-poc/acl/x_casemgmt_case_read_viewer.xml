@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the table-level READ ACL that
+    grants the scoped role `x_casemgmt_case_viewer` UNCONDITIONAL read access
+    to every record on the `x_casemgmt_case` custom table inside the scoped
+    application `x_casemgmt`.
+
+    AAP cross-references:
+      - Section 0.5.6 (ACL Matrix) — case_viewer row:
+          | Role                    | Create | Read    | Write | Delete |
+          | x_casemgmt_case_viewer   |   No   | Yes/All |  No   |   No   |
+        This file authors the single "Read = All" cell. The "No" cells for
+        Create / Write / Delete are enforced by the deliberate ABSENCE of any
+        sibling x_casemgmt_case_create_viewer.xml, x_casemgmt_case_write_viewer.xml,
+        or x_casemgmt_case_delete_viewer.xml file in the ../acl/ folder. ServiceNow
+        record-level ACLs are deny-by-default: a role that is not granted an
+        operation by ANY ACL on a table cannot perform that operation. This file
+        is therefore the SOLE ACL the case_viewer role needs on the case table.
+      - Section 0.7.3 (Validation Framework, Gate 3 — ACLs):
+          "Role-based access enforced — case_viewer cannot write; case_agent
+           cannot access unassigned cases; case_manager has full access."
+        The first clause is satisfied by combining (a) THIS read-only ACL with
+        (b) the absence of any write/create/delete viewer ACL — together they
+        prove that case_viewer can read but not modify any case record.
+      - Section 0.4.3 (Design Pattern Applications — Scoped role-based access
+        control): "Three named roles paired with table-level and field-level
+        ACLs whose conditions are encoded as scripted ACL expressions, replacing
+        ArkCase's ApplicationRolesToPrivilegesConfig map." This ACL is the
+        table-level READ binding for the lowest-tier scoped role.
+
+    Why "Read = All" and NOT "Read = Assigned only":
+      Per AAP Section 0.5.6, only the case_agent role's read scope is
+      restricted to "Assigned only" (assigned_agent = current user OR
+      assigned_group contains current user). The case_viewer role is the
+      audit / compliance / supervisor tier — by deliberate design it has
+      org-wide visibility into every case for oversight purposes. This is why:
+        - <advanced>false</advanced>      — no scripted condition
+        - <condition/>                    — empty encoded query
+        - <script/>                       — empty server-side script
+      With no condition and no script, the ACL evaluates to "permit" for any
+      caller who carries the x_casemgmt_case_viewer role.
+
+    Semantic source-side reference (read-only context per AAP Section 0.3.2;
+    no code or configuration is byte-for-byte ported from these files):
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/services/
+        users/model/ApplicationRolesToPrivilegesConfig.java
+        ArkCase mapped roles to privileges through a single configuration map
+        (`Map<String, List<Object>> rolesToPrivileges`) keyed by the property
+        `application.rolesToPrivileges`. In that model, a "viewer-equivalent"
+        role would have been associated with read-only privilege identifiers
+        such as `acm-case-read` or `acm-case-view`. The ServiceNow target
+        replaces this map-based privilege association with declarative, scoped
+        record-level ACLs — this XML record is the direct equivalent of one
+        cell in the map: the (case_viewer, READ) pairing.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/com/
+        armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        Encapsulated role-CRUD and privilege-paging behavior in ArkCase
+        (`retrieveRoles()`, `retrievePrivileges()`,
+        `retrievePrivilegesByAuthorization(...)`,
+        `retrievePrivilegesByRole(...)`, `updateRolePrivileges(...)`). All of
+        this Java service surface is replaced in the ServiceNow target by the
+        platform's built-in sys_security_acl evaluator; no scripted privilege
+        resolver is needed. This ACL is one of the declarative facts the
+        evaluator consumes.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - Scope-namespace exclusivity: every cross-reference resolves into the
+        x_casemgmt scope (sys_scope = x_casemgmt, sys_package = x_casemgmt).
+        No global-scope ACLs are written. The <name> field references the
+        scoped table x_casemgmt_case (not the OOB `task` table or any other
+        global table), and <roles> references the scoped role
+        x_casemgmt_case_viewer.
+      - Zero hardcoded cross-reference sys_id literals: <name>, <roles>,
+        <sys_scope>, and <sys_package> all resolve their targets by name /
+        source attribute lookup at Update Set apply time. The <sys_id> below
+        is THIS record's own deterministic primary key (MD5 of
+        "x_casemgmt_case.read.case_viewer", a stable canonical identifier for
+        this exact ACL) and is not a cross-reference to any other record.
+        Computing the sys_id deterministically guarantees the ACL is
+        re-applyable / idempotent across fresh PDIs and round-trip Update Set
+        previews.
+      - Table-level (not field-level): <name> is `x_casemgmt_case` with NO dot.
+        Field-level read restrictions (e.g., to hide assigned_group from
+        viewers) are NOT specified by the AAP for the case_viewer role; only
+        the Manager / Agent field-level ACLs on assigned_group / assigned_agent
+        exist (see ../acl/x_casemgmt_case_assigned_group_field_acl.xml and
+        ../acl/x_casemgmt_case_assigned_agent_field_acl.xml). Per AAP Section
+        0.5.6 the viewer reads the entire row including those sensitive fields.
+      - Operation = read: corresponds exactly to the "Read = Yes/All" cell in
+        the AAP matrix. The other three operations (create, write, delete) are
+        enforced as "No" by the deliberate absence of corresponding viewer
+        ACLs in this folder.
+      - admin_overrides = true: standard ServiceNow pattern that allows the
+        platform `admin` role to bypass this ACL. This is required so platform
+        administrators can troubleshoot, repair, or override scoped data
+        without needing a viewer role grant. It does NOT widen viewer
+        privileges — viewers without admin still see exactly what this ACL
+        permits.
+      - active = true: ACL is in force the moment the Update Set commits.
+
+    Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
+      MUST be loaded AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped app record)
+        - ../app/sys_scope/x_casemgmt.xml (scope record - resolves sys_scope and
+          sys_package source="x_casemgmt")
+        - ../tables/x_casemgmt_case.xml (resolves <name>x_casemgmt_case</name>)
+        - ../roles/sys_user_role_x_casemgmt_case_viewer.xml (resolves
+          <roles>x_casemgmt_case_viewer</roles>)
+      MUST be loaded BEFORE:
+        - ../seed-data/role_assignments/sys_user_has_role_x_casemgmt_demo_viewer.xml
+          (the demo viewer's read access during round-trip verification depends
+          on this ACL being applied first).
+
+    The concrete scope identifier `casemgmt` is used verbatim per AAP convention. ServiceNow Update Set imports use a standard XML parser, so the
+    scope id is concrete in the XML before export. The same identifier
+    is used consistently across every artifact in this scoped application.
+-->
+<record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <admin_overrides>true</admin_overrides>
+        <advanced>false</advanced>
+        <condition/>
+        <description>Table-level ACL: x_casemgmt_case_viewer can read all x_casemgmt_case records (read-only access). No create, write, or delete privileges (deny-by-default).</description>
+        <name>x_casemgmt_case</name>
+        <operation>read</operation>
+        <roles>x_casemgmt_case_viewer</roles>
+        <script/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>72b5af7b98b41a8cbe6101ffc5a034b2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_security_acl_x_casemgmt_case_read_viewer</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>record</type>
+    </sys_security_acl>
+</record_update>

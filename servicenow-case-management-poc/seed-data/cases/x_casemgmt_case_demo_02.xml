@@ -1,0 +1,601 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Case 02 - Open / General Inquiry / Medium priority
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the SECOND of the 10-case demo dataset; together with
+    case 01 (Draft, the immediately preceding lifecycle state for the
+    General Inquiry type) and cases 03 through 10 (which cover the
+    remaining statuses across both case types), it satisfies the AAP
+    requirement (Section 0.7.4) of "at least 10 demo cases across all
+    six statuses and both case types," and contributes to the dataset
+    matrix:
+
+        Case 01 - Draft       / General Inquiry
+        Case 02 - Open        / General Inquiry / Medium    ## THIS FILE
+        Case 03 - In Progress / General Inquiry / Medium
+        Case 04 - Pending     / General Inquiry / High
+        Case 05 - Resolved    / General Inquiry / Medium
+        Case 06 - Closed      / General Inquiry
+        Case 07 - Open        / Complaint       / High
+        Case 08 - In Progress / Complaint
+        Case 09 - Resolved    / Complaint
+        Case 10 - Closed      / Complaint
+
+    The 10-case dataset thus exercises:
+      * Every one of the six statuses (Draft, Open, In Progress, Pending,
+        Resolved, Closed) - this case occupies the Open slot for the
+        General Inquiry case type. It is paired with case 07, which
+        occupies the Open slot for the Complaint case type. Together
+        cases 02 and 07 cover the Open status across both case types.
+      * Both case types (General Inquiry and Complaint) - case 02 is on
+        the General Inquiry side; case 07 is the Complaint counterpart.
+      * Multiple priorities (Low, Medium, High, Critical) - this case
+        contributes the Medium bar to the all_cases_by_priority chart
+        (paired with cases 03 In Progress General Inquiry Medium and
+        05 Resolved General Inquiry Medium, which are also Medium).
+      * The Open -> In Progress TRANSITION-GUARD scenario - this case
+        is the CANONICAL test input for the validate_inprogress_transition
+        subflow's "assigned_agent must be populated AND must be a
+        member of assigned_group" gate. With assigned_agent intentionally
+        absent on this Open case, any attempt to advance this case to
+        In Progress via the form MUST be blocked by the subflow until
+        an agent is selected (and that agent is a member of the
+        assigned_group).
+      * The case_agent's "Assigned only" ACL group-membership clause -
+        this case is visible to the demo agent ONLY because the demo
+        agent is a member of x_casemgmt_demo_team (the assigned_group),
+        even though assigned_agent is empty. This is the canonical
+        test for the SECOND clause of "Assigned only":
+        "assigned_group IN current.user_group_membership" (the FIRST
+        clause "assigned_agent = current.sys_id" is exercised by all
+        cases that DO have assigned_agent populated, e.g. case 03).
+
+    Lifecycle position - WHY Open / General Inquiry / Medium is
+    meaningful:
+      A General Inquiry case that has reached Open status has traversed:
+        Draft -> Open
+      The case was created as a Draft (with subject, description,
+      requester_name, optionally requester_email and priority but NOT
+      assigned_group), then routed to a queue / assigned to a group on
+      the Draft -> Open transition. Per AAP Section 0.5.5's transition
+      matrix:
+        - The Draft -> Open transition is gated by
+          validate_open_transition: assigned_group must be populated;
+          otherwise the form-level blocking error is surfaced.
+        - The Open -> In Progress transition is gated by
+          validate_inprogress_transition: assigned_agent must be
+          populated AND must be a member of assigned_group; otherwise
+          the form-level blocking error is surfaced.
+        - Any -> Draft is PROHIBITED ("Cases cannot be returned to
+          Draft." per AAP Section 0.7.4); any attempt to back-
+          transition this Open case to Draft MUST be blocked by the
+          x_casemgmt_block_draft_backtransition Before-Update business
+          rule.
+      This case occupies the Open side of those gates: assigned_group
+      is populated, assigned_agent is INTENTIONALLY ABSENT (the
+      defining feature of Open in this dataset; case 07 follows the
+      same convention for the Complaint side), pending_reason is
+      absent (only relevant on Pending status), and the case has NOT
+      yet been picked up by an agent. The Medium priority is the
+      canonical "ordinary case" priority - elevated above Low (no
+      urgency) but not yet reaching High or Critical thresholds.
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This case DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this case's <sys_scope>/<sys_package>
+             reference fields resolve via the source attribute against
+             those records)
+        - The case table definition at ../../tables/x_casemgmt_case.xml
+            (this record's <sys_class_name>x_casemgmt_case</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case table under
+            ../../dictionary/x_casemgmt_case_*.xml  (every populated
+            field below requires its dictionary entry to be present)
+        - All choice records under ../../choices/  (the type=General
+            Inquiry, status=Open, and priority=Medium choice values
+            must all be registered; the Open choice is defined at
+            ../../choices/sys_choice_case_status.xml as the second
+            status choice in the lifecycle order)
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_casemgmt_case.xml  (defines the
+            CASE0000001 format; this record's <number/> is intentionally
+            absent so the platform auto-generates per that format on
+            insert)
+        - The role records under ../../roles/  (the demo agent's read
+            access for this case requires the x_casemgmt_case_agent role
+            and its ACLs; the demo manager's read/write access requires
+            the x_casemgmt_case_manager role; the demo viewer's read
+            access requires the x_casemgmt_case_viewer role)
+        - The ACL records under ../../acl/  (table-level and field-
+            level ACLs gate read/write access; the demo agent reads
+            this case via the GROUP-MEMBERSHIP CLAUSE of the "Assigned
+            only" ACL: assigned_group IN current.user_group_membership.
+            Note: the agent does NOT see this case via the assigned_agent
+            clause of "Assigned only" since assigned_agent is empty)
+        - The business rule records under ../../business_rules/
+            (set_opened_date Before-Insert auto-sets <opened_date> on
+             this case at import time; block_draft_backtransition will
+             prevent any Open->Draft attempt;
+             validate_assigned_agent_membership is NOT exercised for
+             this case since assigned_agent is empty)
+        - The flow records under ../../flows/
+            (../../flows/general_inquiry_state_machine.xml governs this
+             case type; the validate_inprogress_transition subflow at
+             ../../flows/sub_flows/validate_inprogress_transition.xml
+             is the guard that will block any attempt to transition
+             THIS CASE from Open to In Progress while assigned_agent
+             is empty - this case is the canonical test input for that
+             subflow)
+        - ../groups/sys_user_group_x_casemgmt_demo_team.xml  (referenced
+            by <assigned_group>; resolved by name lookup; THIS CASE'S
+            assigned_group reference matches that group's <name> value
+            EXACTLY: "x_casemgmt_demo_team")
+        - ../users/sys_user_x_casemgmt_demo_agent.xml  (NOT directly
+            referenced by this case but required for the agent's
+            group membership which makes this case visible under the
+            "Assigned only" ACL second clause; without the agent's
+            membership in x_casemgmt_demo_team, the demo agent would
+            NOT see this case at all)
+        - ../role_assignments/sys_user_has_role_x_casemgmt_demo_agent.xml
+            (grants the case_agent role to the demo agent; without
+            this role assignment, the "Assigned only" ACL would not
+            apply to the demo agent at all)
+        - The seed script's group-membership creation
+            (../../scripts/seed_demo_data.js ensureGroupMembership)
+            which makes the demo agent a member of the demo team -
+            prerequisite for the "Assigned only" ACL second clause
+            to grant access on this case.
+
+      This case IS REFERENCED BY (loaded AFTER this record):
+        - NO demo tasks - per the seed script's task table, Open cases
+            have NO children in the demo dataset. The dataset
+            convention is that children are created only on cases
+            that have been picked up by an agent (In Progress and
+            beyond). This is a deliberate dataset design choice that
+            mirrors a realistic case lifecycle: tasks are typically
+            created by the assigned agent during active investigation,
+            not by the queue dispatcher at Draft/Open time.
+        - NO demo parties - per the seed script's party table, Open
+            cases have NO children in the demo dataset. Same rationale
+            as for tasks: parties (witnesses, respondents, etc.) are
+            typically captured by the assigned agent during active
+            investigation. The polymorphic case_party UI Policy
+            (../../ui_policy/x_casemgmt_case_party_conditional_fields.xml)
+            is exercised by cases 03 and other multi-party cases, not
+            by this case.
+        - The all_cases_by_status Manager View bar chart at
+            ../../reports/x_casemgmt_all_cases_by_status.xml  (this case
+            populates one of the two Open bars, alongside case 07
+            which is the Complaint counterpart)
+        - The all_cases_by_type Manager View donut at
+            ../../reports/x_casemgmt_all_cases_by_type.xml  (this case
+            populates the General Inquiry slice)
+        - The all_cases_by_priority Manager View bar chart at
+            ../../reports/x_casemgmt_all_cases_by_priority.xml  (this
+            case populates one of the Medium entries alongside cases
+            03 In Progress General Inquiry Medium and 05 Resolved
+            General Inquiry Medium)
+        - The case_count_by_status Agent Workspace donut at
+            ../../reports/x_casemgmt_case_count_by_status.xml  (this case
+            populates one of the two Open slices)
+        - The cases_opened_30d Manager View single-score widget at
+            ../../reports/x_casemgmt_cases_opened_30d.xml  (since
+            opened_date is auto-set to "now" by the set_opened_date
+            business rule at insert time, this case is included in the
+            count of cases opened within the last 30 days)
+        - The avg_time_to_close Manager View single-score widget at
+            ../../reports/x_casemgmt_avg_time_to_close.xml  (this case
+            does NOT contribute because the widget filters on
+            status=Closed and this case is Open, not Closed; only
+            cases 06 and 10 contribute to the average)
+        - The Agent Workspace's "My Open Cases" list at
+            ../../reports/x_casemgmt_my_open_cases.xml does NOT include
+            this case via its primary filter clause: the list filter
+            is "status NOT IN (Resolved, Closed) AND assigned_agent =
+            javascript:gs.getUserID()". Open is NOT in the (Resolved,
+            Closed) exclusion set, but assigned_agent is EMPTY on this
+            case so the assigned_agent clause does not match the
+            current user. The case is therefore NOT in the demo
+            agent's "My Open Cases" personal list - which is correct,
+            because the agent has not yet picked it up. The case IS,
+            however, visible in the case_agent's ACL-filtered case
+            list (via the assigned_group group-membership clause of
+            "Assigned only"); the demo agent can see it in the global
+            case list and explicitly assign themselves to it via the
+            form, which would then advance the case to In Progress via
+            the standard state machine.
+        - The validate_inprogress_transition subflow test in Validation
+            Gate 2 (TRANSITION-BLOCK): THIS CASE IS THE CANONICAL TEST
+            INPUT. When an operator (with appropriate role) attempts
+            to transition this case from Open to In Progress while
+            assigned_agent is still empty, the
+            validate_inprogress_transition subflow MUST throw the
+            form-level blocking error (per AAP Section 0.5.5 the
+            condition "assigned_agent populated AND member of
+            assigned_group" is REQUIRED) and the form transition MUST
+            be denied. After assigned_agent is manually populated on
+            the form (selecting the demo agent who is a member of
+            x_casemgmt_demo_team), the same transition attempt MUST
+            succeed and yield case status = In Progress.
+        - The case_agent "Assigned only" ACL test (Validation Gate 3,
+            ACL ROLE-BASED ACCESS): this case is visible to the demo
+            agent ONLY via the GROUP-MEMBERSHIP CLAUSE of "Assigned
+            only" (assigned_group IN current.user_group_membership).
+            The agent does NOT see this case via the assigned_agent
+            clause (since assigned_agent is empty). This case is
+            therefore the canonical test for the SECOND clause of
+            "Assigned only"; case 03 (and any other case with
+            assigned_agent populated) is the canonical test for the
+            FIRST clause.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's ten authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        subject       = "Demo case 02: Open (General Inquiry)"
+                        (verbatim per the agent prompt's required
+                        idempotent key)
+        description   = "Synthetic Open case used to verify Open status
+                        visualization and the Open -> In Progress
+                        transition guard." (verbatim per the agent
+                        prompt; the literal `>` is HTML-encoded as
+                        `&gt;` per the agent prompt's Rule 10 XML
+                        convention; no PII; the wording emphasizes
+                        the dual purpose of this case in the dataset:
+                        Open visualization AND the Open -> In Progress
+                        transition guard test)
+        requester_name  = "Synthetic Requester Two" (synthetic
+                          identifier using the literal word "Synthetic"
+                          plus the SPELLED-OUT numeral "Two" for the
+                          requester, NOT a real person's name;
+                          consistent with the peer convention used by
+                          cases 03 through 10 - SPELLED-OUT word for
+                          the requester_name)
+        requester_email = "requester-2@example.invalid"
+                          (RFC 2606 / BCP 32 reserved .invalid TLD never
+                          resolves to a real domain; the local part uses
+                          the NUMERAL "2" matching the file numbering -
+                          consistent with the peer convention used by
+                          cases 03-10's NUMERAL convention for the email
+                          local part versus the SPELLED-OUT word for
+                          the requester_name field)
+
+      Rule 2 - No auto-number override:
+        The <number/> element is intentionally absent. The auto-number
+        engine defined in ../../numbers/sys_number_x_casemgmt_case.xml
+        generates a CASE0000001-format value on insert per AAP Section
+        0.5.7 (the "number" row of the case schema specifies "Auto-
+        number" with format CASE0000001 and Read-only constraint).
+
+      Rule 3 - Auto-set opened_date (NO explicit override):
+        The <opened_date/> element is intentionally absent. The
+        set_opened_date Before-Insert business rule at
+        ../../business_rules/x_casemgmt_set_opened_date.xml fires on
+        insert and sets opened_date = gs.nowDateTime(). On a fresh
+        PDI import this yields an opened_date "now," which is correct
+        for this Open case because:
+          * It is NOT used to compute avg_time_to_close (which excludes
+            non-Closed cases via the status=Closed filter).
+          * It IS appropriate for the case to appear "fresh" in the
+            cases_opened_30d count (an Open case awaiting agent
+            assignment is by definition recently opened).
+        Pattern matches cases 03 (In Progress General Inquiry), 04
+        (Pending General Inquiry), 05 (Resolved General Inquiry), 07
+        (Open Complaint), 08 (In Progress Complaint), and 09 (Resolved
+        Complaint), which also do NOT need explicit opened_date
+        overrides. Only cases 06 (Closed General Inquiry) and 10
+        (Closed Complaint) carry explicit opened_date and closed_date
+        overrides because they are the only inputs to the
+        avg_time_to_close widget.
+
+      Rule 4 - No closed_date in Open:
+        The <closed_date/> element is intentionally absent. Per AAP
+        Section 0.5.5 the set_closed_date business rule fires only on
+        Resolved -> Closed update, NOT on direct insert with status =
+        Open. Open cases by definition have not been Closed (Open is
+        a queue-pre-pickup state, not a terminal state), so closed_date
+        MUST remain null. The avg_time_to_close report filters on
+        status=Closed and ignores non-Closed records, so this case
+        correctly does NOT appear in that widget.
+
+      Rule 5 - Mandatory assigned_group, NO assigned_agent, NO
+              pending_reason:
+        assigned_group = "x_casemgmt_demo_team"  (mandatory because
+                         the case has been routed from Draft to Open;
+                         the Draft -> Open transition is gated by
+                         validate_open_transition which requires
+                         assigned_group populated per AAP Section
+                         0.5.5; the value persists through all
+                         subsequent statuses)
+        assigned_agent = (absent / empty)  (the DEFINING FEATURE of
+                         this Open case; the case has been routed to
+                         the queue but NOT yet picked up by an agent.
+                         This element is INTENTIONALLY absent per the
+                         agent prompt's Rule 5. Any attempt to
+                         transition this case to In Progress while
+                         assigned_agent is empty MUST be blocked by
+                         the validate_inprogress_transition subflow
+                         per AAP Section 0.5.5. This is the CANONICAL
+                         test input for that subflow's "assigned_agent
+                         must be populated AND member of assigned_group"
+                         guard.)
+        pending_reason = (absent)  (NOT applicable to Open status;
+                         pending_reason is set ONLY when status is
+                         Pending, set by the validate_pending_transition
+                         subflow on the In Progress -> Pending transition,
+                         and cleared by the
+                         clear_pending_reason_on_inprogress business
+                         rule on the Pending -> In Progress transition.
+                         For this case (Open), pending_reason is
+                         absent / null.)
+
+      Rule 6 - Choice value precision:
+        type     = "General Inquiry"  (exactly as registered in
+                   ../../choices/sys_choice_case_type.xml; the FIRST
+                   of the two case types; capital G and capital I
+                   deliberate; the space between "General" and "Inquiry"
+                   is a single ASCII space, NOT an em-space or other
+                   Unicode whitespace)
+        status   = "Open"  (exactly as registered in
+                   ../../choices/sys_choice_case_status.xml; capital O
+                   deliberate - "Open" not "open" or "OPEN"; the
+                   second of the six registered statuses Draft, Open,
+                   In Progress, Pending, Resolved, Closed)
+        priority = "Medium"  (exactly as registered in
+                   ../../choices/sys_choice_case_priority.xml; capital M
+                   deliberate - "Medium" not "medium" or "MEDIUM"; the
+                   second of the four registered priorities Low, Medium,
+                   High, Critical)
+
+      Rule 7 - Zero hardcoded sys_id cross-references (AAP Section
+               0.7.2 "NO sys_id literals anywhere"):
+        The case's OWN <sys_id> below is the record's primary key,
+        which is acceptable per the AAP rule (it is NOT a reference to
+        any other record). It is a deterministic 32-character lowercase
+        hex value computed at file generation time as the MD5 of the
+        idempotent subject "Demo case 02: Open (General Inquiry)"
+        = 0e4cacc1c8db7157b8fb73f97786ebb5 - so the Update Set engine
+        resolves the same sys_id on every PDI import, making the record
+        idempotent.
+
+        EVERY cross-reference field below uses the stable human-readable
+        lookup key (name / scope source) as both the display_value
+        attribute AND the text content - NOT a hardcoded sys_id literal.
+        This matches the convention established by every peer file in
+        the scoped Update Set (sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, dictionary/x_casemgmt_*, cases 03/04/05/06/
+        07/08/09/10, etc.) and complies with the AAP Section 0.7.2 "NO
+        sys_id literals anywhere" rule:
+          - <assigned_group display_value="x_casemgmt_demo_team">
+                x_casemgmt_demo_team
+            </assigned_group>  resolves by name lookup against
+                sys_user_group
+          - <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+                resolves by scope source-name lookup
+          - <sys_package display_value="Case Management" source="x_casemgmt">
+                x_casemgmt
+            </sys_package>  resolves by scope source-name lookup
+
+      Rule 8 - Scope binding:
+        <sys_scope>   binds this case row to the scoped application via
+                      the scope source name "x_casemgmt" defined in
+                      ../../app/sys_scope/x_casemgmt.xml at
+                      <source>x_casemgmt</source>; the display_value
+                      "Case Management" matches the sys_app's human-
+                      readable name.
+        <sys_package> follows the same pattern with the additional
+                      source="x_casemgmt" attribute that is required by
+                      the Update Set engine for scope-package binding.
+        Note: the source attribute value "x_casemgmt" matches what every
+        peer file uses; it is the scope's <source> field, NOT the
+        scoped application's sys_update_name. This is the convention
+        used consistently across the project's Update Set artifacts
+        (cases 03/04/05/06/07/08/09/10, all sys_user_*, sys_user_group_*,
+        sys_user_has_role_* records use the same convention).
+
+      Rule 9 - Idempotency anchor:
+        The case's idempotent key is <subject> =
+        "Demo case 02: Open (General Inquiry)". The companion seed
+        script ../../scripts/seed_demo_data.js ensureCase() helper
+        queries x_casemgmt_case by subject BEFORE inserting; the
+        action="INSERT_OR_UPDATE" attribute on the inner <x_casemgmt_case>
+        element ensures the same behavior at Update Set import time.
+        Both the action attribute and the deterministic sys_id make
+        re-imports on a fresh PDI byte-identical and collision-free.
+
+      Rule 10 - Scoped Update Set XML conventions:
+        Root element:  <record_update table="x_casemgmt_case">
+        Inner element: <x_casemgmt_case action="INSERT_OR_UPDATE"> for
+                       idempotent re-import per AAP Section 0.7.1
+                       round-trip-verification gate (Validation Gate 7).
+        UTF-8 encoding declared in XML prolog.
+        HTML-encode `>` as `&gt;` inside element content (the
+        description field uses `Open -&gt; In Progress` to encode the
+        literal arrow character per the agent prompt's Rule 10 XML
+        convention).
+        Element ordering: alphabetical (matching the established peer
+        convention used by sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, role records, cases 03/04/05/06/07/08/09/
+        10, and dictionary entries across the scoped Update Set).
+        Unix-style line endings (LF) per AAP file authoring conventions.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java
+        ArkCase's CaseFile JPA entity declares ~80 fields including
+        cm_case_status (the source for our <status>), cm_case_priority
+        (the source for our <priority>), cm_case_type (the source for
+        our <type>), cm_case_title (the source for our <subject>),
+        cm_case_details (Lob; the source for our <description>), and
+        the assignment fields (assignee, owner) that informed the
+        assigned_agent / assigned_group semantics. ArkCase's
+        CaseFileQueueHandler pre-save handler (which set status to
+        ACTIVE on save and resolved the queue) is the conceptual
+        ancestor of the Open status in this POC: a case that has
+        been routed to a group-as-queue but not yet picked up. The
+        ServiceNow target collapses ArkCase's ~80 fields to the user-
+        prompt's 12-field schema (number, type, status, priority,
+        subject, description, opened_date, closed_date, assigned_group,
+        assigned_agent, requester_name, requester_email - plus the
+        optional pending_reason). ArkCase's ChangeCaseFileStateService
+        Java class (which managed status transitions and is the source
+        of the Open -> In Progress validation semantics) is replaced
+        in this POC by Flow Designer's general_inquiry_state_machine
+        flow plus its validate_inprogress_transition subflow and the
+        x_casemgmt_CaseTransitionValidator script include (which
+        encapsulates the "assigned_agent populated AND member of
+        assigned_group" check that THIS CASE is designed to fail
+        until an agent is selected on the form).
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|doe|
+        @gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net) - the
+        synthetic identifiers ("Synthetic Requester Two",
+        "requester-2@example.invalid", "x_casemgmt_demo_team") do not
+        include any PII tokens. The `.invalid` TLD per RFC 2606 / BCP
+        32 is reserved and never resolves to a real domain.
+      - Choice-value validation: <type>General Inquiry</type>,
+        <status>Open</status>, <priority>Medium</priority> - capital
+        G/I, capital O, capital M respectively.
+      - Anti-pattern validation: NO <number>, NO <opened_date>,
+        NO <closed_date>, NO <assigned_agent>, NO <pending_reason>
+        elements present (this is a STRICTER anti-pattern profile
+        than peer cases 03-10 because Open is the FIRST status that
+        carries an assigned_group but NO assigned_agent).
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        case's own primary key); NO sys_id literals appear in any
+        cross-reference field (all references use display_value
+        attributes with stable lookup keys).
+      - Scope-identifier validation: the concrete scope identifier `casemgmt` is used verbatim in the sys_class_name, sys_update_name,
+        all reference values, and the file path; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export. The same identifier is used consistently across every cross-reference in this file.
+      - Cross-reference resolution: <assigned_group
+        display_value="x_casemgmt_demo_team"> EXACTLY matches the
+        <name> value in ../groups/sys_user_group_x_casemgmt_demo_team.xml
+        ("x_casemgmt_demo_team").
+
+    Key insights (per the agent prompt):
+      1. Demo case 02 is the canonical Open case for the General
+         Inquiry flow. It exercises the queue-based assignment pattern
+         where a case has been routed to a group but not yet picked up
+         by an agent. This mirrors a realistic case lifecycle: the
+         intake/dispatcher routes the case to a team queue (the
+         demo_team group), and the case waits in the queue for a team
+         member to claim it via the form's assigned_agent field
+         (which then triggers the Open -> In Progress transition
+         through the standard state machine).
+
+      2. NO <assigned_agent> is the DEFINING FEATURE of this case.
+         This is what makes the Open -> In Progress transition blocked;
+         the validate_inprogress_transition subflow requires an
+         assigned_agent who is a member of assigned_group. Until an
+         operator populates assigned_agent on the form (selecting the
+         demo agent who is a member of x_casemgmt_demo_team), any
+         transition attempt to In Progress MUST surface a form-level
+         blocking error and MUST be denied.
+
+      3. The status "Open" has a single capital O. The exact choice
+         value is "Open" per AAP Section 0.5.7 and
+         ../../choices/sys_choice_case_status.xml. Common mistakes to
+         avoid: "open", "OPEN", "OPENED", "OPN" - all of these would
+         FAIL choice-value validation against the registered choice
+         list.
+
+      4. The <assigned_group> reference uses
+         display_value="x_casemgmt_demo_team" and resolves by name
+         lookup against sys_user_group. The element value is the same
+         string as the display_value (NOT a sys_id literal). This
+         matches the convention established by the demo group's
+         primary-key record at
+         ../groups/sys_user_group_x_casemgmt_demo_team.xml and the peer
+         case records (cases 03-10).
+
+      5. The case is visible to the demo agent under "Assigned only"
+         via the GROUP-MEMBERSHIP CLAUSE only. When the demo agent
+         impersonates and queries the case list, they see this case
+         because they are a member of x_casemgmt_demo_team (per the
+         seed script's ensureGroupMembership helper). They do NOT see
+         this case via the assigned_agent = current.sys_id clause
+         (since assigned_agent is empty). This is the CANONICAL test
+         for the SECOND clause of "Assigned only"; case 03 (and any
+         other case with assigned_agent populated) is the canonical
+         test for the FIRST clause.
+
+      6. Demo case 02 has NO children in the demo dataset - no demo
+         tasks, no demo parties. This is INTENTIONAL. Per the seed
+         script's task and party tables, children are created only on
+         cases that have been picked up by an agent (In Progress and
+         beyond). This mirrors a realistic case lifecycle: tasks
+         (sub-investigations) and parties (witnesses, respondents)
+         are typically captured by the assigned agent during active
+         investigation, not by the queue dispatcher at Draft/Open
+         time.
+
+      7. This case appears in:
+           - the Open slice of the case_count_by_status donut
+           - the Open bar of the all_cases_by_status bar chart
+           - the General Inquiry slice of the all_cases_by_type donut
+           - the Medium bar of the all_cases_by_priority bar chart
+           - the count of the cases_opened_30d single-score widget
+           (since opened_date is auto-set to "now" on insert by the
+           set_opened_date business rule)
+         This case does NOT appear in:
+           - the avg_time_to_close widget (filters on status=Closed)
+           - the demo agent's "My Open Cases" personal list
+             (filter requires assigned_agent = current user, but
+             assigned_agent is empty)
+
+      8. The Draft -> Open transition USING this case as the post-
+         transition state is testable. Sibling case 01 (Draft) is the
+         pre-transition state; this case is the post-transition state.
+         Together they form a paired demonstration of the Draft -> Open
+         transition guard (validate_open_transition requires
+         assigned_group populated). On case 01 at Draft, an attempt to
+         transition to Open without populating assigned_group MUST be
+         blocked. On this case (already Open with assigned_group set)
+         the post-transition state is shown.
+
+      9. The Open -> In Progress transition USING this case as the
+         input is the canonical test in Validation Gate 2 (Workflow).
+         When an operator (with case_manager or "Assigned only"
+         case_agent role) attempts to set this case status to In
+         Progress via the form WITHOUT first populating assigned_agent,
+         the validate_inprogress_transition subflow MUST surface a
+         form-level blocking error and the transition MUST be denied.
+         After assigned_agent is populated on the form (selecting the
+         demo agent, who is a member of x_casemgmt_demo_team), the
+         same transition attempt MUST succeed and yield case status =
+         In Progress (matching the post-transition state of sibling
+         case 03).
+
+     10. The concrete scope identifier "casemgmt" is used consistently
+         throughout the file - in the sys_class_name, sys_update_name,
+         table attribute, inner element name, all cross-reference
+         text values, and the file path. ServiceNow Update Set imports
+         use a standard XML parser; the scope id must therefore be
+         concrete in the XML before export.
+-->
+<record_update table="x_casemgmt_case">
+    <x_casemgmt_case action="INSERT_OR_UPDATE">
+        <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
+        <description>Synthetic Open case used to verify Open status visualization and the Open -&gt; In Progress transition guard.</description>
+        <priority>Medium</priority>
+        <requester_email>requester-2@example.invalid</requester_email>
+        <requester_name>Synthetic Requester Two</requester_name>
+        <status>Open</status>
+        <subject>Demo case 02: Open (General Inquiry)</subject>
+        <sys_class_name>x_casemgmt_case</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>0e4cacc1c8db7157b8fb73f97786ebb5</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>x_casemgmt_case_demo_02</sys_update_name>
+        <type>General Inquiry</type>
+    </x_casemgmt_case>
+</record_update>

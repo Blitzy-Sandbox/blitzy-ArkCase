@@ -6,11 +6,11 @@ This document captures the three-table schema for the ServiceNow scoped applicat
 
 The three tables are:
 
-- **`x_[scope]_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state).
-- **`x_[scope]_case_task`** — child tasks linked to a parent case via the `case` reference field (6 fields).
-- **`x_[scope]_case_party`** — polymorphic party associations linked to a parent case (5 fields, `party_type` discriminator + conditional `person`/`organization` reference fields).
+- **`x_casemgmt_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state).
+- **`x_casemgmt_case_task`** — child tasks linked to a parent case via the `case` reference field (6 fields).
+- **`x_casemgmt_case_party`** — polymorphic party associations linked to a parent case (5 fields, `party_type` discriminator + conditional `person`/`organization` reference fields).
 
-The placeholder string `x_[scope]_` is preserved as written throughout this repository; the actual scope identifier is auto-assigned by the ServiceNow Personal Developer Instance (PDI) when the scoped application is created. No other token replaces this placeholder.
+The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
 ## Schema Overview
 
@@ -43,7 +43,7 @@ erDiagram
     }
 
     CASE_TASK {
-        ref case "x_[scope]_case, mandatory"
+        ref case "x_casemgmt_case, mandatory"
         string subject "255, mandatory"
         choice type
         choice status
@@ -52,7 +52,7 @@ erDiagram
     }
 
     CASE_PARTY {
-        ref case "x_[scope]_case, mandatory"
+        ref case "x_casemgmt_case, mandatory"
         choice party_type
         ref person "sys_user, conditional"
         ref organization "core_company, conditional"
@@ -60,7 +60,7 @@ erDiagram
     }
 ```
 
-## Table 1: x_[scope]_case
+## Table 1: x_casemgmt_case
 
 The case-file table replicates ArkCase's `acm_case_file` (mapped to the `CaseFile.java` JPA entity). It is the parent record for all case-management workflows in the POC. Each case has 12 user-prompt-specified fields plus a `pending_reason` choice field used for the Pending state.
 
@@ -99,7 +99,7 @@ Per AAP Section 0.4.1 (under choices) and AAP Section 0.5.5 (transition matrix),
 ### Auto-numbering
 
 - The `number` field uses platform auto-numbering with prefix `CASE` and zero-padded width of 7 digits → format `CASE0000001`.
-- The number record file is [`../numbers/sys_number_x_[scope]_case.xml`](../numbers/sys_number_x_[scope]_case.xml).
+- The number record file is [`../numbers/sys_number_x_casemgmt_case.xml`](../numbers/sys_number_x_casemgmt_case.xml).
 - The field is Read-only on the form.
 - Per AAP Section 0.7.4, this format is non-negotiable.
 
@@ -109,13 +109,13 @@ Per AAP Section 0.4.1 (under choices) and AAP Section 0.5.5 (transition matrix),
 - `assigned_agent` references `sys_user` table; resolved by `user_name` lookup.
 - No hard-coded `sys_id`s in any seed data or ACL condition.
 
-## Table 2: x_[scope]_case_task
+## Table 2: x_casemgmt_case_task
 
-The case-task table replicates ArkCase's `acm_task` (mapped to the `AcmTask.java` JPA entity). It is a child record of `x_[scope]_case`, with each task linked to its parent case via the `case` reference field. Task closure status is the gate for the case-level In Progress → Resolved transition.
+The case-task table replicates ArkCase's `acm_task` (mapped to the `AcmTask.java` JPA entity). It is a child record of `x_casemgmt_case`, with each task linked to its parent case via the `case` reference field. Task closure status is the gate for the case-level In Progress → Resolved transition.
 
 | Field | Type | Constraints |
 | --- | --- | --- |
-| case | Reference → x_[scope]_case | Mandatory |
+| case | Reference → x_casemgmt_case | Mandatory |
 | subject | String(255) | Mandatory |
 | type | Choice | Investigation, Review, Follow-up, Other |
 | status | Choice | Open, In Progress, Closed |
@@ -131,21 +131,21 @@ The case-task table replicates ArkCase's `acm_task` (mapped to the `AcmTask.java
 
 ### Reference resolution rules
 
-- `case` references `x_[scope]_case` table; resolved by `number` lookup (per AAP Section 0.5.2).
+- `case` references `x_casemgmt_case` table; resolved by `number` lookup (per AAP Section 0.5.2).
 - `assigned_to` references `sys_user` table; resolved by `user_name` lookup.
 
 ### Auto-numbering
 
 - Optional auto-numbering with prefix `TASK` and zero-padded width of 7 digits → format `TASK0000001`.
-- The number record file is [`../numbers/sys_number_x_[scope]_case_task.xml`](../numbers/sys_number_x_[scope]_case_task.xml).
+- The number record file is [`../numbers/sys_number_x_casemgmt_case_task.xml`](../numbers/sys_number_x_casemgmt_case_task.xml).
 
-## Table 3: x_[scope]_case_party
+## Table 3: x_casemgmt_case_party
 
 The case-party table is a polymorphic association table that collapses ArkCase's two separate association tables (`acm_person_assoc` mapped to `PersonAssociation.java` and `acm_person_org_assoc` mapped to `PersonOrganizationAssociation.java`) into a single ServiceNow scoped table with a Choice discriminator (`party_type`) and conditional reference fields. This is an intentional simplification per AAP Section 0.1.1.
 
 | Field | Type | Constraints |
 | --- | --- | --- |
-| case | Reference → x_[scope]_case | Mandatory |
+| case | Reference → x_casemgmt_case | Mandatory |
 | party_type | Choice | Person, Organization |
 | person | Reference → sys_user | Conditional: required if party_type = Person |
 | organization | Reference → core_company | Conditional: required if party_type = Organization |
@@ -159,7 +159,7 @@ The case-party table is a polymorphic association table that collapses ArkCase's
 
 ### Conditional Field Visibility (UI Policy)
 
-The single-table polymorphism is implemented via a UI Policy that conditionally shows the appropriate reference field based on `party_type`. The policy lives at [`../ui_policy/x_[scope]_case_party_conditional_fields.xml`](../ui_policy/x_[scope]_case_party_conditional_fields.xml).
+The single-table polymorphism is implemented via a UI Policy that conditionally shows the appropriate reference field based on `party_type`. The policy lives at [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml).
 
 | When `party_type =` | Show field | Hide field | Mandatory field |
 | --- | --- | --- | --- |
@@ -169,7 +169,7 @@ The single-table polymorphism is implemented via a UI Policy that conditionally 
 
 ### Reference resolution rules
 
-- `case` references `x_[scope]_case` table; resolved by `number` lookup.
+- `case` references `x_casemgmt_case` table; resolved by `number` lookup.
 - `person` references `sys_user` table; resolved by `user_name` lookup.
 - `organization` references `core_company` table; resolved by `name` lookup.
 - No hard-coded `sys_id`s.
@@ -185,12 +185,12 @@ These values are illustrative only; the field is `String(100)` (free text), not 
 
 ## Cross-Table Relationships
 
-The three tables form a parent-child hierarchy with `x_[scope]_case` as the root.
+The three tables form a parent-child hierarchy with `x_casemgmt_case` as the root.
 
 | Parent | Child | Foreign Key | Cascade Behavior |
 | --- | --- | --- | --- |
-| `x_[scope]_case` | `x_[scope]_case_task` | `x_[scope]_case_task.case` | No cascade-delete; tasks are not auto-deleted when case is deleted (manager must delete children explicitly) |
-| `x_[scope]_case` | `x_[scope]_case_party` | `x_[scope]_case_party.case` | No cascade-delete; parties are not auto-deleted when case is deleted |
+| `x_casemgmt_case` | `x_casemgmt_case_task` | `x_casemgmt_case_task.case` | No cascade-delete; tasks are not auto-deleted when case is deleted (manager must delete children explicitly) |
+| `x_casemgmt_case` | `x_casemgmt_case_party` | `x_casemgmt_case_party.case` | No cascade-delete; parties are not auto-deleted when case is deleted |
 
 Related Lists are configured on the case form to surface the child records (Tasks and Parties) inline with the parent case. Each related list uses the platform's standard list view; no custom related-list scripts are required.
 
@@ -214,11 +214,11 @@ This section documents how the three ServiceNow tables semantically correspond t
 
 | ServiceNow Table | ArkCase Source Concept | Notes |
 | --- | --- | --- |
-| `x_[scope]_case` | `CaseFile.java` JPA entity (`acm_case_file` MySQL table) | Replaces 80+ ArkCase fields with the user-prompt-specified 12 + pending_reason; eliminates Activiti BPMN linkage, ECM container linkage, queue/response timing, milestones, courtroom/responsibility, child associations, audit, disposition |
-| `x_[scope]_case_task` | `AcmTask.java` JPA entity | Replaces 30+ ArkCase fields with user-prompt-specified 6; eliminates buckslip/approval, percent completion, candidate claim groups, ad-hoc/completion flags, workflow IDs, ECM container, business-process info |
-| `x_[scope]_case_party` | `PersonAssociation.java` (`acm_person_assoc`) AND `PersonOrganizationAssociation.java` (`acm_person_org_assoc`) | Collapses two ArkCase tables into one polymorphic table per AAP Section 0.1.1; replaces JPA single-table inheritance with `cm_class_name` discriminator with a Choice field (`party_type`) and UI Policy-driven conditional reference fields |
+| `x_casemgmt_case` | `CaseFile.java` JPA entity (`acm_case_file` MySQL table) | Replaces 80+ ArkCase fields with the user-prompt-specified 12 + pending_reason; eliminates Activiti BPMN linkage, ECM container linkage, queue/response timing, milestones, courtroom/responsibility, child associations, audit, disposition |
+| `x_casemgmt_case_task` | `AcmTask.java` JPA entity | Replaces 30+ ArkCase fields with user-prompt-specified 6; eliminates buckslip/approval, percent completion, candidate claim groups, ad-hoc/completion flags, workflow IDs, ECM container, business-process info |
+| `x_casemgmt_case_party` | `PersonAssociation.java` (`acm_person_assoc`) AND `PersonOrganizationAssociation.java` (`acm_person_org_assoc`) | Collapses two ArkCase tables into one polymorphic table per AAP Section 0.1.1; replaces JPA single-table inheritance with `cm_class_name` discriminator with a Choice field (`party_type`) and UI Policy-driven conditional reference fields |
 
-### Field-by-field mapping for x_[scope]_case
+### Field-by-field mapping for x_casemgmt_case
 
 | ServiceNow Field | ArkCase Source Field | Notes |
 | --- | --- | --- |
@@ -244,7 +244,7 @@ The following schema-level constraints are non-negotiable per AAP Section 0.7.1:
 - **Choice values are non-negotiable.** Each Choice field's values match the user prompt verbatim.
 - **Mandatory flags are non-negotiable.** Every "Mandatory" cell in the schema tables MUST result in `mandatory = true` on the dictionary entry.
 - **Auto-numbering format `CASE0000001` is non-negotiable.** Per AAP Section 0.7.4.
-- **Reference targets are non-negotiable.** `sys_user_group`, `sys_user`, `core_company`, `x_[scope]_case` are the EXACT reference targets.
+- **Reference targets are non-negotiable.** `sys_user_group`, `sys_user`, `core_company`, `x_casemgmt_case` are the EXACT reference targets.
 - **No hard-coded `sys_id`s** in any seed data — references resolved by `name`/`user_name`/`number` lookup.
 - **Single-table polymorphism for case_party** — one table, not two; `party_type` Choice plus conditional fields.
 
@@ -258,12 +258,12 @@ The following verification gate is reproduced verbatim from AAP Section 0.7.3:
 
 Verification procedure (cross-reference [`validation-gates.md`](./validation-gates.md) Gate 1):
 
-1. Open System Definition → Tables → filter `Name CONTAINS x_[scope]_case`. Confirm exactly 3 records: `x_[scope]_case`, `x_[scope]_case_task`, `x_[scope]_case_party`.
-2. Open `x_[scope]_case` → confirm 13 fields (12 + `pending_reason`). For each Mandatory field per the schema table, confirm `mandatory = true`. For each Choice field, confirm choice values match verbatim.
-3. Open `x_[scope]_case_task` → confirm 6 fields. Confirm reference targets and Mandatory flags.
-4. Open `x_[scope]_case_party` → confirm 5 fields. Confirm `party_type` Choice values, conditional `person`/`organization` reference targets.
-5. Open the `x_[scope]_case_party_conditional_fields` UI Policy → confirm conditional show/hide rules.
-6. Open [`../numbers/sys_number_x_[scope]_case.xml`](../numbers/sys_number_x_[scope]_case.xml) → confirm format `CASE0000001` and Read-only flag on the field.
+1. Open System Definition → Tables → filter `Name CONTAINS x_casemgmt_case`. Confirm exactly 3 records: `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
+2. Open `x_casemgmt_case` → confirm 13 fields (12 + `pending_reason`). For each Mandatory field per the schema table, confirm `mandatory = true`. For each Choice field, confirm choice values match verbatim.
+3. Open `x_casemgmt_case_task` → confirm 6 fields. Confirm reference targets and Mandatory flags.
+4. Open `x_casemgmt_case_party` → confirm 5 fields. Confirm `party_type` Choice values, conditional `person`/`organization` reference targets.
+5. Open the `x_casemgmt_case_party_conditional_fields` UI Policy → confirm conditional show/hide rules.
+6. Open [`../numbers/sys_number_x_casemgmt_case.xml`](../numbers/sys_number_x_casemgmt_case.xml) → confirm format `CASE0000001` and Read-only flag on the field.
 
 ## Cross-References
 
@@ -272,8 +272,8 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 - [`portal-pages.md`](./portal-pages.md) — uses `subject`, `type`, `description`, `requester_name`, `requester_email` (submission) and `number`, `status`, `subject`, `opened_date` (lookup).
 - [`dashboards.md`](./dashboards.md) — uses `status`, `type`, `priority`, `opened_date`, `closed_date`, `assigned_agent`, `assigned_to`, `due_date` for grouping/filtering.
 - [`validation-gates.md`](./validation-gates.md) — Gate 1 (Data model).
-- [`../tables/`](../tables/) — three table records: `x_[scope]_case.xml`, `x_[scope]_case_task.xml`, `x_[scope]_case_party.xml`.
+- [`../tables/`](../tables/) — three table records: `x_casemgmt_case.xml`, `x_casemgmt_case_task.xml`, `x_casemgmt_case_party.xml`.
 - [`../dictionary/`](../dictionary/) — every dictionary entry for every field.
 - [`../choices/`](../choices/) — every choice list record.
 - [`../numbers/`](../numbers/) — auto-numbering records.
-- [`../ui_policy/x_[scope]_case_party_conditional_fields.xml`](../ui_policy/x_[scope]_case_party_conditional_fields.xml) — UI Policy for case_party.
+- [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) — UI Policy for case_party.

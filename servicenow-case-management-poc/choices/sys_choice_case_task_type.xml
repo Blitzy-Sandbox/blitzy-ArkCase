@@ -2,10 +2,10 @@
 <!--
     ServiceNow Update Set record-definition for the FOUR `sys_choice` rows
     that enumerate the legal values of the `type` Choice field on the
-    `x_[scope]_case_task` custom table inside the scoped application
-    `x_[scope]`.
+    `x_casemgmt_case_task` custom table inside the scoped application
+    `x_casemgmt`.
 
-    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_[scope]_case_task:
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
 
         Field    Type     Constraints
         type     Choice   Investigation, Review, Follow-up, Other
@@ -30,7 +30,7 @@
     read by:
 
       The parent dictionary entry that declares this field as Choice:
-        ../dictionary/x_[scope]_case_task_type.xml
+        ../dictionary/x_casemgmt_case_task_type.xml
             (mandatory=true, choice=3 means "Choice list - dropdown only";
             because the field is mandatory, "Other" exists as a fallback
             bucket so a user can always file a task whose category does
@@ -42,7 +42,7 @@
       minimum-data threshold ("at least one open and one closed task per
       demo case in `In Progress` or `Pending` state, to exercise the
       all-tasks-closed gate"):
-        ../seed-data/tasks/x_[scope]_case_task_demo_*.xml
+        ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml
             (each demo task picks one of the four Title Case labels
             below by string-equality value - mixing all four categories
             across the demo task population so the dropdown rendering
@@ -167,17 +167,17 @@
         does not fit a more specific category" if user feedback
         warrants it.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]`
+        `<sys_package>` resolve into the `x_casemgmt`
         scoped application by `source` attribute lookup. NO global-
         scope writes - the OOB tables sys_user, sys_user_group,
         sys_user_role, core_company, task, incident, etc. are never
         modified by these records.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]`), not by literal sys_id. Each
+        (`x_casemgmt`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
-        identifier `x_[scope]_case_task.type.<Value>` so that
+        identifier `x_casemgmt_case_task.type.<Value>` so that
         re-generation of this XML yields byte-identical output (no
         random UUIDs). This is the same derivation pattern used by
         the sibling ../choices/sys_choice_case_task_status.xml file
@@ -185,9 +185,7 @@
         is NOT a reference to any other record - it is this record's
         OWN identity, which the no-hardcoded-sys_id rule (AAP Section
         0.7.2) explicitly permits.
-      - The literal `[scope]` placeholder is preserved per AAP
-        convention; the PDI auto-assigns the actual scope id at App
-        Engine Studio creation time, which the import process resolves
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves
         into the final scope namespace.
       - English language only: `<language>en</language>` on every
         record per the POC scope. The platform supports localization
@@ -202,13 +200,13 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_[scope]_case_management.xml (scoped application
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application
           record; the sys_package source target)
-        - ../app/sys_scope/x_[scope].xml (scope record; the sys_scope
+        - ../app/sys_scope/x_casemgmt.xml (scope record; the sys_scope
           target)
-        - ../tables/x_[scope]_case_task.xml (parent table; the type
+        - ../tables/x_casemgmt_case_task.xml (parent table; the type
           field's host)
-        - ../dictionary/x_[scope]_case_task_type.xml (parent dictionary
+        - ../dictionary/x_casemgmt_case_task_type.xml (parent dictionary
           entry; declares the column shape, choice=3, mandatory=true.
           Without this entry the four sys_choice records below have no
           column to attach to; per AAP Section 0.5.2 "Choices after
@@ -221,13 +219,13 @@
       ordering plus the record-by-record dependency-resolution pass.
 
     Source for the deterministic sys_id derivations:
-        echo -n "x_[scope]_case_task.type.Investigation" | md5sum
+        echo -n "x_casemgmt_case_task.type.Investigation" | md5sum
             => c509a1c2ee11b17bb33984334f603baf
-        echo -n "x_[scope]_case_task.type.Review"        | md5sum
+        echo -n "x_casemgmt_case_task.type.Review"        | md5sum
             => b0337f92dc4ec6a9eb8e5a3e4faeccaf
-        echo -n "x_[scope]_case_task.type.Follow-up"     | md5sum
+        echo -n "x_casemgmt_case_task.type.Follow-up"     | md5sum
             => 13e5648ac5e3de04d88ab1aef64f0165
-        echo -n "x_[scope]_case_task.type.Other"         | md5sum
+        echo -n "x_casemgmt_case_task.type.Other"         | md5sum
             => 2edff77acab5fc790a92ad36e2772600
 
     The MD5 input is the canonical identifier <table>.<element>.<value>,
@@ -246,7 +244,7 @@
     <inactive>false</inactive>
     <label>Investigation</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>100</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -255,8 +253,8 @@
     <sys_id>c509a1c2ee11b17bb33984334f603baf</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Investigation</value>
@@ -268,7 +266,7 @@
     <inactive>false</inactive>
     <label>Review</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>200</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -277,8 +275,8 @@
     <sys_id>b0337f92dc4ec6a9eb8e5a3e4faeccaf</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Review</value>
@@ -290,7 +288,7 @@
     <inactive>false</inactive>
     <label>Follow-up</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>300</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -299,8 +297,8 @@
     <sys_id>13e5648ac5e3de04d88ab1aef64f0165</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Follow-up</value>
@@ -312,7 +310,7 @@
     <inactive>false</inactive>
     <label>Other</label>
     <language>en</language>
-    <name>x_[scope]_case_task</name>
+    <name>x_casemgmt_case_task</name>
     <sequence>400</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -321,8 +319,8 @@
     <sys_id>2edff77acab5fc790a92ad36e2772600</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Other</value>

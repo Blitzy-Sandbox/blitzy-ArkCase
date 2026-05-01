@@ -2,8 +2,8 @@
 <!--
     ServiceNow Update Set record-definition for the SIX `sys_choice` rows that
     enumerate the legal values of the `status` Choice field on the
-    `x_[scope]_case` custom table inside the scoped application
-    `x_[scope]`.
+    `x_casemgmt_case` custom table inside the scoped application
+    `x_casemgmt`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
         Field    Type     Constraints
@@ -30,23 +30,23 @@
         ../flows/sub_flows/validate_closed_transition.xml     (Resolved -> Closed)
 
       Six business rules enforcing entity-level guards and side-effects:
-        ../business_rules/x_[scope]_block_draft_backtransition.xml   (* -> Draft prohibited)
-        ../business_rules/x_[scope]_block_terminal_closed.xml        (Closed -> * prohibited)
-        ../business_rules/x_[scope]_set_opened_date.xml              (before-insert)
-        ../business_rules/x_[scope]_set_closed_date.xml              (Resolved -> Closed)
-        ../business_rules/x_[scope]_validate_assigned_agent_membership.xml
-        ../business_rules/x_[scope]_clear_pending_reason_on_inprogress.xml
+        ../business_rules/x_casemgmt_block_draft_backtransition.xml   (* -> Draft prohibited)
+        ../business_rules/x_casemgmt_block_terminal_closed.xml        (Closed -> * prohibited)
+        ../business_rules/x_casemgmt_set_opened_date.xml              (before-insert)
+        ../business_rules/x_casemgmt_set_closed_date.xml              (Resolved -> Closed)
+        ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+        ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
 
       One Script Include exposing reusable transition guards used by both
       flows and business rules:
-        ../script_includes/x_[scope]_CaseTransitionValidator.xml
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml
         (canTransitionToOpen / ToInProgress / ToResolved / ToClosed)
 
       Two scripted REST endpoints serving the unauthenticated portal pages:
-        ../portal/rest/sys_ws_definition_x_[scope]_case_submit.xml
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
             (sets status='Draft' on insert; relies on the Title Case label
             declared by Record 1 below)
-        ../portal/rest/sys_ws_definition_x_[scope]_case_status_lookup.xml
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
             (returns this field's stored value as one of the THREE whitelisted
             output fields per AAP Section 0.7.4: "the lookup page returns
             ONLY status, subject, opened_date - no internal fields exposed".
@@ -54,16 +54,16 @@
             the Title Case string defined here, e.g., 'In Progress'.)
 
       Three reports (one Agent Workspace, two Manager View widgets):
-        ../reports/x_[scope]_my_open_cases.xml
+        ../reports/x_casemgmt_my_open_cases.xml
             (filter: status NOT IN (Resolved, Closed))
-        ../reports/x_[scope]_case_count_by_status.xml
+        ../reports/x_casemgmt_case_count_by_status.xml
             (donut grouped by status; six slices, one per label below)
-        ../reports/x_[scope]_all_cases_by_status.xml
+        ../reports/x_casemgmt_all_cases_by_status.xml
             (bar grouped by status; six bars, one per label below)
 
       Ten synthetic demo cases satisfying AAP Section 0.4.1 minimum-data
       threshold ("at least one demo case in each of the six statuses"):
-        ../seed-data/cases/x_[scope]_case_demo_01.xml ... _demo_10.xml
+        ../seed-data/cases/x_casemgmt_case_demo_01.xml ... _demo_10.xml
 
     THREE VERBATIM BLOCKING-ERROR MESSAGES from AAP Section 0.7.4 reference
     the labels declared below by Title Case string-equality comparisons:
@@ -91,7 +91,7 @@
         ServiceNow target FIXES this by declaring a controlled vocabulary
         of EXACTLY six labels here, enforced at platform-validation time
         through the parent dictionary entry's `<choice>3</choice>` setting
-        in ../dictionary/x_[scope]_case_status.xml.
+        in ../dictionary/x_casemgmt_case_status.xml.
       - CaseFile.java line 307-316 contains the @PrePersist lifecycle hook:
             if (getStatus() == null || getStatus().trim().isEmpty())
                 setStatus("DRAFT");
@@ -161,21 +161,19 @@
         case-management terms). The agent prompt explicitly suppresses
         helper text per the POC scope.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]`
+        `<sys_package>` resolve into the `x_casemgmt`
         scoped application by `source` attribute lookup. NO global-scope
         writes - the OOB tables sys_user, sys_user_group, sys_user_role,
         core_company, task, incident, etc. are never modified.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]`), not by literal sys_id. Each
+        (`x_casemgmt`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
-        identifier `x_[scope]_case.status.<Value>` so that re-generation
+        identifier `x_casemgmt_case.status.<Value>` so that re-generation
         of this XML yields byte-identical output (no random UUIDs). The
         sys_id is NOT a reference to any other record.
-      - The literal `[scope]` placeholder is preserved per AAP convention;
-        the PDI auto-assigns the actual scope id at App Engine Studio
-        creation time, which the import process resolves into the final
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves into the final
         scope namespace.
       - English language only: `<language>en</language>` on every record
         per the POC scope. The platform supports localization via
@@ -189,10 +187,10 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_[scope]_case_management.xml (scoped application)
-        - ../app/sys_scope/x_[scope].xml (scope record)
-        - ../tables/x_[scope]_case.xml (parent table; status field's host)
-        - ../dictionary/x_[scope]_case_status.xml (parent dictionary entry;
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../tables/x_casemgmt_case.xml (parent table; status field's host)
+        - ../dictionary/x_casemgmt_case_status.xml (parent dictionary entry;
           declares the column shape, choice=3, default_value=Draft, and
           audit=true. Without this entry the sys_choice records below
           have no column to attach to.)
@@ -211,7 +209,7 @@
     <inactive>false</inactive>
     <label>Draft</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>100</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -220,8 +218,8 @@
     <sys_id>469743ab68c473967a2b400e96b9ec3b</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Draft</value>
@@ -233,7 +231,7 @@
     <inactive>false</inactive>
     <label>Open</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>200</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -242,8 +240,8 @@
     <sys_id>c7016389461b0514a6c32ef560c8cc15</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Open</value>
@@ -255,7 +253,7 @@
     <inactive>false</inactive>
     <label>In Progress</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>300</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -264,8 +262,8 @@
     <sys_id>c6f64c7588534aa4afc57b3ddb9b94be</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>In Progress</value>
@@ -277,7 +275,7 @@
     <inactive>false</inactive>
     <label>Pending</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>400</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -286,8 +284,8 @@
     <sys_id>b7e4f3630eba2bbb58369d1de1c9f64f</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Pending</value>
@@ -299,7 +297,7 @@
     <inactive>false</inactive>
     <label>Resolved</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>500</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -308,8 +306,8 @@
     <sys_id>c07dd6871aa382dadba4c1462574ad88</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Resolved</value>
@@ -321,7 +319,7 @@
     <inactive>false</inactive>
     <label>Closed</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>600</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -330,8 +328,8 @@
     <sys_id>e954f5727169003243f2db2ae9c872e0</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Closed</value>

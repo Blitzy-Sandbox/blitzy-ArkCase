@@ -2,8 +2,8 @@
 <!--
     ServiceNow Update Set record-definition for the FOUR `sys_choice` rows that
     enumerate the legal values of the `priority` Choice field on the
-    `x_[scope]_case` custom table inside the scoped application
-    `x_[scope]`.
+    `x_casemgmt_case` custom table inside the scoped application
+    `x_casemgmt`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
         Field      Type     Constraints
@@ -15,7 +15,7 @@
     Per the assigned-folder description and AAP Section 0.4.1, new cases
     default to `Medium` priority - a sensible mid-range default for case
     management. The default itself is configured in the parent dictionary
-    entry (../dictionary/x_[scope]_case_priority.xml has
+    entry (../dictionary/x_casemgmt_case_priority.xml has
     <default_value>Medium</default_value>); these sys_choice records merely
     enumerate the allowed values without preferring any one of them at the
     Choice-list level. The Choice-list `<sequence>` controls dropdown DISPLAY
@@ -34,13 +34,13 @@
     Per AAP Sections 0.5.2 and 0.4.1, the labels declared here are read by:
 
       The parent dictionary entry that declares this field as Choice:
-        ../dictionary/x_[scope]_case_priority.xml
+        ../dictionary/x_casemgmt_case_priority.xml
             (mandatory=true, choice=3 means "Choice list - dropdown only";
             default_value=Medium picks one of the four labels declared
             below as the auto-applied value at insert time.)
 
       The Manager View dashboard's "All cases by priority" bar chart:
-        ../reports/x_[scope]_all_cases_by_priority.xml
+        ../reports/x_casemgmt_all_cases_by_priority.xml
             (bar grouped by priority - four bars, one per label below.
             The visual ordering of the bars is driven by the `sequence`
             field declared here: Low (left) -> Medium -> High -> Critical
@@ -51,7 +51,7 @@
       threshold (each demo case picks one of these four values to exercise
       the Manager View bar chart and demonstrate Choice-field behavior on
       the internal form):
-        ../seed-data/cases/x_[scope]_case_demo_01.xml ... _demo_10.xml
+        ../seed-data/cases/x_casemgmt_case_demo_01.xml ... _demo_10.xml
 
     The Experience Portal submission widget per AAP Section 0.4.4 does NOT
     expose this field to anonymous external requesters - per AAP Section
@@ -83,7 +83,7 @@
         vocabulary of EXACTLY four labels here, enforced at platform-
         validation time through the parent dictionary entry's
         `<choice>3</choice>` setting in
-        ../dictionary/x_[scope]_case_priority.xml. Every case insert from
+        ../dictionary/x_casemgmt_case_priority.xml. Every case insert from
         any path (internal form, Table API, scripted REST, seed scripts)
         is now guaranteed to land on one of the four labels below or be
         rejected.
@@ -132,7 +132,7 @@
                 escalates from there - prevents accidental Critical-by-
                 default-cursor-position)
             (b) the bar order on the Manager View "All cases by priority"
-                bar chart (../reports/x_[scope]_all_cases_by_priority.xml)
+                bar chart (../reports/x_casemgmt_all_cases_by_priority.xml)
                 left-to-right: Low to Critical, giving a meaningful visual
                 gradient from least to most urgent.
             (c) the future extensibility - increment-of-100 spacing leaves
@@ -157,7 +157,7 @@
         prompt explicitly suppresses helper text per the POC scope.
       - No default value at this Choice level: per AAP Section 0.4.1 and
         the agent prompt's Phase 4 verbatim, the default is configured
-        in the DICTIONARY entry (../dictionary/x_[scope]_case_priority.xml
+        in the DICTIONARY entry (../dictionary/x_casemgmt_case_priority.xml
         has <default_value>Medium</default_value>), NOT in the choice
         records here. The choice records merely define the available
         options; the dictionary picks which one is auto-applied at insert
@@ -166,7 +166,7 @@
         column) rather than a property of the VALUE (which would require
         a "default" flag on each choice with at-most-one constraint).
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]`
+        `<sys_package>` resolve into the `x_casemgmt`
         scoped application by `source` attribute lookup. NO global-scope
         writes - the OOB tables sys_user, sys_user_group, sys_user_role,
         core_company, task, incident, etc. are never modified. The
@@ -175,17 +175,15 @@
         Choice list is independent.
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]`), not by literal sys_id. Each
+        (`x_casemgmt`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
-        identifier `x_[scope]_case.priority.<Value>` so that re-generation
+        identifier `x_casemgmt_case.priority.<Value>` so that re-generation
         of this XML yields byte-identical output (no random UUIDs). The
         sys_id is NOT a reference to any other record. The MD5 inputs
         are documented in the trailing comment block below for full
         traceability.
-      - The literal `[scope]` placeholder is preserved per AAP convention;
-        the PDI auto-assigns the actual scope id at App Engine Studio
-        creation time, which the import process resolves into the final
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves into the final
         scope namespace.
       - English language only: `<language>en</language>` on every record
         per the POC scope. The platform supports localization via
@@ -201,20 +199,20 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_[scope]_case_management.xml (scoped application)
-        - ../app/sys_scope/x_[scope].xml (scope record)
-        - ../tables/x_[scope]_case.xml (parent table; priority field's host)
-        - ../dictionary/x_[scope]_case_priority.xml (parent dictionary entry;
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../tables/x_casemgmt_case.xml (parent table; priority field's host)
+        - ../dictionary/x_casemgmt_case_priority.xml (parent dictionary entry;
           declares the column shape, choice=3, default_value=Medium,
           mandatory=true. Without this entry the sys_choice records below
           have no column to attach to.)
 
       THIS RECORD SET MUST LOAD BEFORE:
-        - ../reports/x_[scope]_all_cases_by_priority.xml
+        - ../reports/x_casemgmt_all_cases_by_priority.xml
             (Manager View bar chart grouped by priority - four bars, one
             per label below, ordered Low -> Medium -> High -> Critical
             left-to-right via the sequence values declared here)
-        - ../seed-data/cases/x_[scope]_case_demo_*.xml
+        - ../seed-data/cases/x_casemgmt_case_demo_*.xml
             (demo cases set this field; values must match the labels here
             byte-for-byte for the GlideRecord seed lookups by `number` to
             populate the priority field correctly. The demo cases SHOULD
@@ -230,10 +228,10 @@
     sibling Choice files (sys_choice_case_status.xml,
     sys_choice_case_type.xml, sys_choice_case_task_status.xml,
     sys_choice_case_party_party_type.xml):
-        MD5("x_[scope]_case.priority.Low")      = 6224e4afe120474dd8d1257b4a406d37
-        MD5("x_[scope]_case.priority.Medium")   = 7cdfc33aa8fe789423d712565ee468bc
-        MD5("x_[scope]_case.priority.High")     = d7ca8d1e5a898400629bddebe06a9824
-        MD5("x_[scope]_case.priority.Critical") = 34a378616cc6fe411402335b0c0243da
+        MD5("x_casemgmt_case.priority.Low")      = 6224e4afe120474dd8d1257b4a406d37
+        MD5("x_casemgmt_case.priority.Medium")   = 7cdfc33aa8fe789423d712565ee468bc
+        MD5("x_casemgmt_case.priority.High")     = d7ca8d1e5a898400629bddebe06a9824
+        MD5("x_casemgmt_case.priority.Critical") = 34a378616cc6fe411402335b0c0243da
     These hashes are recomputable from the AAP-mandated canonical input,
     guaranteeing deterministic XML re-generation across all build runs and
     idempotent re-imports on any fresh PDI without sys_id collisions.
@@ -246,7 +244,7 @@
     <inactive>false</inactive>
     <label>Low</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>100</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -255,8 +253,8 @@
     <sys_id>6224e4afe120474dd8d1257b4a406d37</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Low</value>
@@ -268,7 +266,7 @@
     <inactive>false</inactive>
     <label>Medium</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>200</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -277,8 +275,8 @@
     <sys_id>7cdfc33aa8fe789423d712565ee468bc</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Medium</value>
@@ -290,7 +288,7 @@
     <inactive>false</inactive>
     <label>High</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>300</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -299,8 +297,8 @@
     <sys_id>d7ca8d1e5a898400629bddebe06a9824</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>High</value>
@@ -312,7 +310,7 @@
     <inactive>false</inactive>
     <label>Critical</label>
     <language>en</language>
-    <name>x_[scope]_case</name>
+    <name>x_casemgmt_case</name>
     <sequence>400</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -321,8 +319,8 @@
     <sys_id>34a378616cc6fe411402335b0c0243da</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Critical</value>

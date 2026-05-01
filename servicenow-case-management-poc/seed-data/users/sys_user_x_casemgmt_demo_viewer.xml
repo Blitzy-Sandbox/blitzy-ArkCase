@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the synthetic demo user
+    `x_casemgmt_demo_viewer`. This is the third of the three demo personas
+    created by the case-management POC scoped application; companions are
+    `x_casemgmt_demo_manager` and `x_casemgmt_demo_agent`.
+
+    Persona role (per AAP Section 0.5.6 ACL Matrix):
+      This user is the READ-ONLY operational demo persona. After the
+      companion role-assignment row at
+      ../role_assignments/sys_user_has_role_x_casemgmt_demo_viewer.xml
+      grants this user the scoped role `x_casemgmt_case_viewer`, this user
+      gets:
+        - x_casemgmt_case        Read All; NO Create / NO Write / NO Delete
+        - x_casemgmt_case_task   Read All; NO Create / NO Write / NO Delete
+        - x_casemgmt_case_party  Read All; NO Create / NO Write / NO Delete
+      Unlike the case_agent persona, the viewer's read scope is NOT
+      restricted to "Assigned only" — the viewer can read every record in
+      the three custom tables regardless of `assigned_agent`/
+      `assigned_group`.
+
+    Validation Gate 3 dependency (AAP Section 0.7.3):
+      The operator impersonates this user to verify the gate's pass row
+      "case_viewer cannot write." If this user is able to save any case
+      form change, write a new task, or delete any record, Gate 3 fails.
+      The absence of write privileges is enforced at the ACL layer
+      (../../acl/x_casemgmt_case_*_viewer*.xml — only READ ACLs exist for
+      this role); no client-side or business-rule guard is required.
+
+    Why this user record lives in the SCOPED Update Set even though
+    `sys_user` is a global OOB table (per the agent prompt and AAP
+    Section 0.7.2 scope-namespace exclusivity):
+      The scoped Update Set's deliverable is fully self-contained: the
+      reviewer must be able to install the Update Set on a fresh PDI and
+      immediately exercise all seven validation gates. The three demo
+      personas (manager, agent, viewer) are required by Gate 3 (ACL role-
+      based access) and Gate 4 (portal submission as an unauthenticated
+      requester routed to a queue visible to the demo agent). Tracking
+      the demo personas inside the scoped Update Set ensures they import
+      together with the rest of the application; the scope binding via
+      <sys_scope> and <sys_package> source attribute groups them with the
+      scoped app even though their parent table (sys_user) is global. No
+      global-scope WRITES are performed: only INSERTS into sys_user (a
+      data table) — the OOB sys_user dictionary, ACLs, and form layouts
+      are never modified.
+
+    Why this user is NOT a member of the demo group `x_casemgmt_demo_team`
+    (per the agent prompt key insight #6):
+      Only the demo AGENT is added to the demo group, because the agent's
+      read/write privileges are gated by "Assigned only" — i.e., agent
+      can only see cases where `assigned_agent = current user OR
+      assigned_group contains current user`. The viewer's role grants
+      Read-All across the three tables (no group-membership condition),
+      so demo-team membership is irrelevant for the viewer's privileges.
+      Adding the viewer to the demo group would be harmless but
+      misleading.
+
+    Why this user does NOT get used as `assigned_agent` on any case (per
+    the agent prompt and round_trip_verify.md acceptance test):
+      The case_viewer role explicitly forbids write access. If the viewer
+      were the assigned_agent on a case, the field-level ACL on
+      x_casemgmt_case.assigned_agent (write restricted to case_manager and
+      assigned case_agent) would block normal case operations. Only the
+      demo AGENT is used as `assigned_agent` and `assigned_to` in the
+      seed data.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's eight authoring rules):
+
+      Rule 1 — No PII:
+        first_name = "Demo" (literal, not a real first name)
+        last_name  = "Viewer" (the role title as a synthetic surname —
+                     unmistakably non-real; no real person's last name
+                     would be "Viewer")
+        email      = "demo-viewer@example.invalid" (the .invalid TLD is
+                     reserved by RFC 2606 / BCP 32; never resolves to a
+                     real domain — guarantees no accidental email leak)
+        NO phone, NO mobile_phone, NO home_phone, NO business_phone,
+        NO address fields, NO birthdate, NO SSN, NO photo,
+        NO realistic full names, NO realistic email addresses.
+
+      Rule 2 — No hardcoded cross-reference sys_ids:
+        The user's OWN <sys_id> below is the record's primary key, which
+        is acceptable per AAP rule (it is NOT a reference to any other
+        record). It is a deterministic 32-character lowercase hex value
+        (MD5 of the canonical user_name "x_casemgmt_demo_viewer") so the
+        Update Set engine resolves the same sys_id on every PDI import,
+        making the role-assignment and party `person` cross-references
+        idempotent.
+        The <sys_scope> and <sys_package> reference fields resolve by
+        display_value/source attributes against the scoped application's
+        sys_scope record — NOT by hardcoded sys_id literals.
+        NO <manager>, <department>, <location>, <company> reference
+        fields are populated, so no other reference-resolution concerns
+        arise.
+
+      Rule 3 — No password:
+        The <user_password/> element is empty (self-closing). A populated
+        password (even hashed) in an Update Set XML would be an obvious
+        credential leak risk. Demo users are signed in via the OOB
+        `admin` impersonation feature in the PDI UI; they do NOT need a
+        set password.
+
+      Rule 4 — Scope binding:
+        <sys_scope> binds this user record to the scoped application
+        whose sys_scope.source is `x_casemgmt` (defined in
+        ../../app/sys_scope/x_casemgmt.xml). The display_value attribute
+        is "Case Management". The <sys_package> follows the same pattern
+        with the source attribute pointing at the scope source name.
+        This matches the convention used by every other scoped artifact
+        in the Update Set (roles, ACLs, dictionary entries, choices,
+        etc.).
+
+      Rule 5 — Idempotency anchor:
+        The user's idempotent key is <user_name> = "x_casemgmt_demo_viewer".
+        The companion seed script ../../scripts/seed_demo_data.js
+        ensureUser() helper queries sys_user by user_name BEFORE
+        inserting; the action="INSERT_OR_UPDATE" attribute on the inner
+        <sys_user> element ensures the same behavior at Update Set
+        import time. This <user_name> value MUST EXACTLY match every
+        downstream reference: the role assignment row at
+        ../role_assignments/sys_user_has_role_x_casemgmt_demo_viewer.xml,
+        the seed script's DEMO.USERS.VIEWER constant, and any party
+        `person` field on case 05's Requester party row.
+
+      Rule 6 — No production data:
+        No real first names, last names, email addresses, phone numbers,
+        addresses, or any other personally identifiable information. The
+        synthetic placeholder values (Demo, Viewer, demo-viewer@example
+        .invalid) are unmistakably non-real.
+
+      Rule 7 — Minimum field set:
+        ONLY the minimum content fields required by the AAP template are
+        populated: active, email, first_name, last_name, user_name,
+        user_password (empty). All additional sys_user columns (manager,
+        department, phone, mobile_phone, home_phone, business_phone,
+        title, location, company, photo, time_zone, date_format,
+        introduction, source, u_*) are auto-defaulted by the platform on
+        first import. This keeps the file small, avoids dependencies on
+        other global tables (cmn_department, cmn_location, core_company),
+        and makes the record resilient to ServiceNow release-version
+        drift.
+
+      Rule 8 — Scoped Update Set XML conventions:
+        Root element: <record_update table="sys_user">
+        Inner element: <sys_user action="INSERT_OR_UPDATE"> for
+        idempotent re-import per AAP Section 0.7.1 round-trip-
+        verification.
+        UTF-8 encoding declared in XML prolog.
+        Boolean values lowercase: <active>true</active>.
+        Element ordering: alphabetical (matching the role records and
+        every other XML in the scoped Update Set).
+
+    Cross-dependencies (per AAP Section 0.5.2):
+
+      This user IS REFERENCED BY (these files resolve THIS user by
+      <user_name> = "x_casemgmt_demo_viewer", NOT by sys_id literal):
+        - ../role_assignments/sys_user_has_role_x_casemgmt_demo_viewer.xml
+            grants this user the x_casemgmt_case_viewer role
+        - any Person-type demo party that uses this user as the `person`
+          reference (per the seed-script's party table — case 05
+          Requester party in the canonical seed list)
+        - ../../scripts/seed_demo_data.js  (the DEMO.USERS.VIEWER
+          constant equals this user_name)
+
+      This user IS NOT referenced by:
+        - any case's `assigned_agent` field (only x_casemgmt_demo_agent
+          is assigned)
+        - any task's `assigned_to` field (only x_casemgmt_demo_agent
+          is assigned)
+        - the demo group's sys_user_grmember membership row (the viewer
+          is intentionally NOT a member of x_casemgmt_demo_team)
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER the scope/app records under
+          ../../app/ (since <sys_scope>/<sys_package> reference the
+          scope's source).
+        - This record MUST be loaded BEFORE:
+            * the role assignment at ../role_assignments/
+              sys_user_has_role_x_casemgmt_demo_viewer.xml (resolves
+              <user> by user_name lookup — needs this user to exist)
+            * any Person-type demo party that references this user as
+              `person` by user_name lookup
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesConfig.java
+        Holds `application.roles` as a List<String> bound from external
+        configuration via @ListValue("application.roles"). Semantic
+        anchor only: ArkCase's role-name list pattern (which would have
+        included a viewer/observer-tier role) is replaced in the target
+        by named scoped roles. This demo user is the principal that gets
+        granted the x_casemgmt_case_viewer role via the separate role-
+        assignment record.
+      - ArkCase's underlying `acm_user` table (defined by AcmUser.java,
+        LDAP/AD-backed in production) is NOT replicated; the ServiceNow
+        target uses fully synthetic in-platform users on the OOB
+        sys_user table.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|doe|
+        mary|maria|@gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net).
+      - No-extra-fields grep returns zero matches against (manager|
+        department|phone|mobile_phone|home_phone|business_phone|title|
+        location|company|photo|introduction|date_format|time_zone|
+        source).
+      - Empty-password grep returns zero matches against a populated
+        user_password element of the form open-tag CHARS close-tag.
+      - The user_name value matches downstream references exactly.
+-->
+<record_update table="sys_user">
+    <sys_user action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <email>demo-viewer@example.invalid</email>
+        <first_name>Demo</first_name>
+        <last_name>Viewer</last_name>
+        <sys_class_name>sys_user</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>912ca3946a0f74c22d5b7c2e7e143771</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_user_x_casemgmt_demo_viewer</sys_update_name>
+        <user_name>x_casemgmt_demo_viewer</user_name>
+        <user_password/>
+    </sys_user>
+</record_update>

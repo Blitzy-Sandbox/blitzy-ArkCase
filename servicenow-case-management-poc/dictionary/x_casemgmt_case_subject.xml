@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `subject` String field on the `x_casemgmt_case` custom table
+    inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field    Type           Constraints
+        subject  String(255)    Mandatory
+
+    Per AAP Section 0.4.4 the case-submission portal page populates this field
+    as one of the five user-supplied inputs (subject, type, description,
+    requester_name, requester_email). Per AAP Section 0.7.4 this field is one
+    of EXACTLY THREE columns whitelisted by the portal status-lookup endpoint
+    for return to anonymous callers - "the lookup page returns ONLY status,
+    subject, opened_date - no internal fields exposed". Therefore `subject` is
+    the primary human-readable label of a case across BOTH the internal user
+    surface (list/form views, dashboards, related lists) AND the external
+    requester surface (submission confirmation, status-lookup response).
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 137-139:
+            @Column(name = "cm_case_title")
+            @Size(min = 1)
+            private String title;
+        ArkCase's `title` was a JPA String column on `acm_case_file` mapped
+        to physical column `cm_case_title`, with Bean Validation
+        `@Size(min = 1)` enforcing a non-empty value at the JSR-380
+        validator layer (effectively a NOT-NULL-AND-NOT-EMPTY check). The
+        ServiceNow target replaces both the @Column declaration AND the
+        @Size constraint with this single dictionary entry: `mandatory=true`
+        is the platform-native equivalent of `@Size(min=1)`, and the
+        `<max_length>255</max_length>` ceiling caps overlong values without
+        a custom validator. The platform enforces mandatory on every insert
+        / update through the standard form, the Table API, the scripted
+        REST submission endpoint, and any seed scripts.
+      - The field name is `subject` (lowercase, 7 chars; NOT `title`,
+        NOT `case_title`, NOT `caseTitle`) per AAP Section 0.5.7 verbatim.
+        This is an INTENTIONAL rename from ArkCase: AAP Section 0.5.1
+        explicitly renames `title` -> `subject` so the case table aligns
+        with the conventional ServiceNow "subject" field naming pattern
+        (incident.short_description / cmdb_ci.short_description carry the
+        equivalent semantic in OOB tables, and the platform's email-driven
+        intake patterns universally name the human-readable summary
+        column `subject`). The rename also mirrors the sibling
+        `x_casemgmt_case_task.subject` field (AAP Section 0.5.7's
+        x_casemgmt_case_task table) - both case and case_task tables thus
+        carry identically-named human-readable summary columns, easing
+        cross-table list views, reports, and portal widget templates.
+      - ArkCase's `acm_case_file.cm_case_title` had no explicit length
+        cap in the JPA annotations (defaulting to the database-engine
+        VARCHAR(255) for MySQL InnoDB). AAP Section 0.5.7 codifies that
+        de-facto cap as the explicit `String(255)` constraint here.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_casemgmt`), not by literal sys_id. The `<sys_id>`
+        text-node value is THIS record's own deterministic primary key
+        (MD5 of the canonical field identifier `x_casemgmt_case.subject`)
+        and is NOT a reference to any other record. The MD5 derivation
+        guarantees that re-generation of this Update Set on any agent run
+        produces a byte-identical `<sys_id>` (no random UUIDs), which is
+        required for clean Update-Set re-import on a fresh PDI without
+        creating duplicate sys_dictionary rows.
+      - The concrete scope identifier `casemgmt` is used per AAP convention;
+        ServiceNow Update Set imports use a standard XML parser, so the
+        scope id must be concrete in the XML before export. The identifier appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=true at the dictionary level (AAP Section 0.5.7 verbatim:
+        "subject | String(255) | Mandatory"; matches AAP Section 0.4.4's
+        portal-submission requirement that `subject` be one of the five
+        user-supplied inputs - a portal submission with an empty subject
+        is invalid and MUST fail at the platform-validation layer before
+        the scripted REST endpoint's GlideRecord.insert() ever fires).
+        This also matches the source-side @Size(min=1) constraint on
+        ArkCase's `title` field semantically (an empty string is rejected).
+      - read_only=false: internal users with the case_manager role (and
+        case_agent role on assigned cases per AAP Section 0.5.6 ACL
+        matrix) may correct an erroneous subject AFTER the case is
+        created. Internal-user write authorization is governed by the
+        table-level ACLs in ../acl/ - this dictionary entry deliberately
+        does NOT carry per-role write_roles since the table-level ACLs
+        apply uniformly across all editable fields.
+      - default_value is EMPTY (no implicit default) per AAP Section 0.5.7
+        and the agent prompt's Phase 4 verbatim. Subject is the most
+        important user-facing identifier of a case; defaulting silently
+        to a placeholder string ("Untitled Case", "(no subject)", etc.)
+        would silently mask submissions that failed mandatory enforcement
+        and pollute the Manager View dashboard's case-by-status / case-
+        by-type / case-by-priority reports with semantically-empty rows.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and the
+        agent prompt's Phase 4. The status field on this same table
+        carries audit=true because every state transition must be
+        reconstructable post-hoc; subject is descriptive metadata, not a
+        regulated lifecycle attribute, so the additional sys_audit row
+        per update is unnecessary overhead for a POC.
+      - max_length=255 EXACTLY per AAP Section 0.5.7 verbatim. NOT 4000
+        (description, the long-form free-text body), NOT 100
+        (requester_name / requester_email, the short identity strings),
+        NOT 40 (number / type / status / priority, the controlled-
+        vocabulary identifier-style strings). 255 is the largest defined
+        ceiling on a free-form String column for this scoped table and
+        accommodates a meaningful summary phrase without bleeding into
+        long-form description territory.
+      - choice=0 = "Free-form String, no choice list" (NOT 3 like the
+        type / status / priority fields). Subject is unconstrained
+        natural-language text; constraining it to a choice list would
+        defeat its purpose as a per-case unique human-readable label.
+      - unique=false: multiple cases with the same subject are explicitly
+        permitted (e.g., a recurring "Quarterly Compliance Review" case
+        can recur each fiscal quarter without colliding). Uniqueness
+        enforcement at the case level is delegated entirely to the
+        auto-generated `number` field per AAP Section 0.5.7 verbatim
+        (which carries unique=true on its own dictionary row in
+        ./x_casemgmt_case_number.xml).
+      - text_index=true future-proofs basic full-text search across the
+        case list / dashboards. Subject is the highest-cardinality
+        free-form String on x_casemgmt_case (description is also free-
+        form but is text/varchar-large with different indexing
+        semantics). Internal users searching the case list by partial
+        subject phrase (the most common search pattern in OOB ServiceNow
+        list filters) benefit directly from the index; the cost is
+        negligible at POC data volumes.
+      - spell_check=true is appropriate for a human-readable label that
+        users type freely. The platform surfaces inline spell-check
+        suggestions on the form input, improving UX without affecting
+        persistence.
+      - No reference target: this is a free-form String field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - No PII: while the field stores synthetic case-summary phrases
+        in the demo seed data, NO real names, real email addresses,
+        real phone numbers, real organization names, or real case
+        content from the source ArkCase database are placed in this
+        column at any point in the build (per AAP Section 0.3.2
+        synthetic-data-only constraint). Demo seed values are
+        fabricated phrases such as "General inquiry about benefits"
+        or "Complaint regarding service delay".
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_casemgmt_case.xml`
+        (parent table), since `<name>x_casemgmt_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `subject` column:
+          * ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+            (the scripted REST submission endpoint - writes this field
+            from the user's portal-form input on every anonymous case
+            submission; AAP Section 0.4.4 lists `subject` as one of
+            the five user-supplied inputs the page collects)
+          * ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+            (the scripted REST status-lookup endpoint - returns this
+            field as one of EXACTLY THREE whitelisted output fields
+            per AAP Section 0.7.4: "the lookup page returns ONLY
+            status, subject, opened_date". The lookup endpoint MUST
+            include this field in its response payload for valid
+            number queries and MUST NOT include any other case
+            field beyond status, subject, and opened_date)
+          * ../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml
+            (the submission widget binds its subject input to this
+            field via the scripted REST endpoint above)
+          * ../portal/widgets/sp_widget_x_casemgmt_case_lookup_widget.xml
+            (the lookup widget renders this field from the status-
+            lookup endpoint's response payload)
+          * ../portal/widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml
+            (the confirmation widget echoes back the submitted subject
+            alongside the auto-generated case number)
+          * ../script_includes/x_casemgmt_CasePortalService.xml
+            (the submitCase() and lookupCase() helper methods read /
+            write this field on behalf of the scripted REST endpoints)
+          * ../reports/x_casemgmt_my_open_cases.xml (list-style report
+            includes subject as a visible column for at-a-glance
+            recognition of each open case row)
+          * ../reports/x_casemgmt_my_overdue_tasks.xml (when joined to
+            the case via case_task.case, the parent case subject is a
+            visible column for at-a-glance recognition of which case
+            an overdue task belongs to)
+          * ../seed-data/cases/x_casemgmt_case_demo_*.xml (synthetic
+            demo cases that MUST populate this mandatory field with
+            realistic non-PII summary phrases to satisfy AAP Section
+            0.7.4 minimum-data threshold of "at least 10 cases across
+            all statuses, both case types represented")
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Subject</column_label>
+        <comments>Mandatory String(255) capturing the short summary or title of the case. One of THREE fields exposed by ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml. Populated by case_submit endpoint. Replaces ArkCase CaseFile.title (@Size(min=1)).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>subject</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>255</max_length>
+        <name>x_casemgmt_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>true</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>96a737c3997894e2ba2aacb07aa4854e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_subject</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>true</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

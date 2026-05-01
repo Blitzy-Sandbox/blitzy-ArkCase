@@ -2,16 +2,16 @@
 
 A proof-of-concept ServiceNow scoped application that re-platforms a subset of ArkCase's case-management functional domain onto the ServiceNow Now Platform.
 
-This subdirectory contains a complete, self-contained ServiceNow scoped application that targets a ServiceNow Personal Developer Instance (PDI) running the latest available release (Yokohama, Zurich, or Australia depending on PDI rollout state at provisioning time). The scoped application is delivered as a single Update Set XML at `update-set/x_[scope]_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The auto-assigned scope identifier `x_[scope]` is used as a placeholder throughout these documents; the actual scope id is assigned by the PDI at application creation time.
+This subdirectory contains a complete, self-contained ServiceNow scoped application that targets a ServiceNow Personal Developer Instance (PDI) running the latest available release (Yokohama, Zurich, or Australia depending on PDI rollout state at provisioning time). The scoped application is delivered as a single Update Set XML at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
 
 ## Refactoring Objective
 
 The POC delivers seven enumerated capabilities, replacing specific ArkCase modules with ServiceNow-native equivalents:
 
-- **Case lifecycle** — `x_[scope]_case` table replicates `acm-case-file-plugin`'s `CaseFile` entity (12 fields).
-- **Task domain** — `x_[scope]_case_task` table replicates `acm-task-plugin`'s `AcmTask` (6 fields).
-- **Polymorphic party association** — `x_[scope]_case_party` collapses `acm-person-plugin`'s `PersonAssociation` and `PersonOrganizationAssociation` (5 fields, single-table polymorphism with a `party_type` choice).
-- **Role/privilege subsystem** — three scoped roles (`x_[scope]_case_manager`, `x_[scope]_case_agent`, `x_[scope]_case_viewer`) replacing `acm-services/acm-service-users` `ApplicationRolesConfig` and `acm-admin-plugin` `RolesPrivilegesService`.
+- **Case lifecycle** — `x_casemgmt_case` table replicates `acm-case-file-plugin`'s `CaseFile` entity (12 fields).
+- **Task domain** — `x_casemgmt_case_task` table replicates `acm-task-plugin`'s `AcmTask` (6 fields).
+- **Polymorphic party association** — `x_casemgmt_case_party` collapses `acm-person-plugin`'s `PersonAssociation` and `PersonOrganizationAssociation` (5 fields, single-table polymorphism with a `party_type` choice).
+- **Role/privilege subsystem** — three scoped roles (`x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`) replacing `acm-services/acm-service-users` `ApplicationRolesConfig` and `acm-admin-plugin` `RolesPrivilegesService`.
 - **Case state-machine** — two Flow Designer flows (one per case type: General Inquiry, Complaint) replacing the Activiti BPMN + `ChangeCaseFileStateService` stack.
 - **External requester intake portal** — ServiceNow Experience Portal with two unauthenticated pages (case submission + case status lookup) replacing `acm-service-portal-gateway`'s anonymous-submission pattern.
 - **Reporting surfaces** — two ServiceNow dashboards (Agent Workspace + Manager View) backed by eight reports, replacing the Pentaho/Solr aggregates.
@@ -96,7 +96,7 @@ Each subfolder corresponds to a category of ServiceNow record definitions or sup
 
 Detailed schemas live in `docs/data-model.md`. This section is a one-glance summary.
 
-**`x_[scope]_case`** (12 fields):
+**`x_casemgmt_case`** (12 fields):
 
 | Field | Type | Constraints |
 | --- | --- | --- |
@@ -115,22 +115,22 @@ Detailed schemas live in `docs/data-model.md`. This section is a one-glance summ
 
 A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, Other) field also exists on the same table and is set/cleared by the state-machine flows during the Pending state.
 
-**`x_[scope]_case_task`** (6 fields):
+**`x_casemgmt_case_task`** (6 fields):
 
 | Field | Type | Constraints |
 | --- | --- | --- |
-| `case` | Reference → `x_[scope]_case` | Mandatory |
+| `case` | Reference → `x_casemgmt_case` | Mandatory |
 | `subject` | String(255) | Mandatory |
 | `type` | Choice | Investigation, Review, Follow-up, Other |
 | `status` | Choice | Open, In Progress, Closed |
 | `assigned_to` | Reference → `sys_user` | Mandatory |
 | `due_date` | Date | Mandatory |
 
-**`x_[scope]_case_party`** (5 fields):
+**`x_casemgmt_case_party`** (5 fields):
 
 | Field | Type | Constraints |
 | --- | --- | --- |
-| `case` | Reference → `x_[scope]_case` | Mandatory |
+| `case` | Reference → `x_casemgmt_case` | Mandatory |
 | `party_type` | Choice | Person, Organization |
 | `person` | Reference → `sys_user` | Conditional: required if `party_type = Person` |
 | `organization` | Reference → `core_company` | Conditional: required if `party_type = Organization` |
@@ -138,11 +138,11 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 
 ## Build Constraints (Non-Negotiable)
 
-1. **Scoped-namespace exclusivity** — every artifact lives in the auto-assigned `x_[scope]` namespace; zero global-scope writes are permitted.
+1. **Scoped-namespace exclusivity** — every artifact lives in the auto-assigned `x_casemgmt` namespace; zero global-scope writes are permitted.
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
-5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_[scope]_case_management_update_set.xml` and re-imports on a fresh PDI with zero preview errors.
+5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml` and re-imports on a fresh PDI with zero preview errors.
 6. **Flow-Designer-exclusive workflow** — all transition logic lives in Flow Designer (with helper Script Includes and Business Rules at the entity level); no direct background scripts for workflow state management.
 7. **Repository minimality** — output confined to `servicenow-case-management-poc/`; the existing ArkCase repository structure is read-only context and is not refactored in place.
 8. **Tooling restriction** — App Engine Studio, Flow Designer, and UI Builder only; no paid Store applications; no alternative authoring path.
@@ -157,8 +157,8 @@ The full transition matrix and narrative live in `docs/state-machine.md`. The ei
 | Open | In Progress | `assigned_agent` populated AND member of `assigned_group` | Surface form-level error |
 | In Progress | Pending | None; sets `pending_reason` (Awaiting Info / Awaiting Third Party / Other) | n/a |
 | Pending | In Progress | None; clears `pending_reason` | n/a |
-| In Progress | Resolved | All linked `x_[scope]_case_task` records have `status = Closed` | Surface "All tasks must be closed before resolving this case." |
-| Resolved | Closed | Caller has `x_[scope]_case_manager` role; auto-set `closed_date` | Surface form-level error |
+| In Progress | Resolved | All linked `x_casemgmt_case_task` records have `status = Closed` | Surface "All tasks must be closed before resolving this case." |
+| Resolved | Closed | Caller has `x_casemgmt_case_manager` role; auto-set `closed_date` | Surface form-level error |
 | Any → Draft | (none) | PROHIBITED | Surface "Cases cannot be returned to Draft." |
 | Closed → * | (none) | PROHIBITED — terminal state | Surface "Closed cases are terminal and cannot be modified." |
 
@@ -168,16 +168,16 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 
 | Role | Create | Read | Write | Delete |
 | --- | --- | --- | --- | --- |
-| `x_[scope]_case_manager` | ✅ | ✅ All | ✅ All | ✅ |
-| `x_[scope]_case_agent` | ✅ | ✅ Assigned only | ✅ Assigned only | ❌ |
-| `x_[scope]_case_viewer` | ❌ | ✅ All | ❌ | ❌ |
+| `x_casemgmt_case_manager` | ✅ | ✅ All | ✅ All | ✅ |
+| `x_casemgmt_case_agent` | ✅ | ✅ Assigned only | ✅ Assigned only | ❌ |
+| `x_casemgmt_case_viewer` | ❌ | ✅ All | ❌ | ❌ |
 
 "Assigned only" = cases where `assigned_agent = current user OR assigned_group contains current user`. Field-level ACLs further restrict writes on `assigned_group` (manager only) and `assigned_agent` (manager + assigned agent).
 
 ## Deliverables
 
-- **Update Set XML:** `servicenow-case-management-poc/update-set/x_[scope]_case_management_update_set.xml`.
-- **Portal URL:** `[instance URL]/x_[scope]_portal` (or the equivalent portal URL chosen at portal-record creation time).
+- **Update Set XML:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
+- **Portal URL:** `[instance URL]/x_casemgmt_portal` (or the equivalent portal URL chosen at portal-record creation time).
 - **Dashboards:** Agent Workspace + Manager View (visible in the PDI under Performance Analytics → Dashboards after commit).
 - **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group.
 
@@ -185,7 +185,7 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 
 1. **Export Update Set:** Navigate to System Update Sets → Local Update Sets. Locate the scoped application Update Set. Set status to Complete. Export as XML.
 2. **Verify Update Set integrity:** Re-import the exported XML on the same instance via System Update Sets → Retrieved Update Sets → Upload. Preview the Update Set. Zero errors required before proceeding. If preview errors exist, resolve them in the source application before re-exporting.
-3. **Confirm deployed state:** After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_[scope]_portal` (or equivalent portal URL); both dashboards accessible to users with correct roles; synthetic demo data visible in case list.
+3. **Confirm deployed state:** After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); both dashboards accessible to users with correct roles; synthetic demo data visible in case list.
 4. **Deliver:** Provide the exported Update Set XML file path and the portal URL as final deliverables alongside confirmation that all validation gates passed.
 
 Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification procedure in `scripts/round_trip_verify.md`.

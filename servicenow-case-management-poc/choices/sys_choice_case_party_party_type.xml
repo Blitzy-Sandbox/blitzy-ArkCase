@@ -2,8 +2,8 @@
 <!--
     ServiceNow Update Set record-definition for the TWO `sys_choice` rows
     that enumerate the legal values of the `party_type` Choice field on the
-    `x_[scope]_case_party` custom table inside the scoped application
-    `x_[scope]`.
+    `x_casemgmt_case_party` custom table inside the scoped application
+    `x_casemgmt`.
 
     Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
         Field        Type     Constraints
@@ -17,11 +17,11 @@
     authorization, since each new party type would require:
         (a) a new `sys_choice` row in this file
         (b) a new conditional reference field in
-            ../tables/x_[scope]_case_party.xml (e.g., a `group` reference
+            ../tables/x_casemgmt_case_party.xml (e.g., a `group` reference
             for `party_type=Group`)
         (c) a new dictionary entry for that conditional reference field
         (d) updates to the UI Policy in
-            ../ui_policy/x_[scope]_case_party_conditional_fields.xml so
+            ../ui_policy/x_casemgmt_case_party_conditional_fields.xml so
             the new conditional field's visibility is wired to the new
             choice value
         (e) updates to seed data in ../seed-data/parties/
@@ -32,7 +32,7 @@
     THIS CHOICE LIST IS THE DRIVER OF THE AAP'S POLYMORPHIC ASSOCIATION
     DESIGN PATTERN (AAP Section 0.4.3): "Polymorphic association via
     single-table choice + UI Policy". Per AAP Section 0.4.3, the UI
-    Policy's visibility logic (../ui_policy/x_[scope]_case_party_conditional_fields.xml)
+    Policy's visibility logic (../ui_policy/x_casemgmt_case_party_conditional_fields.xml)
     uses the EXACT case-sensitive label values declared below:
         When `party_type = Person`:
             - the `person` reference field (-> sys_user) is visible and mandatory
@@ -53,14 +53,14 @@
     additionally read by:
 
       The parent dictionary entry that declares this field as Choice:
-        ../dictionary/x_[scope]_case_party_party_type.xml
+        ../dictionary/x_casemgmt_case_party_party_type.xml
             (mandatory=true, choice=3 means "Choice list - dropdown only",
             max_length=40 which accommodates both `Person` (6 chars) and
             `Organization` (12 chars) with margin for any future extension
             authorized by a subsequent AAP)
 
       The synthetic demo parties satisfying AAP Section 0.4.1:
-        ../seed-data/parties/x_[scope]_case_party_demo_*.xml
+        ../seed-data/parties/x_casemgmt_case_party_demo_*.xml
             (each demo party row picks one of these two values; per AAP
             Section 0.3.1 "at least one Person and one Organization party
             per demo case to exercise the polymorphic UI policy" the
@@ -83,11 +83,11 @@
         PersonOrganizationAssociation lives in a separate table with a
         DIFFERENT discriminator value). The ServiceNow target FIXES
         this by collapsing both ArkCase tables into ONE table
-        (x_[scope]_case_party) with a HUMAN-READABLE choice
+        (x_casemgmt_case_party) with a HUMAN-READABLE choice
         discriminator (`Person` | `Organization`), enforced at
         platform-validation time through the parent dictionary entry's
         `<choice>3</choice>` setting in
-        ../dictionary/x_[scope]_case_party_party_type.xml.
+        ../dictionary/x_casemgmt_case_party_party_type.xml.
       - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
         com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java
         line 64-68:
@@ -141,7 +141,7 @@
         OPPOSITE direction - this `party_type` field DRIVES the
         visibility/required state of the `person` and `organization`
         reference fields, but that is enforced by the UI Policy in
-        ../ui_policy/x_[scope]_case_party_conditional_fields.xml, NOT
+        ../ui_policy/x_casemgmt_case_party_conditional_fields.xml, NOT
         by the Choice's `dependent_value` mechanism (which would make
         THIS field DEPEND on another field, the inverse of what is
         wanted here).
@@ -149,7 +149,7 @@
         Organization are universally understood party-type terms). The
         agent prompt explicitly suppresses helper text per the POC scope.
       - No default value at this Choice level: per the parent dictionary
-        entry ../dictionary/x_[scope]_case_party_party_type.xml which
+        entry ../dictionary/x_casemgmt_case_party_party_type.xml which
         has an empty <default_value/>, the user MUST explicitly pick one
         of these two values. Per the agent prompt's Key Insights item 5,
         this makes the polymorphic intent unambiguous - there is no
@@ -159,7 +159,7 @@
         user choice, which would be confusing in a polymorphic
         association.
       - Scope-namespace exclusivity: every record's `<sys_scope>` and
-        `<sys_package>` resolve into the `x_[scope]`
+        `<sys_package>` resolve into the `x_casemgmt`
         scoped application by `source` attribute lookup. NO global-scope
         writes - the OOB tables sys_user, sys_user_group, sys_user_role,
         core_company, task, incident, etc. are never modified by these
@@ -168,18 +168,16 @@
         a write to that table).
       - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
         `<sys_package>` text-node values resolve by scope source name
-        (`x_[scope]`), not by literal sys_id. Each
+        (`x_casemgmt`), not by literal sys_id. Each
         record's `<sys_id>` element value is THIS record's own
         deterministic primary key - computed as MD5 of the canonical
-        identifier `x_[scope]_case_party.party_type.<Value>` so that
+        identifier `x_casemgmt_case_party.party_type.<Value>` so that
         re-generation of this XML yields byte-identical output (no
         random UUIDs). Per the agent prompt's Key Insights item 10,
         this is the record's own primary key, NOT a forbidden reference
         to another record. The MD5 inputs are documented adjacent to
         each record below for full traceability.
-      - The literal `[scope]` placeholder is preserved per AAP
-        convention; the PDI auto-assigns the actual scope id at App
-        Engine Studio creation time, which the import process resolves
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves
         into the final scope namespace.
       - English language only: `<language>en</language>` on every record
         per the POC scope. The platform supports localization via
@@ -196,22 +194,22 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_[scope]_case_management.xml (scoped application)
-        - ../app/sys_scope/x_[scope].xml (scope record)
-        - ../tables/x_[scope]_case_party.xml (parent table; party_type
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../tables/x_casemgmt_case_party.xml (parent table; party_type
           field's host)
-        - ../dictionary/x_[scope]_case_party_party_type.xml (parent
+        - ../dictionary/x_casemgmt_case_party_party_type.xml (parent
           dictionary entry; declares the column shape, choice=3,
           mandatory=true, max_length=40. Without this entry the
           sys_choice records below have no column to attach to.)
 
       THIS RECORD SET MUST LOAD BEFORE:
-        - ../ui_policy/x_[scope]_case_party_conditional_fields.xml
+        - ../ui_policy/x_casemgmt_case_party_conditional_fields.xml
             (the UI Policy uses these EXACT case-sensitive label values
             for visibility logic - condition expressions check
             `current.party_type == 'Person'` and
             `current.party_type == 'Organization'`)
-        - ../seed-data/parties/x_[scope]_case_party_demo_*.xml
+        - ../seed-data/parties/x_casemgmt_case_party_demo_*.xml
             (each demo party sets this field; values must match the
             labels here byte-for-byte for the GlideRecord seed lookups
             by `case` number to populate the party_type field correctly)
@@ -223,8 +221,8 @@
     <table>.<element>.<value>, matching the convention used by the
     sibling Choice files (sys_choice_case_status, sys_choice_case_type,
     sys_choice_case_task_status):
-        MD5("x_[scope]_case_party.party_type.Person")       = 8980a8a92620d4409c084f61a81d5dcb
-        MD5("x_[scope]_case_party.party_type.Organization") = 1c3db1ba6f9ad0bac44139983f64f7d5
+        MD5("x_casemgmt_case_party.party_type.Person")       = 8980a8a92620d4409c084f61a81d5dcb
+        MD5("x_casemgmt_case_party.party_type.Organization") = 1c3db1ba6f9ad0bac44139983f64f7d5
     These hashes are recomputable from the AAP-mandated canonical input,
     guaranteeing deterministic XML re-generation across all build runs.
 -->
@@ -236,7 +234,7 @@
     <inactive>false</inactive>
     <label>Person</label>
     <language>en</language>
-    <name>x_[scope]_case_party</name>
+    <name>x_casemgmt_case_party</name>
     <sequence>100</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -245,8 +243,8 @@
     <sys_id>8980a8a92620d4409c084f61a81d5dcb</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Person</value>
@@ -258,7 +256,7 @@
     <inactive>false</inactive>
     <label>Organization</label>
     <language>en</language>
-    <name>x_[scope]_case_party</name>
+    <name>x_casemgmt_case_party</name>
     <sequence>200</sequence>
     <sys_class_name>sys_choice</sys_class_name>
     <sys_created_by>admin</sys_created_by>
@@ -267,8 +265,8 @@
     <sys_id>1c3db1ba6f9ad0bac44139983f64f7d5</sys_id>
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
-    <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Organization</value>
