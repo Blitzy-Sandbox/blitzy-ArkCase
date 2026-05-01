@@ -1,0 +1,505 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that VALIDATES the `assigned_agent` is a member of the `assigned_group`
+    on the `x_casemgmt_case` table inside the scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.7 verbatim, x_casemgmt_case schema row 10):
+        "assigned_agent  |  Reference -&gt; sys_user  |  Optional; must be
+         member of assigned_group"
+
+    PURPOSE (AAP Section 0.5.5 verbatim, transition matrix row 2):
+        | From  | To           | Required condition                          | Failure handling          |
+        | Open  | In Progress  | assigned_agent populated AND member of      | Surface form-level error  |
+        |       |              | assigned_group                              |                           |
+
+    THIS BUSINESS RULE IS THE DATA-LAYER MEMBERSHIP GUARD:
+        Order=300 places this rule THIRD in the before-insert/update chain
+        for the x_casemgmt_case table, after order=100 (block_terminal_closed)
+        and order=200 (block_draft_backtransition), and before order=400
+        (clear_pending_reason_on_inprogress) and order=500 (set_closed_date).
+        Running after the two prohibition guards is a deliberate performance
+        optimization: if the case is Closed (order=100 abort) or being
+        rewound to Draft (order=200 abort), the abort cancels all subsequent
+        before-rules, and we never run the sys_user_grmember query that
+        delegates to the Script Include's GlideRecord lookup. Cases that
+        survive to order=300 have a legitimate forward-transition or non-
+        status edit, so the membership check is appropriate.
+
+    DELEGATES TO SCRIPT INCLUDE:
+        The actual sys_user_grmember GlideRecord lookup lives in
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml at the
+        isAgentInGroup(userSysId, groupSysId) method (line 656 in that file).
+        Per AAP Section 0.4.3, the Script Include is the single source of
+        truth for the membership query so the same logic is reusable across:
+            - this Business Rule (data-layer enforcement on direct DB writes)
+            - ../flows/sub_flows/validate_inprogress_transition.xml
+              (workflow-layer enforcement on Open -&gt; In Progress)
+            - ACL conditions for write privileges on case_task and case_party
+              child rows (where the parent case's assignment must be
+              respected)
+            - ../scripts/seed_demo_data.js (validates synthetic seed data
+              before insertion to prevent broken demo cases at PDI import)
+        Inlining a GlideRecord('sys_user_grmember') query here would create
+        a second source of truth and risk the two implementations diverging
+        on edge cases (whitespace handling, case sensitivity, null handling).
+
+    BEHAVIOR:
+        - Trigger          : BEFORE INSERT and BEFORE UPDATE on x_casemgmt_case
+        - Skip conditions  :
+            (a) current.assigned_agent is empty (no agent to validate)
+            (b) current.assigned_group is empty (no group to validate against)
+            (c) Neither agent nor group changed (avoid redundant queries on
+                non-assignment-touching updates)
+        - Validation       : delegate to
+                             new x_casemgmt.CaseTransitionValidator()
+                                 .isAgentInGroup(agentSysId, groupSysId)
+                             which returns true / false based on a sys_user_grmember
+                             GlideRecord query.
+        - On failure       : gs.addErrorMessage('Assigned agent must be a
+                             member of the assigned group.') surfaces the
+                             form-level error per AAP Section 0.7.1
+                             ("Surface all blocking errors on the form -
+                             silent failures or post-save error logs are
+                             unacceptable") and current.setAbortAction(true)
+                             cancels the database write.
+        - On success       : the rule returns silently and the save proceeds
+                             through subsequent before-rules
+                             (order=400, 500) and the database commit.
+
+    DUAL-TRIGGER RATIONALE (action_insert=true AND action_update=true):
+        The membership constraint must be enforced in BOTH contexts:
+            - INSERT: a manager (or seed script, or scripted REST endpoint)
+              may directly create a case AND assign both group and agent in
+              a single Table API call. Without action_insert=true, an
+              invalid agent-group pairing could be persisted at creation
+              time and only caught on the first subsequent update.
+            - UPDATE: the typical interactive path - a manager assigns or
+              re-assigns an agent on an existing case via the form.
+        The script's own change-detection (agentChanged, groupChanged) is
+        agnostic to the trigger context: on insert, `previous` is null and
+        both flags evaluate true (insert path always validates the
+        new assignment); on update, the flags evaluate true only when at
+        least one of the two fields actually changed (avoiding redundant
+        queries on save operations that touched other fields).
+
+    ERROR MESSAGE WORDING (NOT verbatim per AAP Section 0.7.4):
+        Per AAP Section 0.7.4 the verbatim, non-negotiable error messages
+        are ONLY:
+            - "All tasks must be closed before resolving this case."
+            - "Cases cannot be returned to Draft."
+            - "Closed cases are terminal and cannot be modified."
+            - "No case found with that number."
+        The wording for THIS rule's error is NOT prescribed verbatim by the
+        AAP. The chosen string
+            'Assigned agent must be a member of the assigned group.'
+        is consistent with the prompt's tone (clear, professional, form-
+        level) and the AAP's own narrative wording in Section 0.5.7
+        ("Optional; must be member of assigned_group"). The string is
+        inlined in the script body of THIS BR rather than delegated to the
+        Script Include because the Script Include's isAgentInGroup() API
+        contract returns a plain boolean (not a {ok, error} pair like
+        validateNoBacktransition()), keeping it reusable for ACL conditions
+        and seed-script preflight checks where no error-message surface
+        exists.
+
+    SOURCE-SIDE SEMANTIC ANALOG:
+        ArkCase had no direct equivalent of this constraint at the JPA
+        entity layer. CaseFile.java
+        (acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+         com/armedia/acm/plugins/casefile/model/CaseFile.java)
+        modeled assignment via an AcmParticipant collection (see lines 192,
+        336-340, 880-908) where ASSIGNEE and OWNING_GROUP participant types
+        coexisted on the case but the relational integrity between an
+        assignee and the owning group was enforced indirectly through the
+        LDAP/AD organizational structure - if a user existed in LDAP they
+        could be assigned regardless of their group membership. The
+        ServiceNow target makes this rule EXPLICIT via this BR plus the
+        Script Include's isAgentInGroup() helper - a deliberate hardening
+        of the case assignment contract per AAP Section 0.5.5 and 0.5.7.
+        This is a TARGET-SIDE AUTHORED rule with no byte-for-byte source
+        analog.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This rule
+        contains zero gs.eventQueue() calls, zero gs.email() calls, and
+        zero gs.notificationEngine() calls. It performs only the validation
+        delegation, gs.addErrorMessage() form-level error surface, and
+        current.setAbortAction(true) cancel.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case</collection>           scoped table
+        - <sys_scope>x_casemgmt</sys_scope>                  scoped namespace
+        - <sys_package>x_casemgmt</sys_package>              scoped application
+        - script body references new x_casemgmt.CaseTransitionValidator()
+                                                             scoped Script Include
+        - script body references current.assigned_agent      scoped field
+        - script body references current.assigned_group      scoped field
+        - script body references previous.assigned_agent     scoped field
+        - script body references previous.assigned_group     scoped field
+        Zero global-scope writes. Zero modifications to OOB tables.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body resolves the Script Include BY NAME via the
+          standard scoped reference syntax
+          `new x_casemgmt.CaseTransitionValidator()` - no sys_id literal.
+        - The script body extracts sys_id values via
+          current.assigned_agent.toString() and
+          current.assigned_group.toString() at RUNTIME from the platform-
+          injected GlideRecord. These are not hardcoded literals; they are
+          values populated by the caller (form submission, Table API,
+          scripted REST, seed script) at execution time. The AAP's "no
+          hardcoded sys_id" rule prohibits LITERAL sys_id strings in code
+          and configuration; runtime sys_id comparisons via .toString()
+          on a GlideElement are the canonical platform pattern and are
+          permitted.
+        - The membership query inside isAgentInGroup() also uses runtime
+          sys_id values (passed in as method arguments) rather than
+          hardcoded literals.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_assigned_agent_membership"),
+          which is permitted because the AAP "no hardcoded sys_id" rule
+          applies to REFERENCE FIELDS pointing at OTHER records, not to a
+          record's own primary key.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml             (table this rule attaches to)
+            - ../dictionary/x_casemgmt_case_assigned_agent.xml
+                                                        (field this rule reads via
+                                                         current.assigned_agent and
+                                                         previous.assigned_agent)
+            - ../dictionary/x_casemgmt_case_assigned_group.xml
+                                                        (field this rule reads via
+                                                         current.assigned_group and
+                                                         previous.assigned_group)
+            - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+            - ../app/sys_scope/x_casemgmt.xml           (scope record)
+            - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (CRITICAL - this BR calls
+               new x_casemgmt.CaseTransitionValidator().isAgentInGroup();
+               the Script Include MUST exist before this BR fires)
+        And BEFORE:
+            - ../seed-data/role_assignments/sys_user_has_role_x_casemgmt_*.xml
+              (role assignments must precede demo cases for the demo agent
+              to be a valid `assigned_agent`)
+            - ../seed-data/cases/x_casemgmt_case_demo_*.xml
+              (demo cases that have assigned_agent and assigned_group set;
+              the seed script MUST honor the membership invariant or this
+              BR will reject the seed inserts. The demo data uses a single
+              demo group containing the single demo agent, so the seed
+              cases pass this BR's check by construction)
+            - ../flows/general_inquiry_state_machine.xml,
+              ../flows/complaint_state_machine.xml
+              (the per-type state-machine flows trigger updates to status
+              and may indirectly trigger this BR if assignment fields are
+              touched in the same update)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_assigned_agent_membership")
+               = 8136e6a730a2da3c4c36038f572c4269
+        32-character lowercase hex. The PDI accepts any valid 32-char hex
+        sys_id; deriving from the record name guarantees idempotent re-import
+        on a fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in
+        place rather than creating a duplicate. This is the same convention
+        used by the sibling Business Rules:
+            ../business_rules/x_casemgmt_block_terminal_closed.xml
+                sys_id = MD5("x_casemgmt_block_terminal_closed")
+                       = 0ee339c18d12366737a3637b952fe75b
+            ../business_rules/x_casemgmt_block_draft_backtransition.xml
+                sys_id = MD5("x_casemgmt_block_draft_backtransition")
+                       = 6396a298689f7e5a5b41ff6afcece502
+            ../business_rules/x_casemgmt_set_opened_date.xml
+                sys_id = MD5("x_casemgmt_set_opened_date")
+                       = c56aeecd4086f111be2867faae9e55ad
+            ../business_rules/x_casemgmt_set_closed_date.xml
+                sys_id = MD5("x_casemgmt_set_closed_date")
+                       = f6d63b3856121cac9b69215b2c46f64c
+            ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+                sys_id = MD5("x_casemgmt_clear_pending_reason_on_inprogress")
+                       = 0943b10691d8ae86fd3c2fd6994eb693
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 2 (Workflow): "All state transitions enforced for both case
+          types - Invalid transitions return blocking error". This BR is a
+          DATA-LAYER enforcer of the AAP Section 0.5.5 transition row 2
+          ("Open -&gt; In Progress: assigned_agent populated AND member of
+          assigned_group"). The validate_inprogress_transition.xml subflow
+          enforces the same rule at the WORKFLOW LAYER for status changes;
+          this BR catches direct database writes that bypass the flow
+          (Table API, scripted REST endpoints, GlideRecord scripts, bulk
+          imports). Defense in depth.
+        - Gate 1 (Data model): "All 3 custom tables created with correct
+          fields and types - Zero missing mandatory fields". This BR
+          indirectly supports data integrity by preventing inconsistent
+          agent-group pairings from being persisted, which would create
+          orphaned "Assigned only" ACL conditions where the agent has no
+          actual group membership backing the assignment.
+        - Gate 3 (ACLs): "Role-based access enforced - case_agent cannot
+          access unassigned cases". The "Assigned only" ACL condition
+          (case where assigned_agent = current OR assigned_group IN
+          current.user_group_membership) assumes the agent has a real
+          group-membership relationship. This BR ensures that assumption
+          holds at write time.
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance". The deterministic sys_id,
+          reference-by-name pattern, and absence of any external lookups
+          guarantee this rule re-imports cleanly with zero preview errors.
+
+    NO PII (AAP Section 0.7.2):
+        The script body, code comments, description text, and all field
+        values contain zero real names, real email addresses, real phone
+        numbers, real organizational identifiers, or any other personally
+        identifiable information. The rule operates exclusively on synthetic
+        runtime sys_id values supplied by the platform-injected `current`
+        and `previous` GlideRecords and the verbatim error message string
+        about generic "Assigned agent" / "assigned group" terminology.
+
+    ABORT_ACTION FIELD VS setAbortAction() METHOD:
+        Note that the <abort_action>false</abort_action> XML element below
+        is the LEGACY pre-Eureka unconditional-abort flag that is set to
+        false because we want CONDITIONAL aborting via the script body's
+        current.setAbortAction(true) call. The element and the script-body
+        method are NOT the same thing - leaving <abort_action>false</abort_action>
+        is correct and standard for any modern conditional-abort BR.
+
+    CHANGE_FIELDS VS FILTER_CONDITION:
+        <change_fields>false</change_fields> means this BR is NOT bound to
+        a specific subset of changed fields - it fires on ANY insert or
+        update to the row. We use script-level filtering (the agentChanged
+        || groupChanged check, plus the empty-field guards) instead of
+        declarative filter_condition because the predicate involves
+        comparisons against `previous` values (which filter_condition
+        cannot express) and we need to short-circuit on empty agent/group
+        with explicit early returns for performance.
+
+    RELATIONSHIP TO validate_inprogress_transition SUBFLOW:
+        Per AAP Section 0.5.5 transition row 2, the Open -&gt; In Progress
+        transition requires the same membership check. The Flow Designer
+        subflow at ../flows/sub_flows/validate_inprogress_transition.xml
+        enforces it at the WORKFLOW LAYER (driven by status transitions
+        triggered through the per-type state-machine flows in
+        ../flows/general_inquiry_state_machine.xml and
+        ../flows/complaint_state_machine.xml). This BR enforces the SAME
+        rule at the DATA LAYER for any write path that bypasses the
+        flow (direct Table API insert/update, scripted REST endpoints,
+        GlideRecord.update() in custom scripts, bulk Update Set imports
+        of seed data). Both enforcers delegate to the same Script Include
+        method, isAgentInGroup(), so the rule logic is single-sourced
+        and cannot diverge between the two layers. This is the
+        defense-in-depth pattern recommended by ServiceNow best practices
+        for state-machine enforcement.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-insert/update on x_casemgmt_case: when assigned_agent and assigned_group are both populated, validates that the agent is a member of the group via x_casemgmt.CaseTransitionValidator.isAgentInGroup(). On failure, surfaces the form-level error 'Assigned agent must be a member of the assigned group.' via gs.addErrorMessage() + current.setAbortAction(true). Per AAP Sections 0.5.5 (transition matrix row 2: Open -&gt; In Progress: 'assigned_agent populated AND member of assigned_group') and 0.5.7 (assigned_agent constraint: 'Optional; must be member of assigned_group'). Order=300 places this rule THIRD in the before-rule chain on x_casemgmt_case, after block_terminal_closed (100) and block_draft_backtransition (200) and before clear_pending_reason_on_inprogress (400) and set_closed_date (500); running after the prohibition guards is a deliberate performance optimization so we don't run the sys_user_grmember GlideRecord lookup on transitions that will be rejected anyway. Dual-triggered (action_insert=true AND action_update=true) because a manager (or seed script) may assign agent and group at case-creation time via a single Table API call, not just through subsequent updates. Skip conditions: (a) either agent or group is empty (b) neither field changed since previous - avoid redundant queries on non-assignment-touching updates. Defensive previous-null guard: on insert previous is null and both change-detection flags evaluate true so the membership is always validated for new rows. Type-agnostic: fires for both General Inquiry and Complaint case types because the membership constraint applies regardless of case type. Defense in depth: validate_inprogress_transition subflow makes the same check at the workflow layer; this BR catches direct DB writes bypassing the flow. The error message wording is NOT prescribed verbatim by AAP Section 0.7.4 (which lists only four verbatim messages); the chosen wording is consistent with the prompt's tone and the AAP's own narrative wording. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals (runtime sys_id comparisons via .toString() are platform-canonical and permitted).</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_validate_assigned_agent_membership</name>
+        <order>300</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Per AAP Section 0.5.7 (x_casemgmt_case schema row 10):
+    //     "assigned_agent | Reference -> sys_user | Optional; must be
+    //      member of assigned_group"
+    //
+    // Per AAP Section 0.5.5 (transition matrix row 2):
+    //     | From | To          | Required condition                       | Failure handling          |
+    //     | Open | In Progress | assigned_agent populated AND member of   | Surface form-level error  |
+    //     |      |             | assigned_group                           |                           |
+    //
+    // The membership check is delegated to
+    //     new x_casemgmt.CaseTransitionValidator().isAgentInGroup(agentSysId, groupSysId)
+    // which performs a sys_user_grmember GlideRecord lookup and returns a
+    // plain boolean. The Script Include is the single source of truth for
+    // the membership query so the same logic is reusable across this BR,
+    // the validate_inprogress_transition Flow Designer subflow, ACL
+    // conditions for child case_task and case_party rows, and the
+    // seed-script preflight checks. Inlining a GlideRecord('sys_user_grmember')
+    // query here would create a second source of truth and risk the two
+    // implementations diverging on edge cases.
+    //
+    // Order=300 places this rule THIRD in the before-rule chain on
+    // x_casemgmt_case, after block_terminal_closed (order=100, blocks any
+    // edit to a Closed case) and block_draft_backtransition (order=200,
+    // blocks any rewind to Draft). The chain order is a deliberate
+    // performance optimization: invalid transitions short-circuit at the
+    // earlier orders via setAbortAction(true) and we never reach this rule's
+    // GlideRecord query for them. Cases that survive to order=300 have a
+    // legitimate forward-transition or non-status edit, so the membership
+    // check is appropriate. Subsequent rules
+    // (clear_pending_reason_on_inprogress at order=400, set_closed_date at
+    // order=500) are short-circuited if THIS rule aborts.
+    //
+    // ArkCase source-side analog: there was no direct equivalent at the JPA
+    // entity layer in
+    //   acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+    //     com/armedia/acm/plugins/casefile/model/CaseFile.java
+    // CaseFile modeled assignment via an AcmParticipant collection (lines
+    // 192, 336-340, 880-908) where ASSIGNEE and OWNING_GROUP participant
+    // types coexisted on the case but the relational integrity between an
+    // assignee and the owning group was enforced indirectly through the
+    // LDAP/AD organizational structure - if a user existed in LDAP they
+    // could be assigned regardless of their group membership. The
+    // ServiceNow target makes this rule EXPLICIT at the data layer via
+    // this BR plus the Script Include's isAgentInGroup() helper - a
+    // deliberate hardening of the case assignment contract. This is a
+    // TARGET-SIDE AUTHORED rule with no byte-for-byte source analog.
+
+    // Read the assigned_agent and assigned_group sys_id values from the
+    // platform-injected `current` GlideRecord. The .toString() coercion
+    // normalizes the GlideElement reference field to its underlying sys_id
+    // string. Without explicit coercion, the GlideElement instance auto-
+    // converts in some contexts but not others (string concatenation =
+    // string conversion; equality comparison via === = identity comparison;
+    // method-argument passing = pass-by-value of the underlying string
+    // for primitive comparisons but pass-by-reference of the GlideElement
+    // wrapper for complex operations). The downstream isAgentInGroup()
+    // method explicitly handles String() coercion of its arguments and
+    // GlideRecord.addQuery() accepts both forms, but explicit .toString()
+    // here is the platform-canonical defensive pattern and avoids any
+    // wrapper-vs-primitive ambiguity downstream.
+    var agent = current.assigned_agent.toString();
+    var group = current.assigned_group.toString();
+
+    // Skip if either field is empty. The AAP defines assigned_agent as
+    // optional (Section 0.5.7: "Optional"); a case without an assigned
+    // agent is a valid state (e.g., Draft cases, Open cases waiting for
+    // agent assignment). assigned_group is mandatory only on the
+    // Open transition (per dictionary mandatory_on_open=true at
+    // ../dictionary/x_casemgmt_case_assigned_group.xml) - that mandatory
+    // requirement is enforced separately by the form-level mandatory flag
+    // and the validate_open_transition subflow, NOT by this BR.
+    // This BR's responsibility is narrow: validate the membership
+    // RELATIONSHIP when both fields are present. If either field is
+    // absent, the relationship cannot be validated and the rule does
+    // nothing.
+    if (!agent || !group) {
+        return;
+    }
+
+    // Skip if neither agent nor group changed (avoid redundant queries on
+    // every save, including subsequent updates that touch only other
+    // fields like description, priority, or status). For a case that
+    // travels through the full state-machine
+    //   Draft -> Open -> In Progress -> Pending -> In Progress -> Resolved -> Closed
+    // the assignment fields typically change at most twice (once when the
+    // group is set on Draft -> Open, once when the agent is set on
+    // Open -> In Progress). This guard ensures the BR runs the
+    // sys_user_grmember query at most twice across the full lifecycle
+    // rather than five times.
+    //
+    // On INSERT, `previous` is null (no prior state), so the ternary's
+    // !previous branch evaluates true for both flags - the BR always
+    // validates the membership on a brand-new row. This is the correct
+    // semantic: a manager creating a case AND assigning both group and
+    // agent in a single operation must have the assignment validated
+    // before the row is persisted, otherwise an invalid agent-group
+    // pairing could be created and only caught on the first subsequent
+    // update.
+    var agentChanged = !previous || String(previous.assigned_agent) !== agent;
+    var groupChanged = !previous || String(previous.assigned_group) !== group;
+    if (!agentChanged && !groupChanged) {
+        return;
+    }
+
+    // Resolve the Script Include via the standard scoped reference syntax.
+    // The `x_casemgmt` portion is the scope's vendor_prefix from
+    // ../app/sys_app/x_casemgmt_case_management.xml; the
+    // `CaseTransitionValidator` portion is the api_name of the Script
+    // Include declared in
+    // ../script_includes/x_casemgmt_CaseTransitionValidator.xml at
+    // <api_name>x_casemgmt.CaseTransitionValidator</api_name>. NO sys_id
+    // literal - the resolution is by scoped class name only.
+    var validator = new x_casemgmt.CaseTransitionValidator();
+
+    // Call isAgentInGroup(userSysId, groupSysId). The Script Include's
+    // method (line 656 in CaseTransitionValidator.xml) returns a plain
+    // boolean: true when at least one sys_user_grmember row links the
+    // given user to the given group, false otherwise (including when
+    // either argument is null/empty/whitespace). The boolean shape
+    // (rather than the {ok, error} pair used by validateNoBacktransition
+    // and the canTransitionTo* family) is intentional: isAgentInGroup is
+    // a simple yes/no membership predicate reusable from contexts that
+    // have no error-message surface (e.g., ACL condition expressions).
+    // The form-level error string is owned by THIS BR and surfaced via
+    // gs.addErrorMessage(...) below.
+    if (!validator.isAgentInGroup(agent, group)) {
+        // gs.addErrorMessage('...') surfaces the form-level error at the
+        // top of the case form when the user attempts the save through
+        // the UI, and is captured in the API response when the update
+        // arrives via Table API or scripted REST. Per AAP Section 0.7.1:
+        // "Surface all blocking errors on the form. Invalid transition
+        // attempts MUST produce a blocking error message visible on the
+        // form - silent failures or post-save error logs are
+        // unacceptable."
+        //
+        // Per AAP Section 0.7.4, only four error messages are verbatim
+        // (non-negotiable): "All tasks must be closed before resolving
+        // this case.", "Cases cannot be returned to Draft.", "Closed
+        // cases are terminal and cannot be modified.", and "No case
+        // found with that number." This rule's message is NOT in that
+        // list, so the wording here is target-side authored. The chosen
+        // string is consistent with the prompt's tone and the AAP's own
+        // narrative wording in Section 0.5.7 ("Optional; must be member
+        // of assigned_group").
+        gs.addErrorMessage('Assigned agent must be a member of the assigned group.');
+
+        // current.setAbortAction(true) cancels the database write. Both
+        // the gs.addErrorMessage() and setAbortAction(true) calls are
+        // required: the former produces a visible error to the caller,
+        // the latter prevents the write from being persisted. Without
+        // setAbortAction(true), the message would appear but the row
+        // would still update with the invalid agent-group pairing;
+        // without gs.addErrorMessage(), the write would be silently
+        // rejected with no visible failure and no diagnostic message
+        // for the caller.
+        current.setAbortAction(true);
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>8136e6a730a2da3c4c36038f572c4269</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_assigned_agent_membership</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_validate_assigned_agent_membership</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>
