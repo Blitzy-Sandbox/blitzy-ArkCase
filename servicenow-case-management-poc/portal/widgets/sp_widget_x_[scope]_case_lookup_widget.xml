@@ -1,0 +1,565 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sp_widget` row that
+    defines the CASE STATUS LOOKUP WIDGET of the unauthenticated Experience
+    Portal inside the scoped application `x_casemgmt`. This widget is the
+    SECOND of the three Service Portal widgets required by AAP Section 0.4.4
+    ("two unauthenticated pages: case submission and case status lookup") and
+    AAP Section 0.5.1 (in-scope artifact list).
+
+    PURPOSE (AAP Sections 0.1.1 / 0.4.4 / 0.7.4 / Validation Gate 5
+    "Portal - lookup"):
+
+      AAP Section 0.4.4 verbatim ("UI Design - External Experience Portal UI"):
+        "Page 2 - Case Status Lookup: a single input (case number) and a
+         result panel that shows status, subject, opened_date when found, or
+         the literal text 'No case found with that number.' when not found.
+         No internal fields (assigned_group, assigned_agent, description,
+         closed_date, requester_*) are exposed."
+
+      AAP Section 0.7.4 verbatim ("Other User-Provided Rules"):
+        "the literal text 'No case found with that number.' MUST appear when
+         the lookup case number does not match."
+
+      AAP Section 0.7.3 Validation Gate 5 ("Portal - lookup") verbatim:
+        "Status lookup returns correct data for valid case number - Correct
+         status / subject / opened_date returned; 'No case found with that
+         number.' for invalid number"
+
+      This widget renders three UX surfaces:
+        1. A single text-input field for the case number (e.g. CASE0000001).
+        2. A "Look Up Status" submit button that triggers the GET request.
+        3. A conditionally rendered RESULT PANEL (on HTTP 200 success) that
+           displays exactly three field values - status, subject,
+           opened_date - and ONLY those three, per AAP Section 0.4.4
+           "No internal fields ... are exposed".
+        OR
+        4. A conditionally rendered NOT-FOUND PANEL (on HTTP 404 / any
+           error) that displays the verbatim text "No case found with
+           that number." (capital "N", trailing period, ASCII straight
+           quotes - non-negotiable per AAP Section 0.7.4).
+
+      The result panel and the not-found panel are mutually exclusive:
+      `c.result` and `c.notFound` are reset to null/false at the start of
+      every lookup, so only one of the two panels is visible at any time.
+
+    ANONYMOUS-ACCESS DESIGN (AAP Section 0.4.4 verbatim:
+    "two unauthenticated pages"):
+      Three configuration mechanisms work together to make this widget
+      renderable by anonymous, unauthenticated callers (matching the parent
+      page's flags and the parent portal's anonymous-access settings):
+
+        1. <public>true</public> - explicit signal to the platform's
+           authorization layer that THIS WIDGET is exempt from the standard
+           authentication challenge. Anonymous users can render the widget.
+
+        2. <internal>false</internal> - the widget is publicly accessible
+           and NOT restricted to "internal" (employee-only) widgets.
+
+        3. <roles/> - empty. No roles are required to render the widget.
+           The Service Portal widget-level role-based gating is bypassed by
+           the empty roles list, so any caller (including anonymous) who
+           reaches the parent page can render the widget.
+
+      All three mechanisms are necessary; omitting any one breaks the
+      anonymous-access guarantee for the chained user journey:
+        anonymous user -> portal record -> case status page -> THIS lookup
+        widget -> /api/x_casemgmt/case_status_lookup REST endpoint.
+
+    DATA FLOW (CLIENT-DRIVEN; SERVER SCRIPT IS EMPTY):
+      Unlike most ServiceNow widgets (which fetch data server-side via the
+      `data` initialization function and pass it to the client via the
+      `data` object), THIS widget's data flow is entirely client-driven:
+
+        1. The widget renders with empty state (no result, no not-found).
+        2. The user types a case number into the input field.
+        3. The user submits the form (clicks the button or presses Enter).
+        4. The client controller's c.lookup() function issues
+              GET /api/x_casemgmt/case_status_lookup?number=<encoded>
+           via $http.get() (AngularJS 1.5.x service).
+        5. The scripted REST operation handler at
+              ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml
+           processes the GET, delegates to
+              ../../script_includes/x_casemgmt_CasePortalService.xml
+           (lookupCase() method), and returns either:
+              HTTP 200 with body { status, subject, opened_date }, OR
+              HTTP 404 with body { error: 'No case found with that number.' }
+        6. On HTTP 200: the controller maps response.data to c.result
+           (with strict 3-field whitelist - even if the server sent
+           additional fields, the client extracts ONLY status/subject/
+           opened_date) and the result panel renders.
+        7. On HTTP 404 / any error: the controller sets c.notFound = true
+           and the not-found panel renders the VERBATIM text.
+
+      The server script (the data initialization function) is intentionally
+      empty: there is nothing to pre-fetch on widget render because the
+      lookup is driven by user input.
+
+    DEFENSE-IN-DEPTH FIELD WHITELISTING:
+      The 3-field whitelist (status, subject, opened_date) is enforced at
+      THREE layers, not one:
+
+        1. The Script Include's lookupCase() method extracts ONLY these
+           three fields from the GlideRecord row (server-side whitelist).
+        2. The REST operation script copies ONLY these three fields from
+           the Script Include's return value into the response body
+           (REST-handler whitelist - drops accidental field exposure if
+           the Script Include is later modified).
+        3. The CLIENT CONTROLLER (this file) extracts ONLY these three
+           fields from response.data into c.result (UI-layer whitelist -
+           even if the server response somehow contained additional
+           fields, the template would never see them).
+
+      Defense-in-depth ensures that no future refactor of any single layer
+      can accidentally expose internal data via the public lookup endpoint.
+
+    HTTP-ERROR HARDENING (information-leakage prevention):
+      All HTTP errors (404 not-found, 500 internal-server-error, 400
+      bad-request, 0 network-error) are treated identically by the client:
+      c.notFound = true, the verbatim "No case found with that number."
+      message is shown.
+
+      This is INTENTIONAL information-leakage hardening:
+        - An attacker probing the lookup endpoint cannot distinguish
+          "case not found" from "API down" from "server error" from
+          "invalid input" - all show the same UX.
+        - The verbatim message is hardcoded in the template, NOT pulled
+          from the server's error response body. The server's HTTP 404
+          body is NEVER trusted by the client (defense against header
+          injection, response smuggling, malicious server responses).
+        - The error.data.error and error.statusText fields are NEVER
+          displayed to the user; they are deliberately discarded.
+        - No console.log() calls leak the case number or response into
+          the browser console (forensics surface).
+
+    DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
+    treatment: ServiceNow Experience Portal default theme. No custom CSS,
+    no custom branding."):
+      The <css> element is empty. All visual styling uses out-of-the-box
+      Service Portal Bootstrap classes already shipped with the PDI:
+        - form-group, form-control: standard form-field styling.
+        - btn, btn-primary: standard primary-action button styling.
+        - panel, panel-default, panel-heading, panel-title, panel-body:
+          standard result-panel styling.
+        - alert, alert-warning: standard "warning" alert styling for
+          the not-found message (yellow-bordered with alert icon).
+        - <dl>, <dt>, <dd>: semantic definition list for accessibility
+          (screen readers parse <dl> as key-value pairs).
+      No custom CSS is authored or referenced. No custom branding artifacts
+      (icons, images, colors) are defined.
+
+    NO HARDCODED SYS_IDS IN REFERENCES (AAP Section 0.7.2):
+      Every cross-reference is a name lookup against a stable identifier:
+        - <sys_scope> resolves against the scope record's <name> field
+          (`x_casemgmt`) per ../../app/sys_scope/x_casemgmt.xml.
+        - <sys_package> resolves against the sys_app record's <scope> field
+          (`x_casemgmt`) per ../../app/sys_app/x_casemgmt_case_management.xml.
+        - The REST URL is a stable text path
+          (/api/x_casemgmt/case_status_lookup) - NOT a sys_id reference.
+      The ONLY sys_id literal in this file is <sys_id> itself (THIS record's
+      own primary key). It is the deterministic 32-char lowercase hex MD5
+      of `sp_widget_x_casemgmt_case_lookup_widget`:
+        printf '%s' 'sp_widget_x_casemgmt_case_lookup_widget' | md5sum | cut -c1-32
+        -> e992deb0bd1657f36a38f5af6a46aeb2
+      Per AAP Section 0.7.2, the no-hardcoded-sys_id rule applies to
+      references TO OTHER records, not to a record's own identity primary
+      key.
+
+    NO PII, NO EMAIL (AAP Sections 0.7.2, 0.3.2):
+      The description, template, and scripts below contain ZERO PII (no
+      real names, no real email addresses, no real organization names, no
+      real case numbers). The placeholder example "CASE0000001" is the
+      synthetic auto-numbering format defined by AAP Section 0.7.4 and
+      ../../numbers/sys_number_x_casemgmt_case.xml. Email notifications are
+      explicitly disabled on the PDI per AAP Section 0.7.2 - this widget
+      makes no notification calls (gs.eventQueue, NotificationService, etc.).
+
+    `casemgmt` SCOPE IDENTIFIER (AAP Sections 0.7.1 / 0.7.2):
+      All `x_casemgmt_*` references use the concrete scope identifier
+      `casemgmt` per AAP Section 0.7.2 ("Scoped-namespace-only constraint").
+      ServiceNow Update Set imports use a standard XML parser (Java
+      DocumentBuilder); the scope identifier MUST be concrete in the XML
+      before export. The same identifier is used consistently across every
+      sibling XML in this scoped application (see sibling pages, REST
+      endpoints, dashboards, reports, and seed records).
+
+    XML CONVENTIONS HONORED (matching sibling files in this app):
+      - Wrapper element: <record_update table="sp_widget"> per the agent
+        prompt's Phase 1 specification, matching the sibling pattern used
+        by ../sp_portal_x_casemgmt_case_portal.xml and
+        ./sp_widget_x_casemgmt_case_confirmation_widget.xml.
+      - Indentation: 4 spaces for record fields (matching sibling-file
+        convention).
+      - Element ordering: alphabetical within the record (matching
+        sibling-file convention; the ServiceNow Update Set XML serializer
+        emits fields in alphabetical order).
+      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
+        record's <name>).
+      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
+        attribute (matching the sys_app record's <scope>).
+      - Deterministic 32-char lowercase hex sys_id: computed as
+        MD5("sp_widget_x_casemgmt_case_lookup_widget") =
+        e992deb0bd1657f36a38f5af6a46aeb2. Re-generation of this XML is
+        byte-identical (no random UUIDs).
+      - Audit fields: <sys_created_by>admin</sys_created_by> and
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
+        repeatable timestamps (the same date is used by EVERY sibling
+        record in this scoped app for repeatable XML re-generation).
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview
+        (AAP Section 0.7.3 validation gate 7).
+
+    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.5.1):
+
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+      armedia/acm/plugins/casefile/service/GetCaseByNumberService.java
+        line 38 - CaseFile getCaseByNumber(String caseNumber);
+
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+      armedia/acm/plugins/casefile/service/GetCaseByNumberServiceImpl.java
+        line 47-50 - public CaseFile getCaseByNumber(String caseNumber) {
+                       return getCaseFileDao().findByCaseNumber(caseNumber);
+                     }
+
+      acm-standard-applications/arkcase/src/main/webapp/resources/modules/
+      cases/services/case-lookup.client.service.js
+        line 13-30 - Case.LookupService factory using $resource against
+                     'api/latest/plugin'
+
+      ArkCase's JPA-DAO-backed lookup returns the FULL CaseFile entity
+      with all internal fields (assigned_*, description, closed_date,
+      requester_*, etc.). The ServiceNow target deliberately whitelists
+      the response to ONLY status/subject/opened_date per AAP Section 0.4.4.
+      The semantic intent is preserved (lookup by case number -> status);
+      the technical surface is restructured to fit ServiceNow's REST +
+      Service Portal widget conventions and adds the privacy whitelist
+      that ArkCase did not have.
+
+      ArkCase's AngularJS service uses `$resource` (a higher-level wrapper
+      around $http for RESTful resources). The ServiceNow target uses
+      `$http.get()` directly because (a) Service Portal widget controllers
+      do not load `ngResource` by default, and (b) the lookup is a single
+      GET, not a CRUD resource that warrants $resource's overhead.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD MUST LOAD AFTER:
+        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
+          cross-reference resolves against this record's <name>)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped
+          application record; <sys_package> cross-reference resolves
+          against this record's <scope>)
+        - ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+          (the scripted REST API namespace this widget calls)
+        - ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml
+          (the GET operation handler this widget invokes)
+        - ../../script_includes/x_casemgmt_CasePortalService.xml
+          (transitively, called by the REST operation; the lookupCase()
+          method enforces the server-side field whitelist)
+
+      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
+      tolerates any order within the same Update Set, since references
+      resolve by name):
+        - ../pages/sp_page_x_casemgmt_case_status.xml (the page hosts
+          this widget by id `x_casemgmt_case_lookup_widget`; the page's
+          page_internal layout JSON references this widget by id, NOT
+          by sys_id)
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
+      This widget supports Validation Gate 5 ("Portal - lookup") by
+      providing the user-facing UI for the case-status-lookup capability.
+      Without this widget:
+        - Anonymous users would have no way to look up case status.
+        - The portal page itself, the REST API definition, the REST API
+          operation, and the Script Include would all be useless without
+          the UI to invoke them.
+        - Validation Gate 5 would FAIL because there is no UI surface to
+          test the "verbatim 'No case found with that number.' message"
+          requirement.
+
+      Therefore THIS widget is the direct UI implementation behind
+      Validation Gate 5; the AAP's "verbatim text" requirement is
+      enforced by the template's not-found panel.
+-->
+<record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function CaseLookupWidgetController($scope, $http) {
+    /*
+     * Case Lookup Widget - client-side AngularJS controller.
+     *
+     * Implements the case-status-lookup user interaction described in
+     * AAP Section 0.4.4 ("Page 2 - Case Status Lookup: a single input
+     * (case number) and a result panel that shows status, subject,
+     * opened_date when found, or the literal text 'No case found with
+     * that number.' when not found.").
+     *
+     * Exposed properties (template-bound):
+     *   c.caseNumber - string; bound to the input field via ng-model.
+     *                  Initialized to '' (empty string).
+     *   c.result     - object | null; on successful lookup, contains
+     *                  exactly { status, subject, opened_date } - the
+     *                  three whitelisted fields. null when no successful
+     *                  lookup has occurred. Drives the result panel's
+     *                  ng-if="c.result".
+     *   c.notFound   - boolean; true when an HTTP error occurred (404,
+     *                  500, 400, network error, etc.). Drives the not-
+     *                  found panel's ng-if="c.notFound".
+     *   c.loading    - boolean; true while the in-flight $http.get
+     *                  request is pending. Drives the button's
+     *                  ng-disabled and the "Looking up..." text.
+     *
+     * Exposed method (template-bound):
+     *   c.lookup()   - executes the case-status lookup. Issues
+     *                  GET /api/x_casemgmt/case_status_lookup?number=<encoded>
+     *                  via $http.get(). On success (HTTP 200), sets
+     *                  c.result with the strict 3-field whitelist. On
+     *                  any error (HTTP 4xx/5xx, network), sets
+     *                  c.notFound = true so the verbatim message is
+     *                  rendered.
+     *
+     * Design rationale:
+     *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
+     *     widget-authoring conventions and per the sibling confirmation
+     *     widget at ./sp_widget_x_casemgmt_case_confirmation_widget.xml.
+     *   - $http (NOT fetch): Service Portal widgets run in AngularJS
+     *     1.5.x context; $http is the canonical HTTP client. fetch()
+     *     would bypass AngularJS's digest cycle and require manual
+     *     $scope.$apply() handling.
+     *   - encodeURIComponent on the case number: defensive URL escaping.
+     *     Even though normal case numbers (CASE0000001) contain no
+     *     special characters, defensive encoding prevents URL-injection
+     *     attacks if a malicious user submits a crafted string.
+     *   - Strict 3-field whitelist on response.data: defense-in-depth.
+     *     Even if the server's response somehow contained additional
+     *     fields (e.g., due to a future refactor of the Script Include),
+     *     this client controller extracts ONLY status/subject/opened_date
+     *     so no internal data leaks to the template.
+     *   - Verbatim error message in template, NOT echoed from server:
+     *     the message "No case found with that number." (AAP Section
+     *     0.7.4) is hardcoded in the template via ng-if="c.notFound".
+     *     This controller deliberately does NOT pass error.data.error
+     *     or error.statusText to the template - the server's error
+     *     body is NEVER trusted by the client.
+     *   - Identical handling of all HTTP errors: information-leakage
+     *     hardening. 404 (not-found), 500 (server-error), 400 (bad-
+     *     request), and 0 (network-error) all set c.notFound = true.
+     *     An attacker cannot distinguish "case not found" from "API
+     *     down" from any other failure mode.
+     *   - c.loading flag: prevents double-lookup race conditions if
+     *     the user clicks the button twice quickly, AND drives the
+     *     "Looking up..." button text for clear UX feedback.
+     */
+    var c = this;
+
+    // Lookup state. Initialize with safe defaults so the template's
+    // ng-if expressions evaluate cleanly even before c.lookup() runs.
+    c.caseNumber = '';
+    c.result = null;
+    c.notFound = false;
+    c.loading = false;
+
+    /**
+     * Look up the status of a case by its number via the scripted REST
+     * endpoint at /api/x_casemgmt/case_status_lookup.
+     *
+     * Per AAP Section 0.4.4: returns ONLY status, subject, opened_date
+     * via strict 3-field whitelist on the response.
+     *
+     * Per AAP Section 0.7.4: on no-match (HTTP 404 or any other error),
+     * the verbatim text "No case found with that number." is rendered
+     * by the template. This function MUST NOT echo error.data.error or
+     * any server-supplied text.
+     */
+    c.lookup = function() {
+        // Idempotent guard: prevent double-lookup if the user clicks
+        // the button or presses Enter while a request is in flight.
+        if (c.loading) {
+            return;
+        }
+        // Empty-input guard: do not issue a request if the case number
+        // is empty or whitespace-only. The button is also disabled in
+        // this case via ng-disabled, but the guard provides defense-
+        // in-depth in case the disabled state is bypassed (e.g., by
+        // pressing Enter in some edge browsers).
+        if (!c.caseNumber || String(c.caseNumber).trim() === '') {
+            return;
+        }
+
+        // Reset state at the start of every lookup. The result panel
+        // and the not-found panel are mutually exclusive: only one of
+        // c.result and c.notFound can be truthy at any time.
+        c.loading = true;
+        c.result = null;
+        c.notFound = false;
+
+        // Build the URL with defensive URL-encoding of the case number.
+        // The server-side Script Include x_casemgmt.CasePortalService.
+        // lookupCase() trims whitespace and queries by the case 'number'
+        // field. encodeURIComponent() handles any whitespace, special
+        // characters, or potentially malicious input safely.
+        var url = '/api/x_casemgmt/case_status_lookup?number=' + encodeURIComponent(String(c.caseNumber).trim());
+
+        $http.get(url).then(function(response) {
+            // Success path (HTTP 200). The server's REST operation
+            // returns { status, subject, opened_date } per its contract.
+            c.loading = false;
+            if (response && response.data) {
+                // Strict 3-field whitelist (defense-in-depth). Extract
+                // ONLY status, subject, opened_date from the response
+                // body. Even if the server were misconfigured to return
+                // additional fields, this widget would not display them.
+                // String() coercion handles undefined/null gracefully -
+                // the template renders an empty cell rather than the
+                // literal text "undefined" or "null".
+                c.result = {
+                    status:      String(response.data.status      || ''),
+                    subject:     String(response.data.subject     || ''),
+                    opened_date: String(response.data.opened_date || '')
+                };
+                c.notFound = false;
+            } else {
+                // Defensive: empty response body but HTTP 200. Treat as
+                // not-found rather than rendering an empty result panel.
+                // This should not occur in practice (the server always
+                // returns a body on 200) but guards against unexpected
+                // upstream behavior.
+                c.result = null;
+                c.notFound = true;
+            }
+        }, function(error) {
+            // Error path (HTTP 4xx, 5xx, or network failure / 0).
+            // ALL error types are treated identically per the
+            // information-leakage hardening discussed in the file
+            // header comment. The verbatim text "No case found with
+            // that number." (AAP Section 0.7.4) is rendered by the
+            // template; this function MUST NOT echo error.data.error,
+            // error.statusText, or any server-supplied content.
+            c.loading = false;
+            c.result = null;
+            c.notFound = true;
+        });
+    };
+}
+]]></client_script>
+        <controller_as>c</controller_as>
+        <css/>
+        <data_table>sp_instance</data_table>
+        <description>Custom unauthenticated Service Portal widget for case status lookup. Renders a single case-number input field plus a Look Up Status button, GETs /api/x_casemgmt/case_status_lookup, and displays ONLY the whitelisted fields { status, subject, opened_date } on match or the verbatim text 'No case found with that number.' on no-match per AAP Section 0.7.4. Embedded by sp_page_x_casemgmt_case_status. No internal fields (assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, priority, type, pending_reason, audit fields) are exposed. All HTTP errors (404, 500, 400, network) render the same verbatim message for information-leakage hardening. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() and PortalRequestService.getRequestStatus() Spring services. No client-side or server-side database operations - all data flows through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>x_casemgmt_case_lookup_widget</id>
+        <internal>false</internal>
+        <link/>
+        <name>Case Lookup Widget</name>
+        <option_schema>[]</option_schema>
+        <pop_up>false</pop_up>
+        <public>true</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    /*
+     * Case Lookup Widget - server-side data initialization.
+     *
+     * No server-side data fetch is needed. The case-status lookup is
+     * driven entirely by the client-side controller via $http.get to
+     * the scripted REST endpoint at
+     *   /api/x_casemgmt/case_status_lookup?number=<encoded>
+     * defined by ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+     * and handled by ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml.
+     *
+     * This widget intentionally performs ZERO database operations:
+     *   - No GlideRecord reads (no pre-fetching of any case data; the
+     *     widget renders with empty state and the user drives the
+     *     lookup via the form).
+     *   - No GlideRecord writes (the lookup is read-only by definition;
+     *     all writes in this scoped application go through the
+     *     scripted REST endpoints, never through widget server scripts).
+     *   - No gs.eventQueue() calls (email notifications are disabled
+     *     per AAP Section 0.7.2 Email-disabled constraint).
+     *
+     * The IIFE pattern matches ServiceNow's standard widget server-
+     * script convention; the empty body is the canonical no-op
+     * placeholder.
+     */
+})();
+]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e992deb0bd1657f36a38f5af6a46aeb2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Lookup Widget</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sp_widget_x_casemgmt_case_lookup_widget</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template><![CDATA[<div class="x-casemgmt-case-lookup-widget">
+    <h2>Case Status Lookup</h2>
+    <form name="caseLookupForm" novalidate ng-submit="c.lookup()">
+        <div class="form-group">
+            <label for="x-casemgmt-case-number">Case Number</label>
+            <input type="text"
+                   id="x-casemgmt-case-number"
+                   class="form-control"
+                   maxlength="20"
+                   ng-model="c.caseNumber"
+                   placeholder="Enter your case number (e.g., CASE0000001)" />
+        </div>
+        <div class="form-group">
+            <button type="submit"
+                    class="btn btn-primary"
+                    ng-disabled="c.loading || !c.caseNumber">
+                <span ng-if="!c.loading">Look Up Status</span>
+                <span ng-if="c.loading">Looking up...</span>
+            </button>
+        </div>
+    </form>
+
+    <!--
+        Result panel: rendered when c.result is non-null (i.e., the most
+        recent lookup returned HTTP 200 with a whitelisted record). Shows
+        EXACTLY the three fields permitted by AAP Section 0.4.4:
+        status, subject, opened_date. NO internal fields are exposed.
+        Uses a definition list (<dl>/<dt>/<dd>) for semantic accessibility:
+        screen readers parse <dl> as key-value pairs, providing a clear
+        narration of "Status: <value>, Subject: <value>, Opened Date:
+        <value>".
+    -->
+    <div class="panel panel-default" ng-if="c.result">
+        <div class="panel-heading">
+            <h3 class="panel-title">Case Status</h3>
+        </div>
+        <div class="panel-body">
+            <dl>
+                <dt>Status</dt>
+                <dd>{{c.result.status}}</dd>
+                <dt>Subject</dt>
+                <dd>{{c.result.subject}}</dd>
+                <dt>Opened Date</dt>
+                <dd>{{c.result.opened_date}}</dd>
+            </dl>
+        </div>
+    </div>
+
+    <!--
+        Not-found panel: rendered when c.notFound is true (i.e., the most
+        recent lookup returned HTTP 404 or any other error). Contains the
+        EXACT verbatim text required by AAP Section 0.7.4:
+            "No case found with that number."
+        Capital "N", lowercase elsewhere, trailing period, ASCII straight
+        quotes - non-negotiable. The text is hardcoded here in the
+        template, NOT pulled from the server's error response body
+        (defense against header-injection / response-smuggling attacks
+        on the public endpoint).
+    -->
+    <div class="alert alert-warning" role="alert" ng-if="c.notFound">
+        No case found with that number.
+    </div>
+</div>
+]]></template>
+    </sp_widget>
+</record_update>
