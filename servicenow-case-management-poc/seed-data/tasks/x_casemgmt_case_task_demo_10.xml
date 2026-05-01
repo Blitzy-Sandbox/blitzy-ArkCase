@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Task 10 - Preliminary fact-check complete (Closed / Review)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file (with sibling task 09) was added in response to the QA
+    Checkpoint 10 MINOR finding documenting that AAP Section 0.3.1's
+    LITERAL requirement -
+
+        "at least one open and one closed task per demo case in
+         `In Progress` or `Pending` state, to exercise the
+         'all-tasks-closed' gate"
+
+    - was satisfied for case 03 (which carries one Open + one Closed
+    task), but NOT for case 04 (Pending) and case 08 (In Progress),
+    each of which carried only non-Closed tasks. Sibling task 09
+    closes the equivalent gap for case 04.
+
+    THIS task (Demo Task 10) closes that gap for case 08 (In Progress
+    Complaint) by contributing a Closed Review task whose presence in
+    the seed dataset demonstrates that the validate_resolved_transition
+    subflow (../../flows/sub_flows/validate_resolved_transition.xml)
+    correctly EXCLUDES Closed children when computing the non-Closed
+    child count for the Complaint flow's resolve gate.
+
+    Updated 10-task fixture matrix (tasks 09-10 added per QA
+    Checkpoint 10 MINOR finding remediation):
+
+        Task 01 - Open        / Investigation / parent case 03 (In Progress GI)
+        Task 02 - Closed      / Review        / parent case 03 (In Progress GI)
+        Task 03 - Open        / Follow-up     / parent case 04 (Pending GI)
+        Task 04 - Closed      / Review        / parent case 05 (Resolved GI)
+        Task 05 - Closed      / Other         / parent case 05 (Resolved GI)
+        Task 06 - In Progress / Investigation / parent case 08 (In Progress Complaint)
+        Task 07 - Open        / Investigation / parent case 08 (In Progress Complaint)
+        Task 08 - Closed      / Review        / parent case 09 (Resolved Complaint)
+        Task 09 - Closed      / Review        / parent case 04 (Pending GI)
+        Task 10 - Closed      / Review        / parent case 08 (In Progress Complaint)  ## THIS FILE
+
+    AAP literal-compliance state (per AAP Section 0.3.1):
+      * Case 03 (In Progress GI):       Open (task 01) + Closed (task 02)             ✓
+      * Case 04 (Pending GI):           Open (task 03) + Closed (task 09)             ✓
+      * Case 08 (In Progress Complaint): Open (task 07) + Closed (task 10 - THIS)     ✓ NEW
+        (also In Progress task 06; the AAP requires "at least one open
+         and one closed", which is satisfied; the In Progress task 06
+         is supplemental coverage of the third Choice value.)
+
+    Lifecycle position - WHY Closed / Review / parent Complaint case
+    In Progress is meaningful:
+      Per AAP Section 0.5.5 the Complaint flow's resolve gate fires
+      when an operator attempts to transition a Complaint case from
+      In Progress to Resolved; the gate's GlideRecord query inside
+      the validate_resolved_transition subflow checks for non-Closed
+      children. THIS Closed Review task contributes to the case 08
+      seed dataset by demonstrating that:
+
+        (a) The subflow's GlideRecord query correctly EXCLUDES
+            Closed tasks from the non-Closed child count via its
+            "status != Closed" filter qualifier.
+        (b) The case-08 task population is now properly mixed:
+            ONE Open (task 07), ONE In Progress (task 06), ONE
+            Closed (this task). Together they exercise all three
+            registered case_task.status Choice values on a single
+            parent case.
+        (c) The blocked-resolve outcome on case 08 is unaffected:
+            tasks 06 (In Progress) and 07 (Open) are still
+            non-Closed, so the resolve gate's GlideRecord query
+            still returns rows -> blocking error "All tasks must
+            be closed before resolving this case." surfaces
+            correctly. Adding a Closed task does NOT unblock the
+            resolve gate; the gate blocks if ANY non-Closed task
+            exists.
+
+      The Review task type semantically captures the agent's
+      preliminary fact-check activity (per AAP Section 0.5.7's
+      case_task type Choice list). For a Complaint case, the
+      preliminary fact-check is a typical first-stage activity
+      where the agent verifies the complaint's factual basis
+      before launching deeper Investigation work (per task 06's
+      In Progress Investigation status: the deeper investigation
+      is currently ongoing).
+
+      The negative due_date offset (-3 days, i.e., 2026-04-28
+      relative to the build-environment baseline of 2026-05-01)
+      reflects that the fact-check occurred in the past. The
+      my_overdue_tasks report correctly EXCLUDES this task
+      because its filter requires status != Closed; this Closed
+      task is excluded regardless of due_date.
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This task DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+        - The case_task table at ../../tables/x_casemgmt_case_task.xml
+        - All dictionary entries for case_task fields under
+            ../../dictionary/x_casemgmt_case_task_*.xml
+        - The choice records at ../../choices/sys_choice_case_task_type.xml
+            (registers "Review") and ../../choices/sys_choice_case_task_status.xml
+            (registers "Closed")
+        - The auto-numbering record at ../../numbers/sys_number_x_casemgmt_case_task.xml
+        - The role records under ../../roles/ and ACL records under ../../acl/
+        - ../users/sys_user_x_casemgmt_demo_agent.xml (referenced by <assigned_to>;
+            resolved by user_name lookup)
+        - ../cases/x_casemgmt_case_demo_08.xml (referenced by <case>;
+            resolved by number lookup)
+
+      This task IS REFERENCED BY (loaded AFTER this record):
+        - The validate_resolved_transition subflow at
+            ../../flows/sub_flows/validate_resolved_transition.xml
+            EXCLUDES this task from its non-Closed child count.
+        - The Agent Workspace dashboard's "My Overdue Tasks" widget
+            EXCLUDES this task (Closed status excluded regardless
+            of due_date).
+
+    Implementation notes:
+      1. Synthetic data only; no PII. Subject text is generic
+         ("Preliminary fact-check complete") and contains no
+         real names, real email addresses, or real organization
+         references.
+      2. Sys-id-literal validation: only ONE <sys_id> element
+         appears below (the task's own primary key). NO sys_id
+         literals appear in any cross-reference field. The
+         <case>, <assigned_to>, <sys_package>, <sys_scope>
+         elements all use display_value query-by-key resolution
+         (per AAP Section 0.5.2).
+      3. Element ordering is strictly alphabetical within the
+         <x_casemgmt_case_task> element: assigned_to, case,
+         due_date, status, subject, sys_class_name, sys_created_by,
+         sys_id, sys_package, sys_scope, sys_update_name, type.
+         This matches every peer task file.
+      4. Sys_id derivation: deterministic 32-character lowercase
+         hex value computed as MD5(subject):
+             MD5("Demo task 10: Preliminary fact-check complete")
+             = 02f9016a4d3e21e110d84dd61ce3c566
+         This matches the convention used by every peer task
+         (e.g., task 02 = MD5("Demo task 02: Initial review
+         complete") = 949c29a044d9fd7468ddf410173ef684).
+      5. Audit fields: <sys_created_by>admin</sys_created_by> for
+         consistent repeatable timestamps across re-imports.
+      6. Choice value spelling: "Closed" (Title Case "C") and
+         "Review" (Title Case "R") match the registered choice
+         values verbatim.
+      7. Audit-trail consideration: this task's parent case
+         (CASE0000008) is currently in In Progress status. The
+         fact that a Closed Review task exists for this case
+         correctly models a real-world workflow: an agent
+         performs a PRELIMINARY FACT-CHECK (this Closed task)
+         and a DEEPER INVESTIGATION (task 06, In Progress
+         Investigation), and a WITNESS INTERVIEW PREP step
+         (task 07, Open Investigation). The combination
+         demonstrates the natural progression of complaint
+         handling from completed early activities to ongoing
+         and not-yet-started later activities.
+-->
+<record_update table="x_casemgmt_case_task">
+    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
+        <case display_value="CASE0000008">CASE0000008</case>
+        <due_date>2026-04-28</due_date>
+        <status>Closed</status>
+        <subject>Demo task 10: Preliminary fact-check complete</subject>
+        <sys_class_name>x_casemgmt_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>02f9016a4d3e21e110d84dd61ce3c566</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>x_casemgmt_case_task_demo_10</sys_update_name>
+        <type>Review</type>
+    </x_casemgmt_case_task>
+</record_update>

@@ -42,10 +42,16 @@
  *     Complaint), with cases 06 and 10 carrying explicit opened_date and
  *     closed_date overrides so the avg_time_to_close single-score widget
  *     on the Manager View dashboard has non-trivial source data
- *   - 8 demo tasks distributed across cases 03, 04, 05, 08, 09 with the
+ *   - 10 demo tasks distributed across cases 03, 04, 05, 08, 09 with the
  *     mix below; case 03 carries one Open and one Closed task to exercise
  *     the In Progress -> Resolved blocker, while case 05 carries only
- *     Closed tasks to demonstrate the success path
+ *     Closed tasks to demonstrate the success path. Cases 04 (Pending)
+ *     and 08 (In Progress) also carry one Open + one Closed task each
+ *     (tasks 09 and 10), strictly satisfying the AAP Section 0.3.1
+ *     literal requirement of "at least one open and one closed task per
+ *     demo case in `In Progress` or `Pending` state, to exercise the
+ *     'all-tasks-closed' gate" — added per QA Checkpoint 10 MINOR
+ *     finding remediation.
  *   - 8 demo parties distributed across cases 03, 04, 05, 08, 09 with a
  *     mix of Person and Organization parties to exercise the
  *     party_type-driven UI Policy
@@ -805,7 +811,7 @@ function ensureParty(fields) {
 //   Phase B - Demo Group + Member-> ensureGroup() + ensureGroupMembership()
 //   Phase C - Role Assignments   -> ensureRoleAssignment() x 3
 //   Phase D - Demo Cases (10)    -> ensureCase() x 10
-//   Phase E - Demo Tasks (8)     -> ensureTask() x 8
+//   Phase E - Demo Tasks (10)    -> ensureTask() x 10
 //   Phase F - Demo Parties (8)   -> ensureCompany() x 2 + ensureParty() x 8
 //
 // Phases run in order because each later phase depends on data created by
@@ -1104,14 +1110,17 @@ function seedDemoData() {
     // === Phase E: Demo Tasks ===
     // ========================================================================
     //
-    // Insert 8 demo tasks distributed across cases 03, 04, 05, 08, 09.
+    // Insert 10 demo tasks distributed across cases 03, 04, 05, 08, 09.
     // Tasks reference parent cases by `number` (resolved via
     // lookupCaseNumberBySubject -> ensureTask's internal lookupCaseSysId)
     // per AAP Section 0.5.2; no hard-coded sys_id, no hard-coded number
     // literal beyond what the case auto-numbering produced.
     //
     // Distribution exercises the validate_resolved_transition subflow's
-    // task-closure gate:
+    // task-closure gate AND strictly satisfies the AAP Section 0.3.1
+    // literal requirement of "at least one open and one closed task per
+    // demo case in `In Progress` or `Pending` state, to exercise the
+    // 'all-tasks-closed' gate":
     //
     //   - Case 03 (In Progress GI) carries one Open task (task 01) and
     //     one Closed task (task 02). Attempting to transition case 03 to
@@ -1122,24 +1131,37 @@ function seedDemoData() {
     //     This case proves the success path: when every linked task is
     //     Closed, the Resolved transition succeeds and the case advances.
     //
-    //   - Case 04 (Pending GI) carries one Open task (task 03). Pending
-    //     -> In Progress is unconditional, so the open task does not
-    //     block that transition; but the Resolved transition would still
-    //     be blocked.
+    //   - Case 04 (Pending GI) carries one Open task (task 03) and one
+    //     Closed task (task 09). Pending -> In Progress is unconditional,
+    //     so the open task does not block that transition; the Resolved
+    //     transition would still be blocked by task 03. The Closed task
+    //     09 (added per QA Checkpoint 10 MINOR finding remediation)
+    //     demonstrates the resolve gate's correct exclusion of Closed
+    //     children from the non-Closed child count.
     //
     //   - Case 08 (In Progress Complaint) carries one In Progress task
-    //     (task 06) and one Open task (task 07). Mirror of the case-03
-    //     resolve-blocker scenario for the Complaint flow.
+    //     (task 06), one Open task (task 07), and one Closed task
+    //     (task 10). Mirror of the case-03 resolve-blocker scenario for
+    //     the Complaint flow; the Closed task 10 (added per QA Checkpoint
+    //     10 MINOR finding remediation) demonstrates the resolve gate's
+    //     correct exclusion of Closed children for the Complaint flow.
     //
     //   - Case 09 (Resolved Complaint) carries one Closed task (task 08).
     //     Mirror of the case-05 resolve-success scenario for the
     //     Complaint flow.
     //
+    // AAP Section 0.3.1 literal-compliance state (ten tasks total):
+    //   * Case 03 (In Progress GI):       Open (01) + Closed (02)             ✓
+    //   * Case 04 (Pending GI):           Open (03) + Closed (09)             ✓
+    //   * Case 05 (Resolved GI):          Closed (04, 05)                     n/a (Resolved)
+    //   * Case 08 (In Progress Complaint): Open (07) + Closed (10) + ip (06)  ✓
+    //   * Case 09 (Resolved Complaint):   Closed (08)                         n/a (Resolved)
+    //
     // Tasks 01, 03, 07 have positive (future) due dates so the
     // my_overdue_tasks dashboard widget filters them OUT (they are not
-    // overdue). Tasks 02, 04, 05, 08 have negative (past) due dates and
-    // are Closed, so they are also OUT (Closed tasks are excluded by the
-    // report's status filter regardless of due_date).
+    // overdue). Tasks 02, 04, 05, 08, 09, 10 have negative (past) due
+    // dates and are Closed, so they are also OUT (Closed tasks are
+    // excluded by the report's status filter regardless of due_date).
     //
     // Net effect: the my_overdue_tasks report renders ZERO rows on the
     // demo data, demonstrating the report query's correctness even when
@@ -1147,7 +1169,7 @@ function seedDemoData() {
     // overdue report, a manager can post-seed adjust task 01's due_date
     // to a past date, or insert a new Open task with a past due_date.
 
-    gs.info('Phase E: ensuring 8 demo tasks.');
+    gs.info('Phase E: ensuring 10 demo tasks.');
 
     var case03Number = lookupCaseNumberBySubject(CASE_SUBJECTS.GI_IN_PROGRESS);
     var case04Number = lookupCaseNumberBySubject(CASE_SUBJECTS.GI_PENDING);
@@ -1184,6 +1206,21 @@ function seedDemoData() {
             status: 'Open',
             assigned_to_user_name: DEMO.USERS.AGENT,
             due_date: daysAgoDate(-2)  // 2 days in the future
+        });
+        // Task 09 - added per QA Checkpoint 10 MINOR finding remediation
+        // to strictly satisfy AAP Section 0.3.1's "at least one open and
+        // one closed task per demo case in `In Progress` or `Pending`
+        // state, to exercise the 'all-tasks-closed' gate". This Closed
+        // Review task models the agent's completed initial intake review
+        // (a typical first-stage activity performed BEFORE the case was
+        // placed in Pending status awaiting external input).
+        ensureTask({
+            case_number: case04Number,
+            subject: 'Demo task 09: Initial intake review for Pending case',
+            type: 'Review',
+            status: 'Closed',
+            assigned_to_user_name: DEMO.USERS.AGENT,
+            due_date: daysAgoDate(2)   // 2 days in the past (already done)
         });
     } else {
         gs.warn('Phase E: case 04 not found by subject; skipping its tasks.');
@@ -1226,6 +1263,21 @@ function seedDemoData() {
             status: 'Open',
             assigned_to_user_name: DEMO.USERS.AGENT,
             due_date: daysAgoDate(-3)  // 3 days in the future
+        });
+        // Task 10 - added per QA Checkpoint 10 MINOR finding remediation
+        // to strictly satisfy AAP Section 0.3.1's "at least one open and
+        // one closed task per demo case in `In Progress` or `Pending`
+        // state, to exercise the 'all-tasks-closed' gate". This Closed
+        // Review task models the agent's completed preliminary
+        // fact-check (a typical first-stage activity performed BEFORE
+        // the deeper investigation captured by tasks 06 and 07).
+        ensureTask({
+            case_number: case08Number,
+            subject: 'Demo task 10: Preliminary fact-check complete',
+            type: 'Review',
+            status: 'Closed',
+            assigned_to_user_name: DEMO.USERS.AGENT,
+            due_date: daysAgoDate(3)   // 3 days in the past (already done)
         });
     } else {
         gs.warn('Phase E: case 08 not found by subject; skipping its tasks.');

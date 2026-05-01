@@ -10088,114 +10088,7 @@ function serverSetPending() {
         <category>customer</category>
         <comments/>
         <name>Case Submission Widget</name>
-        <payload><![CDATA[<record_update table="sp_widget"> per the agent
-        prompt's Phase 1 specification, matching the sibling pattern used
-        by ./sp_widget_x_casemgmt_case_confirmation_widget.xml and
-        ./sp_widget_x_casemgmt_case_lookup_widget.xml.
-      - Indentation: 4 spaces for record fields (matching sibling-file
-        convention).
-      - Element ordering: alphabetical within the record (matching
-        sibling-file convention; the ServiceNow Update Set XML serializer
-        emits fields in alphabetical order).
-      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
-        record's <name>).
-      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
-        attribute (matching the sys_app record's <scope>).
-      - Deterministic 32-char lowercase hex sys_id: computed as
-        MD5("sp_widget_x_casemgmt_case_submission_widget") =
-        b40f252d17be5fa3b3bb85cb79ca8d2f. Re-generation of this XML is
-        byte-identical (no random UUIDs).
-      - Audit fields: <sys_created_by>admin</sys_created_by> and
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
-        repeatable timestamps (the same date is used by EVERY sibling
-        record in this scoped app for repeatable XML re-generation).
-      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
-        XML conformance for ServiceNow Update Set re-import preview
-        (AAP Section 0.7.3 validation gate 7).
-
-    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
-    ported per AAP Section 0.5.1):
-
-      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/acm/
-      portalgateway/service/DefaultPluggablePortalRequestService.java
-        line 60-65 - submitRequest(...) implementation; resolves provider
-                     by request type and forwards. Returns a PortalResponse
-                     containing the confirmation identifier returned by the
-                     downstream provider (in ArkCase: a request id; in this
-                     ServiceNow target: the auto-generated case number).
-
-      acm-standard-applications/arkcase/src/main/webapp/resources/modules/
-      cases/services/case-info.client.service.js
-        line 13-42 - Case.InfoService factory using $resource against
-                     'api/latest/plugin' with a save() method that POSTs
-                     to 'api/latest/plugin/casefile'.
-
-      ArkCase's PortalRequestService accepted a typed PortalRequest DTO
-      via Spring service injection; the request flowed through Spring
-      MVC, the service implementation looked up a provider by request
-      type, and the provider in turn delegated to a per-type bean for
-      persistence. The ServiceNow target collapses this multi-hop
-      delegation to: widget -> $http.post -> scripted REST -> Script
-      Include -> GlideRecord. Three hops, not five. The semantic
-      intent is preserved (anonymous submission -> confirmation with
-      identifier) while the technical surface is restructured to fit
-      ServiceNow's REST + Service Portal widget conventions.
-
-      ArkCase's Angular service uses `$resource` (a higher-level wrapper
-      around $http for RESTful resources). The ServiceNow target uses
-      `$http.post()` directly because (a) Service Portal widget
-      controllers do not load `ngResource` by default, and (b) the
-      submit is a single POST, not a CRUD resource that warrants
-      $resource's overhead.
-
-    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
-      THIS RECORD MUST LOAD AFTER:
-        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
-          cross-reference resolves against this record's <name>)
-        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped
-          application record; <sys_package> cross-reference resolves
-          against this record's <scope>)
-        - ../rest/sys_ws_definition_x_casemgmt_case_submit.xml
-          (the scripted REST API namespace this widget calls)
-        - ../rest/sys_ws_operation_x_casemgmt_case_submit_post.xml
-          (the POST operation handler this widget invokes)
-        - ../../script_includes/x_casemgmt_CasePortalService.xml
-          (transitively, called by the REST operation; the submitCase()
-          method enforces the server-side field whitelist and inserts
-          the x_casemgmt_case row in Draft status)
-        - ./sp_widget_x_casemgmt_case_confirmation_widget.xml
-          (this widget embeds the confirmation widget via $sp.getWidget()
-          by stable widget ID, so the confirmation widget must be
-          present at import time for the embedded reference to resolve)
-
-      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
-      tolerates any order within the same Update Set, since references
-      resolve by name):
-        - ../pages/sp_page_x_casemgmt_case_submit.xml (the page hosts
-          this widget by id `x_casemgmt_case_submission_widget`; the
-          page's page_internal layout JSON references this widget by
-          id, NOT by sys_id)
-
-    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
-      This widget supports Validation Gate 4 ("Portal - submission") by
-      providing the user-facing UI for the case-submission capability.
-      Without this widget:
-        - Anonymous users would have no way to submit cases.
-        - The portal page itself, the REST API definition, the REST API
-          operation, the Script Include, and the confirmation widget
-          would all be useless without the form to invoke them.
-        - Validation Gate 4 would FAIL because there is no UI surface to
-          test the "Case appears in internal list with Draft status and
-          correct case number" requirement.
-
-      Therefore THIS widget is the direct UI implementation behind
-      Validation Gate 4; the AAP's "5 inputs" requirement is enforced
-      by the template's form-field count and the controller's payload
-      shape, and the AAP's "verbatim 'Your case has been submitted'
-      message" requirement is enforced by the embedded confirmation
-      widget that this widget renders on success.
--->
-<record_update table="sp_widget">
+        <payload><![CDATA[<record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function CaseSubmissionWidgetController($scope, $http) {
@@ -10616,104 +10509,7 @@ function serverSetPending() {
         <category>customer</category>
         <comments/>
         <name>Case Lookup Widget</name>
-        <payload><![CDATA[<record_update table="sp_widget"> per the agent
-        prompt's Phase 1 specification, matching the sibling pattern used
-        by ../sp_portal_x_casemgmt_case_portal.xml and
-        ./sp_widget_x_casemgmt_case_confirmation_widget.xml.
-      - Indentation: 4 spaces for record fields (matching sibling-file
-        convention).
-      - Element ordering: alphabetical within the record (matching
-        sibling-file convention; the ServiceNow Update Set XML serializer
-        emits fields in alphabetical order).
-      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
-        record's <name>).
-      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
-        attribute (matching the sys_app record's <scope>).
-      - Deterministic 32-char lowercase hex sys_id: computed as
-        MD5("sp_widget_x_casemgmt_case_lookup_widget") =
-        e992deb0bd1657f36a38f5af6a46aeb2. Re-generation of this XML is
-        byte-identical (no random UUIDs).
-      - Audit fields: <sys_created_by>admin</sys_created_by> and
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
-        repeatable timestamps (the same date is used by EVERY sibling
-        record in this scoped app for repeatable XML re-generation).
-      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
-        XML conformance for ServiceNow Update Set re-import preview
-        (AAP Section 0.7.3 validation gate 7).
-
-    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
-    ported per AAP Section 0.5.1):
-
-      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
-      armedia/acm/plugins/casefile/service/GetCaseByNumberService.java
-        line 38 - CaseFile getCaseByNumber(String caseNumber);
-
-      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
-      armedia/acm/plugins/casefile/service/GetCaseByNumberServiceImpl.java
-        line 47-50 - public CaseFile getCaseByNumber(String caseNumber) {
-                       return getCaseFileDao().findByCaseNumber(caseNumber);
-                     }
-
-      acm-standard-applications/arkcase/src/main/webapp/resources/modules/
-      cases/services/case-lookup.client.service.js
-        line 13-30 - Case.LookupService factory using $resource against
-                     'api/latest/plugin'
-
-      ArkCase's JPA-DAO-backed lookup returns the FULL CaseFile entity
-      with all internal fields (assigned_*, description, closed_date,
-      requester_*, etc.). The ServiceNow target deliberately whitelists
-      the response to ONLY status/subject/opened_date per AAP Section 0.4.4.
-      The semantic intent is preserved (lookup by case number -> status);
-      the technical surface is restructured to fit ServiceNow's REST +
-      Service Portal widget conventions and adds the privacy whitelist
-      that ArkCase did not have.
-
-      ArkCase's AngularJS service uses `$resource` (a higher-level wrapper
-      around $http for RESTful resources). The ServiceNow target uses
-      `$http.get()` directly because (a) Service Portal widget controllers
-      do not load `ngResource` by default, and (b) the lookup is a single
-      GET, not a CRUD resource that warrants $resource's overhead.
-
-    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
-      THIS RECORD MUST LOAD AFTER:
-        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
-          cross-reference resolves against this record's <name>)
-        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped
-          application record; <sys_package> cross-reference resolves
-          against this record's <scope>)
-        - ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
-          (the scripted REST API namespace this widget calls)
-        - ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml
-          (the GET operation handler this widget invokes)
-        - ../../script_includes/x_casemgmt_CasePortalService.xml
-          (transitively, called by the REST operation; the lookupCase()
-          method enforces the server-side field whitelist)
-
-      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
-      tolerates any order within the same Update Set, since references
-      resolve by name):
-        - ../pages/sp_page_x_casemgmt_case_status.xml (the page hosts
-          this widget by id `x_casemgmt_case_lookup_widget`; the page's
-          page_internal layout JSON references this widget by id, NOT
-          by sys_id)
-
-    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
-      This widget supports Validation Gate 5 ("Portal - lookup") by
-      providing the user-facing UI for the case-status-lookup capability.
-      Without this widget:
-        - Anonymous users would have no way to look up case status.
-        - The portal page itself, the REST API definition, the REST API
-          operation, and the Script Include would all be useless without
-          the UI to invoke them.
-        - Validation Gate 5 would FAIL because there is no UI surface to
-          test the "verbatim 'No case found with that number.' message"
-          requirement.
-
-      Therefore THIS widget is the direct UI implementation behind
-      Validation Gate 5; the AAP's "verbatim text" requirement is
-      enforced by the template's not-found panel.
--->
-<record_update table="sp_widget">
+        <payload><![CDATA[<record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function CaseLookupWidgetController($scope, $http) {
@@ -11015,71 +10811,7 @@ function serverSetPending() {
         <category>customer</category>
         <comments/>
         <name>Case Confirmation Widget</name>
-        <payload><![CDATA[<record_update table="sp_widget"> per the agent
-        prompt's Phase 1 specification, matching the sibling pattern used
-        by ../sp_portal_x_casemgmt_case_portal.xml.
-      - Indentation: 4 spaces for record fields (matching sibling-file
-        convention).
-      - Element ordering: alphabetical within the record (matching
-        sibling-file convention).
-      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
-        record's <name>).
-      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
-        attribute (matching the sys_app record's <scope>).
-      - Deterministic 32-char lowercase hex sys_id: computed as
-        MD5("sp_widget_x_casemgmt_case_confirmation_widget") =
-        a198a7f3386d6b0b146451dcfa3c2126. Re-generation of this XML is
-        byte-identical (no random UUIDs).
-      - Audit fields: <sys_created_by>admin</sys_created_by> and
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
-        repeatable timestamps (the same date is used by EVERY sibling
-        record in this scoped app for repeatable XML re-generation).
-      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
-        XML conformance for ServiceNow Update Set re-import preview
-        (AAP Section 0.7.3 validation gate 7).
-
-    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
-    ported per AAP Section 0.5.1):
-
-      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/acm/
-      portalgateway/service/DefaultPluggablePortalRequestService.java
-        line 60-65 - submitRequest(...) implementation; resolves provider
-                     by request type and forwards. Returns a PortalResponse
-                     containing the confirmation identifier returned by the
-                     downstream provider (in ArkCase: a request id; in this
-                     ServiceNow target: the auto-generated case number).
-
-      ArkCase's PortalResponse DTO carries the confirmation identifier
-      returned by submitRequest(...). The ServiceNow target's confirmation
-      widget consumes the equivalent identifier (the case number) and
-      renders it. The semantic intent is preserved (display submission
-      confirmation); the technology stack is restructured to fit
-      ServiceNow's UI Builder/Service Portal conventions.
-
-    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
-      THIS RECORD MUST LOAD AFTER:
-        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
-          cross-reference resolves against this record's <name>)
-        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped
-          application record; <sys_package> cross-reference resolves
-          against this record's <scope>)
-
-      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
-      tolerates any order within the same Update Set, since references
-      resolve by name):
-        - ./sp_widget_x_casemgmt_case_submission_widget.xml (the submission
-          widget embeds this widget via $sp.getWidget('x_casemgmt_case_
-          confirmation_widget', { number: ... }))
-        - ../pages/sp_page_x_casemgmt_case_submit.xml (the page hosts the
-          submission widget which transitively embeds this widget)
-
-    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
-      This widget supports Validation Gate 4 ("Portal - submission") by
-      providing the success-confirmation UI that the submission widget swaps
-      in after a successful POST. Without this widget, the submission user
-      experience would have no terminal success state.
--->
-<record_update table="sp_widget">
+        <payload><![CDATA[<record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function CaseConfirmationWidgetController($scope) {
@@ -13944,6 +13676,78 @@ function serverSetPending() {
         <type>Case Task Record</type>
         <update_domain>global</update_domain>
         <update_guid>1521a01608e9eaab7dbdad7533b656d9</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <category>customer</category>
+        <comments/>
+        <name>Demo Task 09</name>
+        <payload><![CDATA[<record_update table="x_casemgmt_case_task">
+    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
+        <case display_value="CASE0000004">CASE0000004</case>
+        <due_date>2026-04-29</due_date>
+        <status>Closed</status>
+        <subject>Demo task 09: Initial intake review for Pending case</subject>
+        <sys_class_name>x_casemgmt_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>29660c234fc925b7e37a57c0e0aa9406</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>x_casemgmt_case_task_demo_09</sys_update_name>
+        <type>Review</type>
+    </x_casemgmt_case_task>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt_case_task_demo_09</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>x_casemgmt_case_task</table>
+        <target_name>x_casemgmt_case_task_demo_09</target_name>
+        <type>Case Task Record</type>
+        <update_domain>global</update_domain>
+        <update_guid>1ae3dc36a9311aa91a22235e0367309a</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <category>customer</category>
+        <comments/>
+        <name>Demo Task 10</name>
+        <payload><![CDATA[<record_update table="x_casemgmt_case_task">
+    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
+        <case display_value="CASE0000008">CASE0000008</case>
+        <due_date>2026-04-28</due_date>
+        <status>Closed</status>
+        <subject>Demo task 10: Preliminary fact-check complete</subject>
+        <sys_class_name>x_casemgmt_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>02f9016a4d3e21e110d84dd61ce3c566</sys_id>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>x_casemgmt_case_task_demo_10</sys_update_name>
+        <type>Review</type>
+    </x_casemgmt_case_task>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt_case_task_demo_10</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>x_casemgmt_case_task</table>
+        <target_name>x_casemgmt_case_task_demo_10</target_name>
+        <type>Case Task Record</type>
+        <update_domain>global</update_domain>
+        <update_guid>711140e611fff0d39135dd12bf84b544</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
