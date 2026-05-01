@@ -1,0 +1,662 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Task 03 - Follow up with requester (Open / Follow-up)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the THIRD of the 8-task demo dataset; together with
+    tasks 01-02 and tasks 04-08, it satisfies the AAP requirement
+    (Section 0.7.4) of providing demo tasks that exercise the resolve-
+    blocker and resolve-success gates on both case-type flows. The
+    complete 8-task fixture matrix:
+
+        Task 01 - Open        / Investigation / parent case 03 (In Progress GI)
+        Task 02 - Closed      / Investigation / parent case 03 (In Progress GI)
+        Task 03 - Open        / Follow-up     / parent case 04 (Pending GI)        ## THIS FILE
+        Task 04 - Closed      / Review        / parent case 05 (Resolved GI)
+        Task 05 - Closed      / Other         / parent case 05 (Resolved GI)
+        Task 06 - In Progress / Investigation / parent case 08 (In Progress Complaint)
+        Task 07 - Open        / Investigation / parent case 08 (In Progress Complaint)
+        Task 08 - Closed      / Review        / parent case 09 (Resolved Complaint)
+
+    The 8-task dataset thus exercises:
+      * All 4 task types - this task is THE ONE AND ONLY canonical
+        demonstrator for the `Follow-up` task type (Investigation
+        appears on tasks 01, 02, 06, 07; Review appears on tasks 04
+        and 08; Other appears on task 05; Follow-up appears only
+        here). Per AAP Section 0.5.7 the case_task type Choice list
+        defines exactly four values - Investigation, Review,
+        Follow-up, Other - and Follow-up is the THIRD value, with a
+        deliberate HYPHEN between "Follow" and "up" (NOT a space, NOT
+        an underscore, NOT a single word). This task is the
+        LOAD-BEARING PROOF that the `Follow-up` choice value with
+        its exact hyphenated spelling is registered in
+        ../../choices/sys_choice_case_task_type.xml, accepted by the
+        case_task table's type-field dictionary entry, and surfaces
+        correctly on the form. Follow-up represents the agent's
+        outbound clarifying question to the requester or to a third
+        party - the activity that distinguishes a stalled case
+        (waiting on the agent) from a Pending case (waiting on
+        external input). Pairing the Follow-up task type with the
+        Pending parent case status creates the canonical
+        information-gap demonstration: case 04 is Pending awaiting
+        external info, and this Follow-up task is the agent's
+        actionable item to obtain that info.
+      * All 3 task statuses (Open, In Progress, Closed) - this task
+        contributes the FIRST of two Open tasks (the other being
+        task 07 on case 08); the Open status is the initial,
+        not-yet-started status that contrasts with both terminal
+        Closed and active In Progress, demonstrating that all three
+        registered status values are surfaced in the demo dataset.
+        The Open status on this task ALSO gates any future attempt
+        to resolve case 04: although case 04 is currently Pending
+        (not directly resolvable), if it were transitioned through
+        Pending -> In Progress -> Resolved the validate_resolved_
+        transition subflow would query non-Closed children of case 04
+        and find this Open task, returning the verbatim blocking
+        error "All tasks must be closed before resolving this case."
+        per AAP Section 0.5.5. This task is NOT load-bearing for any
+        immediate resolve-success path, but it IS load-bearing for
+        the demonstration that Pending cases retain Open child tasks
+        until the requested information is received.
+      * 5 unique parent cases (03, 04, 05, 08, 09) - this task is
+        the SOLE child of case 04 (Pending General Inquiry); no
+        other demo task references CASE0000004, making this task
+        the canonical exercise of the case-04-task association.
+        Pairing case 04 (Pending status) with this Open Follow-up
+        task is intentional: the Pending status by AAP Section 0.5.7
+        choice list semantically means "waiting on something
+        external," and the Follow-up task type semantically means
+        "agent's outbound clarifying question". Together they tell
+        the operational story: the agent has placed the case on
+        hold (Pending = Awaiting Info per case 04's pending_reason)
+        and has scheduled a follow-up call/email (this task) to
+        retrieve the missing input. The agent will execute the
+        follow-up activity, close THIS task, and then transition
+        case 04 from Pending to In Progress (which will clear the
+        pending_reason via the clear_pending_reason_on_inprogress
+        business rule). The case 04 -> In Progress -> Resolved path
+        is the ultimate goal, but at this moment the case is
+        deliberately stalled with this Open follow-up task as the
+        single gating action.
+      * Both flow paths (General Inquiry and Complaint) - this task
+        sits on a General Inquiry case (case 04). The General Inquiry
+        flow's resolve-blocker path is exercised by tasks 01 + 02 on
+        case 03; the General Inquiry flow's resolve-success path is
+        exercised by tasks 04 + 05 on case 05. THIS task does not
+        directly exercise a resolve gate (case 04 is in Pending
+        status, not In Progress), but its Open status would block
+        any hypothetical resolve attempt on case 04, demonstrating
+        that the resolve-blocker query is independent of where the
+        case currently sits in the lifecycle.
+
+    Lifecycle position - WHY Open / Follow-up / parent General Inquiry
+    case Pending is meaningful:
+      Per AAP Section 0.5.5 the canonical Pending semantics are: a
+      Pending case is one where the agent has placed it on hold
+      pending external input (see case 04's pending_reason =
+      "Awaiting Info" choice value). Per AAP Section 0.5.7 the
+      Pending case status accepts a pending_reason qualifier with
+      values "Awaiting Info", "Awaiting Third Party", "Other". The
+      Pending state is operator-initiated (not auto-triggered), and
+      transitioning OUT of Pending requires an operator-initiated
+      Pending -> In Progress transition that clears pending_reason
+      via the x_[scope]_clear_pending_reason_on_inprogress business
+      rule (see ../../business_rules/x_[scope]_clear_pending_reason_
+      on_inprogress.xml).
+
+      During the Pending interval the case-management workflow does
+      NOT prevent task creation/modification - tasks remain a
+      first-class child entity of the case and continue to be the
+      operator's tool for tracking outstanding work. THIS task is
+      the canonical demonstration of that interval's workflow:
+      while case 04 is Pending awaiting external info, the agent
+      has created a Follow-up task (with a +2 day due_date) to
+      track the outbound clarifying contact. When the agent
+      successfully obtains the requested information, two things
+      happen in the demo workflow:
+        (a) The agent closes this Open task by setting its status
+            to Closed (an operator-driven activity surfaced via the
+            case-form's related-list edit affordance).
+        (b) The agent operator-initiates the case 04 Pending ->
+            In Progress transition. The clear_pending_reason_on_
+            inprogress business rule fires, removing the
+            "Awaiting Info" pending_reason. Case 04 is now active
+            again.
+      Note that step (a) does NOT auto-trigger step (b) - per AAP
+      Section 0.5.5 there is no implicit Pending-clear-on-task-
+      closure flow logic. The two activities are operationally
+      sequential but technically independent.
+
+      The Follow-up task type captures the agent's outbound
+      clarifying contact activity. Per the AAP's Section 0.5.7
+      Choice list for case_task type, Follow-up is the third of
+      four values (Investigation, Review, Follow-up, Other),
+      positioned to capture work that is neither initial fact-
+      gathering (Investigation), nor final pre-resolution sign-off
+      (Review), nor miscellaneous administrative housekeeping
+      (Other), but specifically the agent's outbound clarifying
+      question or status check. The "Follow up with requester"
+      subject makes this lifecycle role explicit: the agent is
+      reaching out to the requester (the external party who
+      submitted case 04 via the Experience Portal or whose
+      synthetic requester_name is captured on the case) to obtain
+      the missing input that is keeping case 04 Pending. The Open
+      status is consistent with this not-yet-executed semantic:
+      the agent has scheduled the follow-up but has not yet
+      performed the outreach.
+
+      The +2 day due_date reflects that the follow-up is scheduled
+      for two days from now (relative to the build environment date
+      2026-05-01, i.e., 2026-05-03) - a near-term, time-sensitive
+      action that is NOT yet overdue. The relative date pattern
+      uses positive offsets (2 days hence) for active, scheduled
+      tasks, consistent with Open status semantics (a task that has
+      been scheduled but not yet started, with a target completion
+      date in the near future). The +2 day window is also load-
+      bearing for the dashboard's "My Overdue Tasks" report
+      contract: the date qualifier (due_date < today) is NOT
+      satisfied (2026-05-03 is in the future relative to today
+      2026-05-01), so this task correctly does NOT appear on the
+      Agent Workspace's "My Overdue Tasks" widget. This
+      demonstrates that the report's date filter correctly excludes
+      future-dated active tasks rather than incorrectly flagging
+      them as overdue. By contrast, sibling task 01 has a -3 day
+      due_date and IS overdue (and Open), making task 01 the
+      positive-test fixture for the My Overdue Tasks widget; this
+      task is the negative-test fixture (Open but not yet overdue).
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This task DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this task's <sys_scope>/<sys_package>
+             reference fields resolve via the source attribute against
+             those records)
+        - The case_task table definition at
+            ../../tables/x_[scope]_case_task.xml
+            (this record's <sys_class_name>x_[scope]_case_task</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case_task table under
+            ../../dictionary/x_[scope]_case_task_*.xml  (every populated
+            field below requires its dictionary entry to be present)
+        - All choice records for case_task under ../../choices/
+            (specifically sys_choice_case_task_type.xml and
+             sys_choice_case_task_status.xml; the type=Follow-up and
+             status=Open choice values must be registered; "Follow-up"
+             with a single hyphen between "Follow" and "up", Title
+             Case "Follow", lowercase "up", NOT "Follow up" with a
+             space, NOT "Followup" without a separator, NOT "Follow_up"
+             with an underscore, NOT "FOLLOW-UP" all uppercase; "Open"
+             with capital O, not "open" or "OPEN")
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_[scope]_case_task.xml  (the
+             platform may auto-generate a TASK0000003-format value if
+             the table is configured for auto-numbering; this record
+             does not specify <number/> explicitly)
+        - The role records under ../../roles/  (the demo agent's
+             assigned-only access requires the x_[scope]_case_agent
+             role and its task-table ACLs; the demo manager's full
+             access requires the x_[scope]_case_manager role)
+        - The ACL records under ../../acl/ for case_task (table-level
+             read/write/create/delete ACLs gate access for the demo
+             agent and demo manager; the demo viewer reads via the
+             read-all ACL)
+        - ../users/sys_user_x_[scope]_demo_agent.xml  (referenced by
+             <assigned_to>; resolved by user_name lookup)
+        - ../cases/x_[scope]_case_demo_04.xml  (referenced by <case>;
+             resolved by number lookup; this is the parent Pending
+             General Inquiry case for which this task is the SOLE
+             child task in the demo dataset)
+
+      This task IS REFERENCED BY (loaded AFTER this record):
+        - The validate_resolved_transition subflow at
+            ../../flows/sub_flows/validate_resolved_transition.xml
+            DOES count this task as a non-Closed child of case 04
+            (the subflow's query filters on status != Closed, and
+            this task's status IS Open, which != Closed). However,
+            case 04 is currently in Pending status, not In Progress,
+            so the resolve gate (which only fires on In Progress ->
+            Resolved attempts) does not currently apply. If case 04
+            were operator-transitioned Pending -> In Progress -> the
+            validate_resolved_transition subflow would query non-
+            Closed children of case 04 and find THIS Open task,
+            returning the verbatim blocking error "All tasks must
+            be closed before resolving this case." Although this is
+            not the immediate workflow path for case 04, it
+            demonstrates that the resolve gate's logic is robust
+            against Open child tasks regardless of the parent case's
+            current status.
+        - Dashboard report ../../reports/x_[scope]_my_overdue_tasks.xml
+            does NOT include this task in its "My Overdue Tasks"
+            list. The report's filter is "due_date < today AND
+            status != Closed AND assigned_to = current user". This
+            task's status (Open) and assigned_to (demo agent)
+            satisfy two of the three qualifiers, but the date
+            qualifier is NOT satisfied: due_date 2026-05-03 is in
+            the FUTURE relative to today 2026-05-01. Correctly
+            excluded - this is a not-yet-overdue active task. By
+            contrast, task 01's due_date is -3 days (in the past)
+            and IS in the report.
+        - The Agent Workspace dashboard's "My Overdue Tasks" widget
+            similarly excludes this task for the same reason.
+        - The Agent Workspace dashboard's "Case count by status"
+            donut counts case 04 (this task's parent) in the
+            Pending slice, not this task; the donut is keyed off
+            case.status, not case_task.status.
+        - The clear_pending_reason_on_inprogress business rule at
+            ../../business_rules/x_[scope]_clear_pending_reason_on_
+            inprogress.xml fires on the case 04 Pending -> In
+            Progress transition (an operator-driven future activity
+            in the demo workflow), but does NOT directly act on
+            this task. The closure of THIS task is a SEPARATE
+            operator-driven activity that precedes (or in the demo
+            scenario, is operationally paired with) the Pending ->
+            In Progress transition.
+        - The validate_closed_transition subflow checks at case-
+            level (manager role, set closed_date), not task-level;
+            this task does not directly participate in that
+            subflow's logic.
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER:
+            * The scoped application records under ../../app/
+            * The case_task table at ../../tables/x_[scope]_case_task.xml
+            * All dictionary entries under ../../dictionary/
+              x_[scope]_case_task_*.xml
+            * The choice records sys_choice_case_task_type.xml and
+              sys_choice_case_task_status.xml
+            * The demo agent user record at
+              ../users/sys_user_x_[scope]_demo_agent.xml  (assigned_to
+              resolves by user_name lookup)
+            * The parent case at
+              ../cases/x_[scope]_case_demo_04.xml  (case field
+              resolves by number lookup; that case must exist before
+              this task can reference it)
+        - This record can be loaded BEFORE or AFTER its sibling task
+          records (01-02 and 04-08) since they are mutually
+          independent (each task's only outbound references are to
+          a case and a user, not to other tasks).
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's eight authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        subject = "Demo task 03: Follow up with requester"
+                  (synthetic identifier using the literal word "Demo"
+                   plus a numeral plus a generic case-handling-action
+                   phrase "Follow up with requester"; "Follow up" is
+                   a generic agent-activity descriptor written as the
+                   English phrase with a SPACE between "Follow" and
+                   "up" - this is the natural English phrase, NOT
+                   the typed Choice value `Follow-up` (which uses a
+                   hyphen). The CHOICE value `Follow-up` for the
+                   <type> element is a separate distinct string that
+                   appears in <type>Follow-up</type> below; the two
+                   strings are intentionally different - the subject
+                   uses natural English orthography, the type uses
+                   the registered Choice key with its hyphenated
+                   spelling. "with requester" is a generic
+                   preposition+role phrase indicating the recipient
+                   role of the follow-up activity, not a real
+                   person's name; "requester" is a role label, not a
+                   PII identifier; no PII; the wording emphasizes
+                   the task's lifecycle role - the agent's outbound
+                   clarifying contact to the case's requester to
+                   obtain the missing information that is keeping
+                   case 04 Pending)
+        NO description / NO details / NO comments fields populated;
+        the task's primary content is captured in the subject alone.
+        NO assignee email, phone, or other PII-bearing fields.
+
+      Rule 2 - Choice value precision (CRITICAL FOR THIS TASK):
+        type   = "Follow-up"  (exactly as registered in
+                  ../../choices/sys_choice_case_task_type.xml; the
+                  third value of the four task types - Investigation,
+                  Review, Follow-up, Other; spelling is HYPHENATED -
+                  "Follow-up" with a single hyphen between "Follow"
+                  and "up", Title Case "Follow", lowercase "up". This
+                  is the SINGLE MOST COMMON ERROR POINT for this
+                  file because the natural English phrase "Follow up
+                  with requester" appearing in the <subject> element
+                  uses a SPACE between "Follow" and "up", but the
+                  typed Choice key uses a HYPHEN. Anti-patterns:
+                    - "Follow up"   (space; this is the English
+                                     phrase, NOT the choice key)
+                    - "Followup"    (no separator)
+                    - "Follow_up"   (underscore)
+                    - "FOLLOW-UP"   (uppercase)
+                    - "follow-up"   (lowercase F)
+                    - "Follow-Up"   (uppercase U)
+                  CORRECT: exactly "Follow-up" - single hyphen,
+                  Title Case "Follow", lowercase "up". THIS VALUE IS
+                  LOAD-BEARING because this task is THE SOLE
+                  demonstrator of the `Follow-up` choice value in
+                  the demo dataset; without this task's exact match,
+                  no fixture in the dataset would exercise the
+                  third of four task types. Verifiable with: grep
+                  -E '<type>Follow-up</type>' returns exactly 1
+                  match in this file. grep -E '<type>Follow up</type>'
+                  returns exactly 0 matches (verifies the HYPHEN
+                  form is used, not the SPACE form).
+        status = "Open"  (exactly as registered in
+                  ../../choices/sys_choice_case_task_status.xml; the
+                  first value of the three task statuses - Open, In
+                  Progress, Closed; capital O deliberate - "Open"
+                  NOT "open" (lowercase), NOT "OPEN" (all
+                  uppercase), NOT "New" or "Pending" (alternative
+                  terms not in the choice list; specifically NOT
+                  "Pending" - the Pending status applies to the
+                  parent case, NOT to child tasks. case_task.status
+                  has only Open / In Progress / Closed; case.status
+                  is the one with Pending). THIS VALUE IS
+                  LOAD-BEARING because Open is the canonical
+                  initial-task status that pairs naturally with the
+                  +2 day future-dated due_date, demonstrating the
+                  scheduled-but-not-yet-started workflow state.
+                  Verifiable with: grep -E '<status>Open</status>'
+                  returns exactly 1 match in this file.)
+
+      Rule 3 - Date format:
+        due_date = "2026-05-03"  (YYYY-MM-DD format per AAP Section
+                  0.5.7 "due_date" row of case_task schema specifying
+                  Date type; the value is computed as today plus 2
+                  days at file-generation time. This is the standard
+                  ServiceNow Date field format - NOT DateTime; no
+                  timezone, no time-of-day component. The relative
+                  +2 day offset places the due_date in the near
+                  future, consistent with an Open task pattern. The
+                  build-time computation ensures the value remains
+                  semantically meaningful regardless of when the
+                  Update Set is imported. Today is 2026-05-01 per
+                  the build environment date; +2 days = 2026-05-03.
+                  This value contrasts with sibling tasks 04 and 05
+                  (-1 day each, completed yesterday) and tasks 06
+                  (+7 days), 07 (+3 days), 08 (-2 days), and 01
+                  (-3 days), demonstrating that the demo dataset
+                  spans both past-due and future-due time windows
+                  to exercise the My Overdue Tasks report's date
+                  filter.)
+
+      Rule 4 - Reference resolution by stable human-readable key
+              (AAP Section 0.7.2 "NO sys_id literals anywhere"):
+        case        : <case display_value="CASE0000004">CASE0000004
+                      </case>  resolves to demo case 04 by the case
+                      table's idempotent number lookup. CASE0000004
+                      is the auto-numbered value the platform
+                      generates for demo case 04 since cases 01-04
+                      import in order with the CASE0000001-format
+                      auto-number counter (case 01 -> CASE0000001,
+                      case 02 -> CASE0000002, case 03 -> CASE0000003,
+                      case 04 -> CASE0000004). This task's parent
+                      therefore resolves to the demo case 04 record
+                      at ../cases/x_[scope]_case_demo_04.xml, which
+                      is the Pending General Inquiry case awaiting
+                      external information per its pending_reason =
+                      "Awaiting Info".
+        assigned_to : <assigned_to display_value="x_[scope]_demo_agent">
+                      x_[scope]_demo_agent</assigned_to>  resolves
+                      to the demo agent user by user_name lookup.
+                      The demo agent is the assigned_to on every
+                      one of the 8 demo tasks per the seed-script's
+                      task table (the agent is the primary case
+                      worker; the manager approves/closes; the
+                      viewer observes).
+
+      Rule 5 - All 6 mandatory case_task fields populated:
+        case        - mandatory parent reference - CASE0000004
+        subject     - mandatory String(255) - "Demo task 03: Follow
+                      up with requester"
+        type        - mandatory Choice - "Follow-up"
+        status      - mandatory Choice - "Open"
+        assigned_to - mandatory Reference->sys_user - x_[scope]_demo_agent
+        due_date    - mandatory Date - 2026-05-03
+        Per AAP Section 0.5.7 case_task schema, these 6 fields are
+        the ENTIRE schema; this record populates every field, leaves
+        no null required values, and adds no extra fields.
+
+      Rule 6 - Scope binding:
+        <sys_scope>   binds this task row to the scoped application
+                      via the scope source name "x_[scope]" defined
+                      in ../../app/sys_scope/x_[scope].xml at
+                      <source>x_[scope]</source>; the display_value
+                      "Case Management" matches the sys_app's human-
+                      readable name.
+        <sys_package> follows the same pattern with the additional
+                      source="x_[scope]" attribute that is required
+                      by the Update Set engine for scope-package
+                      binding.
+        Note: the source attribute value "x_[scope]" matches what
+        every peer file uses (cases 01-10, sys_user_*,
+        sys_user_group_*, sys_user_has_role_*, dictionary entries,
+        ACL records, role records, and tasks 04, 05, 06, 07, and
+        08); it is the scope's <source> field, NOT the scoped
+        application's sys_update_name. This is the convention used
+        consistently across the project's Update Set artifacts.
+
+      Rule 7 - Idempotency anchor:
+        The task's idempotent key is the (case, subject) tuple:
+        (CASE0000004, "Demo task 03: Follow up with requester").
+        The companion seed script ../../scripts/seed_demo_data.js
+        ensureTask() helper queries x_[scope]_case_task by (case,
+        subject) BEFORE inserting; the action="INSERT_OR_UPDATE"
+        attribute on the inner <x_[scope]_case_task> element
+        ensures the same behavior at Update Set import time.
+        The task's OWN <sys_id> below is the record's primary key
+        and is a deterministic 32-character lowercase hex value
+        (MD5 of the canonical idempotent subject "Demo task 03:
+        Follow up with requester" =
+        922ef8bd877c160b4468ddfe919d8a52) - so the Update Set
+        engine resolves the same sys_id on every PDI import, making
+        the record byte-identical and collision-free across
+        re-imports per AAP Section 0.7.1 round-trip-verification
+        gate (Validation Gate 7).
+
+      Rule 8 - Scoped Update Set XML conventions:
+        Root element:  <record_update table="x_[scope]_case_task">
+        Inner element: <x_[scope]_case_task action="INSERT_OR_UPDATE">
+                       for idempotent re-import.
+        UTF-8 encoding declared in XML prolog.
+        Element ordering: alphabetical (matching the established
+        peer convention used by sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, role records, all 10 case demo
+        records, tasks 04, 05, 06, 07, and 08, and dictionary
+        entries across the scoped Update Set).
+        Unix-style line endings (LF) per AAP file authoring
+        conventions.
+        Scope-placeholder preservation: the literal `[scope]` token
+        is preserved verbatim throughout the file - in the
+        sys_class_name, sys_update_name, table attribute, inner
+        element name, all cross-reference text values, and the
+        file path. The PDI substitutes the auto-assigned concrete
+        scope id at apply-time; pre-substituting here would break
+        the substitution mechanism.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte
+    ported) per AAP Section 0.8.1:
+      acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java
+        ArkCase's AcmTask JPA entity declares ~30+ fields including
+        title (the source for our <subject>), dueDate (the source
+        for our <due_date>; @NotNull-annotated for Bean Validation
+        - we preserve the mandatory constraint via the dictionary
+        entry's mandatory flag), assignee (the source for our
+        <assigned_to>), status (the source for our <status>; with
+        values like OPEN, ASSIGNED, IN_PROGRESS, COMPLETE, CLOSED
+        in ArkCase - we collapse these to the user-prompt's
+        three-value choice list Open / In Progress / Closed;
+        ArkCase's OPEN uppercase form maps to our Title-Case "Open"
+        label), type (the source for our <type>; in ArkCase a
+        free-form String - we constrain to the four-value choice
+        list Investigation / Review / Follow-up / Other; this
+        task's "Follow-up" value maps semantically to ArkCase's
+        clarification-style task variants such as request-info,
+        await-response, and contact-requester that in ArkCase
+        could carry any free-form type label. The hyphenated
+        "Follow-up" form is a target-defined typographic choice
+        with no direct ArkCase analog), and attachedToObjectId
+        (semantic source for our <case> - in ArkCase a generic
+        parent-object FK pattern; here narrowed to a typed
+        reference to x_[scope]_case). ArkCase's percentComplete /
+        pendingStatus / adhocTask / completed / buckslip / outlook
+        / ECM / participants / candidate-claim-groups /
+        next-assignee / legacy-system-id / business-process /
+        workflow-request / document-under-review / documents-to-
+        review / child-objects / rework-instructions / outcome /
+        restriction / Activiti BPMN engine integration are all OUT
+        OF POC SCOPE per AAP Section 0.3.2 and are intentionally
+        absent from the target schema.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output
+        flag) returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|
+        doe|@gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net) -
+        the synthetic identifiers ("Demo task 03: Follow up with
+        requester", "x_[scope]_demo_agent", "CASE0000004") do not
+        include any PII tokens; "Follow up" is a generic
+        agent-activity descriptor written as the natural English
+        phrase, not a person's name; "with requester" is a generic
+        preposition+role-label phrase, not a real person or
+        organization.
+      - Choice-value validation:
+        <type>Follow-up</type>  (HYPHEN, single, between "Follow"
+            and "up") - exact-case match against the registered
+            choice record. Verifiable with:
+              grep -E '<type>Follow-up</type>' returns exactly 1
+                match in this file (confirms HYPHEN form, Title
+                Case "Follow", lowercase "up")
+              grep -E '<type>Follow up</type>' returns exactly 0
+                matches in this file (confirms the SPACE form is
+                NOT used for the typed Choice value)
+        <status>Open</status>  (capital O) - exact-case match
+            against the registered choice record. Verifiable with:
+              grep -E '<status>Open</status>' returns exactly 1
+                match in this file
+      - Date-format validation: <due_date>2026-05-03</due_date>
+        is YYYY-MM-DD with no time-of-day component.
+      - All-mandatory-fields-populated validation: all 6 mandatory
+        case_task fields (case, subject, type, status,
+        assigned_to, due_date) are present and non-empty.
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        task's own primary key); NO sys_id literals appear in any
+        cross-reference field; <case> and <assigned_to> use the
+        human-readable lookup keys CASE0000004 and
+        x_[scope]_demo_agent respectively as both the
+        display_value attribute AND the text content.
+      - Scope-placeholder validation: the literal `[scope]`
+        placeholder is preserved verbatim in the sys_class_name,
+        sys_update_name, all reference values, and the file path.
+      - Idempotency-key validation: (case, subject) =
+        (CASE0000004, "Demo task 03: Follow up with requester") is
+        unique across the 8-task dataset - no other task on case
+        04 exists in the demo dataset (this task is the SOLE child
+        of case 04) and no other task has subject "Demo task 03:
+        Follow up with requester".
+
+    Key insights (per the agent prompt):
+      1. THE `Follow-up` HYPHEN IS THE MOST COMMON ERROR POINT.
+         AAP Section 0.5.7 explicitly defines this with a hyphen.
+         The natural English phrase "Follow up with requester" in
+         the <subject> element uses a SPACE between "Follow" and
+         "up", but the typed Choice value `Follow-up` for the
+         <type> element uses a HYPHEN. They are intentionally
+         DIFFERENT strings serving different purposes: the subject
+         is human-readable English; the type is a typed key in the
+         choice list. Validate after authoring with:
+           grep -E '<type>Follow-up</type>'  -> 1 match
+           grep -E '<type>Follow up</type>'  -> 0 matches
+      2. THE SUBJECT "Follow up with requester" USES A SPACE
+         (English phrase), but the type CHOICE value is `Follow-up`
+         (HYPHEN, typed concept). They are intentionally different
+         strings - this is by design, not by mistake. The subject
+         describes what the agent will DO ("follow up" as a verb
+         phrase); the type categorizes the task into a registered
+         workflow class ("Follow-up" as a noun keyword).
+      3. THIS TASK IS ON A PENDING CASE. Case 04 is in Pending
+         status (`pending_reason=Awaiting Info`). The follow-up
+         task tracks the agent's outbound call/email to the
+         requester to obtain the missing information. The pairing
+         of Pending case status + Follow-up task type is the
+         canonical information-gap demonstration pattern.
+      4. THE due_date IS +2 DAYS (NEAR-TERM, NOT YET OVERDUE).
+         This makes the task time-sensitive but NOT yet overdue,
+         demonstrating realistic operational urgency. The +2 day
+         offset specifically:
+           - Creates a not-yet-overdue Open task (correctly
+             EXCLUDED from My Overdue Tasks report)
+           - Contrasts with task 01's -3 day overdue Open task
+             (correctly INCLUDED in My Overdue Tasks report)
+         Together, tasks 01 and 03 demonstrate that the date
+         filter on the My Overdue Tasks report correctly partitions
+         Open tasks into overdue (past-due) and not-yet-overdue
+         (future-due) buckets.
+      5. TASK TYPE `Follow-up` IS ONE OF FOUR AAP-MANDATED VALUES:
+         Investigation, Review, Follow-up, Other. This task is the
+         CANONICAL DEMONSTRATOR for the Follow-up type - the SOLE
+         exercise of this choice value in the entire 8-task demo
+         dataset. Without this task, the dataset would lack any
+         Follow-up exercise, leaving the third of four task types
+         untested.
+      6. NO AUTOMATIC TRANSITION FROM PENDING TO IN PROGRESS WHEN
+         THIS TASK IS CLOSED. Per AAP Section 0.5.5, Pending -> In
+         Progress transitions are operator-initiated, not
+         auto-triggered by task closure. The seed data correctly
+         demonstrates a Pending case with an Open task, but
+         resolving the task does NOT automatically change the case
+         status. The clear_pending_reason_on_inprogress business
+         rule fires on the OPERATOR-INITIATED Pending -> In
+         Progress transition, not on task-closure events.
+      7. BUILD AGENT COMPUTES due_date DYNAMICALLY at file-
+         generation time so that the relative offset (+2 days) is
+         preserved across importation timeframes. The actual
+         stored value (2026-05-03) is the static result of today
+         + 2 days evaluated at this file's generation time
+         (today = 2026-05-01 per the build environment date).
+      8. NO PII. The "Follow up with requester" subject is
+         generic. "Follow up" is an agent-activity descriptor,
+         not a person's name. "with requester" is a generic
+         preposition+role-label phrase, not a real person or
+         organization. No real names, real email addresses, real
+         phone numbers, or real organization names appear
+         anywhere in this file. The synthetic identifiers
+         ("x_[scope]_demo_agent", "CASE0000004") are scoped
+         placeholders or auto-numbered identifiers with no
+         real-world correspondence.
+      9. ELEMENT ORDERING IS STRICTLY ALPHABETICAL. The element
+         ordering in this file (within the inner
+         <x_[scope]_case_task> element) is: assigned_to, case,
+         due_date, status, subject, sys_class_name,
+         sys_created_by, sys_id, sys_package, sys_scope,
+         sys_update_name, type. This matches the strict
+         alphabetical convention used by every peer task file
+         (04, 05, 06, 07, 08) and every other peer record file
+         in the scoped Update Set artifacts.
+     10. THIS TASK IS THE SOLE CHILD OF CASE 04. No other demo
+         task references CASE0000004. This makes the task-04
+         pairing the definitive exercise of the case-04-task
+         association in the demo dataset. Sibling cases 03, 05,
+         and 08 each have multiple child tasks (case 03: tasks
+         01, 02; case 05: tasks 04, 05; case 08: tasks 06, 07);
+         case 09 has one task (task 08); case 04 has one task
+         (this task). Cases 01, 02, 06, 07, and 10 have zero
+         demo tasks (those cases exercise non-task-related
+         lifecycle points: Draft, Open, Open Complaint, Resolved
+         Complaint, Closed Complaint).
+-->
+<record_update table="x_[scope]_case_task">
+    <x_[scope]_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_[scope]_demo_agent">x_[scope]_demo_agent</assigned_to>
+        <case display_value="CASE0000004">CASE0000004</case>
+        <due_date>2026-05-03</due_date>
+        <status>Open</status>
+        <subject>Demo task 03: Follow up with requester</subject>
+        <sys_class_name>x_[scope]_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>922ef8bd877c160b4468ddfe919d8a52</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>x_[scope]_case_task_demo_03</sys_update_name>
+        <type>Follow-up</type>
+    </x_[scope]_case_task>
+</record_update>
