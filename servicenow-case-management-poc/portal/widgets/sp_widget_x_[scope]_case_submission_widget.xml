@@ -1,0 +1,811 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sp_widget` row that
+    defines the CASE SUBMISSION WIDGET of the unauthenticated Experience Portal
+    inside the scoped application `x_casemgmt`. This widget is the FIRST of
+    the three Service Portal widgets required by AAP Section 0.4.4 ("two
+    unauthenticated pages: case submission and case status lookup") and AAP
+    Section 0.5.1 (in-scope artifact list).
+
+    PURPOSE (AAP Sections 0.1.1 / 0.4.4 / 0.7.4 / Validation Gate 4
+    "Portal - submission"):
+
+      AAP Section 0.4.4 verbatim ("UI Design - External Experience Portal UI"):
+        "Page 1 - Case Submission: a simple form with five inputs (subject,
+         type, description, requester_name, requester_email). On submit, calls
+         the scripted REST endpoint, displays a confirmation panel showing the
+         returned case number and a friendly 'Your case has been submitted'
+         message."
+
+      AAP Section 0.5.1 (in-scope artifact, resolved to concrete scope):
+        "servicenow-case-management-poc/portal/sp_widget_x_casemgmt_case_submission_widget.xml -
+         submission widget"
+
+      This widget renders three UX surfaces:
+        1. A 5-field submission form (subject, type, description,
+           requester_name, requester_email) plus a Submit button.
+        2. A conditionally rendered ERROR message panel (when
+           c.errorMessage is non-empty) for generic submission failures.
+        3. A conditionally rendered CONFIRMATION panel (when c.data.submitted
+           is true) that embeds the sibling confirmation widget
+           (sp_widget_x_casemgmt_case_confirmation_widget) via the
+           <sp-widget widget="c.data.confirmationWidget"> directive. The
+           confirmation widget displays the verbatim text "Your case has
+           been submitted" plus the auto-generated case number returned
+           by the REST endpoint.
+
+      The form panel and the confirmation panel are mutually exclusive:
+      `c.data.submitted` is set to true ONLY after a successful POST, so
+      only one of the two panels is visible at any time. The error panel
+      is rendered INSIDE the form panel so the user can correct and
+      retry.
+
+    THE WIDGET IS THE THIRD LEG OF THE SUBMISSION TRIPOD:
+      The case-submission user journey requires three separate ServiceNow
+      artifacts working together, all in this scoped application:
+
+        1. THIS widget (sp_widget_x_casemgmt_case_submission_widget) -
+           the user-facing form and submission orchestration.
+        2. The scripted REST endpoint
+           (sys_ws_definition_x_casemgmt_case_submit + the paired
+           sys_ws_operation_x_casemgmt_case_submit_post) - the
+           anonymous HTTP POST receiver at /api/x_casemgmt/case_submit.
+        3. The Script Include (x_casemgmt.CasePortalService) - the
+           field-whitelist enforcer and the GlideRecord persistence layer
+           that the REST operation script delegates to.
+
+      Validation Gate 4 ("Portal - submission") verbatim from AAP Section
+      0.7.3:
+        "Case created from unauthenticated portal submission - Case appears
+         in internal list with Draft status and correct case number."
+      All three legs must be present and functional for Gate 4 to pass.
+      Without THIS widget (the user-facing form), anonymous users have no
+      way to invoke the REST endpoint at all.
+
+    UNAUTHENTICATED ANONYMOUS-ACCESS DESIGN (AAP Section 0.4.4 verbatim:
+    "two unauthenticated pages"):
+      Three configuration mechanisms work together to make this widget
+      renderable by anonymous, unauthenticated callers (matching the parent
+      page's flags and the parent portal's anonymous-access settings):
+
+        1. <public>true</public> - explicit signal to the platform's
+           authorization layer that THIS WIDGET is exempt from the standard
+           authentication challenge. Anonymous users can render the widget.
+
+        2. <internal>false</internal> - the widget is publicly accessible
+           and NOT restricted to "internal" (employee-only) widgets.
+
+        3. <roles/> - empty. No roles are required to render the widget.
+           The Service Portal widget-level role-based gating is bypassed by
+           the empty roles list, so any caller (including anonymous) who
+           reaches the parent page can render the widget.
+
+      All three mechanisms are necessary; omitting any one breaks the
+      anonymous-access guarantee for the chained user journey:
+        anonymous user -> portal record -> case submit page -> THIS
+        submission widget -> /api/x_casemgmt/case_submit REST endpoint
+        -> CasePortalService.submitCase() -> x_casemgmt_case row inserted
+        in Draft status.
+
+    DATA FLOW (CLIENT-DRIVEN; SERVER SCRIPT IS MINIMAL):
+      Unlike a typical data-driven widget (which fetches data server-side
+      via the `data` initialization function and passes it to the client),
+      THIS widget's data flow is mostly client-driven, with the server
+      script doing only one job: pre-loading the embedded confirmation
+      widget so the template can render it later.
+
+        1. The widget renders with empty form state (c.formData fields
+           initialized to '').
+        2. The server script initializes data.confirmationWidget via
+           $sp.getWidget('x_casemgmt_case_confirmation_widget',
+           { number: '' }) so the embedded widget is ready to render
+           when c.data.submitted flips to true.
+        3. The user fills in the 5 form fields (subject, type,
+           description, requester_name, requester_email).
+        4. The user submits the form (clicks the button or presses
+           Enter inside any input).
+        5. The client controller's c.submit() function POSTs the
+           5-field whitelisted payload to /api/x_casemgmt/case_submit
+           via $http.post() (AngularJS 1.5.x service).
+        6. The scripted REST operation handler at
+              ../rest/sys_ws_operation_x_casemgmt_case_submit_post.xml
+           processes the POST, delegates to
+              ../../script_includes/x_casemgmt_CasePortalService.xml
+           (submitCase() method), and returns either:
+              HTTP 201 with body { number, message: 'Your case has
+              been submitted' }, OR
+              HTTP 400 / 500 with body { error: '<message>' }
+        7. On HTTP 201: the controller mutates
+           c.data.confirmationWidget.options.number to the returned
+           case number, sets c.data.submitted = true, and the template
+           swaps the form for the embedded confirmation widget.
+        8. On HTTP 4xx / 5xx / network error: the controller sets
+           c.errorMessage to a generic, non-leaking message
+           ("Submission failed. Please try again.") and the template
+           displays the alert banner above the submit button.
+
+    CONFIRMATION-WIDGET EMBEDDING (canonical Service Portal pattern):
+      The submission widget embeds the confirmation widget using
+      ServiceNow Service Portal's canonical two-step embedding pattern:
+
+        Step 1 (server side, in the <script> body): pre-load the
+        confirmation widget by stable widget ID via $sp.getWidget():
+            data.confirmationWidget = $sp.getWidget(
+                'x_casemgmt_case_confirmation_widget',
+                { number: '' }
+            );
+        This returns a widget-instance object that includes the
+        compiled template, the controller wrapping, the options
+        object, and the data object. The empty initial number is
+        a placeholder until the POST returns.
+
+        Step 2 (template side, inside the conditional): render via
+        the <sp-widget> directive bound to the pre-loaded instance:
+            <sp-widget widget="c.data.confirmationWidget"></sp-widget>
+        Wrapped in <div ng-if="c.data.submitted"> so it renders only
+        after a successful POST.
+
+      The case number is passed into the embedded widget by mutating
+      its options object in the success callback:
+            c.data.confirmationWidget.options.number = String(
+                response.data.number
+            );
+      Because the embedded widget's controller assigns
+      c.options = $scope.options, the mutation propagates reactively
+      through Angular's two-way binding and the embedded template's
+      {{c.options.number}} interpolation reflects the new value.
+
+      No hardcoded sys_id is used anywhere in the embedding. The
+      $sp.getWidget() call resolves the confirmation widget by its
+      stable text ID, which is itself the <id> field of
+      ../widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml.
+
+    FIVE-FIELD WHITELIST (DEFENSE-IN-DEPTH):
+      Per AAP Section 0.4.4, the case submission form accepts EXACTLY
+      five fields:
+            subject, type, description, requester_name, requester_email
+      The whitelist is enforced at THREE layers:
+
+        1. The HTML form has EXACTLY five inputs - the user cannot
+           supply additional fields through the standard UX.
+        2. The c.formData object on the client controller has EXACTLY
+           five keys - the POST payload is built from this object.
+        3. The Script Include (x_casemgmt.CasePortalService.submitCase())
+           extracts ONLY these five fields from the POST payload before
+           inserting the GlideRecord - any additional fields a malicious
+           client crafts are silently dropped server-side.
+
+      Defense-in-depth ensures that no future refactor of any single
+      layer can accidentally expose internal fields (priority, status,
+      assigned_group, assigned_agent, opened_date, closed_date,
+      audit fields, sys_id) to anonymous callers.
+
+      Per AAP Section 0.7.4, four of the five fields are mandatory
+      (subject, type, description, requester_name); requester_email
+      is optional. The HTML5 `required` attribute on the four mandatory
+      inputs plus the AngularJS form's $invalid binding to the submit
+      button's ng-disabled prevents submission of incomplete payloads
+      at the UI layer; the Script Include re-validates on the server
+      side as a defense-in-depth fallback.
+
+    HTTP-ERROR HARDENING (information-leakage prevention):
+      All HTTP errors (4xx, 5xx, network 0) are treated identically by
+      the client: c.errorMessage is set to the generic, hardcoded
+      string "Submission failed. Please try again." (NOT echoed from
+      the server's error.data.error or error.statusText).
+
+      This is INTENTIONAL information-leakage hardening:
+        - An attacker probing the submit endpoint cannot distinguish
+          a validation error from a server error from a network error
+          - all show the same UX.
+        - The verbatim error message is hardcoded in the client
+          controller, NOT pulled from the server's error response body.
+          The server's HTTP 4xx/5xx body is NEVER trusted by the client
+          (defense against header injection, response smuggling,
+          malicious server responses).
+        - The error.data.error and error.statusText fields are NEVER
+          displayed to the user; they are deliberately discarded.
+        - No console.log() calls leak the form data or response into
+          the browser console (forensics surface).
+
+      A defensive guard also exists in the success callback: if HTTP 201
+      is received but response.data.number is missing or falsy (which
+      should never happen if the REST operation conforms to its contract),
+      the controller treats it as a failure and sets the same generic
+      error message. This guards against partial or malformed success
+      responses that might occur during platform upgrades or transient
+      backend bugs.
+
+    DOUBLE-SUBMIT PREVENTION:
+      The c.submitting boolean flag, combined with the submit button's
+      ng-disabled binding, prevents the user from accidentally submitting
+      the same case twice. Three independent guards work together:
+
+        1. The button is disabled by ng-disabled="c.submitting ||
+           caseSubmitForm.$invalid" while a request is in flight (and
+           also when the form has any invalid fields).
+        2. The c.submit() function has an early-return guard: if
+           c.submitting is already true, the call is a no-op.
+        3. The button text changes from "Submit" to "Submitting..."
+           via ng-if to provide clear UX feedback that the request
+           is in progress.
+
+      All three guards are necessary; relying on any one alone is
+      brittle (e.g., a user could press Enter inside an input bypassing
+      the button's disabled state in some edge browsers).
+
+    DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
+    treatment: ServiceNow Experience Portal default theme. No custom CSS,
+    no custom branding."):
+      The <css> element is empty. All visual styling uses out-of-the-box
+      Service Portal Bootstrap classes already shipped with the PDI:
+        - form-group, form-control: standard form-field styling.
+        - btn, btn-primary: standard primary-action button styling.
+        - alert, alert-danger: standard "danger" alert styling for
+          the error message (red-bordered with alert icon).
+        - <h2>, <label>: standard typography.
+        - The "required" CSS class on the asterisks is a standard
+          Bootstrap-flavored class for indicating mandatory fields;
+          it is shipped with the OOB Service Portal theme.
+      No custom CSS is authored or referenced. No custom branding artifacts
+      (icons, images, colors) are defined.
+
+    NO HARDCODED SYS_IDS IN REFERENCES (AAP Section 0.7.2):
+      Every cross-reference is a name lookup against a stable identifier:
+        - <sys_scope> resolves against the scope record's <name> field
+          (`x_casemgmt`) per ../../app/sys_scope/x_casemgmt.xml.
+        - <sys_package> resolves against the sys_app record's <scope> field
+          (`x_casemgmt`) per ../../app/sys_app/x_casemgmt_case_management.xml.
+        - The REST URL is a stable text path
+          (/api/x_casemgmt/case_submit) - NOT a sys_id reference.
+        - $sp.getWidget('x_casemgmt_case_confirmation_widget', {...})
+          resolves the embedded confirmation widget by its stable text ID,
+          NOT by sys_id.
+      The ONLY sys_id literal in this file is <sys_id> itself (THIS record's
+      own primary key). It is the deterministic 32-char lowercase hex MD5
+      of `sp_widget_x_casemgmt_case_submission_widget`:
+        printf '%s' 'sp_widget_x_casemgmt_case_submission_widget' | md5sum | cut -c1-32
+        -> b40f252d17be5fa3b3bb85cb79ca8d2f
+      Per AAP Section 0.7.2, the no-hardcoded-sys_id rule applies to
+      references TO OTHER records, not to a record's own identity primary
+      key.
+
+    NO PII, NO EMAIL (AAP Sections 0.7.2, 0.3.2):
+      The description, template, and scripts below contain ZERO PII (no
+      real names, no real email addresses, no real organization names, no
+      real case numbers). Placeholder text uses synthetic-only language
+      ("Enter your case subject", "Enter your name", "Describe your case
+      in detail"). Email notifications are explicitly disabled on the PDI
+      per AAP Section 0.7.2 - this widget makes no notification calls
+      (gs.eventQueue, NotificationService, etc.).
+
+    SERVER SCRIPT IS READ-ONLY (assigned-folder authoring rules):
+      The <script> body intentionally performs ZERO database operations:
+        - No GlideRecord reads (no pre-fetching of case data).
+        - No GlideRecord writes (all writes go through the scripted REST
+          endpoint, never through this widget's server script).
+        - No gs.eventQueue() calls (email is disabled).
+      The server script's sole responsibility is to pre-load the embedded
+      confirmation widget reference via $sp.getWidget() and initialize
+      the submission state flags (data.submitted = false, data.submittedNumber
+      = ''). All business logic (insert, validation, whitelist enforcement)
+      lives in the Script Include x_casemgmt.CasePortalService.
+
+    `casemgmt` SCOPE IDENTIFIER (AAP Sections 0.7.1 / 0.7.2):
+      All `x_casemgmt_*` references use the concrete scope identifier
+      `casemgmt` per AAP Section 0.7.2 ("Scoped-namespace-only constraint").
+      ServiceNow Update Set imports use a standard XML parser (Java
+      DocumentBuilder); the scope identifier MUST be concrete in the XML
+      before export. The same identifier is used consistently across every
+      sibling XML in this scoped application (see sibling pages, REST
+      endpoints, dashboards, reports, and seed records).
+
+    XML CONVENTIONS HONORED (matching sibling files in this app):
+      - Wrapper element: <record_update table="sp_widget"> per the agent
+        prompt's Phase 1 specification, matching the sibling pattern used
+        by ./sp_widget_x_casemgmt_case_confirmation_widget.xml and
+        ./sp_widget_x_[scope]_case_lookup_widget.xml.
+      - Indentation: 4 spaces for record fields (matching sibling-file
+        convention).
+      - Element ordering: alphabetical within the record (matching
+        sibling-file convention; the ServiceNow Update Set XML serializer
+        emits fields in alphabetical order).
+      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
+        record's <name>).
+      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
+        attribute (matching the sys_app record's <scope>).
+      - Deterministic 32-char lowercase hex sys_id: computed as
+        MD5("sp_widget_x_casemgmt_case_submission_widget") =
+        b40f252d17be5fa3b3bb85cb79ca8d2f. Re-generation of this XML is
+        byte-identical (no random UUIDs).
+      - Audit fields: <sys_created_by>admin</sys_created_by> and
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
+        repeatable timestamps (the same date is used by EVERY sibling
+        record in this scoped app for repeatable XML re-generation).
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview
+        (AAP Section 0.7.3 validation gate 7).
+
+    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.5.1):
+
+      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/acm/
+      portalgateway/service/DefaultPluggablePortalRequestService.java
+        line 60-65 - submitRequest(...) implementation; resolves provider
+                     by request type and forwards. Returns a PortalResponse
+                     containing the confirmation identifier returned by the
+                     downstream provider (in ArkCase: a request id; in this
+                     ServiceNow target: the auto-generated case number).
+
+      acm-standard-applications/arkcase/src/main/webapp/resources/modules/
+      cases/services/case-info.client.service.js
+        line 13-42 - Case.InfoService factory using $resource against
+                     'api/latest/plugin' with a save() method that POSTs
+                     to 'api/latest/plugin/casefile'.
+
+      ArkCase's PortalRequestService accepted a typed PortalRequest DTO
+      via Spring service injection; the request flowed through Spring
+      MVC, the service implementation looked up a provider by request
+      type, and the provider in turn delegated to a per-type bean for
+      persistence. The ServiceNow target collapses this multi-hop
+      delegation to: widget -> $http.post -> scripted REST -> Script
+      Include -> GlideRecord. Three hops, not five. The semantic
+      intent is preserved (anonymous submission -> confirmation with
+      identifier) while the technical surface is restructured to fit
+      ServiceNow's REST + Service Portal widget conventions.
+
+      ArkCase's Angular service uses `$resource` (a higher-level wrapper
+      around $http for RESTful resources). The ServiceNow target uses
+      `$http.post()` directly because (a) Service Portal widget
+      controllers do not load `ngResource` by default, and (b) the
+      submit is a single POST, not a CRUD resource that warrants
+      $resource's overhead.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD MUST LOAD AFTER:
+        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
+          cross-reference resolves against this record's <name>)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped
+          application record; <sys_package> cross-reference resolves
+          against this record's <scope>)
+        - ../rest/sys_ws_definition_x_casemgmt_case_submit.xml
+          (the scripted REST API namespace this widget calls)
+        - ../rest/sys_ws_operation_x_casemgmt_case_submit_post.xml
+          (the POST operation handler this widget invokes)
+        - ../../script_includes/x_casemgmt_CasePortalService.xml
+          (transitively, called by the REST operation; the submitCase()
+          method enforces the server-side field whitelist and inserts
+          the x_casemgmt_case row in Draft status)
+        - ./sp_widget_x_casemgmt_case_confirmation_widget.xml
+          (this widget embeds the confirmation widget via $sp.getWidget()
+          by stable widget ID, so the confirmation widget must be
+          present at import time for the embedded reference to resolve)
+
+      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
+      tolerates any order within the same Update Set, since references
+      resolve by name):
+        - ../pages/sp_page_x_casemgmt_case_submit.xml (the page hosts
+          this widget by id `x_casemgmt_case_submission_widget`; the
+          page's page_internal layout JSON references this widget by
+          id, NOT by sys_id)
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
+      This widget supports Validation Gate 4 ("Portal - submission") by
+      providing the user-facing UI for the case-submission capability.
+      Without this widget:
+        - Anonymous users would have no way to submit cases.
+        - The portal page itself, the REST API definition, the REST API
+          operation, the Script Include, and the confirmation widget
+          would all be useless without the form to invoke them.
+        - Validation Gate 4 would FAIL because there is no UI surface to
+          test the "Case appears in internal list with Draft status and
+          correct case number" requirement.
+
+      Therefore THIS widget is the direct UI implementation behind
+      Validation Gate 4; the AAP's "5 inputs" requirement is enforced
+      by the template's form-field count and the controller's payload
+      shape, and the AAP's "verbatim 'Your case has been submitted'
+      message" requirement is enforced by the embedded confirmation
+      widget that this widget renders on success.
+-->
+<record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function CaseSubmissionWidgetController($scope, $http) {
+    /*
+     * Case Submission Widget - client-side AngularJS controller.
+     *
+     * Implements the case-submission user interaction described in
+     * AAP Section 0.4.4 ("Page 1 - Case Submission: a simple form
+     * with five inputs (subject, type, description, requester_name,
+     * requester_email). On submit, calls the scripted REST endpoint,
+     * displays a confirmation panel showing the returned case number
+     * and a friendly 'Your case has been submitted' message.").
+     *
+     * Exposed properties (template-bound):
+     *   c.formData       - object with five string keys (subject, type,
+     *                      description, requester_name, requester_email).
+     *                      Each key is initialized to '' (empty string).
+     *                      Each key is bound to its corresponding form
+     *                      input via ng-model.
+     *   c.submitting     - boolean; true while the in-flight $http.post
+     *                      request is pending. Drives the button's
+     *                      ng-disabled and the "Submitting..." text.
+     *   c.errorMessage   - string; non-empty when the most recent
+     *                      submit attempt failed. Drives the alert
+     *                      panel's ng-if="c.errorMessage". Reset to
+     *                      '' at the start of every new submit.
+     *   c.data           - object provided by the Service Portal
+     *                      framework, populated server-side by the
+     *                      <script> body. Contains:
+     *                        c.data.confirmationWidget - the embedded
+     *                          confirmation widget instance loaded via
+     *                          $sp.getWidget(). The success callback
+     *                          mutates c.data.confirmationWidget.options.
+     *                          number to pass the auto-generated case
+     *                          number to the embedded widget.
+     *                        c.data.submitted - boolean; flipped to
+     *                          true after a successful POST. Drives
+     *                          the conditional swap from the form panel
+     *                          to the embedded confirmation widget panel.
+     *                        c.data.submittedNumber - string; mirrors
+     *                          the case number for any consumers that
+     *                          want it directly off c.data (defense-in-
+     *                          depth, in case the embedded widget's
+     *                          options object is replaced rather than
+     *                          mutated by some future refactor).
+     *
+     * Exposed method (template-bound):
+     *   c.submit()       - executes the case submission. Issues
+     *                      POST /api/x_casemgmt/case_submit with the
+     *                      5-field whitelisted payload via $http.post().
+     *                      On success (HTTP 201 with non-empty number),
+     *                      sets c.data.submitted = true and mutates the
+     *                      embedded confirmation widget's options.number
+     *                      to the returned case number. On any error
+     *                      (HTTP 4xx/5xx, network, missing number),
+     *                      sets c.errorMessage to a generic, non-leaking
+     *                      message so the verbatim alert is rendered.
+     *
+     * Design rationale:
+     *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
+     *     widget-authoring conventions and per the sibling lookup widget
+     *     at ./sp_widget_x_[scope]_case_lookup_widget.xml.
+     *   - $http (NOT fetch): Service Portal widgets run in AngularJS
+     *     1.5.x context; $http is the canonical HTTP client. fetch()
+     *     would bypass AngularJS's digest cycle and require manual
+     *     $scope.$apply() handling.
+     *   - Strict 5-key payload (defense-in-depth): the POST body is
+     *     constructed by enumerating exactly the five whitelisted
+     *     fields, NOT by passing c.formData wholesale. Even if a future
+     *     refactor accidentally adds a sixth key to c.formData, the
+     *     POST body would still contain exactly the five whitelisted
+     *     fields. The server-side Script Include also drops any
+     *     non-whitelisted keys as a fallback, but the client-side
+     *     enumeration provides the first line of defense.
+     *   - Generic error message in template, NOT echoed from server:
+     *     the message "Submission failed. Please try again." is
+     *     hardcoded in this controller via direct assignment to
+     *     c.errorMessage. This controller deliberately does NOT pass
+     *     error.data.error or error.statusText to the template - the
+     *     server's error body is NEVER trusted by the client. This
+     *     matches the information-leakage hardening pattern used by
+     *     the sibling lookup widget.
+     *   - Identical handling of all HTTP errors: information-leakage
+     *     hardening. 400 (validation), 500 (server-error), 0 (network),
+     *     and "missing number on HTTP 200" all set the same generic
+     *     error. An attacker cannot distinguish "validation failed"
+     *     from "server error" from "network down" via the UX.
+     *   - c.submitting flag: prevents double-submit race conditions if
+     *     the user clicks the button twice quickly OR presses Enter
+     *     inside an input field while a request is in flight. The
+     *     ng-disabled binding on the button is the primary guard;
+     *     the early-return inside c.submit() is the defense-in-depth
+     *     fallback in case the disabled state is bypassed by a
+     *     keyboard event in an edge browser.
+     *   - String() coercion on response.data.number: ensures the
+     *     embedded widget's c.options.number is always a string, even
+     *     if the REST operation accidentally returns a number primitive.
+     *     Matches the embedded widget's own defensive coercion in
+     *     ./sp_widget_x_casemgmt_case_confirmation_widget.xml.
+     */
+    var c = this;
+
+    // Initialize the form state with empty values for each whitelisted field.
+    // The whitelist (subject, type, description, requester_name,
+    // requester_email) matches exactly the fields accepted by
+    // /api/x_casemgmt/case_submit per AAP Section 0.4.4 and 0.7.4.
+    c.formData = {
+        subject: '',
+        type: '',
+        description: '',
+        requester_name: '',
+        requester_email: ''
+    };
+
+    // Submission state flags. Initialized with safe defaults so the
+    // template's ng-if and ng-disabled expressions evaluate cleanly
+    // even before c.submit() runs.
+    c.submitting = false;
+    c.errorMessage = '';
+
+    /**
+     * Submit the form data to the scripted REST endpoint at
+     * POST /api/x_casemgmt/case_submit.
+     *
+     * Per AAP Section 0.4.4: posts EXACTLY the five whitelisted fields
+     * (subject, type, description, requester_name, requester_email).
+     * No additional fields are sent.
+     *
+     * Per AAP Section 0.4.4: on success, flips c.data.submitted to true
+     * and passes the returned case number to the embedded confirmation
+     * widget via c.data.confirmationWidget.options.number. The embedded
+     * widget renders the verbatim message "Your case has been submitted"
+     * plus the case number.
+     *
+     * Per AAP Section 0.7.2 (information-leakage hardening): on any
+     * error (HTTP 4xx/5xx, network, missing number on HTTP 200), sets
+     * c.errorMessage to the generic string "Submission failed. Please
+     * try again." This function MUST NOT echo error.data.error,
+     * error.statusText, or any server-supplied text.
+     */
+    c.submit = function() {
+        // Idempotent guard: prevent double-submit if the user clicks
+        // the button or presses Enter while a request is in flight.
+        // The button is also disabled in this case via ng-disabled,
+        // but the guard provides defense-in-depth in case the disabled
+        // state is bypassed by an edge browser's keyboard handling.
+        if (c.submitting) {
+            return;
+        }
+
+        // Reset state at the start of every submit. The error message
+        // and submitting flag drive mutually-exclusive UI affordances.
+        c.submitting = true;
+        c.errorMessage = '';
+
+        // POST to the scripted REST endpoint. The payload is built by
+        // enumerating EXACTLY the five whitelisted fields - NOT by
+        // passing c.formData wholesale - so any future expansion of
+        // c.formData does not accidentally widen the payload surface.
+        // This is defense-in-depth alongside the server-side whitelist
+        // enforced by x_casemgmt.CasePortalService.submitCase().
+        $http.post('/api/x_casemgmt/case_submit', {
+            subject:          c.formData.subject,
+            type:             c.formData.type,
+            description:      c.formData.description,
+            requester_name:   c.formData.requester_name,
+            requester_email:  c.formData.requester_email
+        }).then(function(response) {
+            // Success path (HTTP 2xx). The server's REST operation
+            // returns { number, message } per its contract.
+            c.submitting = false;
+            if (response && response.data && response.data.number) {
+                // Pass the returned case number to the embedded
+                // confirmation widget by mutating its options.number.
+                // The embedded widget's controller assigns
+                //   c.options = $scope.options;
+                // so this mutation propagates reactively through
+                // Angular's two-way binding.
+                if (c.data.confirmationWidget && c.data.confirmationWidget.options) {
+                    c.data.confirmationWidget.options.number = String(response.data.number);
+                }
+                // Mirror the case number on c.data for any consumer that
+                // wants it directly. Defense-in-depth in case the
+                // embedded widget's options object is replaced rather
+                // than mutated by some future refactor.
+                c.data.submittedNumber = String(response.data.number);
+                // Flip the submitted flag - the template swaps from
+                // the form panel to the embedded confirmation widget.
+                c.data.submitted = true;
+            } else {
+                // Defensive: HTTP 200 but no case number in the body.
+                // This should never happen if the REST operation
+                // conforms to its contract (it always returns either
+                // { number, message } on success or { error } on
+                // failure), but the guard prevents a confusing UX
+                // where the form vanishes without a confirmation.
+                c.errorMessage = 'Submission failed. Please try again.';
+            }
+        }, function(error) {
+            // Error path (HTTP 4xx, 5xx, or network failure / 0).
+            // ALL error types are treated identically per the
+            // information-leakage hardening discussed in the file
+            // header comment. The generic error message is hardcoded
+            // here in the controller; this function MUST NOT echo
+            // error.data.error, error.statusText, or any server-
+            // supplied content.
+            c.submitting = false;
+            c.errorMessage = 'Submission failed. Please try again.';
+        });
+    };
+}
+]]></client_script>
+        <controller_as>c</controller_as>
+        <css/>
+        <data_table>sp_instance</data_table>
+        <description>Custom unauthenticated Service Portal widget for case submission. Renders a 5-field form (subject, type, description, requester_name, requester_email) and POSTs to /api/x_casemgmt/case_submit on Submit. On success, embeds the confirmation widget (sp_widget_x_casemgmt_case_confirmation_widget) via $sp.getWidget() and the &lt;sp-widget&gt; directive, passing the auto-generated case number through c.data.confirmationWidget.options.number so the embedded widget renders the verbatim message 'Your case has been submitted' plus the case number per AAP Section 0.4.4. On any HTTP error or missing-number response, displays a generic 'Submission failed. Please try again.' alert (no server diagnostics leaked). Embedded by sp_page_x_casemgmt_case_submit. The 5-field whitelist is enforced at three layers (form inputs, payload construction, and Script Include) for defense-in-depth. Replaces ArkCase's acm-service-portal-gateway DefaultPluggablePortalRequestService.submitRequest pattern. No client-side or server-side database operations - all writes flow through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim 'Your case has been submitted' message lives in the embedded confirmation widget) and Validation Gate 4 (Portal - submission).</description>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>x_casemgmt_case_submission_widget</id>
+        <internal>false</internal>
+        <link/>
+        <name>Case Submission Widget</name>
+        <option_schema>[]</option_schema>
+        <pop_up>false</pop_up>
+        <public>true</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    /*
+     * Case Submission Widget - server-side data initialization.
+     *
+     * The server script's sole responsibility is to pre-load the
+     * embedded confirmation widget reference and initialize the
+     * submission state flags so the client controller has a valid
+     * c.data object on first render.
+     *
+     * Per AAP Section 0.7.4 / Phase 7 of the agent prompt:
+     *   - data.confirmationWidget is loaded via $sp.getWidget() by
+     *     stable widget ID (no hardcoded sys_id). The empty initial
+     *     number is a placeholder; the client-side success callback
+     *     mutates c.data.confirmationWidget.options.number after the
+     *     POST returns.
+     *   - data.submitted is initialized to false so the template's
+     *     ng-if="!c.data.submitted" expression evaluates true on
+     *     first render and the form panel is shown.
+     *   - data.submittedNumber is initialized to '' (empty string)
+     *     so the template can safely interpolate c.data.submittedNumber
+     *     even before a successful submission has occurred (no "null"
+     *     or "undefined" rendering).
+     *
+     * This widget intentionally performs ZERO database operations:
+     *   - No GlideRecord reads (no fetching of case data; the widget
+     *     renders with empty form state and the user drives the
+     *     submission via the form).
+     *   - No GlideRecord writes (all writes happen through the
+     *     scripted REST endpoint at sys_ws_definition_x_casemgmt_case_submit
+     *     plus its sys_ws_operation_x_casemgmt_case_submit_post handler;
+     *     this widget does NOT duplicate that contract).
+     *   - No gs.eventQueue() calls (email notifications are disabled
+     *     per AAP Section 0.7.2 Email-disabled constraint).
+     *
+     * The IIFE pattern matches ServiceNow's standard widget server-
+     * script convention. The implicit `data` and `$sp` symbols are
+     * provided by the Service Portal framework at execution time.
+     */
+    data.confirmationWidget = $sp.getWidget('x_casemgmt_case_confirmation_widget', { number: '' });
+    data.submitted = false;
+    data.submittedNumber = '';
+})();
+]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b40f252d17be5fa3b3bb85cb79ca8d2f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Submission Widget</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sp_widget_x_casemgmt_case_submission_widget</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template><![CDATA[<div class="x-casemgmt-case-submission-widget">
+    <!--
+        Submission form: rendered when c.data.submitted is false (i.e., the
+        user has not yet successfully submitted). Contains EXACTLY five
+        input fields per AAP Section 0.4.4:
+            subject, type, description, requester_name, requester_email
+        Four are mandatory (subject, type, description, requester_name);
+        requester_email is optional. HTML5 `required` attributes plus the
+        AngularJS form's $invalid binding to the submit button's ng-disabled
+        prevents submission of incomplete payloads at the UI layer.
+    -->
+    <div ng-if="!c.data.submitted">
+        <h2>Submit a Case</h2>
+        <form name="caseSubmitForm" novalidate ng-submit="c.submit()">
+            <div class="form-group">
+                <label for="x-casemgmt-subject">Subject <span class="required">*</span></label>
+                <input type="text"
+                       id="x-casemgmt-subject"
+                       class="form-control"
+                       maxlength="255"
+                       ng-model="c.formData.subject"
+                       placeholder="Enter your case subject"
+                       required />
+            </div>
+            <div class="form-group">
+                <label for="x-casemgmt-type">Type <span class="required">*</span></label>
+                <select id="x-casemgmt-type"
+                        class="form-control"
+                        ng-model="c.formData.type"
+                        required>
+                    <option value="">-- Select a type --</option>
+                    <option value="General Inquiry">General Inquiry</option>
+                    <option value="Complaint">Complaint</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="x-casemgmt-description">Description <span class="required">*</span></label>
+                <textarea id="x-casemgmt-description"
+                          class="form-control"
+                          rows="4"
+                          maxlength="4000"
+                          ng-model="c.formData.description"
+                          placeholder="Describe your case in detail"
+                          required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="x-casemgmt-requester-name">Your Name <span class="required">*</span></label>
+                <input type="text"
+                       id="x-casemgmt-requester-name"
+                       class="form-control"
+                       maxlength="100"
+                       ng-model="c.formData.requester_name"
+                       placeholder="Enter your name"
+                       required />
+            </div>
+            <div class="form-group">
+                <label for="x-casemgmt-requester-email">Email</label>
+                <input type="email"
+                       id="x-casemgmt-requester-email"
+                       class="form-control"
+                       maxlength="100"
+                       ng-model="c.formData.requester_email"
+                       placeholder="Enter your email (optional)" />
+            </div>
+
+            <!--
+                Error panel: rendered when c.errorMessage is non-empty (i.e.,
+                the most recent submit attempt failed). Contains a generic,
+                hardcoded message per AAP Section 0.7.2 (information-leakage
+                hardening). The text is NEVER pulled from the server's error
+                response body (defense against header-injection / response-
+                smuggling attacks on the public endpoint).
+            -->
+            <div class="form-group" ng-if="c.errorMessage">
+                <div class="alert alert-danger" role="alert">
+                    {{c.errorMessage}}
+                </div>
+            </div>
+
+            <!--
+                Submit button: disabled while a request is in flight OR while
+                the form has any invalid fields. The button text alternates
+                between "Submit" and "Submitting..." for clear UX feedback.
+                The double-submit prevention is enforced at three independent
+                layers: ng-disabled on the button, the early-return guard in
+                c.submit(), and the c.submitting flag.
+            -->
+            <div class="form-group">
+                <button type="submit"
+                        class="btn btn-primary"
+                        ng-disabled="c.submitting || caseSubmitForm.$invalid">
+                    <span ng-if="!c.submitting">Submit</span>
+                    <span ng-if="c.submitting">Submitting...</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!--
+        Confirmation panel: rendered when c.data.submitted is true (i.e., the
+        most recent submit returned HTTP 201 with a non-empty case number).
+        Embeds the sibling confirmation widget (sp_widget_x_casemgmt_case_
+        confirmation_widget) via the canonical Service Portal embedding
+        pattern: <sp-widget widget="..."> bound to the c.data.confirmationWidget
+        instance pre-loaded by the server script via $sp.getWidget(). The
+        embedded widget renders the verbatim message "Your case has been
+        submitted" (AAP Section 0.4.4 verbatim) plus the auto-generated case
+        number. The case number is passed via c.data.confirmationWidget.
+        options.number, mutated by the success callback in c.submit().
+    -->
+    <div ng-if="c.data.submitted">
+        <sp-widget widget="c.data.confirmationWidget"></sp-widget>
+    </div>
+</div>
+]]></template>
+    </sp_widget>
+</record_update>
