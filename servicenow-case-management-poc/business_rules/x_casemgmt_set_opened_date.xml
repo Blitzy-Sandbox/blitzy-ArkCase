@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that auto-populates the `opened_date` field on every newly inserted
+    `x_casemgmt_case` record inside the scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.7 verbatim):
+        "opened_date  |  DateTime  |  Auto-set on creation"
+
+    This Business Rule is the ServiceNow-native equivalent of ArkCase's JPA
+    @PrePersist beforeInsert() audit hook in
+    acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    armedia/acm/plugins/casefile/model/CaseFile.java (lines 307-316). The
+    ArkCase hook ran before Hibernate persisted a new `acm_case_file` row
+    and defaulted any unpopulated `status` field to "DRAFT". Status defaulting
+    is handled in ServiceNow at the dictionary level (default_value="Draft" on
+    ../dictionary/x_casemgmt_case_status.xml) rather than in this Business
+    Rule; this Business Rule's sole responsibility is the `opened_date` audit
+    timestamp. The corresponding ArkCase audit field was the `created` column
+    (java.util.Date with @Temporal(TIMESTAMP)) on the AcmEntity superclass;
+    the ServiceNow domain-meaningful equivalent is the `opened_date` field on
+    `x_casemgmt_case` (note that ServiceNow auto-manages the platform audit
+    column `sys_created_on` automatically on every record - this Business Rule
+    only populates the DOMAIN-meaningful `opened_date` business field, not
+    the platform audit column).
+
+    BEHAVIOR:
+        - Trigger          : BEFORE INSERT only on the `x_casemgmt_case` table
+        - Condition        : current.opened_date is nil/empty
+        - Action           : sets current.opened_date = gs.nowDateTime()
+        - Other timing     : does NOT fire on update, delete, or query
+
+    DEFENSIVE FIELD-SET (AAP Section 0.4.1 dashboards consideration):
+        The script uses current.opened_date.nil() to check whether the field
+        is already populated. If the caller (seed data, Table API, scripted
+        REST endpoint, manual administrative insert) has already provided an
+        explicit opened_date value, the script does NOT overwrite. This
+        intentionally allows:
+            (a) Seed data demos in ../seed-data/cases/x_casemgmt_case_demo_*.xml
+                to specify synthetic timestamps spanning the past 30 days so
+                the "Cases opened (30 days)" single-score widget on the Manager
+                View dashboard (../reports/x_casemgmt_cases_opened_30d.xml) has
+                non-zero data on a freshly-imported PDI.
+            (b) The "Average time to close" report
+                (../reports/x_casemgmt_avg_time_to_close.xml) to receive
+                pre-aged demo opened_date values that pair with the seeded
+                closed_date values to produce a meaningful average.
+        For organic inserts (no explicit opened_date), the script populates
+        the field with the current platform time so reports and the portal
+        status lookup never see a null opened_date.
+
+    DICTIONARY READ-ONLY OVERRIDE:
+        The opened_date field is declared read_only=true at the dictionary
+        level in ../dictionary/x_casemgmt_case_opened_date.xml. ServiceNow
+        intentionally exempts server-side Business Rule scripts from
+        dictionary read_only enforcement so this rule can write the field
+        even though end-users cannot edit it on the form. This pattern is
+        the canonical way to populate auto-set audit-style domain fields.
+
+    PORTAL SUBMISSION COMPATIBILITY:
+        The unauthenticated submission endpoint at
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+        and the portal submission endpoint
+        (../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml when
+        authored) both insert into x_casemgmt_case via GlideRecord.insert().
+        The platform fires before-insert Business Rules in ALL contexts when
+        is_rest=false, so this rule fires for portal submissions too. The
+        external requester therefore gets a non-null opened_date populated
+        automatically on Draft creation. The portal status lookup later
+        exposes opened_date back to the requester as one of the three
+        whitelisted fields (status, subject, opened_date) per AAP Section
+        0.4.4 ("External Experience Portal UI").
+
+    ORDERING WITHIN BEFORE-INSERT PHASE:
+        order=100 is intentionally low to ensure this rule runs early in the
+        before-insert phase. opened_date is populated before any subsequent
+        before-insert rules (such as field-validation rules) execute, so any
+        downstream rule that reads current.opened_date sees a populated
+        value. There is no opened_date READ in any other before-insert rule
+        in this scoped application, so the order does not currently conflict
+        with anything; 100 leaves room above (lower numbers run earlier) and
+        below for future expansion.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This rule
+        contains zero gs.eventQueue() calls, zero gs.email() calls, and
+        zero gs.notificationEngine() calls. It performs only the field-set
+        operation.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case</collection>     scoped table
+        - <sys_scope>x_casemgmt</sys_scope>            scoped namespace
+        - <sys_package>x_casemgmt</sys_package>        scoped application
+        - script body references current.opened_date  scoped field
+        Zero global-scope writes. Zero modifications to OOB tables.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; it operates only on the platform-injected `current`
+          GlideRecord (the row being inserted).
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_set_opened_date"), which is
+          permitted because the AAP "no hardcoded sys_id" rule applies to
+          REFERENCE FIELDS pointing at OTHER records, not to a record's own
+          primary key.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml             (table this rule attaches to)
+            - ../dictionary/x_casemgmt_case_opened_date.xml (field this rule writes)
+            - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+            - ../app/sys_scope/x_casemgmt.xml           (scope record)
+        And BEFORE:
+            - ../seed-data/cases/x_casemgmt_case_demo_*.xml (demo case rows insert
+              into x_casemgmt_case; this BR fires for them, but the demos that
+              explicitly set opened_date won't be overwritten thanks to the
+              .nil() check)
+            - ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+              (the portal submission inserts into x_casemgmt_case; this BR fires)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_set_opened_date")
+               = c56aeecd4086f111be2867faae9e55ad
+        32-character lowercase hex. The PDI accepts any valid 32-char hex
+        sys_id; deriving from the record name guarantees idempotent re-import
+        on a fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in place
+        rather than creating a duplicate.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 1 (Data model): "All 3 custom tables created with correct
+          fields and types - Zero missing mandatory fields". This rule
+          ensures opened_date is populated on every insert, supporting
+          Gate 1's data integrity expectations.
+        - Gate 6 (Dashboards): "Both dashboards render with synthetic
+          data - All widgets display data". The "Cases opened (30 days)"
+          single-score widget requires non-null opened_date values; this
+          rule guarantees that for any organically inserted case.
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance". The deterministic
+          sys_id and reference-by-name pattern ensure this rule re-imports
+          cleanly with zero preview errors.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>false</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-insert on x_casemgmt_case: sets current.opened_date = gs.nowDateTime() when not already populated. Replaces ArkCase CaseFile.@PrePersist beforeInsert() audit hook from acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/armedia/acm/plugins/casefile/model/CaseFile.java. Per AAP Section 0.5.7 (opened_date Auto-set on creation). Defensive: respects pre-set values from seed data and other authoritative callers via current.opened_date.nil() guard. Fires in all contexts (form, Table API, scripted REST, seed scripts) because is_rest=false. Order=100 ensures the field is populated early in the before-insert phase. Contains zero gs.eventQueue() calls per the email-disabled constraint.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_set_opened_date</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // ServiceNow-native equivalent of ArkCase CaseFile.@PrePersist beforeInsert()
+    // (acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    //  armedia/acm/plugins/casefile/model/CaseFile.java, lines 307-316).
+    //
+    // Per AAP Section 0.5.7: opened_date is "DateTime, Auto-set on creation".
+    //
+    // Defensive .nil() guard: respect pre-set values from authoritative callers.
+    // This is critical for the seed-data demos in
+    // ../seed-data/cases/x_casemgmt_case_demo_*.xml which explicitly set
+    // synthetic timestamps spanning the past 30 days so the "Cases opened
+    // (30 days)" single-score widget on the Manager View dashboard
+    // (../reports/x_casemgmt_cases_opened_30d.xml) has non-zero data on a
+    // freshly-imported PDI. Without this guard, the seeded timestamps would
+    // be overwritten with gs.nowDateTime() at import time and every demo
+    // case would appear to be opened on import day.
+    //
+    // For organic inserts (form submissions, Table API calls, portal scripted
+    // REST submissions, ad-hoc admin scripts) where opened_date is not
+    // pre-populated, the script populates the field with the current platform
+    // time so downstream reports and the portal status lookup never see a
+    // null opened_date.
+    if (current.opened_date.nil()) {
+        current.opened_date = gs.nowDateTime();
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>c56aeecd4086f111be2867faae9e55ad</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_set_opened_date</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_set_opened_date</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>
