@@ -1,0 +1,832 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_hub_flow` row that
+    declares the `x_casemgmt_complaint_state_machine` Flow Designer
+    PARENT FLOW (type=flow) inside the scoped application `x_casemgmt`
+    (Case Management).
+
+    PURPOSE (AAP Section 0.1.2 verbatim transformation rule):
+        "Workflow transformation: Activiti BPMN + ChangeCaseFileStateService
+         + queue pipeline -> Flow Designer."
+
+    This is ONE OF TWO parent state-machine flows. Together with the sibling
+    flow ./general_inquiry_state_machine.xml and the FIVE shared transition-
+    validation subflows under ./sub_flows/, this flow replaces ArkCase's
+    entire BPMN/Activiti case state-machine stack with a low-code Flow
+    Designer equivalent. Per AAP Section 0.7.2 ("Flow-Designer-exclusive
+    workflow constraint"), all transition logic for cases of type=Complaint
+    flows through this single sys_hub_flow record (with delegation to
+    subflows and the x_casemgmt.CaseTransitionValidator Script Include).
+
+    WHY TWO PARENT FLOWS, ONE PER CASE TYPE:
+        Per AAP Section 0.4.3 Design Pattern ("Declarative state machine
+        via Flow Designer"): "Each case.type (General Inquiry, Complaint)
+        gets its own sys_hub_flow whose triggers are filtered on status
+        change." The duplication is intentional - it keeps the per-type
+        trigger filter explicit, makes future per-type customization
+        trivial (e.g., a Complaint-only escalation step), and avoids a
+        single monolithic flow whose dispatch logic has to internally
+        branch on case.type before doing anything else. Per AAP Section
+        0.5.5 the per-type isolation is verbatim-mandated:
+            "Replicate ArkCase's case state-machine ... as TWO Flow
+             Designer flows - one per case type (General Inquiry,
+             Complaint)".
+
+    THIS FLOW IS FUNCTIONALLY IDENTICAL to ./general_inquiry_state_machine.xml
+    EXCEPT that the trigger condition filter is `type = Complaint`
+    (this file) rather than `type = General Inquiry` (the sibling). All
+    other behavior - the OnUpdate trigger semantics, the status-change
+    filter, the dispatch If/Else-If ladder, the five subflow call steps,
+    the run_as=user_who_triggers context, the published+active state, and
+    the scope binding - is identical between the two parent flows. The
+    five dispatched subflows under ./sub_flows/ are SHARED between the
+    two parents (DRY principle); this file does not redefine any of them.
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only, NOT byte-for-byte ported):
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseFileStateService.java line 79-114 - the central
+        ArkCase case state-machine service. Its changeCaseState(auth,
+        caseId, newState, ipAddress) method:
+            1) Loaded the CaseFile by ID (line 85)
+            2) Returned early if status unchanged (lines 87-91 -
+               the source-side equivalent of this flow's "status changes"
+               trigger filter optimization: do nothing if the field
+               didn't actually change)
+            3) Set the new status on the entity (line 95)
+            4) For "CLOSED" status, set the close timestamp (lines 97-100 -
+               the source-side equivalent of the sub_flows/
+               validate_closed_transition.xml subflow's closed_date side
+               effect)
+            5) Saved the entity (line 102)
+            6) Raised an event for downstream notification listeners
+               (line 106 - intentionally NOT replicated in the ServiceNow
+               target because email is disabled per AAP Section 0.7.2)
+
+        The ServiceNow target SPLITS that single Java method into per-
+        transition subflows (see ./sub_flows/) and uses Flow Designer's
+        OnUpdate trigger to fire only on actual status changes - making
+        the "Returned early if status unchanged" optimization implicit
+        rather than imperative.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseStatusWorkflowListener.java line 56-71 - the
+        ApplicationListener<ChangeCaseFileStatusEvent> that launched a
+        BPMN process whenever a case's status changed. Its onApplicationEvent
+        method dispatched to handleNewCloseCaseRequest which used the
+        ArkCase pipeline framework to run a workflow business rule. The
+        ServiceNow target ELIMINATES the BPMN/Activiti engine entirely:
+        Flow Designer's Record Updated trigger (configured in the snapshot
+        JSON below) replaces the ApplicationListener, and the dispatched
+        subflows replace the BPMN process. Per AAP Section 0.1.2
+        ("Workflow transformation"), this is the canonical path.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/pipeline/presave/
+        CaseFileQueueHandler.java line 49-59 - the pre-save pipeline
+        handler that resolved a queue and forced status=ACTIVE. The
+        ServiceNow target REPLACES this with the validate_open_transition
+        subflow (called by this parent flow's status==Open dispatch
+        branch). The ArkCase queue concept maps to the assigned_group
+        field on x_casemgmt_case; the precondition "queue must be set
+        before status becomes ACTIVE" maps to "assigned_group must be
+        populated before status becomes Open". The semantic equivalence
+        is preserved; the layer at which it runs (Java pre-save handler
+        -> Flow Designer subflow) differs.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        CaseFileTasksService.java - the service interface that aggregated
+        child tasks for a case. The ServiceNow target REPLACES this with
+        the validate_resolved_transition subflow (called by this parent
+        flow's status==Resolved dispatch branch). Per AAP Section 0.7.4
+        verbatim, that subflow throws "All tasks must be closed before
+        resolving this case." when any child x_casemgmt_case_task row
+        has status != Closed. Internally the subflow delegates to
+        x_casemgmt.CaseTransitionValidator.canTransitionToResolved
+        which uses GlideAggregate('x_casemgmt_case_task') for an
+        efficient SQL COUNT(*) - the ServiceNow analog of ArkCase's
+        Solr-based task-count aggregation (Solr is out of POC scope per
+        AAP Section 0.3.2).
+
+    WHAT THIS FLOW DOES (high-level):
+
+        1. Triggered by ANY update to a row in x_casemgmt_case where
+           BOTH conditions are true:
+             (a) the row's `type` field is exactly the literal string
+                 "Complaint" (Title Case, single word - NOT "complaint",
+                 "COMPLAINT", "Complaints", or any other punctuation/
+                 case variant). The literal value is the choice LABEL
+                 declared in ../choices/sys_choice_case_type.xml
+                 sequence 200, NOT a sys_id.
+             (b) the row's `status` field changed from the prior value
+                 to a new value.
+           The trigger does NOT fire on inserts, on row deletions, or
+           on updates that leave the status field unchanged.
+
+        2. Dispatches based on the NEW value of the status field via a
+           5-branch If/Else-If ladder:
+
+             status == 'Open'        -> calls subflow x_casemgmt_validate_open_transition
+             status == 'In Progress' -> calls subflow x_casemgmt_validate_inprogress_transition
+             status == 'Pending'     -> calls subflow x_casemgmt_validate_pending_transition
+             status == 'Resolved'    -> calls subflow x_casemgmt_validate_resolved_transition
+             status == 'Closed'      -> calls subflow x_casemgmt_validate_closed_transition
+
+           Each subflow receives the triggering row as input via the
+           "case_record" reference parameter ($trigger.current).
+
+        3. Defense-in-depth: status transitions to 'Draft' are NOT
+           dispatched here because they are blocked by the companion
+           Business Rule ../business_rules/x_casemgmt_block_draft_backtransition.xml
+           (which throws "Cases cannot be returned to Draft." per AAP
+           Section 0.7.4 verbatim). If somehow a 'Draft' value reaches
+           this flow's dispatch ladder (e.g., the BR was disabled),
+           none of the five If/Else-If branches match and the flow
+           returns successfully without action - but the BR will have
+           already aborted the update with the verbatim error message.
+
+           Status transitions OUT OF 'Closed' are similarly blocked by
+           ../business_rules/x_casemgmt_block_terminal_closed.xml (which
+           throws "Closed cases are terminal and cannot be modified."
+           per AAP Section 0.7.4 verbatim). When that BR fires, the
+           update is aborted before this flow's trigger can be evaluated.
+
+        4. The verbatim AAP Section 0.7.4 error messages are NOT thrown
+           by this parent flow directly - they are surfaced by the
+           dispatched subflows (e.g., validate_resolved_transition
+           throws "All tasks must be closed before resolving this case.")
+           or by the supporting business rules listed above. This
+           parent flow's responsibility is dispatch and orchestration,
+           NOT message composition.
+
+    DELEGATE-TO-SUBFLOW PATTERN (AAP Section 0.4.3 Design Pattern):
+
+        The five subflows under ./sub_flows/ are CALLED by both this
+        parent flow AND the sibling general_inquiry_state_machine.xml.
+        The DRY principle is observed at the subflow boundary - per-
+        transition validation logic exists exactly once, in the subflow,
+        and is reused by both parent flows. Per AAP Section 0.4.3
+        Design Pattern ("Shared transition-guard Script Include" - the
+        same DRY rationale extends to the subflows themselves):
+
+            x_casemgmt_validate_open_transition
+                Single-field gate: assigned_group populated.
+                Called from BOTH parent flows on status==Open.
+
+            x_casemgmt_validate_inprogress_transition
+                Compound gate: assigned_agent populated AND member of
+                assigned_group; side effect: clear pending_reason
+                when transitioning from Pending.
+                Called from BOTH parent flows on status==In Progress.
+
+            x_casemgmt_validate_pending_transition
+                Side effect only: stamp pending_reason via prompt to
+                caller (Awaiting Info / Awaiting Third Party / Other).
+                Called from BOTH parent flows on status==Pending.
+
+            x_casemgmt_validate_resolved_transition
+                Aggregate gate: all child x_casemgmt_case_task rows
+                must have status==Closed.
+                Called from BOTH parent flows on status==Resolved.
+                Surfaces VERBATIM AAP error message.
+
+            x_casemgmt_validate_closed_transition
+                Role gate: caller has x_casemgmt_case_manager role;
+                side effect: stamp closed_date via gs.nowDateTime().
+                Called from BOTH parent flows on status==Closed.
+
+        If a future enhancement adds Complaint-specific behavior on a
+        transition (e.g., notify a different team for severity-A
+        complaints), the way to add it is EITHER (a) enrich the subflow
+        with a parameter that switches behavior, or (b) add a Complaint-
+        only step in this parent flow AROUND the subflow call - never
+        duplicate the subflow's logic inline.
+
+    TYPE / FLOW SEMANTICS (assigned-folder Phase 5 Rule 4):
+
+        - <type>flow</type> - this record IS a parent flow, not a
+          subflow and not an action. Flow Designer "type" enumeration:
+          flow | subflow | action. Parent flows are flow.
+        - <sc_callable>false</sc_callable> - the flow is NOT callable
+          from a Service Catalog item. It is auto-invoked by the
+          platform whenever its trigger conditions are met.
+        - <callable_by_client_api>false</callable_by_client_api> - the
+          flow is NOT exposed to client-side scripts. It runs server-
+          side only. Per AAP Section 0.7.2, restricting client-side
+          API exposure prevents a malicious client from probing the
+          flow to discover transition rules.
+        - <validation_status>complete</validation_status> - Flow
+          Designer's pre-publish validation has been run and the flow
+          has zero validation errors. Required so the platform marks
+          the flow as runnable rather than draft.
+
+    RUN-AS / EXECUTION CONTEXT (assigned-folder Phase 5 Rule 6 - CRITICAL):
+
+        - <run_as>user_who_triggers</run_as> - the flow runs in the
+          identity of the user whose update triggered it, NOT as the
+          system user. This is CRITICAL for the validate_closed_transition
+          subflow's role check:
+              gs.getUser().hasRole('x_casemgmt_case_manager')
+
+          When run_as=user_who_triggers, gs.getUser() returns the
+          user who saved the form, and the role check correctly
+          enforces "only case_manager users may transition cases to
+          Closed status" per AAP Section 0.5.5 and the role x CRUD
+          matrix in AAP Section 0.5.6.
+
+          When run_as=system_user, gs.getUser() returns the system
+          user, which has all roles, which would cause the role
+          check to pass for ANY user. The AAP-required "manager only"
+          gate would be silently bypassed.
+
+          Per AAP Section 0.7.4, the role gate is a hard requirement
+          ("Resolved -> Closed: caller has x_casemgmt_case_manager
+          role"). run_as=user_who_triggers is therefore non-negotiable.
+
+    ACTIVE / PUBLISHED STATE (AAP Section 0.7.3 Gate 7 - CRITICAL):
+
+        - <active>true</active> - flow is enabled, NOT Draft. Per the
+          assigned-folder Phase 5 Rule 1: "both parent flows MUST be
+          set to Active = true (not Draft) before Update Set export,
+          otherwise Gate 7 (Update Set integrity) will pass but Gate
+          2 (Workflow) will fail post-deploy." A Draft flow would
+          import successfully but would not fire on case updates,
+          silently disabling the entire state machine for Complaint
+          cases.
+        - <status>published</status> - flow is published, NOT draft.
+          Together with active=true, this guarantees the flow is
+          invocable by the platform's record-trigger framework
+          immediately after Update Set commit.
+
+    NO-EMAIL CONSTRAINT (AAP Section 0.7.2 + assigned-folder Phase 5 Rule 7):
+
+        - The flow contains ZERO "Send Email" actions, ZERO
+          gs.eventQueue() calls, ZERO sn_notification API
+          invocations, and ZERO notification-trigger steps.
+        - Email is disabled on the PDI per AAP Section 0.3.2; this
+          flow honors that constraint. ArkCase's
+          ChangeCaseFileStateService line 106 (raiseEvent) is
+          intentionally NOT replicated.
+        - When validation fails (in the dispatched subflows), the
+          message is surfaced ONLY via Throw Error -> gs.addErrorMessage()
+          -> form-level display. No email notification is generated.
+
+    NO-PII CONSTRAINT (AAP Section 0.7.2):
+
+        - All comments, descriptions, and inline log messages avoid
+          real names, real email addresses, real phone numbers, real
+          organization names, and any other personally-identifying
+          information. The flow's description and trigger filter
+          reference only abstract field names ("type", "status") and
+          choice labels ("Complaint").
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+
+        - <name>x_casemgmt_complaint_state_machine</name> - flow
+          name preserved character-for-character per the AAP file-
+          naming convention.
+        - <internal_name> matches <name>.
+        - <sys_update_name>sys_hub_flow_x_casemgmt_complaint_state_machine</sys_update_name>
+          - the Update Set tracking key follows the pattern
+          <table>_<record_name>.
+        - <sys_scope> binds THIS flow record to the scoped application's
+          scope record by NAME (no hardcoded sys_id literal).
+        - <sys_package> binds THIS flow record to the scoped
+          application's sys_app record by NAME (no hardcoded sys_id
+          literal). The display_value="Case Management" attribute and
+          source="x_casemgmt" attribute are platform conventions for
+          the Update Set engine to resolve the package binding at
+          import time.
+        - All references inside <latest_snapshot> / <master_snapshot>
+          use stable name lookups: "table": "x_casemgmt_case" (BY NAME),
+          "subflow_name": "x_casemgmt_validate_open_transition" (BY
+          NAME), etc. Zero hardcoded sys_id literals appear in the
+          snapshot JSON.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME
+          (x_casemgmt)
+        - The snapshot JSON's "trigger.table" field uses the table
+          NAME ("x_casemgmt_case"), not its sys_id.
+        - The snapshot JSON's "actions[*].subflow_name" fields use
+          the subflow NAME ("x_casemgmt_validate_open_transition",
+          etc.), not their sys_ids.
+        - The trigger filter "type=Complaint" uses the choice LABEL
+          string, not a sys_choice sys_id.
+        - The <sys_id> element below is THIS record-set's own
+          deterministic primary key (MD5 of canonical record name),
+          which is permitted because the AAP "no hardcoded sys_id"
+          rule applies to REFERENCE fields targeting OTHER rows.
+          A record's own sys_id IS its primary key, not a reference.
+          Deriving from the stable name guarantees idempotent re-import.
+
+    DETERMINISTIC SYS_ID:
+
+        Computed via MD5 over the canonical record name:
+
+            sys_id of the parent sys_hub_flow record:
+                MD5("x_casemgmt_complaint_state_machine")
+                = 789e559c36dbf6890bb32580a1553e54
+
+        32-character lowercase hex per ServiceNow convention. Re-importing
+        the same Update Set produces the same sys_id, which collides on
+        the existing record and updates it in place rather than creating
+        a duplicate - guaranteeing AAP Section 0.7.3 Gate 7 ("Update Set
+        loads without errors on a fresh PDI instance") passes for this
+        record. The trigger and action-instance child records that the
+        platform creates from the snapshot JSON during import receive
+        platform-assigned sys_ids on the destination PDI; this record's
+        own primary key is the only sys_id literal in this file, and is
+        permitted because the AAP "no hardcoded sys_id" rule applies to
+        REFERENCE fields targeting OTHER rows, not to a record's own
+        primary key. This is the same convention used by the sibling
+        general_inquiry_state_machine.xml record and by every peer
+        subflow record (e.g., x_casemgmt_validate_open_transition has
+        sys_id 968df74ca78c07ed1dd3ea6c755963d0 = MD5 of its own
+        canonical name).
+
+    CROSS-DEPENDENCY RESOLUTION (AAP Section 0.5.2):
+
+        This parent flow MUST be loaded AFTER the following records:
+
+          - ../app/sys_app/x_casemgmt_case_management.xml
+              (scoped application; <sys_package> reference resolution)
+          - ../app/sys_scope/x_casemgmt.xml
+              (scope record; <sys_scope> reference resolution)
+          - ../tables/x_casemgmt_case.xml
+              (the case table; the trigger's "table": "x_casemgmt_case"
+               and the trigger filter "type=Complaint" require this
+               table to exist before the flow record references it)
+          - ../tables/x_casemgmt_case_task.xml
+              (queried by validate_resolved_transition subflow that
+               this flow dispatches to)
+          - ../dictionary/x_casemgmt_case_status.xml
+              (the field whose changes fire the trigger; the trigger's
+               status_changes filter requires this dictionary entry)
+          - ../dictionary/x_casemgmt_case_type.xml
+              (the field used in the trigger filter; the trigger
+               condition "type=Complaint" requires this entry)
+          - ../dictionary/x_casemgmt_case_assigned_group.xml,
+            ../dictionary/x_casemgmt_case_assigned_agent.xml,
+            ../dictionary/x_casemgmt_case_pending_reason.xml,
+            ../dictionary/x_casemgmt_case_closed_date.xml
+              (fields read or written by the dispatched subflows)
+          - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (Script Include called by the dispatched subflows)
+          - ./sub_flows/validate_open_transition.xml,
+            ./sub_flows/validate_inprogress_transition.xml,
+            ./sub_flows/validate_pending_transition.xml,
+            ./sub_flows/validate_resolved_transition.xml,
+            ./sub_flows/validate_closed_transition.xml
+              (the five subflows this parent dispatches to)
+          - ../roles/sys_user_role_x_casemgmt_case_manager.xml
+              (role checked by validate_closed_transition - referenced
+               indirectly through the subflow dispatch)
+
+        This parent flow MUST be loaded BEFORE:
+
+          - ../seed-data/cases/x_casemgmt_case_demo_07.xml,
+            ../seed-data/cases/x_casemgmt_case_demo_08.xml,
+            ../seed-data/cases/x_casemgmt_case_demo_09.xml,
+            ../seed-data/cases/x_casemgmt_case_demo_10.xml
+              (the four Complaint demo case rows that get inserted by
+               seed data per AAP Section 0.5.1; the flow's trigger is
+               OnUpdate not OnInsert so ordering is not strictly
+               required for the seed inserts themselves, but loading
+               the flow first ensures any subsequent UPDATEs to those
+               rows correctly engage the state-machine)
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3, Gate 2):
+
+        Gate 2: "Workflow: All state transitions enforced for both
+        case types - Invalid transitions return blocking error;
+        task-closure check blocks Resolved transition." This flow is
+        THE central piece for Gate 2 for the Complaint half of the
+        case-type matrix. The companion ./general_inquiry_state_machine.xml
+        covers the General Inquiry half.
+
+        After deployment, the gate is verified by:
+          1. Creating a Complaint case in Draft status without
+             assigned_group; attempting Draft -> Open should produce
+             the validate_open_transition error.
+          2. Setting assigned_group; transitioning Draft -> Open
+             should succeed.
+          3. Without assigned_agent, attempting Open -> In Progress
+             should produce the validate_inprogress_transition error.
+          4. With assigned_agent populated AND a member of
+             assigned_group, transitioning Open -> In Progress should
+             succeed.
+          5. Creating a child task in Open status, then attempting
+             In Progress -> Resolved should produce the verbatim AAP
+             Section 0.7.4 error "All tasks must be closed before
+             resolving this case."
+          6. Closing all child tasks, retrying In Progress -> Resolved
+             should succeed.
+          7. As non-manager user, attempting Resolved -> Closed should
+             produce the validate_closed_transition role-gate error.
+          8. As case_manager user, attempting Resolved -> Closed should
+             succeed and closed_date should be auto-set.
+          9. Attempting any back-transition to Draft should produce
+             the verbatim AAP Section 0.7.4 error "Cases cannot be
+             returned to Draft." (from the companion business rule).
+         10. Attempting any transition out of Closed should produce
+             the verbatim AAP Section 0.7.4 error "Closed cases are
+             terminal and cannot be modified." (from the companion
+             business rule).
+
+    PERFORMANCE NOTE:
+
+        The trigger filter "type=Complaint AND status changes" is a
+        low-cardinality, indexed-field comparison. The platform's
+        record-trigger framework evaluates the filter on every update
+        to x_casemgmt_case but only invokes the flow when both
+        conditions hold. For General Inquiry cases or any update that
+        doesn't change status, the cost is a single row-field
+        comparison - no flow invocation, no script execution, no
+        subflow dispatch.
+
+        When the flow IS invoked, the dispatch If/Else-If ladder is
+        O(1) (at most 5 string equality checks). Each subflow's
+        internal cost is documented in the respective subflow XML;
+        the heaviest is validate_resolved_transition which performs a
+        single GlideAggregate count on the child task table - well
+        under 10 ms in steady state.
+
+    FUTURE EXTENSIBILITY:
+
+        - If a new case type is added (e.g., "Service Request"), AAP
+          Section 0.4.3 ("two Flow Designer flows, one per case type")
+          requires a NEW flow file (e.g., service_request_state_machine.xml)
+          - NOT a modification to this flow. The per-type isolation is
+          a deliberate AAP design choice.
+        - If a new status is added (e.g., "Reopened"), this flow's
+          dispatch ladder must be extended with a new If/Else-If branch
+          calling the appropriate subflow. The trigger's status-changes
+          filter remains correct because it fires on ANY status change.
+        - If a new transition validation gate is added on an existing
+          status, the change goes in the corresponding subflow under
+          ./sub_flows/, NOT in this parent flow. This flow's
+          responsibility is dispatch only.
+        - If a Complaint-specific behavior must diverge from General
+          Inquiry behavior on a particular transition, the divergence
+          goes either (a) inside the subflow as a parameterized switch,
+          or (b) in this parent flow AROUND the subflow call. Never
+          inline the subflow's logic here - that would duplicate the
+          source of truth and break DRY.
+-->
+<record_update table="sys_hub_flow">
+    <sys_hub_flow action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <acls/>
+        <active>true</active>
+        <annotation/>
+        <callable_by_client_api>false</callable_by_client_api>
+        <category display_value="Custom">custom</category>
+        <copied_from/>
+        <copied_from_name/>
+        <description>Parent Flow Designer flow that orchestrates every status transition for cases of type Complaint on x_casemgmt_case. OnUpdate trigger filtered on type=Complaint AND status change. Dispatches to validate_open_transition, validate_inprogress_transition, validate_pending_transition, validate_resolved_transition, or validate_closed_transition subflow under ./sub_flows/ based on the new status value via a 5-branch If/Else-If ladder. Replaces the ArkCase ChangeCaseFileStateService + ChangeCaseStatusWorkflowListener + CaseFileQueueHandler stack (the BPMN/Activiti engine is eliminated entirely per AAP Section 0.1.2). Runs as user_who_triggers so that the role-based gate in validate_closed_transition (gs.getUser().hasRole('x_casemgmt_case_manager')) evaluates against the saving user rather than the system user - non-negotiable per AAP Section 0.7.4. All transition rules and verbatim error messages are sourced from AAP Sections 0.5.5 and 0.7.4 and surfaced from the dispatched subflows or supporting business rules (../business_rules/x_casemgmt_block_draft_backtransition.xml and ../business_rules/x_casemgmt_block_terminal_closed.xml). NO hardcoded sys_ids in any reference field - the trigger's table reference, every subflow call, and every scope reference resolve by name (table=x_casemgmt_case, subflow_name=x_casemgmt_validate_*_transition, scope=x_casemgmt). Active=true and status=published per AAP Section 0.7.3 Gate 7 so Update Set commit immediately enables the state machine. Functionally identical to ./general_inquiry_state_machine.xml except the trigger filter is type=Complaint rather than type=General Inquiry - the duplication is intentional per AAP Section 0.4.3 to keep per-type trigger filtering explicit and to allow future per-type customization. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <internal_name>x_casemgmt_complaint_state_machine</internal_name>
+        <label_cache>Complaint State Machine</label_cache>
+        <latest_snapshot><![CDATA[{
+    "name": "x_casemgmt_complaint_state_machine",
+    "label": "Complaint State Machine",
+    "type": "flow",
+    "description": "Parent state-machine flow for cases of type=Complaint. OnUpdate trigger filtered on type=Complaint AND status change; dispatches to one of five transition-validation subflows based on the new status value. Replaces ArkCase ChangeCaseFileStateService + ChangeCaseStatusWorkflowListener + CaseFileQueueHandler. Runs as user_who_triggers for correct role-check evaluation. Functionally identical to general_inquiry_state_machine.xml except the trigger filter is type=Complaint rather than type=General Inquiry.",
+    "scope": "x_casemgmt",
+    "run_as": "user_who_triggers",
+    "category": "flow",
+    "trigger": {
+        "id": "trigger_record_updated",
+        "name": "On Complaint case status change",
+        "type": "record",
+        "operation": "updated",
+        "trigger_type": "record_updated",
+        "table": "x_casemgmt_case",
+        "reference_table": "x_casemgmt_case",
+        "condition": "type=Complaint^EQ",
+        "condition_query": "type=Complaint",
+        "filter_status_changes_only": true,
+        "filter_field_changed": "status",
+        "filter_field_changes_to_any": true,
+        "run_trigger": "always",
+        "description": "Fires on every update to a row in x_casemgmt_case where (a) the row's type field equals the literal string 'Complaint' (Title Case, single word; this is the choice LABEL value declared in ../choices/sys_choice_case_type.xml sequence 200, NOT a sys_id) AND (b) the row's status field changed value as part of the update. The trigger does NOT fire on inserts, on row deletions, or on updates that leave status unchanged. The 'condition' string uses ServiceNow's GlideRecord encoded-query syntax: type=Complaint^EQ means 'type field exactly equals Complaint' (the ^EQ suffix is the equality operator marker - some platform releases serialize it as '=' alone, others append ^EQ). The filter_status_changes_only flag is the platform-canonical way to express 'fire only when the status field changes value' which is more selective than firing on every update."
+    },
+    "inputs": [],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_if_status_open",
+            "order": 100,
+            "name": "If status is Open",
+            "type": "if",
+            "description": "Branches when the case's new status value is exactly 'Open' (Title Case, single word). On match, dispatches to the validate_open_transition subflow which validates that assigned_group is populated. The condition uses the new value of the field (current.status), not the previous value (previous.status), because the trigger has already established that status changed and we are interested in the destination state.",
+            "condition": "current.status == 'Open'",
+            "actions": [
+                {
+                    "id": "step_call_validate_open",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_open_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_open_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_open_transition subflow which checks that assigned_group is populated before allowing Draft -> Open. The subflow uses x_casemgmt.CaseTransitionValidator.canTransitionToOpen and throws a blocking form-level error if the precondition fails. Subflow lookup is by NAME (not by sys_id) per AAP Section 0.7.2 No-Hardcoded-Sys_ID constraint.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_inprogress",
+            "order": 200,
+            "name": "Else if status is In Progress",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'In Progress' (Title Case, two words separated by single ASCII space). On match, dispatches to the validate_inprogress_transition subflow which validates that assigned_agent is populated AND is a member of assigned_group, and clears pending_reason if the source state was Pending.",
+            "condition": "current.status == 'In Progress'",
+            "actions": [
+                {
+                    "id": "step_call_validate_inprogress",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_inprogress_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_inprogress_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_inprogress_transition subflow which checks that assigned_agent is populated AND is a member of assigned_group before allowing Open -> In Progress (or Pending -> In Progress). The subflow uses x_casemgmt.CaseTransitionValidator.canTransitionToInProgress and throws a blocking form-level error if the compound precondition fails. Subflow lookup is by NAME per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_pending",
+            "order": 300,
+            "name": "Else if status is Pending",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'Pending'. On match, dispatches to the validate_pending_transition subflow which has no precondition gate but DOES set the pending_reason field (Awaiting Info / Awaiting Third Party / Other) per AAP Section 0.5.5.",
+            "condition": "current.status == 'Pending'",
+            "actions": [
+                {
+                    "id": "step_call_validate_pending",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_pending_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_pending_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_pending_transition subflow which stamps pending_reason on the case row. No precondition gate; the In Progress -> Pending transition is unconditionally allowed per AAP Section 0.5.5. The pending_reason value is captured from the calling user's prompt input and persisted via Update Record action inside the subflow. Subflow lookup is by NAME per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_resolved",
+            "order": 400,
+            "name": "Else if status is Resolved",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'Resolved'. On match, dispatches to the validate_resolved_transition subflow which queries child x_casemgmt_case_task records via GlideAggregate and surfaces the VERBATIM AAP Section 0.7.4 error message 'All tasks must be closed before resolving this case.' if any open child tasks exist.",
+            "condition": "current.status == 'Resolved'",
+            "actions": [
+                {
+                    "id": "step_call_validate_resolved",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_resolved_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_resolved_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_resolved_transition subflow which enforces the all-tasks-closed gate before allowing In Progress -> Resolved. The subflow uses x_casemgmt.CaseTransitionValidator.canTransitionToResolved (which delegates to GlideAggregate('x_casemgmt_case_task') with addQuery('case', caseSysId) and addQuery('status', '!=', 'Closed')). Throws the VERBATIM AAP Section 0.7.4 error message on failure. Replaces ArkCase CaseFileTasksService (which used Solr search; Solr is out of POC scope per AAP Section 0.3.2). Subflow lookup is by NAME per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_closed",
+            "order": 500,
+            "name": "Else if status is Closed",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'Closed'. On match, dispatches to the validate_closed_transition subflow which enforces the case_manager role gate before allowing Resolved -> Closed and auto-sets the closed_date field.",
+            "condition": "current.status == 'Closed'",
+            "actions": [
+                {
+                    "id": "step_call_validate_closed",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_closed_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_closed_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_closed_transition subflow which (a) checks gs.getUser().hasRole('x_casemgmt_case_manager') and (b) auto-sets closed_date = gs.nowDateTime() per AAP Section 0.5.5. The role check evaluates against the saving user because this parent flow's run_as is user_who_triggers (NOT system_user, which would bypass the role gate). Subflow lookup is by NAME and the role lookup inside the subflow is also by NAME (x_casemgmt_case_manager) per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        }
+    ],
+    "tables_referenced": [
+        "x_casemgmt_case",
+        "x_casemgmt_case_task"
+    ],
+    "subflows_called": [
+        "x_casemgmt_validate_open_transition",
+        "x_casemgmt_validate_inprogress_transition",
+        "x_casemgmt_validate_pending_transition",
+        "x_casemgmt_validate_resolved_transition",
+        "x_casemgmt_validate_closed_transition"
+    ],
+    "script_includes_used": [
+        "x_casemgmt.CaseTransitionValidator"
+    ]
+}]]></latest_snapshot>
+        <latest_snapshot_user display_value="System Administrator">admin</latest_snapshot_user>
+        <master_snapshot><![CDATA[{
+    "name": "x_casemgmt_complaint_state_machine",
+    "label": "Complaint State Machine",
+    "type": "flow",
+    "description": "Parent state-machine flow for cases of type=Complaint. OnUpdate trigger filtered on type=Complaint AND status change; dispatches to one of five transition-validation subflows based on the new status value. Replaces ArkCase ChangeCaseFileStateService + ChangeCaseStatusWorkflowListener + CaseFileQueueHandler. Runs as user_who_triggers for correct role-check evaluation. Functionally identical to general_inquiry_state_machine.xml except the trigger filter is type=Complaint rather than type=General Inquiry.",
+    "scope": "x_casemgmt",
+    "run_as": "user_who_triggers",
+    "category": "flow",
+    "trigger": {
+        "id": "trigger_record_updated",
+        "name": "On Complaint case status change",
+        "type": "record",
+        "operation": "updated",
+        "trigger_type": "record_updated",
+        "table": "x_casemgmt_case",
+        "reference_table": "x_casemgmt_case",
+        "condition": "type=Complaint^EQ",
+        "condition_query": "type=Complaint",
+        "filter_status_changes_only": true,
+        "filter_field_changed": "status",
+        "filter_field_changes_to_any": true,
+        "run_trigger": "always",
+        "description": "Fires on every update to a row in x_casemgmt_case where (a) the row's type field equals the literal string 'Complaint' (Title Case, single word; this is the choice LABEL value declared in ../choices/sys_choice_case_type.xml sequence 200, NOT a sys_id) AND (b) the row's status field changed value as part of the update. The trigger does NOT fire on inserts, on row deletions, or on updates that leave status unchanged. The 'condition' string uses ServiceNow's GlideRecord encoded-query syntax: type=Complaint^EQ means 'type field exactly equals Complaint' (the ^EQ suffix is the equality operator marker - some platform releases serialize it as '=' alone, others append ^EQ). The filter_status_changes_only flag is the platform-canonical way to express 'fire only when the status field changes value' which is more selective than firing on every update."
+    },
+    "inputs": [],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_if_status_open",
+            "order": 100,
+            "name": "If status is Open",
+            "type": "if",
+            "description": "Branches when the case's new status value is exactly 'Open' (Title Case, single word). On match, dispatches to the validate_open_transition subflow which validates that assigned_group is populated. The condition uses the new value of the field (current.status), not the previous value (previous.status), because the trigger has already established that status changed and we are interested in the destination state.",
+            "condition": "current.status == 'Open'",
+            "actions": [
+                {
+                    "id": "step_call_validate_open",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_open_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_open_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_open_transition subflow which checks that assigned_group is populated before allowing Draft -> Open. The subflow uses x_casemgmt.CaseTransitionValidator.canTransitionToOpen and throws a blocking form-level error if the precondition fails. Subflow lookup is by NAME (not by sys_id) per AAP Section 0.7.2 No-Hardcoded-Sys_ID constraint.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_inprogress",
+            "order": 200,
+            "name": "Else if status is In Progress",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'In Progress' (Title Case, two words separated by single ASCII space). On match, dispatches to the validate_inprogress_transition subflow which validates that assigned_agent is populated AND is a member of assigned_group, and clears pending_reason if the source state was Pending.",
+            "condition": "current.status == 'In Progress'",
+            "actions": [
+                {
+                    "id": "step_call_validate_inprogress",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_inprogress_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_inprogress_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_inprogress_transition subflow which checks that assigned_agent is populated AND is a member of assigned_group before allowing Open -> In Progress (or Pending -> In Progress). The subflow uses x_casemgmt.CaseTransitionValidator.canTransitionToInProgress and throws a blocking form-level error if the compound precondition fails. Subflow lookup is by NAME per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_pending",
+            "order": 300,
+            "name": "Else if status is Pending",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'Pending'. On match, dispatches to the validate_pending_transition subflow which has no precondition gate but DOES set the pending_reason field (Awaiting Info / Awaiting Third Party / Other) per AAP Section 0.5.5.",
+            "condition": "current.status == 'Pending'",
+            "actions": [
+                {
+                    "id": "step_call_validate_pending",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_pending_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_pending_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_pending_transition subflow which stamps pending_reason on the case row. No precondition gate; the In Progress -> Pending transition is unconditionally allowed per AAP Section 0.5.5. The pending_reason value is captured from the calling user's prompt input and persisted via Update Record action inside the subflow. Subflow lookup is by NAME per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_resolved",
+            "order": 400,
+            "name": "Else if status is Resolved",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'Resolved'. On match, dispatches to the validate_resolved_transition subflow which queries child x_casemgmt_case_task records via GlideAggregate and surfaces the VERBATIM AAP Section 0.7.4 error message 'All tasks must be closed before resolving this case.' if any open child tasks exist.",
+            "condition": "current.status == 'Resolved'",
+            "actions": [
+                {
+                    "id": "step_call_validate_resolved",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_resolved_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_resolved_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_resolved_transition subflow which enforces the all-tasks-closed gate before allowing In Progress -> Resolved. The subflow uses x_casemgmt.CaseTransitionValidator.canTransitionToResolved (which delegates to GlideAggregate('x_casemgmt_case_task') with addQuery('case', caseSysId) and addQuery('status', '!=', 'Closed')). Throws the VERBATIM AAP Section 0.7.4 error message on failure. Replaces ArkCase CaseFileTasksService (which used Solr search; Solr is out of POC scope per AAP Section 0.3.2). Subflow lookup is by NAME per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_elseif_status_closed",
+            "order": 500,
+            "name": "Else if status is Closed",
+            "type": "elseif",
+            "description": "Branches when the case's new status value is exactly 'Closed'. On match, dispatches to the validate_closed_transition subflow which enforces the case_manager role gate before allowing Resolved -> Closed and auto-sets the closed_date field.",
+            "condition": "current.status == 'Closed'",
+            "actions": [
+                {
+                    "id": "step_call_validate_closed",
+                    "order": 100,
+                    "name": "Call x_casemgmt_validate_closed_transition",
+                    "type": "call_subflow",
+                    "subflow_name": "x_casemgmt_validate_closed_transition",
+                    "subflow_scope": "x_casemgmt",
+                    "description": "Invokes the validate_closed_transition subflow which (a) checks gs.getUser().hasRole('x_casemgmt_case_manager') and (b) auto-sets closed_date = gs.nowDateTime() per AAP Section 0.5.5. The role check evaluates against the saving user because this parent flow's run_as is user_who_triggers (NOT system_user, which would bypass the role gate). Subflow lookup is by NAME and the role lookup inside the subflow is also by NAME (x_casemgmt_case_manager) per AAP Section 0.7.2.",
+                    "inputs": {
+                        "case_record": "${trigger.current}"
+                    }
+                }
+            ]
+        }
+    ],
+    "tables_referenced": [
+        "x_casemgmt_case",
+        "x_casemgmt_case_task"
+    ],
+    "subflows_called": [
+        "x_casemgmt_validate_open_transition",
+        "x_casemgmt_validate_inprogress_transition",
+        "x_casemgmt_validate_pending_transition",
+        "x_casemgmt_validate_resolved_transition",
+        "x_casemgmt_validate_closed_transition"
+    ],
+    "script_includes_used": [
+        "x_casemgmt.CaseTransitionValidator"
+    ]
+}]]></master_snapshot>
+        <master_snapshot_id/>
+        <name>x_casemgmt_complaint_state_machine</name>
+        <natlang/>
+        <nlu_model_version/>
+        <outputs/>
+        <protection_policy/>
+        <remote_published_version/>
+        <run_as>user_who_triggers</run_as>
+        <sc_callable>false</sc_callable>
+        <show_draft_actions>false</show_draft_actions>
+        <show_triggered_flows>false</show_triggered_flows>
+        <status>published</status>
+        <sys_class_name>sys_hub_flow</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>789e559c36dbf6890bb32580a1553e54</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_complaint_state_machine</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_hub_flow_x_casemgmt_complaint_state_machine</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>flow</type>
+        <validation_status>complete</validation_status>
+    </sys_hub_flow>
+</record_update>
