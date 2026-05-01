@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sp_widget` row that
+    defines the CASE CONFIRMATION WIDGET of the unauthenticated Experience
+    Portal inside the scoped application `x_casemgmt`. This widget is the
+    THIRD of the three Service Portal widgets required by AAP Section 0.4.4
+    ("two unauthenticated pages: case submission and case status lookup") and
+    AAP Section 0.5.1 (in-scope artifact list).
+
+    PURPOSE (AAP Sections 0.1.1 / 0.4.4 / 0.7.4 / Validation Gate 4
+    "Portal - submission"):
+
+      AAP Section 0.4.4 verbatim ("UI Design - External Experience Portal UI"):
+        "Page 1 - Case Submission: a simple form with five inputs (subject,
+         type, description, requester_name, requester_email). On submit, calls
+         the scripted REST endpoint, displays a confirmation panel showing the
+         returned case number and a friendly 'Your case has been submitted'
+         message."
+
+      AAP Section 0.5.1 (in-scope artifact, resolved to concrete scope):
+        "servicenow-case-management-poc/portal/sp_widget_x_casemgmt_case_confirmation_widget.xml -
+         confirmation widget displaying returned case number"
+
+      This widget renders, after a successful case submission, exactly two
+      pieces of content:
+        1. The verbatim friendly success message "Your case has been submitted"
+           (capital "Y", lowercase elsewhere, NO trailing period - matching
+           the AAP quote character-for-character).
+        2. The auto-generated case number returned by the case submission REST
+           endpoint (e.g., CASE0000001), passed in via the widget options.
+
+      Validation Gate 4 ("Portal - submission") verbatim from AAP Section 0.7.3:
+        "Case created from unauthenticated portal submission - Case appears in
+         internal list with Draft status and correct case number."
+      Although Gate 4's pass criterion focuses on the case being CREATED
+      (which happens in the REST endpoint + Script Include), the user-facing
+      confirmation is what makes the submission UX usable. This widget is the
+      third leg of the submission tripod (form widget -> REST endpoint ->
+      confirmation widget); without this widget, the submission widget would
+      have no way to confirm success to the user.
+
+    THE WIDGET IS A "LEAF" DISPLAY-ONLY COMPONENT:
+      This widget has the simplest design contract of any in this scoped
+      application:
+        - NO client-side AJAX calls (no $http, no $resource, no fetch).
+        - NO server-side database operations (no GlideRecord reads or writes).
+        - NO state machine; no event listeners; no buttons.
+        - The case number flows in via widget options, exposed to the template
+          via c.options.number, and rendered as plain interpolated text.
+      It is "embedded" by the case submission widget via the canonical
+      ServiceNow Service Portal pattern of $sp.getWidget('id', { ... }) on
+      the server side plus the <sp-widget widget="..."> directive on the
+      template side. The submission widget sets c.data.confirmationWidget.
+      options.number = String(response.data.number); after a successful POST
+      to /api/x_casemgmt/case_submit, then conditionally renders this widget
+      in place of the form via ng-if.
+
+    UNAUTHENTICATED ANONYMOUS-ACCESS DESIGN (AAP Section 0.4.4 verbatim:
+    "two unauthenticated pages"):
+      Three configuration mechanisms work together to make this widget
+      renderable by anonymous, unauthenticated callers (matching the parent
+      submission widget's flags and the parent page's flags):
+
+        1. <public>true</public> - explicit signal to the platform's
+           authorization layer that THIS WIDGET is exempt from the standard
+           authentication challenge.
+
+        2. <internal>false</internal> - the widget is publicly accessible
+           and NOT restricted to "internal" (employee-only) widgets.
+
+        3. <roles/> - empty. No roles are required to render the widget.
+           The Service Portal widget-level role-based gating is bypassed by
+           the empty roles list, so any caller (including anonymous) who
+           reaches the parent page can render the widget.
+
+      All three mechanisms are necessary; omitting any one breaks the
+      anonymous-access guarantee for the chained user journey:
+        anonymous user -> portal record -> submission page -> submission
+        widget -> (on submit success) -> THIS confirmation widget.
+
+    DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
+    treatment: ServiceNow Experience Portal default theme. No custom CSS,
+    no custom branding."):
+      The <css> element is empty. All visual styling uses out-of-the-box
+      Service Portal Bootstrap classes already shipped with the PDI:
+        - alert alert-success: green-bordered success panel with subtle
+          icon and standard padding.
+        - <h3>: standard heading typography.
+        - <strong>: bold emphasis on the case number for visual scanning.
+      No custom CSS is authored or referenced. No custom branding artifacts
+      (icons, images, colors) are defined.
+
+    NO HARDCODED SYS_IDS IN REFERENCES (AAP Section 0.7.2):
+      Every cross-reference is a name lookup against a stable identifier:
+        - <sys_scope> resolves against the scope record's <name> field
+          (`x_casemgmt`) per ../../app/sys_scope/x_casemgmt.xml.
+        - <sys_package> resolves against the sys_app record's <scope> field
+          (`x_casemgmt`) per ../../app/sys_app/x_casemgmt_case_management.xml.
+      The ONLY sys_id literal in this file is <sys_id> itself (THIS record's
+      own primary key). It is the deterministic 32-char lowercase hex MD5
+      of `sp_widget_x_casemgmt_case_confirmation_widget`:
+        printf '%s' 'sp_widget_x_casemgmt_case_confirmation_widget' | md5sum | cut -c1-32
+        -> a198a7f3386d6b0b146451dcfa3c2126
+      Per AAP Section 0.7.2, the no-hardcoded-sys_id rule applies to
+      references TO OTHER records, not to a record's own identity primary
+      key.
+
+    NO PII, NO EMAIL (AAP Sections 0.7.2, 0.3.2):
+      The description and template below contain ZERO PII (no real names,
+      no real email addresses, no real organization names, no real case
+      numbers). Email notifications are explicitly disabled on the PDI per
+      AAP Section 0.7.2 - this widget makes no notification calls
+      (gs.eventQueue, NotificationService, etc.).
+
+    `casemgmt` SCOPE IDENTIFIER (AAP Sections 0.7.1 / 0.7.2):
+      All `x_casemgmt_*` references use the concrete scope identifier
+      `casemgmt` per AAP Section 0.7.2 ("Scoped-namespace-only constraint").
+      ServiceNow Update Set imports use a standard XML parser (Java
+      DocumentBuilder); the scope identifier MUST be concrete in the XML
+      before export. The same identifier is used consistently across every
+      sibling XML in this scoped application (see sibling pages, REST
+      endpoints, dashboards, reports, and seed records).
+
+    XML CONVENTIONS HONORED (matching sibling files in this app):
+      - Wrapper element: <record_update table="sp_widget"> per the agent
+        prompt's Phase 1 specification, matching the sibling pattern used
+        by ../sp_portal_x_casemgmt_case_portal.xml.
+      - Indentation: 4 spaces for record fields (matching sibling-file
+        convention).
+      - Element ordering: alphabetical within the record (matching
+        sibling-file convention).
+      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
+        record's <name>).
+      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
+        attribute (matching the sys_app record's <scope>).
+      - Deterministic 32-char lowercase hex sys_id: computed as
+        MD5("sp_widget_x_casemgmt_case_confirmation_widget") =
+        a198a7f3386d6b0b146451dcfa3c2126. Re-generation of this XML is
+        byte-identical (no random UUIDs).
+      - Audit fields: <sys_created_by>admin</sys_created_by> and
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
+        repeatable timestamps (the same date is used by EVERY sibling
+        record in this scoped app for repeatable XML re-generation).
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview
+        (AAP Section 0.7.3 validation gate 7).
+
+    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.5.1):
+
+      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/acm/
+      portalgateway/service/DefaultPluggablePortalRequestService.java
+        line 60-65 - submitRequest(...) implementation; resolves provider
+                     by request type and forwards. Returns a PortalResponse
+                     containing the confirmation identifier returned by the
+                     downstream provider (in ArkCase: a request id; in this
+                     ServiceNow target: the auto-generated case number).
+
+      ArkCase's PortalResponse DTO carries the confirmation identifier
+      returned by submitRequest(...). The ServiceNow target's confirmation
+      widget consumes the equivalent identifier (the case number) and
+      renders it. The semantic intent is preserved (display submission
+      confirmation); the technology stack is restructured to fit
+      ServiceNow's UI Builder/Service Portal conventions.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD MUST LOAD AFTER:
+        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
+          cross-reference resolves against this record's <name>)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped
+          application record; <sys_package> cross-reference resolves
+          against this record's <scope>)
+
+      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
+      tolerates any order within the same Update Set, since references
+      resolve by name):
+        - ./sp_widget_x_casemgmt_case_submission_widget.xml (the submission
+          widget embeds this widget via $sp.getWidget('x_casemgmt_case_
+          confirmation_widget', { number: ... }))
+        - ../pages/sp_page_x_casemgmt_case_submit.xml (the page hosts the
+          submission widget which transitively embeds this widget)
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
+      This widget supports Validation Gate 4 ("Portal - submission") by
+      providing the success-confirmation UI that the submission widget swaps
+      in after a successful POST. Without this widget, the submission user
+      experience would have no terminal success state.
+-->
+<record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function CaseConfirmationWidgetController($scope) {
+    /*
+     * Case Confirmation Widget - client-side controller.
+     *
+     * This widget is a pure display component. It receives the auto-generated
+     * case number via widget options (set by the parent submission widget via
+     * $sp.getWidget('x_casemgmt_case_confirmation_widget', { number: '...' })),
+     * and exposes it to the template via c.options.number for interpolation.
+     *
+     * NO AJAX calls, NO event listeners, NO state machine, NO buttons - this
+     * controller's sole responsibility is to expose the options object to the
+     * template under the `c` alias and defensively coerce the number to a
+     * string for predictable template binding.
+     */
+    var c = this;
+
+    // Expose widget options to the template via c.options.
+    // ServiceNow's Service Portal framework auto-populates $scope.options from
+    // the widget instance options (set by the parent's $sp.getWidget call).
+    // We assign it explicitly to c.options for `controller as c` syntax clarity.
+    c.options = $scope.options || {};
+
+    // Defensive coercion: ensure c.options.number is always a string (or empty
+    // string) so the template's ng-if and {{}} interpolation behave predictably.
+    // Handles edge cases where the parent passes a non-string value (e.g., a
+    // number primitive, null, or undefined). Without this guard, the template
+    // could render the literal text "null" or "undefined".
+    if (c.options.number == null) {
+        c.options.number = '';
+    } else {
+        c.options.number = String(c.options.number);
+    }
+}
+]]></client_script>
+        <controller_as>c</controller_as>
+        <css/>
+        <data_table>sp_instance</data_table>
+        <description>Custom display-only Service Portal widget that shows the verbatim text 'Your case has been submitted' plus the auto-generated case number after a successful case submission. Embedded by sp_widget_x_casemgmt_case_submission_widget via $sp.getWidget(); receives the case number via the 'number' widget option (exposed to the template as c.options.number). Per AAP Section 0.4.4 (verbatim 'Your case has been submitted' message) and Validation Gate 4 (Portal - submission). No client-side AJAX, no server-side database operations - pure display component.</description>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>x_casemgmt_case_confirmation_widget</id>
+        <internal>false</internal>
+        <link/>
+        <name>Case Confirmation Widget</name>
+        <option_schema>[{"name":"number","label":"Case Number","section":"Presentation","type":"string","default_value":""}]</option_schema>
+        <pop_up>false</pop_up>
+        <public>true</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    /*
+     * Case Confirmation Widget - server-side data initialization.
+     *
+     * No server-side data fetch is needed. The case number is passed via widget
+     * options by the parent (case submission widget) after a successful POST to
+     * /api/x_casemgmt/case_submit. The client-side controller exposes c.options
+     * to the template, which interpolates {{c.options.number}}.
+     *
+     * This widget intentionally performs ZERO database operations:
+     *   - No GlideRecord reads (no fetching of the freshly-created case row).
+     *   - No GlideRecord writes (all writes happen through the scripted REST
+     *     endpoint at sys_ws_definition_x_casemgmt_case_submit; this widget
+     *     does not duplicate that contract).
+     *   - No gs.eventQueue calls (email notifications are disabled per AAP
+     *     Section 0.7.2 Email-disabled constraint).
+     *
+     * The IIFE pattern matches ServiceNow's standard widget server-script
+     * convention; the empty body is the canonical no-op placeholder.
+     */
+})();
+]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a198a7f3386d6b0b146451dcfa3c2126</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Confirmation Widget</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sp_widget_x_casemgmt_case_confirmation_widget</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template><![CDATA[<div class="x-casemgmt-case-confirmation-widget">
+    <div class="alert alert-success" role="alert">
+        <h3>Your case has been submitted</h3>
+        <p ng-if="c.options.number">
+            Case number: <strong>{{c.options.number}}</strong>
+        </p>
+        <p>
+            Please save this case number for future reference. You can use it to look up the status of your case at any time.
+        </p>
+    </div>
+</div>
+]]></template>
+    </sp_widget>
+</record_update>
