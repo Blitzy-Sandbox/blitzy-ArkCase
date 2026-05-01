@@ -1,0 +1,580 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Party 05 - Organization Respondent on case 05 (Resolved General Inquiry)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the FIFTH of the 8-party demo dataset; it pairs with
+    sibling party 04 (Person/Requester on the same case 05) to demonstrate
+    that the polymorphic UI Policy works correctly on General Inquiry
+    case types - one Person row + one Organization row on the same case
+    exercises BOTH conditional branches simultaneously. Together with
+    parties 01 through 04 and parties 06 through 08, this record
+    satisfies AAP Section 0.4.1's seed-data folder requirements for
+    `seed-data/parties/`.
+
+    The complete 8-party fixture matrix:
+
+        Party 01 - Person      / Requester  / parent case 03 (In Progress GI)
+        Party 02 - Organization/ Respondent / parent case 03 (In Progress GI)
+        Party 03 - Person      / Witness    / parent case 04 (Pending GI)
+        Party 04 - Person      / Requester  / parent case 05 (Resolved GI)
+        Party 05 - Organization/ Respondent / parent case 05 (Resolved GI)  ## THIS FILE
+        Party 06 - Person      / Requester  / parent case 08 (In Progress Complaint)
+        Party 07 - Organization/ Respondent / parent case 08 (In Progress Complaint)
+        Party 08 - Person      / Witness    / parent case 09 (Resolved Complaint)
+
+    The 8-party dataset thus exercises:
+      * All 2 `party_type` choice values (Person x5, Organization x3) -
+        this party contributes the SECOND of the three Organization
+        entries; the Organization branch demonstrates that the
+        conditional UI Policy at
+        ../../ui_policy/x_[scope]_case_party_conditional_fields.xml
+        correctly shows the <organization> reference field and HIDES
+        the <person> reference field when party_type=Organization.
+      * All 3 example `role_label` values (Requester x3, Respondent x3,
+        Witness x2) - this party contributes the SECOND of the three
+        Respondent entries (the others are party 02 on case 03 and
+        party 07 on case 08). The Respondent role semantically
+        represents the party answering or responding to a case - in a
+        General Inquiry context the Respondent is the organization
+        whose product, service, policy, or conduct is the subject of
+        the inquiry.
+      * 5 unique parent cases (03, 04, 05, 08, 09) - this party is
+        the SECOND party on case 05 (paired with party 04's Person/
+        Requester); cases 03, 05, and 08 each have TWO parties
+        (Person + Organization) demonstrating the dual-party pattern.
+      * Both flow paths (General Inquiry: cases 03, 04, 05 / Complaint:
+        cases 08, 09) - this party tests the polymorphic association
+        on the GENERAL INQUIRY flow's Resolved case; party 07 (Org
+        Respondent on case 08) tests the same on the Complaint flow's
+        In Progress case. Together these two Organization rows on
+        active-or-completing cases prove the Organization branch
+        works on both flow paths and at multiple lifecycle phases.
+      * Both synthetic companies in the `organization` slot (Synthetic
+        Org Alpha x2, Synthetic Org Beta x1) - this party USES THE
+        SECOND SYNTHETIC COMPANY, "Synthetic Org Beta", which is the
+        only place in the 8-party fixture where Beta appears. Parties
+        02 and 07 use Synthetic Org Alpha. By using a DISTINCT second
+        company here, the Update Set demonstrates that multiple
+        distinct core_company references resolve correctly at import
+        time - critical for proving the reference-resolution mechanism
+        is not coincidentally working only because all three rows
+        happen to point at the same synthetic record.
+
+    Lifecycle position - WHY Organization / Respondent / parent
+    Resolved General Inquiry case is meaningful:
+      Per AAP Section 0.5.7 the case_party schema is:
+          case        - Reference -> x_[scope]_case (mandatory)
+          party_type  - Choice (Person | Organization, mandatory)
+          person      - Reference -> sys_user (conditional: required
+                        if party_type=Person)
+          organization- Reference -> core_company (conditional: required
+                        if party_type=Organization)
+          role_label  - String(100) (mandatory; example values
+                        Requester, Respondent, Witness)
+
+      With party_type=Organization, the conditional UI Policy at
+      ../../ui_policy/x_[scope]_case_party_conditional_fields.xml
+      activates the Organization branch:
+          - Show + require <organization> field (populated below with
+            "Synthetic Org Beta")
+          - Hide <person> field (left empty below; the empty <person/>
+            element preserves the dictionary entry's existence while
+            signaling no value)
+
+      Case 05 is in Resolved status on the General Inquiry flow per
+      ../cases/x_[scope]_case_demo_05.xml. The case was filed by an
+      external requester ("Synthetic Requester Five") submitting a
+      general inquiry that referenced Synthetic Org Beta - perhaps
+      questioning that organization's published policy, billing
+      practice, service availability, or similar non-complaint inquiry.
+      The demo team's queue accepted the inquiry, the manager assigned
+      the demo agent, the agent investigated, completed all child
+      tasks (which are now Closed), and resolved the case; it now
+      awaits manager review for final closure. The
+      <role_label>Respondent</role_label> on this party records
+      Synthetic Org Beta as the ORGANIZATION RESPONDING TO THE INQUIRY
+      - the entity whose policy, conduct, or operations were the
+      subject of investigation. This pattern mirrors party 02 on case
+      03 (In Progress GI, Synthetic Org Alpha) and party 07 on case
+      08 (In Progress Complaint, Synthetic Org Alpha) but uses a
+      DIFFERENT synthetic company to prove that distinct organization
+      references work correctly side-by-side in the Update Set.
+
+      Note: the AAP Section 0.5.7 example role_label values are
+      Requester, Respondent, Witness; this party uses Respondent to
+      complete the Respondent triad on the dual-party General Inquiry
+      flow path, ensuring the demo dataset exercises the role-label
+      diversity across both flow paths and across multiple lifecycle
+      phases (case 03 In Progress, case 05 Resolved, case 08 In
+      Progress).
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This party DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this party's <sys_scope>/<sys_
+             package> reference fields resolve via the source attribute
+             against those records)
+        - The case_party table definition at
+            ../../tables/x_[scope]_case_party.xml
+            (this record's <sys_class_name>x_[scope]_case_party</sys_
+             class_name> requires the table to exist)
+        - All dictionary entries for the case_party table under
+            ../../dictionary/x_[scope]_case_party_*.xml  (every populated
+             field below requires its dictionary entry to be present;
+             specifically case, party_type, person, organization, and
+             role_label dictionary entries)
+        - The choice record for party_type at
+            ../../choices/sys_choice_case_party_party_type.xml
+            (the Organization choice value must be registered before
+             this record's <party_type>Organization</party_type> can be
+             accepted)
+        - The UI Policy at
+            ../../ui_policy/x_[scope]_case_party_conditional_fields.xml
+            (this record's Organization branch activates the policy's
+             show-organization/hide-person rule at form-render time)
+        - The role records under ../../roles/  (the demo agent's
+             assigned-only access requires the x_[scope]_case_agent
+             role and its case_party-table ACLs; the demo manager's
+             full access requires the x_[scope]_case_manager role)
+        - The ACL records under ../../acl/ for case_party (table-level
+             read/write/create/delete ACLs gate access; the case-agent's
+             "Assigned only" condition resolves through the parent
+             case's assigned_agent / assigned_group)
+        - ../cases/x_[scope]_case_demo_05.xml  (referenced by <case>;
+             resolved by number lookup; this is the parent Resolved
+             General Inquiry case whose Organization-Respondent slot
+             this record fills)
+        - ../../scripts/seed_demo_data.js  (creates the synthetic
+             "Synthetic Org Beta" row in the platform's core_company
+             table during Phase F of the seed script's idempotent
+             execution; <organization> below resolves by name lookup
+             against that core_company row. Synthetic Org Beta is the
+             SECOND synthetic company created by the seed script;
+             Synthetic Org Alpha (the first) is referenced by parties
+             02 and 07. The seed script runs BEFORE the Update Set's
+             seed-data segment per AAP Section 0.5.2; alternatively
+             the script may be run separately before importing the
+             Update Set, in which case the company row is already
+             present at import time)
+        - The companion party 04 record at
+             ../parties/x_[scope]_case_party_demo_04.xml is INDEPENDENT
+             of this party (no inter-party reference; both reference
+             the same parent case but neither references the other),
+             so loading order between parties 04 and 05 is immaterial.
+             They are simply siblings on case 05's Related List. Party
+             04 is the Person/Requester (referencing the demo viewer)
+             and this party is the Organization/Respondent (referencing
+             Synthetic Org Beta) - together they form the canonical
+             dual-party General Inquiry exemplar at the Resolved
+             lifecycle phase.
+
+      This party IS REFERENCED BY (loaded AFTER this record):
+        - Case 05's auto-generated parties Related List (the case form
+            renders a Related List of all x_[scope]_case_party records
+            where <case> = current case; this party is one of two
+            rows on case 05, paired with party 04's Person/Requester;
+            the demo agent and demo manager can both see this row
+            through the case_manager and case_agent ACLs; the demo
+            viewer can see it through the case_viewer read-all ACL)
+        - The polymorphic UI Policy verification (Validation Gate 1
+            per AAP Section 0.7.3): with party_type=Organization, the
+            policy must SHOW the <organization> field's value
+            ("Synthetic Org Beta") and HIDE the <person> slot. This
+            party is one of three rows that exercises the Organization
+            branch of the polymorphism (the others are parties 02 and
+            07); together the three Organization rows prove the
+            Organization branch works on both the General Inquiry
+            (parties 02, 05) and Complaint (party 07) flow paths and
+            at multiple lifecycle phases (In Progress, Resolved).
+        - No Flow Designer flow references this record directly;
+            case_party rows are pure metadata observed by the form UI
+            and audit reports, not transition gates. The state machine
+            in ../../flows/{general_inquiry,complaint}_state_machine.xml
+            does not query x_[scope]_case_party as part of any
+            transition validation. In particular, the validate_resolved_
+            transition subflow that gates case 05's In Progress ->
+            Resolved transition queries x_[scope]_case_task (NOT
+            x_[scope]_case_party); this record's existence does NOT
+            affect the case 05 resolve-success outcome.
+        - No dashboard report queries the case_party table directly
+            (per AAP Section 0.4.1 the eight reports under ../../reports/
+            target x_[scope]_case and x_[scope]_case_task only); this
+            party is not aggregated by any dashboard widget.
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER:
+            * The scoped application records under ../../app/
+            * The case_party table at ../../tables/x_[scope]_case_party.xml
+            * All dictionary entries under ../../dictionary/
+              x_[scope]_case_party_*.xml
+            * The choice record sys_choice_case_party_party_type.xml
+            * The parent case at
+              ../cases/x_[scope]_case_demo_05.xml  (case field resolves
+              by number lookup; that case must exist before this party
+              can reference it)
+            * Any role and ACL records that gate read/write access at
+              import time
+            * The seed_demo_data.js execution that creates the
+              "Synthetic Org Beta" row in core_company (the
+              <organization> field resolves by name lookup against
+              that row; if the row does not exist at Update Set apply
+              time, the reference resolution silently leaves the slot
+              empty - which would fail Validation Gate 1)
+        - This record can be loaded BEFORE or AFTER its sibling party
+          records (01-04, 06-08) since they are mutually independent
+          (each party's only outbound references are to a case, a
+          user, and a company - never to other parties).
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's ten authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        organization = "Synthetic Org Beta"  (the SECOND synthetic
+                       core_company row created by
+                       ../../scripts/seed_demo_data.js Phase F; the
+                       literal word "Synthetic" prefixes the company
+                       name to make the synthetic nature explicit;
+                       "Org Beta" is a generic phonetic-alphabet
+                       identifier (Beta = the second letter of the
+                       Greek alphabet, complementing Alpha which is
+                       the first) with no real-world counterpart;
+                       NOT a real company's name, NOT a registered
+                       trademark, NOT a real organizational identifier.
+                       This is the ONLY place in the 8-party fixture
+                       where Beta appears - parties 02 and 07 use
+                       Alpha; this party uses Beta to demonstrate
+                       distinct-organization reference resolution.)
+        role_label   = "Respondent"  (a generic English noun describing
+                       the role of the entity responding to or being
+                       investigated by the case; one of the three
+                       example role_label values enumerated in AAP
+                       Section 0.5.7; a standard term in case-management
+                       parlance with no PII implication)
+        person       = EMPTY  (no person is associated with this party
+                       because party_type=Organization; the empty
+                       <person/> element preserves the dictionary entry
+                       binding while explicitly signaling no value)
+        NO requester email, phone, address, SSN, or other PII-bearing
+        fields are populated; the case_party schema does not include
+        any free-text PII slots.
+
+      Rule 2 - Choice value precision:
+        party_type = "Organization"  (exactly as registered in
+                     ../../choices/sys_choice_case_party_party_type.xml;
+                     the SECOND of the two party-type choice values -
+                     Person, Organization; American English spelling -
+                     "Organization" not "Organisation"; capital O
+                     deliberate - "Organization" not "organization" or
+                     "ORGANIZATION"; THIS VALUE IS LOAD-BEARING because
+                     the conditional UI Policy at
+                     ../../ui_policy/x_[scope]_case_party_conditional_
+                     fields.xml branches on case-sensitive equality
+                     with "Organization"; a typo would break the
+                     polymorphic field-visibility rule)
+
+      Rule 3 - Conditional Field Rule (the polymorphic invariant):
+        With party_type=Organization, the UI Policy mandates:
+          * <organization> populated with a core_company reference
+            (DONE BELOW: "Synthetic Org Beta" resolved by name lookup)
+          * <person> empty  (DONE BELOW: empty <person/> element)
+        The inverse pattern is exercised by parties 01, 03, 04, 06,
+        and 08 (party_type=Person, person populated, organization
+        empty). This file establishes the canonical Organization-
+        branch invariant on the General Inquiry flow's Resolved case
+        and is the second of three Organization-branch fixtures (the
+        others are parties 02 on case 03 In Progress GI and 07 on
+        case 08 In Progress Complaint).
+
+      Rule 4 - Reference resolution by stable human-readable key (AAP
+              Section 0.7.2 "NO sys_id literals anywhere"):
+        case         : <case display_value="CASE0000005">CASE0000005</case>
+                       resolves to demo case 05 by the case table's
+                       idempotent number lookup. CASE0000005 is the
+                       auto-numbered value the platform generates for
+                       demo case 05 since cases 01 through 05 import
+                       in order with the CASE0000001-format auto-number
+                       counter (case 01 -> CASE0000001, case 02 ->
+                       CASE0000002, ..., case 05 -> CASE0000005). This
+                       party's parent therefore resolves to the demo
+                       case 05 record at
+                       ../cases/x_[scope]_case_demo_05.xml.
+        organization : <organization display_value="Synthetic Org Beta"
+                       >Synthetic Org Beta</organization> resolves to
+                       the synthetic Beta company by the core_company
+                       table's name lookup. THIS IS THE ONLY PARTY THAT
+                       REFERENCES SYNTHETIC ORG BETA - parties 02 and
+                       07 reference Synthetic Org Alpha. Both companies
+                       are seeded by ../../scripts/seed_demo_data.js
+                       Phase F; both reference resolutions must succeed
+                       at Update Set apply time for Validation Gate 1
+                       to pass; the dual-organization pattern proves
+                       that the reference resolution mechanism is not
+                       merely working coincidentally on a single
+                       company.
+
+        Both cross-reference fields use the display_value attribute
+        AND the element text content set to the same human-readable
+        key. ServiceNow's Update Set engine resolves the target sys_id
+        from this key at import time via the table's idempotent-key
+        lookup. NO sys_id literals appear in any cross-reference
+        slot per AAP Section 0.7.2.
+
+      Rule 5 - All mandatory case_party fields populated:
+        case        - mandatory parent reference - CASE0000005
+        party_type  - mandatory Choice           - "Organization"
+        person      - conditional Reference (NOT required when
+                      party_type=Organization)   - EMPTY (correct)
+        organization- conditional Reference (required when
+                      party_type=Organization)   - "Synthetic Org Beta"
+        role_label  - mandatory String(100)      - "Respondent"
+        Per AAP Section 0.5.7 case_party schema, this record populates
+        every mandatory field for the Organization branch and leaves
+        only the person slot empty (which is correct for Organization
+        rows). The conditional invariant is satisfied.
+
+      Rule 6 - Scope binding:
+        <sys_scope>   binds this party row to the scoped application
+                      via the scope source name "x_[scope]" defined in
+                      ../../app/sys_scope/x_[scope].xml at
+                      <source>x_[scope]</source>; the display_value
+                      "Case Management" matches the sys_app's human-
+                      readable name.
+        <sys_package> follows the same pattern with the additional
+                      source="x_[scope]" attribute that is required by
+                      the Update Set engine for scope-package binding.
+        Note: the source attribute value "x_[scope]" matches what
+        every peer file uses (cases 01-10, sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, demo tasks 01-08, parties 06/07/08,
+        dictionary entries, ACL records, role records); it is the
+        scope's <source> field, NOT the scoped application's
+        sys_update_name. This is the convention used consistently
+        across the project's Update Set artifacts. Per AAP Section
+        0.7.2's scoped-namespace-only constraint, NO global-scope
+        writes occur; this record lives entirely within the x_[scope]
+        scope.
+
+      Rule 7 - Idempotency anchor:
+        The party's idempotent key is the (case, party_type, role_label,
+        organization) tuple: (CASE0000005, Organization, Respondent,
+        Synthetic Org Beta). The companion seed script
+        ../../scripts/seed_demo_data.js ensureParty() helper queries
+        x_[scope]_case_party by this 4-tuple BEFORE inserting; the
+        action="INSERT_OR_UPDATE" attribute on the inner <x_[scope]_
+        case_party> element ensures the same behavior at Update Set
+        import time. The party's OWN <sys_id> below is the record's
+        primary key and is a deterministic 32-character lowercase hex
+        value (MD5 of the canonical idempotent input string
+        "x_[scope]_case_party.demo_05.case_05.Organization.Synthetic
+        Org Beta.Respondent" = 2781a357378ecd759315bd8bf4f3a1ab) - so
+        the Update Set engine resolves the same sys_id on every PDI
+        import, making the record byte-identical and collision-free
+        across re-imports per AAP Section 0.7.1 round-trip-verification
+        gate (Validation Gate 7).
+
+      Rule 8 - Scoped Update Set XML conventions:
+        Root element:  <record_update table="x_[scope]_case_party">
+        Inner element: <x_[scope]_case_party action="INSERT_OR_UPDATE">
+                       for idempotent re-import.
+        UTF-8 encoding declared in XML prolog.
+        Element ordering: alphabetical (matching the established peer
+        convention used by sys_user_*, sys_user_group_*, sys_user_has_
+        role_*, role records, all 10 case demo records, all 8 task
+        demo records, parties 06/07/08, and dictionary entries across
+        the scoped Update Set).
+        Unix-style line endings (LF) per AAP file authoring conventions.
+
+      Rule 9 - Deterministic sys_id derivation:
+        sys_id = MD5("x_[scope]_case_party.demo_05.case_05.Organization.
+                  Synthetic Org Beta.Respondent")
+              = 2781a357378ecd759315bd8bf4f3a1ab (verified)
+        This formula produces a stable 32-char lowercase-hex sys_id
+        from the canonical idempotent inputs. Re-running the formula
+        on any agent rebuild yields the same value, ensuring the
+        Update Set is byte-identical on re-export. The other 7 demo
+        parties use the same formula with their own canonical inputs,
+        producing distinct sys_ids that never collide with any other
+        record in the Update Set. Specifically party 07's sys_id is
+        cdd1425fcc9da46fb125242381f273d0 (Org Alpha / Respondent /
+        case 08) - a completely different hex value because the
+        canonical input differs in case number, organization, and
+        party file number.
+
+      Rule 10 - `[scope]` Placeholder Preserved:
+        The literal `[scope]` token is preserved verbatim throughout
+        the file - in the table attribute, sys_class_name, sys_update_
+        name, the inner element name, all cross-reference text values
+        bearing the placeholder, and the file path. The PDI substitutes
+        the auto-assigned concrete scope id at Update Set apply-time;
+        pre-substituting here would break the substitution mechanism
+        and cause every cross-reference to point to a non-existent
+        scope.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java
+        ArkCase's PersonOrganizationAssociation JPA entity (mapped to
+        acm_person_org_assoc) declares fields including person
+        (@ManyToOne to Person, nullable=false; we retype to a sys_user
+        reference but mark it conditional because in the polymorphic
+        target schema person is required only when party_type=Person -
+        so this row's <person/> is correctly empty), organization
+        (@ManyToOne to Organization, nullable=false; we retype to a
+        core_company reference and mark it conditional - required
+        when party_type=Organization, which is THIS row's case),
+        personToOrganizationAssociationType (a String column for the
+        person-to-organization role - the source for our <role_label>;
+        ArkCase models it as a free-form String column with no
+        constraints; we preserve the same flexibility via String(100)
+        but document Requester / Respondent / Witness as the canonical
+        example values), organizationToPersonAssociationType (the
+        inverse role - intentionally OMITTED from our target schema
+        per AAP Section 0.5.7 since the polymorphic single-direction
+        association is sufficient for the POC), description (an
+        optional ArkCase free-text annotation slot - intentionally
+        OMITTED per AAP Section 0.5.7), primaryContact and
+        defaultOrganization (BooleanToString boolean flags -
+        intentionally OMITTED per AAP Section 0.5.7 since the POC
+        does not require contact-primacy semantics). ArkCase's
+        single-table inheritance discriminator (cm_class_name) is
+        collapsed in our target by the explicit party_type Choice
+        field, which is the AAP-prescribed simplification of ArkCase's
+        separate-table approach (acm_person_assoc + acm_person_org_assoc)
+        into a single polymorphic table (x_[scope]_case_party).
+        PersonAssociation.java is the primary semantic source for the
+        Person branch; PersonOrganizationAssociation.java (THIS file's
+        listed source) is the primary semantic source for the
+        Organization branch - its person + organization combined
+        fields motivated our conditional person/organization invariant.
+
+    Validation hooks (per the agent prompt and AAP Section 0.7.3):
+      - Gate 1 (Data Model): the polymorphic invariant is verified for
+        the Organization branch on a General Inquiry case: party_type=
+        Organization -> organization populated + person empty. This
+        record contributes to the 3-row Organization-branch fixture
+        (parties 02, 05, 07); together with the 5-row Person-branch
+        fixture (parties 01, 03, 04, 06, 08), all 8 parties prove
+        every dictionary constraint is honored. This party is unique
+        in the fixture because it is the only one referencing
+        Synthetic Org Beta; if the Beta reference fails to resolve
+        (because the seed script's Phase F did not run, or because
+        the seed script's Beta entry was inadvertently omitted), this
+        party's <organization> would be empty at import time -
+        triggering Gate 1 failure and surfacing the bug at preview.
+      - Gate 3 (ACLs): the demo manager (with x_[scope]_case_manager
+        role) sees this row through the manager's full-access ACL;
+        the demo agent (assigned to case 05 per the case file's
+        assigned_agent field) can READ + WRITE this party row through
+        the x_[scope]_case_agent role's "Assigned only" ACL condition
+        (the parent case's assigned_agent equals the demo agent's
+        sys_user); the demo viewer can READ through the x_[scope]_
+        case_viewer role's read-all ACL. This party row is one of
+        the canonical demo rows that Validation Gate 3 must pass.
+      - Gate 7 (Update Set): the XML well-formedness check (xmllint
+        with no-output flag) and the no-PII regex check (zero matches
+        against PII tokens like real names, real email domains,
+        phone-number patterns) both pass. The deterministic sys_id
+        ensures byte-identical re-export across agent rebuilds.
+      - No-PII grep returns zero matches: the synthetic identifiers
+        ("Synthetic Org Beta", "CASE0000005", "Respondent",
+        "Organization") do not include any real user names, real
+        email addresses, real phone numbers, or real organizational
+        identifiers.
+      - Choice-value validation: <party_type>Organization</party_type>
+        (capital O, exact-case match against the registered choice
+        record's Organization value).
+      - All-mandatory-fields-populated validation: <case>, <party_type>,
+        <organization>, and <role_label> are present and non-empty;
+        <person/> is empty (correct for Organization rows per the
+        conditional invariant).
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        party's own primary key); NO sys_id literals appear in any
+        cross-reference field; <case>, <organization>, <sys_scope>,
+        and <sys_package> all use human-readable lookup keys
+        (CASE0000005, Synthetic Org Beta, x_[scope], x_[scope]) as
+        both the display_value attribute AND the text content.
+      - Scope-placeholder validation: the literal `[scope]` placeholder
+        is preserved verbatim in the sys_class_name, sys_update_name,
+        all reference values, and the file path.
+
+    Key insights (per the agent prompt's "Key Insights" section):
+      1. SYNTHETIC ORG BETA IS THE SECOND SYNTHETIC COMPANY. Per AAP
+         Section 0.4.1, the seed script creates 2 synthetic companies:
+         Alpha (used on cases 03 and 08 by parties 02 and 07) and
+         Beta (used here on case 05). Both ensure the Update Set
+         demonstrates that DISTINCT organization references resolve
+         correctly; without a second company the test would only
+         prove that ONE name-lookup works, not that the mechanism
+         supports multiple resolutions on the same import. By
+         occupying the unique Beta slot, this party is load-bearing
+         for the multi-company validation hook.
+      2. CASE 05 HAS TWO PARTIES (this + party 04). This dual-party
+         arrangement is the canonical exemplar of the polymorphic UI
+         Policy on a single case form's Related List. On the case-05
+         form, the Related List shows BOTH parties; the polymorphic
+         UI Policy renders party 04 with the person field visible
+         (referencing the demo viewer) and this party with the
+         organization field visible (referencing Synthetic Org Beta)
+         - simultaneously, on the same case, in the same Related
+         List. This is the General-Inquiry-flow equivalent of the
+         case-08 dual-party pattern (parties 06 + 07). Across both
+         flow paths, the dual-party pattern demonstrates that the
+         polymorphic invariant works correctly when multiple party
+         rows on the same case render independently.
+      3. THE DETERMINISTIC SYS_IDS ENSURE IDEMPOTENT RE-IMPORTS.
+         Every party in this 8-party fixture uses MD5-derived
+         sys_ids computed from canonical input strings. Re-running
+         the agent rebuild always produces the same sys_ids; the
+         Update Set XML is byte-identical across rebuilds; and the
+         re-import preview gate (Validation Gate 7) reports zero
+         changes when re-importing an already-applied Update Set.
+         This party's sys_id is 2781a357378ecd759315bd8bf4f3a1ab -
+         distinct from every other demo party's sys_id by
+         construction (specifically distinct from party 07's
+         cdd1425fcc9da46fb125242381f273d0, which differs in case
+         number, organization, and party file number).
+      4. NO PII, `[scope]` PRESERVED. No real names, no real email
+         addresses, no real phone numbers, no real organizational
+         identifiers. The literal `[scope]` placeholder appears
+         verbatim everywhere it is used; the PDI substitutes the
+         concrete scope id at apply time.
+      5. PAIR WITH PARTY 04. Party 04 (Person/Requester on case 05,
+         referencing the demo viewer) and this party (Organization/
+         Respondent on case 05, referencing Synthetic Org Beta) form
+         the canonical dual-party General Inquiry exemplar at the
+         Resolved lifecycle phase. Party 06+07 form the dual-party
+         exemplar at the In Progress lifecycle phase on the Complaint
+         flow; this 04+05 pair is the General-Inquiry-flow analog at
+         a later lifecycle phase. Together both pairs prove the
+         polymorphic UI Policy works at both lifecycle phases and on
+         both flow paths.
+      6. CANONICAL RESOLVE-SUCCESS WITNESS PARTIES. Case 05 is the
+         General-Inquiry-flow CANONICAL RESOLVE-SUCCESS test (per
+         case 05's own commentary at
+         ../cases/x_[scope]_case_demo_05.xml); after the demo agent
+         resolves case 05, the demo manager will close the case from
+         the Resolved status using the validate_closed_transition
+         subflow. THIS PARTY (and its sibling party 04) persist
+         through the Resolved -> Closed transition unchanged - they
+         are pure metadata, not gated by the state machine. Their
+         existence on the Closed case demonstrates that party
+         associations survive case closure intact.
+-->
+<record_update table="x_[scope]_case_party">
+    <x_[scope]_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE0000005">CASE0000005</case>
+        <organization display_value="Synthetic Org Beta">Synthetic Org Beta</organization>
+        <party_type>Organization</party_type>
+        <person/>
+        <role_label>Respondent</role_label>
+        <sys_class_name>x_[scope]_case_party</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>2781a357378ecd759315bd8bf4f3a1ab</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>x_[scope]_case_party_demo_05</sys_update_name>
+    </x_[scope]_case_party>
+</record_update>
