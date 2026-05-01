@@ -304,7 +304,7 @@
       - Wrapper element: <record_update table="sp_widget"> per the agent
         prompt's Phase 1 specification, matching the sibling pattern used
         by ./sp_widget_x_casemgmt_case_confirmation_widget.xml and
-        ./sp_widget_x_[scope]_case_lookup_widget.xml.
+        ./sp_widget_x_casemgmt_case_lookup_widget.xml.
       - Indentation: 4 spaces for record fields (matching sibling-file
         convention).
       - Element ordering: alphabetical within the record (matching
@@ -470,7 +470,7 @@
      * Design rationale:
      *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
      *     widget-authoring conventions and per the sibling lookup widget
-     *     at ./sp_widget_x_[scope]_case_lookup_widget.xml.
+     *     at ./sp_widget_x_casemgmt_case_lookup_widget.xml.
      *   - $http (NOT fetch): Service Portal widgets run in AngularJS
      *     1.5.x context; $http is the canonical HTTP client. fetch()
      *     would bypass AngularJS's digest cycle and require manual

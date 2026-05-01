@@ -123,6 +123,30 @@ Per AAP Section 0.5.6, field-level ACLs MUST be authored on the sensitive fields
 - The `assigned_group` field-level ACL prevents an agent from reassigning their own case to a different group.
 - The `assigned_agent` field-level ACL allows the assigned agent to update the field if needed (e.g., reassign to peer in same group), but the manager can override.
 
+## UI Action Visibility Tied to ACL Matrix
+
+The role × CRUD matrix above governs database-level authorization (read, write, create, delete). At the form-action layer, the `x_casemgmt_case` form surfaces six UI Actions (one per state transition) whose visibility conditions enforce the SAME role gating as the ACLs, plus the source-status precondition for the transition. The full per-transition mapping appears in [`state-machine.md`](./state-machine.md) "UI Action Visibility Per Transition"; the relevant role gating is summarized below.
+
+| UI Action | Visible to Role(s) | Rationale |
+| --- | --- | --- |
+| **Open** (Draft → Open) | `x_casemgmt_case_manager` only | The Open transition's precondition is `assigned_group populated`. The field-level ACL on `assigned_group` already restricts writes to `case_manager`, so the only role that can establish the precondition is `case_manager`. Surfacing the Open button to `case_agent` would be UX-misleading: agents have no path to set `assigned_group`, so they would see a button they cannot drive. |
+| **Start Progress** (Open → In Progress) | `case_manager` AND assigned `case_agent` | First transition where agents become first-class participants — the "Assigned only" ACL condition gives the assigned agent write access on their own case. |
+| **Set Pending** (In Progress → Pending) | `case_manager` AND assigned `case_agent` | Same role surface as Start Progress. |
+| **Resume** (Pending → In Progress) | `case_manager` AND assigned `case_agent` | Same role surface as Start Progress. |
+| **Resolve** (In Progress → Resolved) | `case_manager` AND assigned `case_agent` | Same role surface as Start Progress. |
+| **Close** (Resolved → Closed) | `x_casemgmt_case_manager` only | AAP Section 0.5.5 row 6 explicitly requires `case_manager` role for Resolved → Closed. The UI Action also uses `form_style=destructive` to communicate the terminal nature of the transition. |
+
+### Design Decision: Open Button — Manager Only
+
+The choice to restrict the **Open** UI Action to `x_casemgmt_case_manager` (instead of mirroring the role surface used by Start Progress, Set Pending, Resume, and Resolve) is an intentional UX-clarity decision:
+
+1. **Field-level ACL alignment.** Writing `assigned_group` is a manager-only operation per the field-level ACL `x_casemgmt_case_assigned_group_field_acl`. Without an `assigned_group` value, the Open transition's precondition cannot be satisfied. Therefore the only role whose privileges include "set the precondition AND fire the transition" is `case_manager`.
+2. **No security delta.** If the Open button were visible to agents, every agent click would reach the server-side `CaseTransitionValidator.canTransitionToOpen(current)` check and either fail (if `assigned_group` is unset) or succeed only when a manager has pre-populated `assigned_group`. The behavioral effect on the database is identical: agents cannot drive Draft → Open without a manager's preceding action.
+3. **UX cleanliness.** Hiding the button on cases an agent cannot complete the action on is consistent with ServiceNow's standard UI-Action visibility pattern (`<condition>` + `<roles>`) where buttons are gated to the audience that can use them.
+4. **No drift from AAP.** AAP Section 0.5.5 row 1 specifies the precondition (`assigned_group populated`) and the failure-handling behavior (`Surface form-level error`) but does NOT specify which role(s) may invoke the transition. The role-restriction is therefore a design choice within the AAP envelope, and the chosen restriction (`case_manager` only) is consistent with the field-level ACL.
+
+The departure from a hypothetical "all transitions visible to both manager and agent" model is documented here and in `state-machine.md`; the rule lives canonically in the `<roles>` and `<condition>` fields of `x_casemgmt_case_open.xml` and can be relaxed in a future iteration without touching any other artifact.
+
 ## Mirror Patterns: case_task and case_party
 
 The role × CRUD matrix is mirrored on the `x_casemgmt_case_task` and `x_casemgmt_case_party` tables, with one additional rule: write/read access is governed by the parent case's "Assigned only" condition. Tasks and parties are children of a case; if the agent cannot access the parent case, they cannot access its child records.

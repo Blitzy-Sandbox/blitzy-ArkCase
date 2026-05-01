@@ -105,6 +105,32 @@ This section maps each transition row in the matrix to the specific subflow and/
 
 The three "VERBATIM" rows in the table above MUST surface the EXACT error text on the form — character-for-character match with AAP Sections 0.5.5 and 0.7.4.
 
+## UI Action Visibility Per Transition
+
+The state-machine transitions are surfaced in the internal user UI as form buttons (UI Actions) on the `x_casemgmt_case` form. Each UI Action is gated by a visibility condition that re-implements the role-based authorization model from the ACL matrix (see [`acl-matrix.md`](./acl-matrix.md)) plus the source-status precondition for the transition.
+
+| UI Action | File | Visible to Role(s) | Source Status | Server-Side Validator Call |
+| --- | --- | --- | --- | --- |
+| **Open** | `x_casemgmt_case_open.xml` | `x_casemgmt_case_manager` only | `Draft` | `CaseTransitionValidator.canTransitionToOpen(current)` |
+| **Start Progress** | `x_casemgmt_case_start_progress.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `Open` | `CaseTransitionValidator.canTransitionToInProgress(current)` |
+| **Set Pending** | `x_casemgmt_case_set_pending.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `In Progress` | (no validator call — `pending_reason` is captured via UI prompt) |
+| **Resume** | `x_casemgmt_case_resume.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `Pending` | (no validator call — clears `pending_reason` via cooperating BR) |
+| **Resolve** | `x_casemgmt_case_resolve.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `In Progress` | `CaseTransitionValidator.canTransitionToResolved(current)` (verbatim error) |
+| **Close** | `x_casemgmt_case_close.xml` | `x_casemgmt_case_manager` only (`form_style=destructive`) | `Resolved` | `CaseTransitionValidator.canTransitionToClosed(current)` |
+
+### Design Decision: Open Button — Manager Only
+
+The **Open** UI Action is intentionally restricted to `x_casemgmt_case_manager` (rather than allowing both `case_manager` and `case_agent`) because `assigned_group` is itself a manager-restricted field per the ACL matrix:
+
+- The field-level ACL `x_casemgmt_case_assigned_group_field_acl` permits writes ONLY by `case_manager` (see [`acl-matrix.md`](./acl-matrix.md) "Field-Level ACLs"). Agents cannot write `assigned_group`.
+- The Draft → Open transition's required precondition is `assigned_group populated` (AAP Section 0.5.5 row 1).
+- Therefore the act of placing a case in a state where it CAN transition to Open is, by ACL definition, a manager-only operation. Agents have no path to set the `assigned_group` field, so making them visible on a button that requires that field's value would be UX-misleading: they would see the button on cases the manager has populated, but pre-population is the manager's domain.
+- Functionally, agents become first-class participants on the case starting at Open → In Progress (the **Start Progress** button), where the ACL "Assigned only" condition gives them write access via the assigned_agent / assigned_group dot-walks. From that point through Resolve, agents share the action surface with managers.
+
+This decision intentionally departs from a simpler "all transitions visible to both roles" model. The trade-off favors UX clarity (the button only appears when the operator has authority to use it) over surface uniformity. The behavioral effect is identical to a hypothetical "agents see the button but every click fails the validator" model — in both cases agents cannot drive Draft → Open. The chosen design simply removes the misleading button.
+
+The departure is intentional and is preserved here as the canonical design rationale. The rule lives in ONE place — the `<roles>` and `<condition>` fields of `x_casemgmt_case_open.xml` — and is not duplicated in the Script Include `CaseTransitionValidator` (which performs the same check whether or not the UI Action is visible). This means the rule can be relaxed in a future iteration (allowing agents to see the button) by editing only the UI Action's visibility metadata, without touching any other artifact.
+
 ## Subflow Specifications
 
 Each transition is encapsulated as a reusable subflow under `../flows/sub_flows/` (subdirectory created in a subsequent checkpoint). Subflows are called from both case-type flows (`general_inquiry_state_machine` and `complaint_state_machine`) so that the validation logic exists in exactly one place per transition.
