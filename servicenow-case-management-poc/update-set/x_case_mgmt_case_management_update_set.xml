@@ -114,6 +114,41 @@
         <application display_value="Case Management">x_casemgmt_case_management</application>
         <category>customer</category>
         <comments/>
+        <name>x_casemgmt</name>
+        <payload><![CDATA[<record_update table="sys_scope">
+    <sys_scope action="INSERT_OR_UPDATE">
+        <licensable>false</licensable>
+        <logo />
+        <name>x_casemgmt</name>
+        <private>false</private>
+        <scope>x_casemgmt</scope>
+        <short_description>Application scope for Case Management POC</short_description>
+        <source>x_casemgmt</source>
+        <sys_id>0e77960b9cdc260c199f0d2c23f37603</sys_id>
+        <vendor>ServiceNow Case Management POC</vendor>
+        <vendor_prefix>x_casemgmt</vendor_prefix>
+        <version>1.0.0</version>
+    </sys_scope>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>sys_scope</table>
+        <target_name>x_casemgmt</target_name>
+        <type>Application</type>
+        <update_domain>global</update_domain>
+        <update_guid>5c77e2bb42935bf5b9014fd251ee3e41</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <category>customer</category>
+        <comments/>
         <name>Case Management</name>
         <payload><![CDATA[<record_update table="sys_app">
     <sys_app action="INSERT_OR_UPDATE">
@@ -144,41 +179,6 @@
         <type>Application</type>
         <update_domain>global</update_domain>
         <update_guid>018ddcc517c90fca84be779d856a129e</update_guid>
-        <update_guid_history/>
-        <view></view>
-    </sys_update_xml>
-    <sys_update_xml action="INSERT_OR_UPDATE">
-        <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
-        <category>customer</category>
-        <comments/>
-        <name>x_casemgmt</name>
-        <payload><![CDATA[<record_update table="sys_scope">
-    <sys_scope action="INSERT_OR_UPDATE">
-        <licensable>false</licensable>
-        <logo />
-        <name>x_casemgmt</name>
-        <private>false</private>
-        <scope>x_casemgmt</scope>
-        <short_description>Application scope for Case Management POC</short_description>
-        <source>x_casemgmt</source>
-        <sys_id>0e77960b9cdc260c199f0d2c23f37603</sys_id>
-        <vendor>ServiceNow Case Management POC</vendor>
-        <vendor_prefix>x_casemgmt</vendor_prefix>
-        <version>1.0.0</version>
-    </sys_scope>
-</record_update>
-]]></payload>
-        <payload_hash/>
-        <record_name>x_casemgmt</record_name>
-        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
-        <replace_on_upgrade>false</replace_on_upgrade>
-        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
-        <table>sys_scope</table>
-        <target_name>x_casemgmt</target_name>
-        <type>Application</type>
-        <update_domain>global</update_domain>
-        <update_guid>5c77e2bb42935bf5b9014fd251ee3e41</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
