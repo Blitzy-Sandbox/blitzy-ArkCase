@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Task 07 - Witness interview prep (Open / Investigation)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the SEVENTH of the 8-task demo dataset; together with
+    tasks 01 through 06 and task 08, it satisfies the AAP requirement
+    (Section 0.7.4) of providing demo tasks that exercise the resolve-
+    blocker and resolve-success gates on both case-type flows. The
+    complete 8-task fixture matrix:
+
+        Task 01 - Open        / Investigation / parent case 03 (In Progress GI)
+        Task 02 - Closed      / Investigation / parent case 03 (In Progress GI)
+        Task 03 - Open        / Follow-up     / parent case 04 (Pending GI)
+        Task 04 - Closed      / Investigation / parent case 05 (Resolved GI)
+        Task 05 - Closed      / Review        / parent case 05 (Resolved GI)
+        Task 06 - In Progress / Investigation / parent case 08 (In Progress Complaint)
+        Task 07 - Open        / Investigation / parent case 08 (In Progress Complaint)  ## THIS FILE
+        Task 08 - Closed      / Review        / parent case 09 (Resolved Complaint)
+
+    The 8-task dataset thus exercises:
+      * All 4 task types - this task contributes one of four Investigation
+        entries (the others are tasks 01, 04, and 06); the Investigation
+        type semantically represents the agent's evidence-gathering and
+        information-collection action on a case.
+      * All 3 task statuses (Open, In Progress, Closed) - this task
+        contributes the THIRD of the three Open tasks (the others are
+        tasks 01 and 03); the Open status is the initial state for a
+        newly-created task and is one of the two non-Closed states that
+        the validate_resolved_transition subflow treats as a resolve-
+        blocker for the parent case.
+      * 5 unique parent cases (03, 04, 05, 08, 09) - this task is the
+        SECOND child of case 08 (the first being task 06); together,
+        tasks 06 + 07 give case 08 TWO non-Closed child tasks
+        (In Progress + Open), demonstrating that the resolve gate's
+        GlideRecord query correctly counts ALL non-Closed children, not
+        just the first one encountered.
+      * Both flow paths (General Inquiry and Complaint) - tasks 06 + 07
+        together test the COMPLAINT flow's resolve-BLOCKER path; tasks
+        01 + 02 test the GENERAL INQUIRY flow's resolve-blocker path;
+        tasks 04 + 05 test the GENERAL INQUIRY flow's resolve-success
+        path; task 08 tests the COMPLAINT flow's resolve-success path.
+      * Both resolve outcomes (BLOCKED via at least one non-Closed task,
+        and SUCCESS via zero non-Closed tasks) - this task is the
+        SECOND blocker on case 08 (paired with task 06), reinforcing
+        that the resolve-blocker fires whenever the count of non-Closed
+        children is >= 1, regardless of whether that count is 1 or many.
+
+    Lifecycle position - WHY Open / Investigation / parent Complaint case
+    In Progress is meaningful:
+      Per AAP Section 0.5.5 the resolve gate's GlideRecord query
+      executed inside the validate_resolved_transition subflow is:
+
+          var gr = new GlideRecord('x_[scope]_case_task');
+          gr.addQuery('case', current.sys_id);
+          gr.addQuery('status', '!=', 'Closed');
+          gr.query();
+          if (gr.next()) {
+              // BLOCK: surface the verbatim error message
+              //   "All tasks must be closed before resolving this case."
+          } else {
+              // ALLOW: zero non-Closed tasks - case may be Resolved
+          }
+
+      Case 08 is in In Progress status with type=Complaint. With this
+      Open child task PLUS task 06's In Progress status, the query
+      "case = case 08 AND status != Closed" returns TWO rows. The
+      subflow blocks any attempt to transition case 08 to Resolved and
+      surfaces the verbatim error "All tasks must be closed before
+      resolving this case." THIS TASK + TASK 06 ARE THE CANONICAL
+      RESOLVE-BLOCKER PAIR FOR THE COMPLAINT FLOW. Where tasks 01 + 02
+      perform this role for case 03 on the General Inquiry flow, this
+      task with task 06 performs the same role for case 08 on the
+      Complaint flow.
+
+      The Investigation task type captures the agent's evidence-
+      gathering action prior to taking substantive case action. Per
+      the AAP's Complaint case-handling pattern, an investigation prep
+      task (such as preparing for a witness interview) is a typical
+      early step in the agent's workflow - the agent organizes
+      questions, reviews prior evidence, and prepares any necessary
+      documentation BEFORE conducting the interview itself. The
+      "Witness interview prep" subject makes this lifecycle phase
+      explicit. Note: per AAP Section 0.5.7's role_label examples, the
+      term "Witness" is a generic party role label (alongside
+      "Requester" and "Respondent"), NOT a real person's name; this
+      task's subject uses the role label generically and contains
+      zero PII.
+
+      The +3 days due_date is appropriate for a near-term prep task -
+      the agent has 3 calendar days to complete the prep before the
+      scheduled interview. This contrasts with task 06's +7 days
+      due_date (the broader investigation milestone is further out),
+      reinforcing that prep tasks are typically scheduled more
+      proximally than the activities they support. The relative date
+      pattern uses positive offsets (in 3 days) for active/upcoming
+      tasks, consistent with Open status semantics (a task that has
+      not yet been started but has a target completion date).
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This task DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this task's <sys_scope>/<sys_package>
+             reference fields resolve via the source attribute against
+             those records)
+        - The case_task table definition at
+            ../../tables/x_[scope]_case_task.xml
+            (this record's <sys_class_name>x_[scope]_case_task</sys_class_name>
+             requires the table to exist)
+        - All dictionary entries for the case_task table under
+            ../../dictionary/x_[scope]_case_task_*.xml  (every populated
+            field below requires its dictionary entry to be present)
+        - All choice records for case_task under ../../choices/
+            (specifically sys_choice_case_task_type.xml and
+             sys_choice_case_task_status.xml; the type=Investigation
+             and status=Open choice values must be registered)
+        - The auto-numbering record at
+            ../../numbers/sys_number_x_[scope]_case_task.xml  (the
+             platform may auto-generate a TASK0000007-format value if
+             the table is configured for auto-numbering; this record
+             does not specify <number/> explicitly)
+        - The role records under ../../roles/  (the demo agent's
+             assigned-only access requires the x_[scope]_case_agent
+             role and its task-table ACLs; the demo manager's full
+             access requires the x_[scope]_case_manager role)
+        - The ACL records under ../../acl/ for case_task (table-level
+             read/write/create/delete ACLs gate access for the demo
+             agent and demo manager; the demo viewer reads via the
+             read-all ACL)
+        - ../users/sys_user_x_[scope]_demo_agent.xml  (referenced by
+             <assigned_to>; resolved by user_name lookup)
+        - ../cases/x_[scope]_case_demo_08.xml  (referenced by <case>;
+             resolved by number lookup; this is the parent In Progress
+             Complaint case whose resolve-blocker path this Open task
+             exercises in conjunction with task 06)
+
+      This task IS REFERENCED BY (loaded AFTER this record):
+        - The validate_resolved_transition subflow at
+            ../../flows/sub_flows/validate_resolved_transition.xml
+            COUNTS THIS TASK as one of the two non-Closed child tasks
+            of case 08. Because this task's status is Open (not Closed),
+            the subflow's GlideRecord query for non-Closed child tasks
+            of case 08 returns this row (alongside task 06's In Progress
+            row), causing the subflow to BLOCK any In Progress ->
+            Resolved transition for case 08 with the verbatim error
+            "All tasks must be closed before resolving this case."
+            THIS TASK IS THE SECOND CANONICAL BLOCKER OF THE COMPLAINT-
+            FLOW RESOLVE PATH FOR CASE 08. Where tasks 01 + 02 perform
+            this role for case 03 on the General Inquiry flow, this
+            task with task 06 performs it for case 08 on the Complaint
+            flow.
+        - Dashboard report ../../reports/x_[scope]_my_overdue_tasks.xml
+            DOES NOT include this task in its "My Overdue Tasks" list;
+            the list filter is "due_date < Today AND status != Closed
+            AND assigned_to = current user", and this task's due_date
+            is +3 days in the FUTURE (not overdue). This is the correct
+            behavior for an upcoming/planned task that is not yet
+            actionable.
+        - The Agent Workspace dashboard's "My Overdue Tasks" widget
+            similarly excludes this task for the same reason.
+        - The Agent Workspace dashboard's "Case count by status" donut
+            counts case 08 (this task's parent) in the In Progress
+            slice, not this task; the donut is keyed off case.status,
+            not case_task.status.
+        - The validate_closed_transition subflow checks at case-level
+            (manager role, set closed_date), not task-level; this task
+            does not directly participate in that subflow's logic.
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER:
+            * The scoped application records under ../../app/
+            * The case_task table at ../../tables/x_[scope]_case_task.xml
+            * All dictionary entries under ../../dictionary/
+              x_[scope]_case_task_*.xml
+            * The choice records sys_choice_case_task_type.xml and
+              sys_choice_case_task_status.xml
+            * The demo agent user record at
+              ../users/sys_user_x_[scope]_demo_agent.xml  (assigned_to
+              resolves by user_name lookup)
+            * The parent case at
+              ../cases/x_[scope]_case_demo_08.xml  (case field resolves
+              by number lookup; that case must exist before this task
+              can reference it)
+        - This record can be loaded BEFORE or AFTER its sibling task
+          records (01 through 06 and 08) since they are mutually
+          independent (each task's only outbound references are to a
+          case and a user, not to other tasks).
+        - This record is the SECOND-TO-LAST demo task; only task 08
+          is loaded after it, and task 08 does not depend on this
+          task.
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's eight authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        subject = "Demo task 07: Witness interview prep"
+                  (synthetic identifier using the literal word "Demo"
+                   plus a numeral plus a generic agent-action phrase
+                   incorporating the role label "Witness" from AAP
+                   Section 0.5.7's role_label examples; "Witness" here
+                   is a generic party-role designation, NOT a real
+                   person's name; no PII; the wording emphasizes the
+                   task's lifecycle role - the agent's preparation
+                   action prior to conducting an investigative
+                   interview)
+        NO description / NO details / NO comments fields populated;
+        the task's primary content is captured in the subject alone.
+        NO assignee email, phone, or other PII-bearing fields.
+
+      Rule 2 - Choice value precision:
+        type   = "Investigation"  (exactly as registered in
+                  ../../choices/sys_choice_case_task_type.xml; the first
+                  of the four task types - Investigation, Review,
+                  Follow-up, Other; capital I deliberate -
+                  "Investigation" not "investigation" or
+                  "INVESTIGATION"; semantically pairs with task 06's
+                  Investigation type, reflecting that both tasks on
+                  case 08 are investigation-related activities on the
+                  same Complaint case)
+        status = "Open"  (exactly as registered in
+                  ../../choices/sys_choice_case_task_status.xml; the
+                  first and initial of the three task statuses - Open,
+                  In Progress, Closed; capital O deliberate - "Open"
+                  not "open" or "OPEN"; THIS VALUE IS LOAD-BEARING
+                  because the validate_resolved_transition subflow's
+                  GlideRecord query filters on status='Closed' (case-
+                  sensitive negated equality); a typo would BREAK the
+                  resolve-blocker pairing for the Complaint flow)
+
+      Rule 3 - Date format:
+        due_date = "2026-05-04"  (YYYY-MM-DD format per AAP Section
+                  0.5.7 "due_date" row of case_task schema specifying
+                  Date type; the value is computed as today plus 3
+                  days at file-generation time. This is the standard
+                  ServiceNow Date field format - NOT DateTime; no
+                  timezone, no time-of-day component. The relative +3
+                  days offset places the due_date in the near future,
+                  consistent with an upcoming-but-not-yet-overdue task
+                  pattern. The build-time computation ensures the
+                  value remains semantically meaningful regardless of
+                  when the Update Set is imported.)
+
+      Rule 4 - Reference resolution by stable human-readable key (AAP
+              Section 0.7.2 "NO sys_id literals anywhere"):
+        case        : <case display_value="CASE0000008">CASE0000008
+                      </case>  resolves to demo case 08 by the case
+                      table's idempotent number lookup. CASE0000008 is
+                      the auto-numbered value the platform generates
+                      for demo case 08 since cases 01 through 08 import
+                      in order with the CASE0000001-format auto-number
+                      counter (case 01 -> CASE0000001, case 02 ->
+                      CASE0000002, ..., case 08 -> CASE0000008). This
+                      task's parent therefore resolves to the demo case
+                      08 record at ../cases/x_[scope]_case_demo_08.xml.
+        assigned_to : <assigned_to display_value="x_[scope]_demo_agent">
+                      x_[scope]_demo_agent</assigned_to>  resolves to
+                      the demo agent user by user_name lookup. The
+                      demo agent is the assigned_to on every one of
+                      the 8 demo tasks per the seed-script's task
+                      table (the agent is the primary case worker; the
+                      manager approves/closes; the viewer observes).
+
+      Rule 5 - All 6 mandatory case_task fields populated:
+        case        - mandatory parent reference - CASE0000008
+        subject     - mandatory String(255) - "Demo task 07: Witness
+                      interview prep"
+        type        - mandatory Choice - "Investigation"
+        status      - mandatory Choice - "Open"
+        assigned_to - mandatory Reference->sys_user - x_[scope]_demo_agent
+        due_date    - mandatory Date - 2026-05-04
+        Per AAP Section 0.5.7 case_task schema, these 6 fields are
+        the ENTIRE schema; this record populates every field, leaves
+        no null required values, and adds no extra fields.
+
+      Rule 6 - Scope binding:
+        <sys_scope>   binds this task row to the scoped application
+                      via the scope source name "x_[scope]" defined in
+                      ../../app/sys_scope/x_[scope].xml at
+                      <source>x_[scope]</source>; the display_value
+                      "Case Management" matches the sys_app's human-
+                      readable name.
+        <sys_package> follows the same pattern with the additional
+                      source="x_[scope]" attribute that is required by
+                      the Update Set engine for scope-package binding.
+        Note: the source attribute value "x_[scope]" matches what
+        every peer file uses (cases 01-10, sys_user_*, sys_user_group_*,
+        sys_user_has_role_*, dictionary entries, ACL records, role
+        records, and task 08); it is the scope's <source> field, NOT
+        the scoped application's sys_update_name. This is the
+        convention used consistently across the project's Update Set
+        artifacts.
+
+      Rule 7 - Idempotency anchor:
+        The task's idempotent key is the (case, subject) tuple:
+        (CASE0000008, "Demo task 07: Witness interview prep"). The
+        companion seed script ../../scripts/seed_demo_data.js
+        ensureTask() helper queries x_[scope]_case_task by (case,
+        subject) BEFORE inserting; the action="INSERT_OR_UPDATE"
+        attribute on the inner <x_[scope]_case_task> element ensures
+        the same behavior at Update Set import time.
+        The task's OWN <sys_id> below is the record's primary key and
+        is a deterministic 32-character lowercase hex value (MD5 of
+        the canonical idempotent subject "Demo task 07: Witness
+        interview prep" = 2389f169fb798f67b74c89bd0b78533c) - so the
+        Update Set engine resolves the same sys_id on every PDI
+        import, making the record byte-identical and collision-free
+        across re-imports per AAP Section 0.7.1 round-trip-
+        verification gate (Validation Gate 7).
+
+      Rule 8 - Scoped Update Set XML conventions:
+        Root element:  <record_update table="x_[scope]_case_task">
+        Inner element: <x_[scope]_case_task action="INSERT_OR_UPDATE">
+                       for idempotent re-import.
+        UTF-8 encoding declared in XML prolog.
+        Element ordering: alphabetical (matching the established peer
+        convention used by sys_user_*, sys_user_group_*, sys_user_has_
+        role_*, role records, all 10 case demo records, task 08, and
+        dictionary entries across the scoped Update Set).
+        Unix-style line endings (LF) per AAP file authoring conventions.
+        Scope-placeholder preservation: the literal `[scope]` token is
+        preserved verbatim throughout the file - in the sys_class_name,
+        sys_update_name, table attribute, inner element name, all
+        cross-reference text values, and the file path. The PDI
+        substitutes the auto-assigned concrete scope id at apply-time;
+        pre-substituting here would break the substitution mechanism.
+
+    Source-side semantic reference (read-only, NOT byte-for-byte ported)
+    per AAP Section 0.8.1:
+      acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java
+        ArkCase's AcmTask JPA entity declares ~30+ fields including
+        title (the source for our <subject>), dueDate (the source for
+        our <due_date>; @NotNull-annotated for Bean Validation - we
+        preserve the mandatory constraint via the dictionary entry's
+        mandatory flag), assignee (the source for our <assigned_to>),
+        status (the source for our <status>; with values like OPEN,
+        ASSIGNED, IN_PROGRESS, COMPLETE, CLOSED in ArkCase - we collapse
+        these to the user-prompt's three-value choice list Open / In
+        Progress / Closed), type (the source for our <type>; in
+        ArkCase a free-form String - we constrain to the four-value
+        choice list Investigation / Review / Follow-up / Other), and
+        attachedToObjectId (semantic source for our <case> - in ArkCase
+        a generic parent-object FK pattern; here narrowed to a typed
+        reference to x_[scope]_case). ArkCase's percentComplete /
+        pendingStatus / adhocTask / completed / buckslip / outlook /
+        ECM / participants / candidate-claim-groups / next-assignee /
+        legacy-system-id / business-process / workflow-request /
+        document-under-review / documents-to-review / child-objects /
+        rework-instructions / outcome / restriction / Activiti BPMN
+        engine integration are all OUT OF POC SCOPE per AAP Section
+        0.3.2 and are intentionally absent from the target schema.
+
+    Validation hooks (per the agent prompt):
+      - The XML well-formedness check (xmllint with no-output flag)
+        returns zero errors.
+      - No-PII grep returns zero matches against (john|jane|smith|doe|
+        @gmail|@yahoo|@outlook|@hotmail|\.com|\.org|\.net) - the
+        synthetic identifiers ("Demo task 07: Witness interview prep",
+        "x_[scope]_demo_agent", "CASE0000008") do not include any PII
+        tokens; "Witness" is a generic role label per AAP Section
+        0.5.7, not a person's name.
+      - Choice-value validation: <type>Investigation</type> (capital
+        I), <status>Open</status> (capital O) - exact-case match
+        against the registered choice records.
+      - Date-format validation: <due_date>2026-05-04</due_date> is
+        YYYY-MM-DD with no time-of-day component.
+      - All-mandatory-fields-populated validation: all 6 mandatory
+        case_task fields (case, subject, type, status, assigned_to,
+        due_date) are present and non-empty.
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        task's own primary key); NO sys_id literals appear in any
+        cross-reference field; <case> and <assigned_to> use the human-
+        readable lookup keys CASE0000008 and x_[scope]_demo_agent
+        respectively as both the display_value attribute AND the text
+        content.
+      - Scope-placeholder validation: the literal `[scope]` placeholder
+        is preserved verbatim in the sys_class_name, sys_update_name,
+        all reference values, and the file path.
+
+    Key insights (per the agent prompt):
+      1. THIS TASK + TASK 06 ARE THE COMPLAINT-FLOW RESOLVE-BLOCKER
+         PAIR. Where tasks 01 + 02 demonstrate the General Inquiry
+         resolve-blocker on case 03, tasks 06 + 07 demonstrate the
+         same for the Complaint flow on case 08. Both pairs prove
+         that the validate_resolved_transition subflow correctly
+         counts ALL non-Closed child tasks (not just one) when
+         enforcing the resolve gate.
+      2. THE STATUS Open MATCHES THE CHOICE LIST. Combined with task
+         06's In Progress, case 08 has 2 non-Closed tasks contributing
+         to the resolve-block. The verbatim error message "All tasks
+         must be closed before resolving this case." is surfaced when
+         either task is non-Closed; with TWO non-Closed tasks, the
+         error fires with even higher confidence that the gate works.
+      3. THE Investigation TYPE SEMANTICALLY PAIRS WITH TASK 06.
+         Both are investigation-related tasks on the same Complaint
+         case - a thematically consistent task set. Task 06 is the
+         broader investigation-in-progress; task 07 is the prep work
+         for a specific upcoming investigative action (the witness
+         interview).
+      4. THE +3 DAYS DUE_DATE IS SHORTER THAN TASK 06's +7 DAYS,
+         suggesting this prep task is closer to imminent action (the
+         interview happening sooner than the broader investigation
+         milestone). The shorter offset reflects the typical pattern
+         that prep tasks immediately precede the activity they
+         support.
+      5. THE "Witness interview prep" SUBJECT USES THE GENERIC ROLE
+         LABEL "Witness" - consistent with AAP Section 0.5.7
+         role_label examples ("Requester, Respondent, Witness"). This
+         is NOT a real witness's name; it is the role designation
+         that would be applied to a Person-typed party on the case
+         when one is associated. The subject contains zero PII.
+      6. BUILD AGENT COMPUTES due_date DYNAMICALLY at file-generation
+         time so that the relative offset (+3 days) is preserved
+         across importation timeframes. The actual stored value
+         (2026-05-04) is the static result of today + 3 days
+         evaluated at this file's generation time (today =
+         2026-05-01 per the build environment date).
+      7. NO PII. Synthetic data only. The subject uses a generic
+         role-label-plus-action phrase ("Witness interview prep");
+         the assigned_to and case references are scoped synthetic
+         identifiers.
+-->
+<record_update table="x_[scope]_case_task">
+    <x_[scope]_case_task action="INSERT_OR_UPDATE">
+        <assigned_to display_value="x_[scope]_demo_agent">x_[scope]_demo_agent</assigned_to>
+        <case display_value="CASE0000008">CASE0000008</case>
+        <due_date>2026-05-04</due_date>
+        <status>Open</status>
+        <subject>Demo task 07: Witness interview prep</subject>
+        <sys_class_name>x_[scope]_case_task</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>2389f169fb798f67b74c89bd0b78533c</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>x_[scope]_case_task_demo_07</sys_update_name>
+        <type>Investigation</type>
+    </x_[scope]_case_task>
+</record_update>
