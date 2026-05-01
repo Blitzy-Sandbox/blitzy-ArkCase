@@ -1,0 +1,768 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_hub_flow` row that
+    declares the `x_casemgmt_validate_closed_transition` Flow Designer
+    SUBFLOW (type=subflow) inside the scoped application `x_casemgmt`
+    (Case Management).
+
+    PURPOSE (AAP Section 0.5.5 verbatim transition row):
+        From          To         Required condition / blocking-error behavior
+        Resolved      Closed     Caller has x_casemgmt_case_manager role;
+                                 auto-set closed_date.
+                                 Failure: Surface form-level error (the
+                                 Script Include returns the message
+                                 "Only case managers can close cases.").
+
+    This subflow is one of FIVE shared transition-validation subflows
+    under `servicenow-case-management-poc/flows/sub_flows/`. It is called
+    by both parent state-machine flows whenever a case's `status` field
+    changes to `Closed`:
+
+      - ../general_inquiry_state_machine.xml
+            (when a General Inquiry case enters the Closed status)
+      - ../complaint_state_machine.xml
+            (when a Complaint case enters the Closed status)
+
+    UNIQUE RESPONSIBILITIES VS PEER SUBFLOWS:
+
+      - LIKE validate_resolved_transition.xml: this subflow has a
+        REQUIRED-CONDITION GATE and a THROW ERROR step. The gate is
+        delegated to x_casemgmt.CaseTransitionValidator.
+        canTransitionToClosed(case_record, gs.getUserID()), which
+        internally calls gs.getUser().hasRole('x_casemgmt_case_manager')
+        for the manager-role check. On failure, the validator returns
+        { ok: false, error: 'Only case managers can close cases.' }.
+
+      - UNLIKE validate_resolved_transition.xml: this subflow's gate
+        is a ROLE CHECK (caller has case_manager) rather than a
+        DATA CHECK (all child tasks Closed). The Script Include's
+        canTransitionToClosed method takes a SECOND parameter (userId)
+        which this subflow always supplies as gs.getUserID() so the
+        role check explicitly evaluates against the saving user.
+
+      - UNLIKE validate_resolved_transition.xml: this subflow has a
+        SIDE EFFECT ON SUCCESS. After the role check passes, it sets
+        closed_date = gs.nowDateTime() on the case record via an
+        Update Record step. This is the AAP Section 0.5.5 mandated
+        side effect of the Resolved -> Closed transition.
+
+      - LIKE validate_pending_transition.xml: this subflow has an
+        Update Record step that mutates the case row. validate_pending
+        sets pending_reason; this subflow sets closed_date. Both
+        steps target the same x_casemgmt_case record passed in as the
+        case_record input.
+
+      - DEFENSE-IN-DEPTH: The companion business rule
+        ../../business_rules/x_casemgmt_set_closed_date.xml ALSO sets
+        closed_date on Resolved -> Closed (order=500, before-update).
+        Both layers (subflow and BR) ensure closed_date is stamped:
+            * If the BR runs FIRST (before the flow), the subflow's
+              Update Record is a no-op write (the field already has
+              the same gs.nowDateTime() value within ~milliseconds).
+            * If the flow runs first, the BR confirms the value.
+        Either way, closed_date is guaranteed populated on every
+        Resolved -> Closed transition.
+
+      - DEFENSE-IN-DEPTH: The companion business rule
+        ../../business_rules/x_casemgmt_block_terminal_closed.xml
+        blocks any transition OUT of Closed (Closed -> *) with the
+        verbatim AAP Section 0.7.4 message "Closed cases are
+        terminal and cannot be modified." This subflow handles only
+        the FORWARD Resolved -> Closed transition; the BR handles
+        the terminal-state guard.
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only, NOT byte-for-byte ported):
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseFileStateService.java
+            * line 79-114 changeCaseState(auth, caseId, newState,
+              ipAddress) - the central case state-machine service in
+              ArkCase. The single method covered every transition by
+              string-matching the newState parameter. The ServiceNow
+              target splits this into FIVE per-transition subflows;
+              this subflow is the Resolved -> Closed slice.
+            * lines 97-100 are the canonical source-side reference
+              for THIS subflow's auto-set-closed_date behavior:
+                  if ("CLOSED".equals(newState))
+                  {
+                      retval.setClosed(now);
+                  }
+              where `now = new Date()` (line 93). The ServiceNow
+              target replicates this exactly: when transitioning to
+              the Closed status (which corresponds to ArkCase's
+              "CLOSED" string), the case row's closed_date column is
+              stamped with gs.nowDateTime() (the GlideDateTime
+              equivalent of new Date() in the system timezone).
+            * The ArkCase method has NO ROLE GATE on the close
+              transition - any authenticated caller could invoke
+              changeCaseState with newState="CLOSED" provided their
+              ApplicationRolesToPrivilegesConfig grants permitted
+              the URL-mapped action that called the method. The
+              ServiceNow target ADDS the explicit case_manager role
+              gate per AAP Section 0.5.5, which strengthens the
+              authorization model relative to ArkCase.
+            * line 106 raiseEvent() is INTENTIONALLY OMITTED here
+              per the email-disabled constraint (AAP Section 0.7.2).
+              ArkCase's raiseEvent() call would have triggered
+              downstream notification listeners on every state change;
+              the ServiceNow POC has no equivalent gs.eventQueue()
+              call in this subflow because email is disabled on the
+              PDI and no other in-scope listeners need the event.
+
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesConfig.java
+            ArkCase declared application roles as a list of strings
+            (e.g., "ROLE_ARKCASE_CASE_MANAGER") in
+            ApplicationRolesToPrivilegesConfig. Privileges were
+            url/method-bound via AcmPluginUrlPrivilege. The
+            ServiceNow target replaces this entire URL-privilege
+            machinery with three named scoped roles (case_manager,
+            case_agent, case_viewer) plus table-level and field-
+            level ACLs. THIS subflow's role gate uses the role NAME
+            (x_casemgmt_case_manager) - a stable human-readable
+            key per AAP Section 0.7.2 - resolved at runtime by
+            gs.getUser().hasRole(name) inside the Script Include.
+
+    SUBFLOW INPUTS (Flow Designer declarative parameters):
+
+      1. case_record  (Reference to x_casemgmt_case, MANDATORY)
+            Passed in by the parent flow as $trigger.current. This is
+            the case row whose status is transitioning to Closed.
+            The parent flow's OnUpdate trigger fires when status
+            changes to 'Closed', and the trigger's $trigger.current
+            is the just-updated case GlideRecord. The subflow uses
+            this input for two purposes:
+              (a) Pass to validator.canTransitionToClosed(case_record,
+                  userId) for the manager-role check.
+              (b) Target of the Update Record step that sets
+                  closed_date to gs.nowDateTime() on success.
+
+    SUBFLOW STEPS (ordered):
+
+      Step 1 (order=100): Validate Closed Transition (manager role check)
+            A Script Step that:
+                a) Instantiates the Script Include:
+                       var validator = new x_casemgmt.CaseTransitionValidator();
+                b) Invokes the per-transition guard with the supplied
+                   case_record GlideRecord AND gs.getUserID() so the
+                   role check explicitly evaluates against the saving
+                   user (per assigned-folder Rule 11):
+                       var result = validator.canTransitionToClosed(
+                           fd_data.subflow_inputs.case_record,
+                           gs.getUserID());
+                c) Captures the current GlideDateTime as a string for
+                   the subsequent Update Record step:
+                       outputs.closed_date_now = gs.nowDateTime() + '';
+                   This is the canonical way to obtain "now" in
+                   server-side scripts; gs.nowDateTime() returns a
+                   GlideDateTime string in the system timezone. The
+                   string conversion (+ '') ensures the value is a
+                   stable string that the Update Record step can
+                   bind to the closed_date field via flow expression
+                   ${step_run_validator.closed_date_now}.
+                d) Exposes three outputs to the subflow execution
+                   context:
+                       outputs.ok               = result.ok            (Boolean)
+                       outputs.error_message    = result.error || ''   (String)
+                       outputs.closed_date_now  = gs.nowDateTime()+''  (String)
+            The Script Include's canTransitionToClosed returns:
+                { ok: true } - when the user has the case_manager role
+                { ok: false, error: 'Only case managers can close cases.' }
+                             - when the user does NOT have the
+                               case_manager role (the message is
+                               not verbatim from AAP - AAP just says
+                               "Surface form-level error" - but the
+                               Script Include's default message is
+                               aligned with the AAP intent and is
+                               reused here)
+                { ok: false, error: 'Case record is missing.' }
+                             - when caseGr is null/undefined
+                               (defensive guard inside the Script
+                               Include; should not occur in normal
+                               parent-flow invocation)
+
+      Step 2 (order=200): If validator returned not-ok
+            An If/Then condition that branches when:
+                fd_data._step_outputs.step_run_validator.ok == false
+            The branch contains a single Throw Error action.
+
+      Step 2a (order=100, nested): Throw Error (surface message on form)
+            The Throw Error action's message is bound to the Script
+            Step's error_message output. At runtime, when the
+            condition is true and the action fires, the platform:
+                a) Calls gs.addErrorMessage(error_message) on the
+                   current update transaction's session.
+                b) Aborts the parent flow's triggering update
+                   (the implicit setAbortAction(true) on Throw Error).
+                c) Returns control to the form, which displays the
+                   error message at the top of the form.
+            The error message text is the validator's:
+                "Only case managers can close cases."
+            (lowercase 'managers' and 'cases', trailing period, ASCII
+            straight quotes when quoted, no leading/trailing whitespace).
+            This message is propagated through the Script Include's
+            return value; the subflow does not compose its own message.
+
+      Step 3 (order=300): Set closed_date to now (success path)
+            An Update Record step that:
+                a) Targets the x_casemgmt_case table (BY NAME).
+                b) Targets the case_record input as the row to update.
+                c) Sets the closed_date field to the
+                   ${step_run_validator.closed_date_now} expression
+                   captured by Step 1.
+                d) Conditional on the validator returning ok=true.
+            Per assigned-folder Rule 10 and AAP Section 0.5.5, this
+            is the AAP-mandated side effect of the Resolved -> Closed
+            transition. The companion business rule
+            ../../business_rules/x_casemgmt_set_closed_date.xml
+            provides defense-in-depth (sets the same field at the
+            BR layer with the same gs.nowDateTime() expression).
+
+    OUTPUTS:
+        None at the subflow level. The internal Script Step exposes
+        ok, error_message, and closed_date_now outputs but those are
+        scoped to the subflow and consumed only by the subsequent
+        If/Throw Error step and Update Record step. The subflow
+        itself returns no value to the parent.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <name>x_casemgmt_validate_closed_transition</name> uses
+          the x_casemgmt scope prefix per the auto-assigned scoped-
+          app namespace.
+        - <sys_scope>x_casemgmt</sys_scope> binds THIS subflow record
+          to the x_casemgmt scope.
+        - <sys_package source="x_casemgmt">x_casemgmt</sys_package>
+          binds THIS subflow record to the x_casemgmt application
+          package.
+        - The Flow Designer snapshot below references:
+            * x_casemgmt_case table BY NAME
+              (input parameter reference_table AND Update Record
+               table reference)
+            * x_casemgmt.CaseTransitionValidator Script Include BY
+              API NAME (the canonical scope-qualified accessor for
+              scoped Script Includes; see
+              ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              <api_name>x_casemgmt.CaseTransitionValidator</api_name>)
+            * x_casemgmt_case_manager role TRANSITIVELY by NAME
+              (via the Script Include's gs.getUser().hasRole(
+               'x_casemgmt_case_manager') call - see
+               ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+               line 514)
+        Zero global-scope writes. Zero modifications to OOB tables
+        (sys_user, sys_user_group, sys_user_role, core_company,
+         task, incident, etc.).
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME
+          (x_casemgmt) via its `source` attribute
+        - The subflow snapshot references the x_casemgmt_case table
+          BY NAME ("table": "x_casemgmt_case", "reference_table":
+          "x_casemgmt_case") and invokes the Script Include BY API
+          NAME ("x_casemgmt.CaseTransitionValidator"). Zero `sys_id`
+          literal references appear anywhere in the snapshot or
+          audit-field XML.
+        - The role x_casemgmt_case_manager is referenced BY NAME
+          inside the Script Include's hasRole() call - the Script
+          Include explicitly avoids any hardcoded role sys_id, which
+          this subflow inherits transitively.
+        - The userId argument passed to canTransitionToClosed comes
+          from gs.getUserID() (a runtime value, the saving user's
+          sys_id) - this is a runtime value, NOT a hardcoded literal.
+          The same applies to caseGr.getUniqueValue() inside the
+          Script Include if any future enhancement uses it.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_closed_transition"),
+          which is permitted because the AAP "no hardcoded sys_id" rule
+          applies to REFERENCE FIELDS pointing at OTHER records, not to
+          a record's own primary key. The deterministic derivation
+          ensures idempotent re-import on a fresh PDI - re-importing
+          the same Update Set produces the same sys_id, which collides
+          on the existing record and updates it in place rather than
+          creating a duplicate.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The subflow MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This
+        subflow contains zero gs.eventQueue() calls, zero Send Email
+        actions, and zero notification trigger steps. It performs
+        only the validation-and-throw side effect on failure and the
+        update-closed_date side effect on success.
+        Intentionally diverges from ArkCase ChangeCaseFileStateService
+        line 106 raiseEvent() which would have triggered downstream
+        notification listeners on every state change; the ServiceNow
+        POC omits the equivalent call per the AAP minimal-change
+        clause and the email-disabled constraint.
+
+    NO PII (AAP Section 0.7.2):
+        The description text, code comments, and snapshot inline
+        labels contain zero real names, real email addresses, real
+        phone numbers, real organizational identifiers, or any
+        other personally identifiable information. The subflow
+        operates exclusively on a case-row reference and emits a
+        generic, role-gate-aligned error string.
+
+    ACTIVE-PUBLISHED STATE (CRITICAL per agent prompt Phase 2.3):
+        - <active>true</active>      - subflow is enabled, NOT Draft
+        - <status>published</status> - subflow is published, NOT draft
+        Both are required for the parent flows to be able to call
+        this subflow at runtime. A Draft-state subflow is callable
+        only from the Flow Designer canvas during testing; published
+        is the production-ready state.
+
+    TYPE=SUBFLOW (CRITICAL per agent prompt Phase 2.4):
+        - <type>subflow</type>
+        Subflows are reusable building blocks called by parent flows
+        via the "Call a Subflow" action. A type=flow record cannot
+        be called by another flow; the platform looks for type=subflow
+        records when resolving a "Call a Subflow" reference. The
+        parent flows in ../general_inquiry_state_machine.xml and
+        ../complaint_state_machine.xml reference this subflow BY
+        NAME (x_casemgmt_validate_closed_transition), and the
+        platform's lookup at activation time resolves to THIS record
+        because of the type=subflow setting.
+
+    RUN_AS=CALLER (CRITICAL per agent prompt Phase 2.4 and Rule 3):
+        - <run_as>caller</run_as>
+        FOR THIS SUBFLOW SPECIFICALLY, run_as=caller is NON-NEGOTIABLE
+        because the role check
+        gs.getUser().hasRole('x_casemgmt_case_manager') MUST evaluate
+        against the SAVING USER. If run_as were system_user, the
+        platform would bypass role checks (system context has all
+        roles by definition), silently bypassing the AAP-required
+        manager-only gate and allowing case_agent or case_viewer
+        users to close cases.
+        The parent flows use run_as=user_who_triggers, so when the
+        parent calls this subflow, the subflow ALSO runs as the
+        triggering user. This ensures:
+            * The Script Include's gs.getUser().hasRole() call
+              evaluates against the correct user identity.
+            * gs.getUserID() at the script step returns the saving
+              user's sys_id, which the validator uses for the
+              hasRole() check.
+            * Any future audit logging tracks the actual user who
+              attempted the Closed transition, not the system
+              account.
+            * The Update Record step on closed_date is performed
+              under the caller's ACL context. The case_manager role
+              has table-level write ACL on x_casemgmt_case per AAP
+              Section 0.5.6, so the Update succeeds for valid
+              callers (the role check at Step 1 has already gated
+              non-managers out by this point).
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+
+        This sys_hub_flow record MUST be loaded AFTER:
+
+          - ../../app/sys_app/x_casemgmt_case_management.xml
+              (scoped application; <sys_package> reference resolution)
+          - ../../app/sys_scope/x_casemgmt.xml
+              (scope record; <sys_scope> reference resolution)
+          - ../../tables/x_casemgmt_case.xml
+              (parent table; the case_record input parameter is a
+               Reference to this table, AND the Update Record step
+               targets this table)
+          - ../../dictionary/x_casemgmt_case_status.xml
+              (the field whose change to 'Closed' triggers the
+               parent flow's OnUpdate filter; must exist before the
+               parent flow's trigger filter can resolve)
+          - ../../dictionary/x_casemgmt_case_closed_date.xml
+              (the DateTime field this subflow updates on success;
+               the Update Record step's field reference must
+               resolve)
+          - ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (the Script Include this subflow invokes; must exist
+               and be activated before the subflow's Script Step can
+               resolve the API name x_casemgmt.CaseTransitionValidator)
+          - ../../roles/sys_user_role_x_casemgmt_case_manager.xml
+              (the role transitively checked by the Script Include's
+               canTransitionToClosed via hasRole(name); the role
+               record must exist before the runtime gate can
+               evaluate)
+
+        And BEFORE:
+
+          - ../general_inquiry_state_machine.xml
+              (parent flow that calls this subflow on the General
+               Inquiry case-type's Resolved -> Closed edge)
+          - ../complaint_state_machine.xml
+              (parent flow that calls this subflow on the Complaint
+               case-type's Resolved -> Closed edge)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_closed_transition")
+               = 61c7e698df95ea6fc80f639b4dc99fb3
+        32-character lowercase hex. The PDI accepts any valid 32-char
+        hex sys_id; deriving from the record name guarantees idempotent
+        re-import on a fresh PDI: re-importing the same Update Set
+        produces the same sys_id, which collides on the existing
+        record and updates it in place rather than creating a
+        duplicate. This is the same convention used by every other
+        deterministically-keyed record in this Update Set (e.g., the
+        peer subflow validate_resolved_transition.xml whose sys_id is
+        c8fde9d4675c53e1c14e40c0503835f0 = MD5 of
+        "x_casemgmt_validate_resolved_transition", and
+        validate_pending_transition.xml whose sys_id is
+        94063d7d535c4e841ad7deb0b45e8ba5 = MD5 of
+        "x_casemgmt_validate_pending_transition").
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition." THIS subflow
+          implements the manager-role gate on the Resolved -> Closed
+          edge. The gate is verified by:
+
+              1) Logging in as a case_agent user (NOT a manager).
+              2) Opening a case in 'Resolved' status that the agent
+                 owns (assigned_agent = current user OR
+                 assigned_group contains current user).
+              3) Setting status = 'Closed'.
+              4) The parent flow (general_inquiry or complaint
+                 state_machine, depending on case.type) fires on
+                 the OnUpdate trigger filtered to status -> Closed.
+              5) The parent flow calls THIS subflow with
+                 case_record = $trigger.current.
+              6) THIS subflow's Script Step runs the validator,
+                 which calls gs.getUser().hasRole(
+                 'x_casemgmt_case_manager') and detects the role
+                 is NOT held.
+              7) The validator returns
+                 { ok: false, error: 'Only case managers can close
+                                       cases.' }
+              8) THIS subflow's If condition (ok == false) is true.
+              9) The Throw Error action fires with the message
+                 'Only case managers can close cases.'
+             10) The parent flow's transaction aborts; the form
+                 displays the error.
+             11) The case row remains at status='Resolved' (the
+                 update was rolled back; the new value 'Closed'
+                 was never persisted).
+             12) Then logging in as a case_manager user, repeating
+                 steps 2-3, the validator returns { ok: true }.
+             13) The Throw Error step is skipped, and the Update
+                 Record step fires, setting closed_date =
+                 gs.nowDateTime().
+             14) The case row updates to status='Closed' AND
+                 closed_date=<current timestamp>.
+
+        - Gate 3 (ACLs): "Role-based access enforced - case_viewer
+          cannot write; case_agent cannot access unassigned cases;
+          case_manager has full access." THIS subflow contributes to
+          Gate 3 by enforcing that ONLY managers (not agents, not
+          viewers) can transition cases to Closed. While the broader
+          ACL matrix is enforced by the table-level and field-level
+          ACLs in ../../acl/x_casemgmt_case_*.xml, the close-case
+          gate is a transition-specific ACL-equivalent enforced by
+          this subflow's role check.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set
+          loads without errors on a fresh PDI instance." The
+          deterministic sys_id, reference-by-name pattern, and well-
+          formed XML structure ensure this record re-imports cleanly
+          with zero preview errors. The CDATA-wrapped JSON snapshot
+          contains characters requiring CDATA escaping (curly braces,
+          quotes within JSON), and the CDATA section is properly
+          opened and closed around both <latest_snapshot> and
+          <master_snapshot> elements.
+
+    PERFORMANCE NOTE:
+        The role check inside canTransitionToClosed uses
+        gs.getUser().hasRole(roleName), which is an in-memory cache
+        lookup against the current session's role set. It does NOT
+        issue a database query and is therefore extremely fast.
+        Even when the validator falls back to the gs.getUser(userId)
+        / GlideRecord('sys_user').get() path (used when userId is
+        provided and differs from the current session user), the
+        operation is a single-row lookup followed by an in-memory
+        role-set check; total latency is sub-millisecond on a typical
+        PDI. The Update Record step that follows the gate is also
+        a single-row update of a single column, which is O(1) in the
+        database and bounded by transaction-commit overhead.
+
+    DEFENSE-IN-DEPTH NOTE:
+        Three layers protect the Resolved -> Closed transition:
+            (1) THIS subflow performs the manager-role gate via the
+                Script Include and stamps closed_date on success.
+            (2) The companion business rule
+                ../../business_rules/x_casemgmt_set_closed_date.xml
+                redundantly stamps closed_date on the BR layer (order
+                500, before-update). If this subflow's Update Record
+                step were to fail (e.g., due to a future ACL change
+                that revokes case_manager write access on closed_date),
+                the BR would still ensure the field is populated.
+            (3) The companion business rule
+                ../../business_rules/x_casemgmt_block_terminal_closed.xml
+                blocks any transition OUT of Closed (Closed -> *)
+                with the verbatim AAP Section 0.7.4 message "Closed
+                cases are terminal and cannot be modified." This
+                subflow handles the FORWARD Resolved -> Closed
+                transition only; the BR handles the terminal-state
+                guard.
+
+    FUTURE EXTENSIBILITY:
+        - If a future AAP enhancement adds a "Reopened" status that
+          allows transitions from Closed back to In Progress (which
+          would require relaxing the Closed-is-terminal rule), this
+          subflow would still apply to subsequent Resolved -> Closed
+          transitions and would still enforce the manager-role gate
+          and re-stamp closed_date.
+        - If the manager-role gate is later relaxed (e.g., agents
+          can close their own cases under some condition), update
+          the canTransitionToClosed method in
+          ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+          rather than this subflow. The subflow is a thin
+          orchestration shell; the gate logic lives in the Script
+          Include for code reuse across the Flow Designer flow,
+          Business Rules, UI Actions, and any future REST endpoints.
+        - If email is later re-enabled on the PDI and a "Case has
+          been Closed by [manager_name]" notification is desired,
+          add a Send Email step to the parent flows AFTER this
+          subflow returns successfully, NOT to this subflow. This
+          subflow's responsibility is gate-and-stamp; notification
+          is a separate concern.
+        - If the "now" timestamp computation needs more precision
+          (e.g., milliseconds), replace gs.nowDateTime() with new
+          GlideDateTime().toString(); this returns the same wall-
+          clock value but uses the GlideDateTime constructor for
+          potentially different precision behavior. The current
+          gs.nowDateTime() pattern is the canonical choice and
+          matches the companion business rule's pattern.
+-->
+<record_update table="sys_hub_flow">
+    <sys_hub_flow action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <acls/>
+        <active>true</active>
+        <annotation/>
+        <callable_by_client_api>false</callable_by_client_api>
+        <category display_value="Custom">custom</category>
+        <copied_from/>
+        <copied_from_name/>
+        <description>Subflow that validates the Resolved -&gt; Closed transition on x_casemgmt_case. Per AAP Section 0.5.5, requires the caller to have the x_casemgmt_case_manager role; calls x_casemgmt.CaseTransitionValidator.canTransitionToClosed(case_record, gs.getUserID()) which delegates to gs.getUser().hasRole('x_casemgmt_case_manager'). On failure, throws the validator's error message "Only case managers can close cases." which surfaces on the form via Flow Designer Throw Error (gs.addErrorMessage + setAbortAction). On success, sets closed_date = gs.nowDateTime() on the case via an Update Record step (the AAP Section 0.5.5 mandated side effect of the Resolved -&gt; Closed transition; defense-in-depth with ../../business_rules/x_casemgmt_set_closed_date.xml). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Closed'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. ServiceNow-native replacement for ArkCase ChangeCaseFileStateService.changeCaseState's "if (CLOSED.equals(newState)) retval.setClosed(now)" branch (lines 97-100), strengthened with an explicit case_manager role gate that ArkCase did not have. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <internal_name>x_casemgmt_validate_closed_transition</internal_name>
+        <label_cache>Validate Closed Transition</label_cache>
+        <latest_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_closed_transition",
+    "label": "Validate Closed Transition",
+    "type": "subflow",
+    "description": "Validates the Resolved -> Closed transition. Requires caller to have x_casemgmt_case_manager role; throws 'Only case managers can close cases.' on failure (AAP Section 0.5.5). On success, sets closed_date = gs.nowDateTime() on the case row.",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose Closed-transition is being validated. Passed from the parent flow as $trigger.current. The Script Include validates the saving user has the case_manager role; on success, the Update Record step sets closed_date on this record."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_run_validator",
+            "order": 100,
+            "name": "Validate Closed Transition (manager role check)",
+            "type": "script_step",
+            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToClosed(case_record, gs.getUserID()). The Script Include returns { ok: true } when the user has the x_casemgmt_case_manager role, or { ok: false, error: 'Only case managers can close cases.' } when the role check fails. Also captures gs.nowDateTime() as closed_date_now for the subsequent Update Record step (Step 3). Passing gs.getUserID() explicitly ensures the role check evaluates against the saving user (defensive; matches the validator's signature).",
+            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToClosed(inputs.case_record, gs.getUserID()); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; outputs.closed_date_now = gs.nowDateTime() + ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
+            "script_includes_used": [
+                "x_casemgmt.CaseTransitionValidator"
+            ],
+            "tables_referenced": [],
+            "outputs": [
+                {
+                    "name": "ok",
+                    "label": "OK",
+                    "field_type": "boolean",
+                    "description": "True when the validator reports the saving user has the x_casemgmt_case_manager role. False when the role check fails or when the case_record input is null/undefined."
+                },
+                {
+                    "name": "error_message",
+                    "label": "Error Message",
+                    "field_type": "string",
+                    "description": "Empty string when ok=true. The Script Include's default message 'Only case managers can close cases.' when ok=false because of a missing case_manager role. The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation)."
+                },
+                {
+                    "name": "closed_date_now",
+                    "label": "Closed Date Now",
+                    "field_type": "string",
+                    "description": "Current GlideDateTime in system timezone, captured at the moment the validator was called. Bound to the Update Record step's closed_date field via ${step_run_validator.closed_date_now}. Equivalent to ArkCase ChangeCaseFileStateService line 93's 'Date now = new Date()' followed by line 99's retval.setClosed(now)."
+                }
+            ]
+        },
+        {
+            "id": "step_if_validator_failed",
+            "order": 200,
+            "name": "If validator returned not-ok",
+            "type": "if",
+            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the validator's error message on the form and aborts the parent flow's triggering update transaction.",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
+            "actions": [
+                {
+                    "id": "step_throw_error",
+                    "order": 100,
+                    "name": "Throw Error (surface validator message)",
+                    "type": "throw_error",
+                    "description": "Throws the validator's error message to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to 'Only case managers can close cases.' when the role check fails. The default message 'Only case managers can close cases.' is preserved character-for-character including trailing period and lowercase 'managers' / 'cases' per the Script Include's canonical message.",
+                    "inputs": {
+                        "message": "${step_run_validator.error_message}",
+                        "default_validator_message": "Only case managers can close cases."
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_update_closed_date",
+            "order": 300,
+            "name": "Set closed_date to now (success path)",
+            "type": "update_record",
+            "description": "On the success path (validator ok=true and Throw Error did not fire), updates the case_record's closed_date field to gs.nowDateTime() captured by Step 1's closed_date_now output. This is the AAP Section 0.5.5 mandated side effect of the Resolved -> Closed transition. The companion business rule ../../business_rules/x_casemgmt_set_closed_date.xml provides defense-in-depth (sets the same field at the BR layer with the same gs.nowDateTime() expression). ServiceNow-native equivalent of ArkCase ChangeCaseFileStateService line 99: retval.setClosed(now).",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == true",
+            "inputs": {
+                "table": "x_casemgmt_case",
+                "record": "${inputs.case_record}",
+                "fields": [
+                    {
+                        "field_name": "closed_date",
+                        "value": "${step_run_validator.closed_date_now}"
+                    }
+                ]
+            }
+        }
+    ]
+}]]></latest_snapshot>
+        <latest_snapshot_user display_value="System Administrator">admin</latest_snapshot_user>
+        <master_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_closed_transition",
+    "label": "Validate Closed Transition",
+    "type": "subflow",
+    "description": "Validates the Resolved -> Closed transition. Requires caller to have x_casemgmt_case_manager role; throws 'Only case managers can close cases.' on failure (AAP Section 0.5.5). On success, sets closed_date = gs.nowDateTime() on the case row.",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose Closed-transition is being validated. Passed from the parent flow as $trigger.current. The Script Include validates the saving user has the case_manager role; on success, the Update Record step sets closed_date on this record."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_run_validator",
+            "order": 100,
+            "name": "Validate Closed Transition (manager role check)",
+            "type": "script_step",
+            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToClosed(case_record, gs.getUserID()). The Script Include returns { ok: true } when the user has the x_casemgmt_case_manager role, or { ok: false, error: 'Only case managers can close cases.' } when the role check fails. Also captures gs.nowDateTime() as closed_date_now for the subsequent Update Record step (Step 3). Passing gs.getUserID() explicitly ensures the role check evaluates against the saving user (defensive; matches the validator's signature).",
+            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToClosed(inputs.case_record, gs.getUserID()); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; outputs.closed_date_now = gs.nowDateTime() + ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
+            "script_includes_used": [
+                "x_casemgmt.CaseTransitionValidator"
+            ],
+            "tables_referenced": [],
+            "outputs": [
+                {
+                    "name": "ok",
+                    "label": "OK",
+                    "field_type": "boolean",
+                    "description": "True when the validator reports the saving user has the x_casemgmt_case_manager role. False when the role check fails or when the case_record input is null/undefined."
+                },
+                {
+                    "name": "error_message",
+                    "label": "Error Message",
+                    "field_type": "string",
+                    "description": "Empty string when ok=true. The Script Include's default message 'Only case managers can close cases.' when ok=false because of a missing case_manager role. The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation)."
+                },
+                {
+                    "name": "closed_date_now",
+                    "label": "Closed Date Now",
+                    "field_type": "string",
+                    "description": "Current GlideDateTime in system timezone, captured at the moment the validator was called. Bound to the Update Record step's closed_date field via ${step_run_validator.closed_date_now}. Equivalent to ArkCase ChangeCaseFileStateService line 93's 'Date now = new Date()' followed by line 99's retval.setClosed(now)."
+                }
+            ]
+        },
+        {
+            "id": "step_if_validator_failed",
+            "order": 200,
+            "name": "If validator returned not-ok",
+            "type": "if",
+            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the validator's error message on the form and aborts the parent flow's triggering update transaction.",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
+            "actions": [
+                {
+                    "id": "step_throw_error",
+                    "order": 100,
+                    "name": "Throw Error (surface validator message)",
+                    "type": "throw_error",
+                    "description": "Throws the validator's error message to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to 'Only case managers can close cases.' when the role check fails. The default message 'Only case managers can close cases.' is preserved character-for-character including trailing period and lowercase 'managers' / 'cases' per the Script Include's canonical message.",
+                    "inputs": {
+                        "message": "${step_run_validator.error_message}",
+                        "default_validator_message": "Only case managers can close cases."
+                    }
+                }
+            ]
+        },
+        {
+            "id": "step_update_closed_date",
+            "order": 300,
+            "name": "Set closed_date to now (success path)",
+            "type": "update_record",
+            "description": "On the success path (validator ok=true and Throw Error did not fire), updates the case_record's closed_date field to gs.nowDateTime() captured by Step 1's closed_date_now output. This is the AAP Section 0.5.5 mandated side effect of the Resolved -> Closed transition. The companion business rule ../../business_rules/x_casemgmt_set_closed_date.xml provides defense-in-depth (sets the same field at the BR layer with the same gs.nowDateTime() expression). ServiceNow-native equivalent of ArkCase ChangeCaseFileStateService line 99: retval.setClosed(now).",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == true",
+            "inputs": {
+                "table": "x_casemgmt_case",
+                "record": "${inputs.case_record}",
+                "fields": [
+                    {
+                        "field_name": "closed_date",
+                        "value": "${step_run_validator.closed_date_now}"
+                    }
+                ]
+            }
+        }
+    ]
+}]]></master_snapshot>
+        <master_snapshot_id/>
+        <name>x_casemgmt_validate_closed_transition</name>
+        <natlang/>
+        <nlu_model_version/>
+        <outputs/>
+        <protection_policy/>
+        <remote_published_version/>
+        <run_as>caller</run_as>
+        <sc_callable>false</sc_callable>
+        <show_draft_actions>false</show_draft_actions>
+        <show_triggered_flows>false</show_triggered_flows>
+        <status>published</status>
+        <sys_class_name>sys_hub_flow</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>61c7e698df95ea6fc80f639b4dc99fb3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_closed_transition</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_hub_flow_x_casemgmt_validate_closed_transition</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>subflow</type>
+        <validation_status>complete</validation_status>
+    </sys_hub_flow>
+</record_update>
