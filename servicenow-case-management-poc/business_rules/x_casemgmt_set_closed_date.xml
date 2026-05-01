@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that auto-populates the `closed_date` field on every `x_casemgmt_case`
+    record whose `status` transitions from "Resolved" to "Closed", inside the
+    scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.5 verbatim):
+        From       To       Required condition                                   Behavior
+        Resolved   Closed   Caller has x_casemgmt_case_manager role; auto-set    surface form-level error
+                            closed_date                                          on failure
+
+    PURPOSE (AAP Section 0.5.7 verbatim):
+        Field         Type        Constraints
+        closed_date   DateTime    Auto-set on Close transition
+
+    This Business Rule is the ServiceNow-native equivalent of ArkCase's
+    server-side close-timestamp population in
+    acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java
+    line 79-114 - specifically line 99:
+            if ("CLOSED".equals(newState))
+            {
+                retval.setClosed(now);
+            }
+    The ArkCase implementation read the new state, compared against the
+    string literal "CLOSED" (uppercase), and called retval.setClosed(now)
+    to stamp the JPA-mapped `cm_case_closed` column (declared on
+    acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    armedia/acm/plugins/casefile/model/CaseFile.java line 171-173 as
+    @Column(name = "cm_case_closed") @Temporal(TemporalType.TIMESTAMP)
+    private Date closed). The ServiceNow target preserves the same
+    semantic - "stamp the close timestamp at the moment a case enters
+    the Closed terminal state" - but adapts it to the platform's
+    declarative Business Rule mechanism with three intentional
+    differences:
+
+      1) Title Case status comparison ('Resolved'/'Closed') instead of
+         the ArkCase UPPERCASE comparison ('CLOSED'). The Title Case
+         labels are the verbatim choice values defined in
+         ../choices/sys_choice_case_status.xml per AAP Section 0.5.7,
+         and they are stored on the row as-is - ServiceNow Choice
+         fields persist the LABEL string by default, not an integer ID
+         or an UPPERCASE-normalized form.
+
+      2) Transition-detection (Resolved -> Closed) instead of
+         single-state-detection (-> CLOSED). The ArkCase service was
+         only invoked from the explicit ChangeCaseStatus pipeline, so
+         it could safely set closed_date on any incoming "CLOSED"
+         transition without checking the prior state. The ServiceNow
+         Business Rule fires on EVERY before-update of x_casemgmt_case,
+         regardless of caller (form, Table API, scripted REST,
+         GlideRecord script, bulk import). To avoid stamping closed_date
+         on (for example) a re-save of an already-Closed case from an
+         administrative correction, the rule explicitly compares
+         previous.status === 'Resolved' AND current.status === 'Closed',
+         which uniquely identifies the lifecycle transition rather
+         than the steady state. Note that direct insertion of a Closed
+         case (status = Closed at insert time, with no prior Resolved
+         step) is a separate code path and is NOT covered by this
+         before-UPDATE rule - that path is exercised only by the seed
+         data XML files (../seed-data/cases/x_casemgmt_case_demo_06.xml
+         and ../seed-data/cases/x_casemgmt_case_demo_10.xml), which
+         carry an explicit closed_date column value and intentionally
+         bypass this Business Rule via the .nil() check.
+
+      3) Defensive .nil() guard against double-write. The ArkCase
+         service set the column unconditionally because it ran inside
+         the same transaction as the state change and there was no
+         risk of a parallel writer. The ServiceNow target has a
+         second writer for the same column - the Flow Designer
+         subflow ../flows/sub_flows/validate_closed_transition.xml -
+         and the seed data carries explicit synthetic close
+         timestamps. The .nil() guard prevents this rule from
+         overwriting any of those authoritative values.
+
+    BEHAVIOR:
+        - Trigger          : BEFORE UPDATE only on the `x_casemgmt_case` table
+        - Condition        : previous.status == 'Resolved' AND
+                             current.status == 'Closed' AND
+                             current.closed_date is nil/empty
+        - Action           : sets current.closed_date = gs.nowDateTime()
+        - Other timing     : does NOT fire on insert, delete, or query
+
+    DEFENSIVE FIELD-SET (.nil() GUARD):
+        The script uses current.closed_date.nil() to check whether the field
+        is already populated. If the caller (seed data, Flow Designer
+        subflow validate_closed_transition, manual administrative update)
+        has already provided an explicit closed_date value, the script
+        does NOT overwrite. This intentionally allows:
+
+            (a) Seed data demos in
+                ../seed-data/cases/x_casemgmt_case_demo_06.xml (General
+                Inquiry, Closed) and
+                ../seed-data/cases/x_casemgmt_case_demo_10.xml (Complaint,
+                Closed) to specify synthetic closed_date timestamps that
+                pair with the synthetic opened_date timestamps to give the
+                "Average Time to Close" single-score widget on the Manager
+                View dashboard (../reports/x_casemgmt_avg_time_to_close.xml)
+                a non-zero, deterministic, demo-friendly value on a
+                freshly-imported PDI. Note: the demo cases are inserted
+                with status=Closed, so the BEFORE-UPDATE trigger of THIS
+                rule does not even fire for them; the .nil() guard is
+                relevant primarily to (b) below, plus any future
+                re-update of an already-Closed case that somehow re-enters
+                the Resolved -> Closed transition (which itself would be
+                blocked by ../business_rules/x_casemgmt_block_terminal_closed.xml,
+                but defense in depth).
+
+            (b) The Flow Designer subflow
+                ../flows/sub_flows/validate_closed_transition.xml, which
+                fires on the same Resolved -> Closed transition through
+                the user-facing flow path, also writes
+                current.closed_date = gs.nowDateTime() inside a Set
+                Field Value action. Both writers landing on the same
+                row in the same transaction is harmless because:
+                  * The .nil() guard means whichever writer fires FIRST
+                    populates the value, and the SECOND writer sees a
+                    non-nil column and exits without re-stamping;
+                  * Even if both writers fired and both wrote, both
+                    would write the same gs.nowDateTime() value (within
+                    millisecond precision in the same transaction), so
+                    the net effect is identical to a single write.
+                The redundancy is INTENTIONAL: the flow catches
+                interactive transitions through the form/UI; this BR
+                catches direct DB modifications (Table API, scripted
+                REST endpoints, server scripts, bulk imports) that
+                bypass the Flow Designer entry point.
+
+        For organic Resolved -> Closed transitions that flow through any
+        other path (direct Table API PATCH, GlideRecord.update() in an
+        ad-hoc admin script, a future scripted REST endpoint that
+        bypasses the flow), the script populates closed_date with the
+        current platform time so downstream reports and the Manager
+        View dashboard never see a null closed_date for a Closed case.
+
+    DICTIONARY READ-ONLY OVERRIDE:
+        The closed_date field is declared read_only=true at the dictionary
+        level in ../dictionary/x_casemgmt_case_closed_date.xml. ServiceNow
+        intentionally exempts server-side Business Rule scripts from
+        dictionary read_only enforcement so this rule can write the field
+        even though end-users cannot edit it on the form. This pattern is
+        the canonical way to populate auto-set audit-style domain fields
+        whose value is system-managed but whose presence on the row is
+        critical for downstream reporting (the avg-time-to-close widget
+        is the primary consumer per AAP Section 0.4.1 Manager View
+        Dashboard widget inventory).
+
+    PORTAL UPDATE COMPATIBILITY:
+        The unauthenticated submission endpoint at
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+        creates new cases in Draft (not Closed), so this BEFORE-UPDATE
+        rule does NOT fire on portal submission. The lookup endpoint at
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+        is read-only and never updates the row. Therefore neither portal
+        endpoint interacts with this rule. The portal lookup explicitly
+        EXCLUDES closed_date from its whitelisted output fields per AAP
+        Section 0.7.4 ("the lookup page returns ONLY status, subject,
+        opened_date") - so even though this rule populates closed_date
+        on internal transitions, that timestamp is never exposed to
+        anonymous external requesters.
+
+    ORDERING WITHIN BEFORE-UPDATE PHASE:
+        order=500 is intentionally HIGH so this rule runs LAST among the
+        before-update rules in this scoped application. The full
+        before-update execution order in this folder is:
+
+            1) x_casemgmt_block_terminal_closed.xml          (order=100, FIRST)
+            2) x_casemgmt_block_draft_backtransition.xml     (order=200)
+            3) x_casemgmt_validate_assigned_agent_membership (order=300)
+            4) x_casemgmt_clear_pending_reason_on_inprogress (order=400)
+            5) x_casemgmt_set_closed_date.xml                (order=500, LAST)
+
+        Running LAST is critical because:
+          * If x_casemgmt_block_terminal_closed (order=100) aborts the
+            update because the previous.status was already Closed, this
+            rule MUST be skipped - we never want to stamp closed_date on
+            a transition that the platform is about to reject. ServiceNow
+            short-circuits the BR pipeline on abort, so a higher order
+            ensures we run only after all guards have passed.
+          * If x_casemgmt_block_draft_backtransition (order=200) aborts
+            the update because current.status == 'Draft', this rule MUST
+            be skipped (the transition won't happen, so no close
+            timestamp should be stamped).
+          * Symmetric reasoning applies to orders 300 and 400.
+          * After all guards pass and the platform is committed to the
+            transition, this rule fires last and stamps the close
+            timestamp as the final step of the before-update phase,
+            immediately before the platform writes the row. The
+            platform's database write therefore sees a fully-populated
+            row including a freshly-stamped closed_date.
+
+        There is no other before-update rule in this scoped application
+        that reads closed_date, so the high order does not currently
+        conflict with anything; 500 leaves room above (lower numbers
+        run earlier) and below for future expansion.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This rule
+        contains zero gs.eventQueue() calls, zero gs.email() calls, and
+        zero gs.notificationEngine() calls. It performs only the field-set
+        operation. This intentionally diverges from ArkCase, where
+        ChangeCaseFileStateService line 106 raised an event via
+        getCaseFileEventUtility().raiseEvent(...) which would have
+        triggered downstream notification listeners; the ServiceNow POC
+        omits the equivalent gs.eventQueue('case.closed', ...) call
+        per the AAP minimal-change clause.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case</collection>     scoped table
+        - <sys_scope>x_casemgmt</sys_scope>            scoped namespace
+        - <sys_package>x_casemgmt</sys_package>        scoped application
+        - script body references current.closed_date  scoped field
+        - script body references previous.status      scoped field
+        - script body references current.status       scoped field
+        Zero global-scope writes. Zero modifications to OOB tables.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; it operates only on the platform-injected `current`
+          and `previous` GlideRecord pair (the row being updated and
+          its prior state).
+        - The script body uses NO gs.getReference() calls and NO
+          GlideRecord.get(sys_id) calls.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_set_closed_date"), which is
+          permitted because the AAP "no hardcoded sys_id" rule applies
+          to REFERENCE FIELDS pointing at OTHER records, not to a
+          record's own primary key.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml             (table this rule attaches to)
+            - ../dictionary/x_casemgmt_case_status.xml  (field this rule reads via previous/current)
+            - ../dictionary/x_casemgmt_case_closed_date.xml (field this rule writes)
+            - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+            - ../app/sys_scope/x_casemgmt.xml           (scope record)
+            - ../choices/sys_choice_case_status.xml     (the Resolved/Closed
+                                                         choice values that
+                                                         this rule's script
+                                                         compares against)
+        And BEFORE:
+            - ../seed-data/cases/x_casemgmt_case_demo_06.xml,
+              ../seed-data/cases/x_casemgmt_case_demo_10.xml
+              (the two Closed demo cases insert into x_casemgmt_case at
+               status=Closed; the BEFORE-UPDATE trigger of this rule does
+               NOT fire on those inserts, but the rule must be present
+               in the schema before any subsequent update of those rows
+               could plausibly trigger it)
+            - ../flows/sub_flows/validate_closed_transition.xml
+              (the Flow Designer subflow that ALSO sets closed_date
+               on the Resolved -> Closed transition - defense in depth)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_set_closed_date")
+               = f6d63b3856121cac9b69215b2c46f64c
+        32-character lowercase hex. The PDI accepts any valid 32-char hex
+        sys_id; deriving from the record name guarantees idempotent re-import
+        on a fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in place
+        rather than creating a duplicate. This is the same convention used
+        by the sibling Business Rule
+        ../business_rules/x_casemgmt_set_opened_date.xml whose sys_id is
+        MD5("x_casemgmt_set_opened_date") = c56aeecd4086f111be2867faae9e55ad.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 2 (Workflow): "All state transitions enforced for both case
+          types - Invalid transitions return blocking error; task-closure
+          check blocks Resolved transition". This rule completes the
+          Resolved -> Closed transition by populating closed_date so the
+          terminal state is fully recorded. Without this, the transition
+          would technically succeed (status would change to Closed) but
+          the close timestamp would be null, breaking the
+          time-to-close downstream report.
+        - Gate 6 (Dashboards): "Both dashboards render with synthetic
+          data - All widgets display data; no broken report references".
+          The Manager View dashboard's "Average Time to Close"
+          single-score widget at ../reports/x_casemgmt_avg_time_to_close.xml
+          computes AVG(closed_date - opened_date) over Closed cases.
+          This rule guarantees closed_date is populated for every Closed
+          case reached via the standard transition path, so the average
+          is computed over a complete population (the seed-data Closed
+          cases provide the synthetic baseline; this rule ensures any
+          ad-hoc Closed transition during demo/validation also feeds
+          the average correctly).
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance". The deterministic
+          sys_id and reference-by-name pattern ensure this rule re-imports
+          cleanly with zero preview errors.
+
+    NO PII (AAP Section 0.7.2):
+        The script body, code comments, and description text contain
+        zero real names, real email addresses, real phone numbers, real
+        organizational identifiers, or any other personally identifiable
+        information. The rule operates exclusively on the synthetic
+        case-status enumeration and a UTC timestamp.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-update on x_casemgmt_case: when previous.status == 'Resolved' AND current.status == 'Closed', sets current.closed_date = gs.nowDateTime() if not already populated. Replaces ArkCase ChangeCaseFileStateService.changeCaseState() retval.setClosed(now) (line 99 in acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java). Per AAP Section 0.5.5 (Resolved-&gt;Closed auto-sets closed_date) and AAP Section 0.5.7 (closed_date DateTime, Auto-set on Close transition). Order=500 ensures this rule runs LAST among before-update rules so it only fires after all transition guards (block_terminal_closed, block_draft_backtransition, validate_assigned_agent_membership, clear_pending_reason_on_inprogress) have passed. Defensive .nil() guard preserves authoritative pre-set values from seed data and the validate_closed_transition Flow Designer subflow. Defense in depth with the subflow is intentional - this BR catches direct DB updates (Table API, scripted REST, GlideRecord scripts), the subflow catches interactive transitions through the form/UI. Contains zero gs.eventQueue() calls per the email-disabled constraint.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_set_closed_date</name>
+        <order>500</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // ServiceNow-native equivalent of ArkCase
+    // ChangeCaseFileStateService.changeCaseState() line 99:
+    //     if ("CLOSED".equals(newState)) { retval.setClosed(now); }
+    // (acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    //  armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java)
+    //
+    // Per AAP Section 0.5.5: Resolved -> Closed transition auto-sets closed_date.
+    // Per AAP Section 0.5.7: closed_date is "DateTime, Auto-set on Close transition".
+    //
+    // This BR runs alongside the Flow Designer subflow
+    // ../flows/sub_flows/validate_closed_transition.xml; the redundancy is
+    // intentional - this BR catches direct DB modifications (Table API,
+    // scripted REST, GlideRecord scripts, bulk imports), the flow catches
+    // interactive transitions through the form/UI.
+    //
+    // Order=500 ensures this rule runs LAST among before-update rules; if
+    // any earlier guard aborted the action (block_terminal_closed at
+    // order=100, block_draft_backtransition at order=200,
+    // validate_assigned_agent_membership at order=300,
+    // clear_pending_reason_on_inprogress at order=400), this BR is skipped.
+    // We never stamp closed_date on a transition that's about to be
+    // rejected.
+    //
+    // Defensive previous-null guard: the `previous` GlideRecord is null in
+    // certain async/system contexts. If there is no previous state, no
+    // transition can be detected, and the rule does nothing. The String()
+    // cast normalizes the GlideElement to a primitive string for safe
+    // === comparison; without the cast, GlideElement-vs-string equality
+    // can behave inconsistently across releases.
+    var prevStatus = previous ? String(previous.status) : '';
+    var newStatus = String(current.status);
+
+    // Verbatim Title Case status values per AAP Section 0.5.7 and the
+    // sibling choice list ../choices/sys_choice_case_status.xml. The
+    // labels ARE the stored values - ServiceNow Choice fields persist
+    // the LABEL string by default, not an integer ID.
+    if (prevStatus === 'Resolved' && newStatus === 'Closed') {
+        // Defensive .nil() guard: respect pre-set values from the
+        // Flow Designer subflow (which fires in the same transaction
+        // for interactive transitions and may have already stamped
+        // the column) and from any future seed-data path that updates
+        // an already-loaded case from Resolved to Closed. Without this
+        // guard, a value already written by the subflow would be
+        // overwritten by gs.nowDateTime() at this rule's execution
+        // point - harmless in practice (both writers produce the same
+        // millisecond-precision timestamp within a single transaction)
+        // but unnecessary and slightly less clear in audit logs.
+        if (current.closed_date.nil()) {
+            current.closed_date = gs.nowDateTime();
+        }
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>f6d63b3856121cac9b69215b2c46f64c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_set_closed_date</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_set_closed_date</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>
