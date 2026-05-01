@@ -1,0 +1,523 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Demo Party 04 - Person Requester on case 05 (Resolved General Inquiry)
+    ====================================================================
+
+    Synthetic seed record for the case-management POC scoped application.
+    This file is the FOURTH of the 8-party demo dataset; it pairs with
+    sibling party 05 (Organization/Respondent on the same case 05) to
+    demonstrate that the polymorphic UI Policy works correctly on
+    General Inquiry case types - one Person row + one Organization row
+    on the same case exercises BOTH conditional branches simultaneously.
+    Together with parties 01 through 03 and parties 05 through 08, this
+    record satisfies AAP Section 0.4.1's seed-data folder requirements
+    for `seed-data/parties/`.
+
+    The complete 8-party fixture matrix:
+
+        Party 01 - Person      / Requester  / parent case 03 (In Progress GI)
+        Party 02 - Organization/ Respondent / parent case 03 (In Progress GI)
+        Party 03 - Person      / Witness    / parent case 04 (Pending GI)
+        Party 04 - Person      / Requester  / parent case 05 (Resolved GI)  ## THIS FILE
+        Party 05 - Organization/ Respondent / parent case 05 (Resolved GI)
+        Party 06 - Person      / Requester  / parent case 08 (In Progress Complaint)
+        Party 07 - Organization/ Respondent / parent case 08 (In Progress Complaint)
+        Party 08 - Person      / Witness    / parent case 09 (Resolved Complaint)
+
+    The 8-party dataset thus exercises:
+      * All 2 `party_type` choice values (Person x5, Organization x3) -
+        this party contributes the THIRD of the five Person entries.
+        The Person branch demonstrates that the conditional UI Policy
+        at ../../ui_policy/x_[scope]_case_party_conditional_fields.xml
+        correctly shows the <person> reference field and HIDES the
+        <organization> reference field when party_type=Person.
+      * All 3 example `role_label` values (Requester x3, Respondent x3,
+        Witness x2) - this party contributes the SECOND of the three
+        Requester entries (the others are party 01 on case 03 and party
+        06 on case 08). The Requester role semantically represents the
+        external person who FILED the case (per AAP Section 0.7.4 the
+        case's requester_name + requester_email fields capture the
+        primary external requester; a parallel case_party row with
+        role_label=Requester records the same individual as a typed
+        party for the polymorphic associations Related List).
+      * 5 unique parent cases (03, 04, 05, 08, 09) - this party is
+        the FIRST of two parties on case 05 (paired with party 05's
+        Organization/Respondent); cases 03, 05, and 08 each have TWO
+        parties (Person + Organization) demonstrating the dual-party
+        pattern.
+      * Both flow paths (General Inquiry: cases 03, 04, 05 / Complaint:
+        cases 08, 09) - this party tests the polymorphic Person branch
+        on the GENERAL INQUIRY flow's Resolved case; party 06 (Person
+        Requester on case 08) tests the same on the Complaint flow's
+        In Progress case. Together these two Person/Requester rows on
+        active-or-resolving cases prove the Person branch works on
+        both flow paths and at multiple lifecycle phases.
+      * All 3 demo users as `person` references (manager x2, agent x2,
+        viewer x1) - THIS PARTY IS THE SOLE VIEWER ENTRY in the 8-party
+        fixture. The other Person rows reference the demo manager
+        (parties 01 and 06 on cases 03 and 08) or the demo agent
+        (parties 03 and 08 on cases 04 and 09); only this party
+        references the demo viewer (case 05). The viewer's appearance
+        as a Person/Requester here exercises a critical access-control
+        scenario described in Key Insight 1 below.
+
+    Lifecycle position - WHY Person / Requester / parent Resolved
+    General Inquiry case is meaningful:
+      Per AAP Section 0.5.7 the case_party schema is:
+          case        - Reference -> x_[scope]_case (mandatory)
+          party_type  - Choice (Person | Organization, mandatory)
+          person      - Reference -> sys_user (conditional: required
+                        if party_type=Person)
+          organization- Reference -> core_company (conditional: required
+                        if party_type=Organization)
+          role_label  - String(100) (mandatory; example values
+                        Requester, Respondent, Witness)
+
+      With party_type=Person, the conditional UI Policy at
+      ../../ui_policy/x_[scope]_case_party_conditional_fields.xml
+      activates the Person branch:
+          - Show + require <person> field (populated below with
+            "x_[scope]_demo_viewer")
+          - Hide <organization> field (left empty below; the empty
+            <organization/> element preserves the dictionary entry's
+            existence while signaling no value)
+
+      Case 05 is in Resolved status on the General Inquiry flow per
+      ../cases/x_[scope]_case_demo_05.xml. The case was filed by an
+      external requester ("Synthetic Requester Five") submitting a
+      general inquiry; the demo team's queue accepted the inquiry,
+      the manager assigned the demo agent, the agent investigated,
+      completed all child tasks (which are now Closed per
+      ../tasks/x_[scope]_case_task_demo_04.xml and
+      ../tasks/x_[scope]_case_task_demo_05.xml), and resolved the
+      case; it now awaits manager review for final closure. The
+      <role_label>Requester</role_label> on this party records the
+      demo viewer as the EXTERNAL PERSON WHO FILED THE INQUIRY -
+      mirroring the case's own requester_name field and providing
+      the structured, queryable, polymorphic representation that
+      reports and filters can consume. This pattern mirrors party
+      01 on case 03 (In Progress GI) and party 06 on case 08
+      (In Progress Complaint) but uses a DIFFERENT demo user (the
+      viewer rather than the manager) to prove that distinct
+      person references work correctly side-by-side in the Update
+      Set, AND to demonstrate that even read-only users can be
+      typed parties on cases (a crucial subtlety of the ACL model).
+
+      Note: the AAP Section 0.5.7 example role_label values are
+      Requester, Respondent, Witness; this party uses Requester to
+      complete the Requester triad on the dual-party General Inquiry
+      flow path, ensuring the demo dataset exercises the role-label
+      diversity across both flow paths and across multiple lifecycle
+      phases (case 03 In Progress, case 05 Resolved, case 08 In
+      Progress).
+
+    Role / cross-dependency context (per AAP Section 0.5.2):
+
+      This party DEPENDS ON (loaded BEFORE this record):
+        - The scoped application records under ../../app/
+            (sys_app and sys_scope; this party's <sys_scope>/<sys_
+             package> reference fields resolve via the source attribute
+             against those records)
+        - The case_party table definition at
+            ../../tables/x_[scope]_case_party.xml
+            (this record's <sys_class_name>x_[scope]_case_party</sys_
+             class_name> requires the table to exist)
+        - All dictionary entries for the case_party table under
+            ../../dictionary/x_[scope]_case_party_*.xml  (every populated
+             field below requires its dictionary entry to be present;
+             specifically case, party_type, person, organization, and
+             role_label dictionary entries)
+        - The choice record for party_type at
+            ../../choices/sys_choice_case_party_party_type.xml
+            (the Person choice value must be registered before this
+             record's <party_type>Person</party_type> can be accepted)
+        - The UI Policy at
+            ../../ui_policy/x_[scope]_case_party_conditional_fields.xml
+            (this record's Person branch activates the policy's
+             show-person/hide-organization rule at form-render time)
+        - The role records under ../../roles/  (the demo agent's
+             assigned-only access to case 05 requires the
+             x_[scope]_case_agent role and its case_party-table ACLs;
+             the demo manager's full access requires the
+             x_[scope]_case_manager role; the demo viewer's read-all
+             access requires the x_[scope]_case_viewer role - and
+             notably, the viewer is the very user being referenced as
+             this party's <person>, demonstrating that BEING a party
+             on a case is independent of having WRITE access to the
+             case)
+        - The ACL records under ../../acl/ for case_party (table-level
+             read/write/create/delete ACLs gate access; the case-agent's
+             "Assigned only" condition resolves through the parent
+             case's assigned_agent / assigned_group)
+        - ../cases/x_[scope]_case_demo_05.xml  (referenced by <case>;
+             resolved by number lookup; this is the parent Resolved
+             General Inquiry case whose Person-Requester slot this
+             record fills)
+        - ../users/sys_user_x_[scope]_demo_viewer.xml  (referenced by
+             <person>; resolved by user_name lookup; this is the demo
+             viewer user assigned to the x_[scope]_case_viewer role
+             via the role assignments under ../role_assignments/. The
+             user must exist in sys_user with user_name="x_[scope]_
+             demo_viewer" before this party's <person> field can
+             resolve. Note that the demo viewer is a synthetic user
+             with no real-world counterpart - the prefix "x_[scope]_"
+             on the user_name is intentional to keep the user namespaced
+             alongside all other scoped artifacts.)
+        - The companion party 05 record at
+             ../parties/x_[scope]_case_party_demo_05.xml is INDEPENDENT
+             of this party (no inter-party reference; both reference
+             the same parent case but neither references the other),
+             so loading order between parties 04 and 05 is immaterial.
+             They are simply siblings on case 05's Related List. This
+             party (party 04) is the Person/Requester (referencing the
+             demo viewer) and party 05 is the Organization/Respondent
+             (referencing Synthetic Org Beta) - together they form the
+             canonical dual-party General Inquiry exemplar at the
+             Resolved lifecycle phase.
+
+      This party IS REFERENCED BY (loaded AFTER this record):
+        - Case 05's auto-generated parties Related List (the case form
+            renders a Related List of all x_[scope]_case_party records
+            where <case> = current case; this party is one of two
+            rows on case 05, paired with party 05's Organization/
+            Respondent; the demo agent and demo manager can both see
+            this row through the case_manager and case_agent ACLs;
+            the demo viewer can see it through the case_viewer
+            read-all ACL - and as a bonus, the viewer recognizes
+            their own user_name displayed in the person column)
+        - The polymorphic UI Policy verification (Validation Gate 1
+            per AAP Section 0.7.3): with party_type=Person, the
+            policy must SHOW the <person> field's value
+            ("x_[scope]_demo_viewer") and HIDE the <organization>
+            slot. This party is one of five rows that exercises the
+            Person branch of the polymorphism (the others are parties
+            01, 03, 06, 08); together the five Person rows prove the
+            Person branch works on both the General Inquiry (parties
+            01, 03, 04) and Complaint (parties 06, 08) flow paths and
+            at all relevant lifecycle phases (In Progress, Pending,
+            Resolved).
+        - No Flow Designer flow references this record directly;
+            case_party rows are pure metadata observed by the form UI
+            and audit reports, not transition gates. The state machine
+            in ../../flows/{general_inquiry,complaint}_state_machine.xml
+            does not query x_[scope]_case_party as part of any
+            transition validation. In particular, the validate_resolved_
+            transition subflow that gated case 05's In Progress ->
+            Resolved transition queries x_[scope]_case_task (NOT
+            x_[scope]_case_party); this record's existence does NOT
+            affect the case 05 resolve-success outcome (which already
+            occurred with this party in place; case 05 is currently
+            Resolved).
+        - No dashboard report queries the case_party table directly
+            (per AAP Section 0.4.1 the eight reports under ../../reports/
+            target x_[scope]_case and x_[scope]_case_task only); this
+            party is not aggregated by any dashboard widget.
+
+      Update Set ordering (per AAP Section 0.5.2):
+        - This record MUST be loaded AFTER:
+            * The scoped application records under ../../app/
+            * The case_party table at ../../tables/x_[scope]_case_party.xml
+            * All dictionary entries under ../../dictionary/
+              x_[scope]_case_party_*.xml
+            * The choice record sys_choice_case_party_party_type.xml
+            * The parent case at
+              ../cases/x_[scope]_case_demo_05.xml  (case field resolves
+              by number lookup; that case must exist before this party
+              can reference it)
+            * The demo viewer user at
+              ../users/sys_user_x_[scope]_demo_viewer.xml  (person field
+              resolves by user_name lookup; that user must exist before
+              this party can reference it)
+            * Any role and ACL records that gate read/write access at
+              import time
+        - This record can be loaded BEFORE or AFTER its sibling party
+          records (01-03, 05-08) since they are mutually independent
+          (each party's only outbound references are to a case and
+          a user or company - never to other parties).
+
+    Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the
+    agent prompt's ten authoring rules):
+
+      Rule 1 - Synthetic only (AAP Section 0.7.2 NO-PII clause):
+        person       = "x_[scope]_demo_viewer"  (the demo viewer user
+                       seeded by ../users/sys_user_x_[scope]_demo_
+                       viewer.xml; its first/last name and email are
+                       fabricated synthetic values, NOT a real person's
+                       identifiers; the user_name itself uses the
+                       scoped prefix to make the synthetic nature
+                       explicit; "viewer" is a generic functional role
+                       descriptor, NOT a real person's name; NOT a
+                       registered user identifier on any production
+                       system)
+        role_label   = "Requester"  (a generic English noun describing
+                       the party who FILED the case; NOT a person's
+                       name, NOT a registered identifier; the AAP
+                       Section 0.5.7 lists Requester as the FIRST
+                       example role_label value, making it the most
+                       common and idiomatic role on a case_management
+                       party)
+        case         = "CASE0000005"  (the synthetic auto-numbered
+                       reference to the Resolved General Inquiry demo
+                       case; NOT a real-world case identifier; the
+                       CASE prefix and 7-digit zero-padded format
+                       follow the auto-numbering convention defined
+                       by ../../numbers/sys_number_x_[scope]_case.xml)
+        party_type   = "Person"  (a Choice value, exact title-case
+                       match against the registered choice record's
+                       Person value)
+
+      Rule 2 - Choice-value precision:
+        <party_type>Person</party_type>  (capital P, exact-case match
+        against the Person choice value registered in
+        ../../choices/sys_choice_case_party_party_type.xml).
+
+      Rule 3 - Conditional field rule (the polymorphic invariant):
+        With party_type=Person:
+          <person>  = populated with x_[scope]_demo_viewer  (Person
+                      branch active)
+          <organization/>  = empty  (Person branch hides the
+                             organization field per the UI Policy)
+
+      Rule 4 - Reference resolution (NO sys_id literals in cross-
+      reference fields; AAP Section 0.7.2 No-Hardcoded-Sys-Id
+      constraint):
+        <case>          : display_value="CASE0000005" + text content
+                          "CASE0000005"  (resolved at apply time by
+                          number lookup against x_[scope]_case)
+        <person>        : display_value="x_[scope]_demo_viewer" +
+                          text content "x_[scope]_demo_viewer"
+                          (resolved at apply time by user_name
+                          lookup against sys_user)
+        <organization/> : empty element (no resolution needed)
+        <sys_scope>     : display_value="Case Management" + text
+                          content "x_[scope]"  (resolved at apply
+                          time by sys_scope name lookup)
+        <sys_package>   : display_value="Case Management" +
+                          source="x_[scope]" + text content
+                          "x_[scope]"  (resolved at apply time by
+                          sys_app name + scope lookup)
+        The <sys_id> below is the record's OWN primary key (deterministic
+        MD5 per Rule 9), which is acceptable per the AAP rule (it is
+        NOT a reference to any other record).
+
+      Rule 5 - All mandatory fields populated:
+        <case>          - mandatory per dictionary  (POPULATED)
+        <party_type>    - mandatory per dictionary  (POPULATED: Person)
+        <person>        - conditional: required if party_type=Person
+                          (POPULATED: x_[scope]_demo_viewer)
+        <organization/> - conditional: required if party_type=
+                          Organization (NOT REQUIRED here; empty)
+        <role_label>    - mandatory per dictionary  (POPULATED:
+                          Requester)
+
+      Rule 6 - Scope binding (standard):
+        <sys_class_name>  = "x_[scope]_case_party"  (binds row to
+                            scoped table)
+        <sys_scope>       = "x_[scope]"             (binds row to
+                            scoped application)
+        <sys_package>     = "x_[scope]" with source="x_[scope]"
+                            (binds row to scoped application package)
+        Together these three elements enforce that the row lives
+        entirely within the scoped application namespace and is
+        captured by the Update Set when exported.
+
+      Rule 7 - Idempotency: the natural key is (case, party_type,
+        role_label, person), which uniquely identifies this party
+        within the case_management domain. The deterministic sys_id
+        derived from these fields (per Rule 9) ensures byte-identical
+        re-export across agent rebuilds; re-importing an already-
+        applied Update Set produces zero changes for this row.
+
+      Rule 8 - XML conventions:
+        * UTF-8 encoding declared on line 1
+        * Unix line endings (LF, no CRLF)
+        * Field elements alphabetized within the record envelope
+          (case, organization, party_type, person, role_label,
+          sys_class_name, sys_created_by, sys_id, sys_package,
+          sys_scope, sys_update_name)
+        * Attribute order: display_value first, then source on
+          sys_package
+        * Empty elements use the self-closing form (<organization/>)
+          rather than open+close pairs (<organization></organization>)
+        * No XML namespace declarations  (the Update Set XML schema
+          does not use namespaces)
+
+      Rule 9 - Deterministic sys_id:
+        sys_id = 947634cfd3a1ef3dc9a59179ba9f515a  (per the agent
+        prompt's Rule 9; computed from the canonical input string
+        "x_[scope]_case_party.demo_04.case_05.Person.x_[scope]_demo_
+        viewer.Requester" using a deterministic MD5 derivation; this
+        sys_id is unique across the 8-party fixture by construction
+        because the canonical input string includes the party-row
+        ordinal, the parent case number, the party_type, the person
+        user_name, and the role_label - all of which are unique
+        in combination for this row).
+
+      Rule 10 - `[scope]` placeholder preserved:
+        The literal `[scope]` placeholder appears verbatim in the
+        sys_class_name, sys_update_name, the <person> reference text
+        and display_value, the <sys_scope>/<sys_package> reference
+        values, and the file path. The PDI substitutes the concrete
+        scope id at apply time when the scoped application record's
+        scope is auto-assigned.
+
+    Validation hooks (per the agent prompt and AAP Section 0.7.3):
+      - Gate 1 (Data Model): the polymorphic invariant is verified
+        for the Person branch on a General Inquiry case:
+        party_type=Person -> person populated + organization empty.
+        This record contributes to the 5-row Person-branch fixture
+        (parties 01, 03, 04, 06, 08); together with the 3-row
+        Organization-branch fixture (parties 02, 05, 07), all 8
+        parties prove every dictionary constraint is honored. This
+        party is unique in the fixture because it is the only one
+        referencing the demo viewer user; if the viewer user is
+        absent at apply time (because the user seed file failed),
+        this party's <person> would resolve empty - triggering Gate
+        1 failure and surfacing the bug at preview.
+      - Gate 3 (ACLs): the demo manager (with x_[scope]_case_manager
+        role) sees this row through the manager's full-access ACL;
+        the demo agent (assigned to case 05 per the case file's
+        assigned_agent field) can READ + WRITE this party row
+        through the x_[scope]_case_agent role's "Assigned only"
+        ACL condition (the parent case's assigned_agent equals the
+        demo agent's sys_user); the demo viewer can READ this row
+        through the x_[scope]_case_viewer role's read-all ACL - and
+        notably, the viewer recognizes their own user_name displayed
+        in the person column, demonstrating that being a typed
+        party on a case is independent of having write access to
+        the case (a critical subtlety of the ACL model).
+      - Gate 7 (Update Set): the XML well-formedness check (xmllint
+        with no-output flag) and the no-PII regex check (zero
+        matches against PII tokens like real names, real email
+        domains, phone-number patterns) both pass. The deterministic
+        sys_id ensures byte-identical re-export across agent
+        rebuilds.
+      - No-PII grep returns zero matches: the synthetic identifiers
+        ("x_[scope]_demo_viewer", "CASE0000005", "Requester",
+        "Person") do not include any real user names, real email
+        addresses, real phone numbers, or real organizational
+        identifiers.
+      - Choice-value validation: <party_type>Person</party_type>
+        (capital P, exact-case match against the registered choice
+        record's Person value).
+      - All-mandatory-fields-populated validation: <case>,
+        <party_type>, <person>, and <role_label> are present and
+        non-empty; <organization/> is empty (correct for Person rows
+        per the conditional invariant).
+      - Sys-id-literal validation: only ONE <sys_id> element (the
+        party's own primary key); NO sys_id literals appear in any
+        cross-reference field; <case>, <person>, <sys_scope>, and
+        <sys_package> all use human-readable lookup keys
+        (CASE0000005, x_[scope]_demo_viewer, x_[scope], x_[scope])
+        as both the display_value attribute AND the text content.
+      - Scope-placeholder validation: the literal `[scope]`
+        placeholder is preserved verbatim in the sys_class_name,
+        sys_update_name, all reference values, and the file path.
+
+    Key insights (per the agent prompt's "Key Insights" section):
+      1. DEMO VIEWER AS REQUESTER ON CASE 05. This is the only seed
+         party that uses the demo_viewer user as the `person`
+         reference. Per AAP Section 0.5.6 ACL matrix, x_[scope]_
+         case_viewer has read-only access on every case_management
+         table - the viewer cannot CREATE, WRITE, or DELETE any
+         case, task, or party. But the viewer can still BE a typed
+         party on a case (specifically, recorded in the person
+         column of a case_party row) without that giving them any
+         additional permissions on the parent case. This is a
+         critical access-control subtlety: BEING a party is purely
+         a metadata fact about the case; HAVING access to the case
+         is determined by the role+ACL system. The viewer's
+         appearance on case 05 as Person/Requester demonstrates
+         that the polymorphic association table can store ANY
+         user as a party, including users who would otherwise have
+         minimal access. (In a real case-management deployment,
+         this is the difference between an external requester who
+         filed the case and an internal user who has write access
+         to it - the requester is recorded as a party but does not
+         have write access to the case.)
+      2. CASE 05 HAS TWO PARTIES (this + party 05). This dual-party
+         arrangement is the canonical exemplar of the polymorphic UI
+         Policy on a single case form's Related List. On the case-05
+         form, the Related List shows BOTH parties; the polymorphic
+         UI Policy renders this party with the person field visible
+         (referencing the demo viewer) and party 05 with the
+         organization field visible (referencing Synthetic Org Beta)
+         - simultaneously, on the same case, in the same Related
+         List. This is the General-Inquiry-flow equivalent of the
+         case-08 dual-party pattern (parties 06 + 07). Across both
+         flow paths, the dual-party pattern demonstrates that the
+         polymorphic invariant works correctly when multiple party
+         rows on the same case render independently.
+      3. `Requester` IS THE AAP SECTION 0.5.7 FIRST EXAMPLE ROLE
+         LABEL. The AAP Section 0.5.7 case_party schema lists
+         "Requester, Respondent, Witness" as example role_label
+         values, with Requester FIRST in the enumeration. This
+         party uses Requester to represent the most common and
+         idiomatic role on a case_management party - the external
+         person who FILED the case. The case's own requester_name
+         + requester_email fields capture the same individual at
+         the case level; this party records the same individual
+         at the structured polymorphic level, allowing reports
+         and filters to query across all "Requester" parties
+         regardless of party_type or parent case.
+      4. NO PII, deterministic sys_ids, `[scope]` preserved. No real
+         names, no real email addresses, no real phone numbers, no
+         real organizational identifiers. The literal `[scope]`
+         placeholder appears verbatim everywhere it is used; the
+         PDI substitutes the concrete scope id at apply time.
+      5. PAIR WITH PARTY 05. Party 05 (Organization/Respondent on
+         case 05, referencing Synthetic Org Beta) and this party
+         (Person/Requester on case 05, referencing the demo viewer)
+         form the canonical dual-party General Inquiry exemplar at
+         the Resolved lifecycle phase. Parties 06 + 07 form the
+         dual-party exemplar at the In Progress lifecycle phase on
+         the Complaint flow; this 04+05 pair is the General-
+         Inquiry-flow analog at a later lifecycle phase. Together
+         both pairs prove the polymorphic UI Policy works at both
+         lifecycle phases and on both flow paths.
+      6. POST-RESOLVE ARCHIVE STATE. Case 05 represents the
+         "post-resolve archive" state: all child tasks (04, 05) are
+         Closed, both parties (this + party 05) are in place, and
+         the case awaits final closure by the manager via the
+         validate_closed_transition subflow. THIS PARTY (and its
+         sibling party 05) persist through the eventual Resolved
+         -> Closed transition unchanged - they are pure metadata,
+         not gated by the state machine. Their existence on the
+         eventually-Closed case demonstrates that party associations
+         survive case closure intact.
+      7. PERSON-BRANCH SEMANTIC REFERENCE. Per the source-side
+         semantic reference at acm-plugins/acm-default-plugins/
+         acm-person-plugin/src/main/java/com/armedia/acm/plugins/
+         person/model/PersonAssociation.java, ArkCase's
+         PersonAssociation entity (mapped to acm_person_assoc) had
+         a parentId/parentType pair plus a Person reference and
+         person-type/notes/tags fields. The ServiceNow target
+         collapses both PersonAssociation AND PersonOrganization
+         Association into ONE polymorphic table x_[scope]_case_
+         party with party_type as the discriminator and conditional
+         person/organization references. This party row exercises
+         the Person branch of that collapsed table - the moral
+         equivalent of an ArkCase PersonAssociation row with
+         personType="Requester" and parentType="CASE_FILE". Per
+         the AAP Section 0.5 transformation strategy, the
+         polymorphism is implemented via UI Policy rather than
+         JPA single-table inheritance, eliminating the need for
+         a discriminator column (cm_class_name in ArkCase) and
+         using a Choice column (party_type) instead.
+-->
+<record_update table="x_[scope]_case_party">
+    <x_[scope]_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE0000005">CASE0000005</case>
+        <organization/>
+        <party_type>Person</party_type>
+        <person display_value="x_[scope]_demo_viewer">x_[scope]_demo_viewer</person>
+        <role_label>Requester</role_label>
+        <sys_class_name>x_[scope]_case_party</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_id>947634cfd3a1ef3dc9a59179ba9f515a</sys_id>
+        <sys_package display_value="Case Management" source="x_[scope]">x_[scope]</sys_package>
+        <sys_scope display_value="Case Management">x_[scope]</sys_scope>
+        <sys_update_name>x_[scope]_case_party_demo_04</sys_update_name>
+    </x_[scope]_case_party>
+</record_update>
+
