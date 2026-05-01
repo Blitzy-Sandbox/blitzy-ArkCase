@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_hub_flow` row that
+    declares the `x_casemgmt_validate_pending_transition` Flow Designer
+    SUBFLOW (type=subflow) inside the scoped application `x_casemgmt`
+    (Case Management).
+
+    PURPOSE (AAP Section 0.5.5 verbatim):
+        From          To           Required condition / behavior
+        In Progress   Pending      None; sets pending_reason
+                                   (Awaiting Info / Awaiting Third Party / Other)
+
+    This subflow is the SIMPLEST of the FIVE shared transition-validation
+    subflows under `servicenow-case-management-poc/flows/sub_flows/`. It is
+    called by both parent state-machine flows whenever a case's `status`
+    field changes to `Pending`:
+
+      - ../general_inquiry_state_machine.xml
+            (when a General Inquiry case enters the Pending sub-state)
+      - ../complaint_state_machine.xml
+            (when a Complaint case enters the Pending sub-state)
+
+    UNLIKE the other four subflows in this folder, this subflow has:
+
+      - NO required-condition gate. Per AAP Section 0.5.5 verbatim, the
+        In Progress -> Pending transition has "None" required condition.
+        The transition is ALWAYS permitted from In Progress (the inverse,
+        Pending -> In Progress, is also unconditional - see
+        ../../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+        which clears pending_reason on the reverse transition).
+
+      - NO Throw Error step. There is no validation failure mode for this
+        transition - the parent flow always proceeds to the Pending status
+        once this subflow returns.
+
+      - NO Script Include call. The other four subflows (validate_open,
+        validate_inprogress, validate_resolved, validate_closed) call
+        ../../script_includes/x_casemgmt_CaseTransitionValidator.xml for
+        their precondition checks; this subflow has no precondition to
+        check, so it does not invoke the validator.
+
+      - NO role check. validate_closed_transition.xml verifies the caller
+        has the x_casemgmt_case_manager role; this subflow imposes no role
+        gate (any role with write access to the case can transition to
+        Pending - the ACL matrix in AAP Section 0.5.6 governs WHICH users
+        can update the case at all, but transitioning to Pending requires
+        no additional role above and beyond standard write access).
+
+    WHAT THIS SUBFLOW DOES:
+        Stamps the `pending_reason` field on the parent case row with the
+        Choice value supplied by the caller (or 'Other' if the caller did
+        not supply one). That is its ENTIRE behavior. The parent flow
+        handles status persistence; this subflow handles only the
+        side-effect of recording WHY the case is now Pending.
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only, NOT byte-for-byte ported):
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseFileStateService.java line 79-114 - the central
+        ArkCase case state-machine service. Its changeCaseState(auth,
+        caseId, newState, ipAddress) method:
+
+            1) Loads the CaseFile by ID
+            2) Returns early if status unchanged
+            3) Sets the new status on the entity (line 95: retval.setStatus(newState))
+            4) For "CLOSED" status, sets the close timestamp (lines 97-100)
+            5) Saves the entity (line 102)
+            6) Raises an event for downstream notification listeners
+               (line 106: getCaseFileEventUtility().raiseEvent(...))
+
+        That single method covered EVERY transition by string-matching
+        the `newState` parameter. The ServiceNow target instead splits
+        per-transition logic into FIVE dedicated subflows, one per
+        transition target status, plus a small handful of Business
+        Rules. The Pending-target slice of the original method was a
+        no-op because ArkCase's String column had no Pending sub-state
+        with a typed reason. The ServiceNow target ADDS the typed
+        reason mechanism (the pending_reason Choice column declared in
+        ../../dictionary/x_casemgmt_case_pending_reason.xml) and uses
+        THIS subflow to populate it on the In Progress -> Pending edge.
+
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java's
+        `pendingStatus` String attribute is the closest semantic
+        ancestor of the `pending_reason` field this subflow writes.
+        AcmTask.pendingStatus was a free-form String describing the
+        task's pending sub-state; the ServiceNow target generalizes
+        the pattern (free-form -> closed Choice list of three values)
+        and applies it at the case level rather than the task level.
+        This subflow is the writer that PUTS the value on the case row.
+
+      - The event-raising side-effect on line 106 of
+        ChangeCaseFileStateService.java is INTENTIONALLY OMITTED here
+        per the email-disabled constraint (AAP Section 0.7.2). ArkCase's
+        raiseEvent() call would have triggered downstream notification
+        listeners; the ServiceNow POC has no equivalent gs.eventQueue()
+        call in this subflow because email is disabled on the PDI and
+        no other in-scope listeners need the event.
+
+    SUBFLOW INPUTS (Flow Designer declarative parameters):
+
+      1. case_record  (Reference to x_casemgmt_case, MANDATORY)
+            Passed in by the parent flow as $trigger.current. This is
+            the case row whose pending_reason field will be stamped.
+            The parent flow's OnUpdate trigger fires when status
+            changes to 'Pending', and the trigger's $trigger.current
+            is the just-updated case GlideRecord.
+
+      2. pending_reason  (Choice, OPTIONAL, default 'Other')
+            One of the three Choice values declared in
+            ../../choices/sys_choice_case_pending_reason.xml:
+              - 'Awaiting Info'
+              - 'Awaiting Third Party'
+              - 'Other'
+            The parent flow may pass a value from a UI Action input
+            field, a Flow Designer prompt step, or any computed source.
+            If the parent flow does not pass a value, this subflow
+            defaults to 'Other' to ensure the field is never left
+            empty after a Pending transition (which would degrade the
+            Manager View dashboard's analytics surface).
+
+    SUBFLOW STEPS (ordered):
+
+      Step 1: Default pending_reason if empty
+            A Set Flow Variable step that ensures the pending_reason
+            input is non-empty. If the caller passed 'Awaiting Info',
+            'Awaiting Third Party', or 'Other', the value is preserved
+            unchanged. If the caller passed null, undefined, empty
+            string, or any other falsy value, the input is overwritten
+            with 'Other'. This is the only normalization the subflow
+            performs on its inputs; no character-level validation is
+            done because the parent flow's Choice prompt restricts the
+            input to the three legal values, and the dictionary entry's
+            choice=3 enforcement at the platform level rejects any
+            other value at insert/update time.
+
+      Step 2: Set pending_reason on case
+            An Update Record step that performs:
+                case_record.pending_reason = pending_reason
+            This is the subflow's sole side effect. The platform's
+            standard Business Rule pipeline runs against the update
+            (including the sibling
+            ../../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+            which is a NO-OP for this transition because it only
+            fires on the reverse Pending -> In Progress edge). The
+            row is persisted at the end of the parent flow's
+            transaction.
+
+    OUTPUTS:
+        None. The subflow is fire-and-forget from the parent flow's
+        perspective. The parent flow does not need a return value
+        because the side effect (pending_reason on the case row) is
+        directly visible through the standard form refresh and the
+        related lists.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <name>x_casemgmt_validate_pending_transition</name> uses the
+          x_casemgmt scope prefix per the auto-assigned scoped-app
+          namespace.
+        - <sys_scope>x_casemgmt</sys_scope> binds THIS subflow record
+          to the x_casemgmt scope.
+        - <sys_package source="x_casemgmt">x_casemgmt</sys_package>
+          binds THIS subflow record to the x_casemgmt application
+          package.
+        - The Flow Designer snapshot below references the
+          x_casemgmt_case table by name (NOT sys_id), and references
+          the pending_reason field by element name (NOT sys_id).
+        Zero global-scope writes. Zero modifications to OOB tables
+        (sys_user, sys_user_group, sys_user_role, core_company,
+         task, incident, etc.).
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME
+          (x_casemgmt) via its `source` attribute
+        - The subflow snapshot references the x_casemgmt_case table
+          BY NAME ("table": "x_casemgmt_case") and field BY NAME
+          ("pending_reason"); zero `sys_id` literal references
+          appear anywhere in the snapshot or audit-field XML.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_pending_transition"),
+          which is permitted because the AAP "no hardcoded sys_id" rule
+          applies to REFERENCE FIELDS pointing at OTHER records, not
+          to a record's own primary key. The deterministic derivation
+          ensures idempotent re-import on a fresh PDI - re-importing
+          the same Update Set produces the same sys_id, which collides
+          on the existing record and updates it in place rather than
+          creating a duplicate.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The subflow MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This
+        subflow contains zero gs.eventQueue() calls, zero Send Email
+        actions, and zero notification trigger steps. It performs
+        only the field-set side effect on the case row. This
+        intentionally diverges from ArkCase ChangeCaseFileStateService
+        line 106 raiseEvent() which would have triggered downstream
+        notification listeners; the ServiceNow POC omits the
+        equivalent call per the AAP minimal-change clause.
+
+    NO PII (AAP Section 0.7.2):
+        The description text, code comments, and snapshot inline
+        labels contain zero real names, real email addresses, real
+        phone numbers, real organizational identifiers, or any other
+        personally identifiable information. The subflow operates
+        exclusively on a case-row reference, a controlled-vocabulary
+        Choice value, and a target field name.
+
+    ACTIVE-PUBLISHED STATE (CRITICAL per agent prompt Phase 2.3):
+        - <active>true</active>      - subflow is enabled, NOT Draft
+        - <status>published</status> - subflow is published, NOT draft
+        Both are required for the parent flows to be able to call
+        this subflow at runtime. A Draft-state subflow is callable
+        only from the Flow Designer canvas during testing; published
+        is the production-ready state.
+
+    TYPE=SUBFLOW (CRITICAL per agent prompt Phase 2.4):
+        - <type>subflow</type>
+        Subflows are reusable building blocks called by parent flows
+        via the "Call a Subflow" action. A type=flow record cannot
+        be called by another flow; the platform looks for type=subflow
+        records when resolving a "Call a Subflow" reference. The
+        parent flows in ../general_inquiry_state_machine.xml and
+        ../complaint_state_machine.xml reference this subflow BY
+        NAME (x_casemgmt_validate_pending_transition), and the
+        platform's lookup at activation time resolves to THIS record
+        because of the type=subflow setting.
+
+    RUN_AS=CALLER (CRITICAL per agent prompt Phase 2.4):
+        - <run_as>caller</run_as>
+        The subflow inherits the run-as context of the calling parent
+        flow. The parent flows use run_as=user_who_triggers, so when
+        the parent calls this subflow, the subflow ALSO runs as the
+        triggering user. This ensures the Update Record step's write
+        is correctly attributed (sys_updated_by tracks the actual
+        user who initiated the Pending transition, not the system
+        account). It also ensures any future role-aware logic added
+        to this subflow would evaluate against the correct user.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+
+        This sys_hub_flow record MUST be loaded AFTER:
+
+          - ../../app/sys_app/x_casemgmt_case_management.xml
+              (scoped application; <sys_package> reference resolution)
+          - ../../app/sys_scope/x_casemgmt.xml
+              (scope record; <sys_scope> reference resolution)
+          - ../../tables/x_casemgmt_case.xml
+              (parent table; the case_record input parameter is a
+               Reference to this table, and the Update Record step
+               targets this table)
+          - ../../dictionary/x_casemgmt_case_pending_reason.xml
+              (the field this subflow writes - must exist before the
+               Update Record step can resolve the field name)
+          - ../../dictionary/x_casemgmt_case_status.xml
+              (the field whose change to 'Pending' triggers the
+               parent flow's OnUpdate filter; must exist before the
+               parent flow's trigger filter can resolve)
+          - ../../choices/sys_choice_case_pending_reason.xml
+              (the choice list that bounds the legal values of the
+               pending_reason input parameter; must exist so the
+               subflow's Choice input can resolve its allowed values)
+
+        And BEFORE:
+
+          - ../general_inquiry_state_machine.xml
+              (parent flow that calls this subflow on the General
+               Inquiry case-type's In Progress -> Pending edge)
+          - ../complaint_state_machine.xml
+              (parent flow that calls this subflow on the Complaint
+               case-type's In Progress -> Pending edge)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_pending_transition")
+               = 94063d7d535c4e841ad7deb0b45e8ba5
+        32-character lowercase hex. The PDI accepts any valid 32-char
+        hex sys_id; deriving from the record name guarantees idempotent
+        re-import on a fresh PDI: re-importing the same Update Set
+        produces the same sys_id, which collides on the existing
+        record and updates it in place rather than creating a duplicate.
+        This is the same convention used by every other deterministically-
+        keyed record in this Update Set (e.g.,
+        ../../business_rules/x_casemgmt_set_closed_date.xml whose
+        sys_id is f6d63b3856121cac9b69215b2c46f64c).
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition." This subflow
+          contributes to Gate 2 by ENSURING the In Progress -> Pending
+          transition is permitted and properly stamps the
+          pending_reason field. Although this transition has no
+          validation gate per AAP Section 0.5.5, it must execute
+          successfully and write the reason; otherwise Gate 2
+          inspection of the Pending state would reveal an empty
+          pending_reason field (which is a Gate 2 regression). The
+          gate is verified by:
+              1) Creating a case with status=In Progress and
+                 assigned_agent populated.
+              2) Setting status=Pending.
+              3) The parent flow fires and dispatches to this subflow.
+              4) The subflow sets pending_reason='Other' (or the value
+                 supplied by the parent flow).
+              5) The form displays the pending_reason value alongside
+                 the new status.
+
+        - Gate 6 (Dashboards): "Both dashboards render with synthetic
+          data - All widgets display data; no broken report references."
+          This subflow indirectly supports Gate 6 by populating
+          pending_reason for any Pending case. Although no current
+          dashboard widget groups by pending_reason, a future Manager
+          View enhancement (e.g., a donut showing the breakdown of
+          Awaiting Info vs Awaiting Third Party vs Other) would rely
+          on this subflow having populated the column for every
+          Pending row.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance." The deterministic
+          sys_id, reference-by-name pattern, and well-formed XML
+          structure ensure this record re-imports cleanly with zero
+          preview errors. The CDATA-wrapped JSON snapshot is the only
+          element that contains characters requiring CDATA escaping
+          (curly braces, quotes within JSON), and the CDATA section
+          is properly opened and closed.
+
+    FUTURE EXTENSIBILITY:
+        If a future enhancement needs to record the Pending start
+        time (e.g., a derived "time-spent-Pending" metric for
+        process-improvement analysis), enrich this subflow rather
+        than the parent flows. The parent flows should remain thin
+        dispatchers; per-transition concerns belong here. Likewise,
+        if email is later re-enabled on the PDI and a "Case is now
+        Pending - awaiting [reason]" email is desired, add a Send
+        Email step to THIS subflow rather than to the parent flows.
+        Adding parameters to this subflow does not break the parent
+        flows because Flow Designer's "Call a Subflow" action passes
+        only the inputs the parent supplies; new optional inputs
+        with defaults are backward-compatible.
+-->
+<record_update table="sys_hub_flow">
+    <sys_hub_flow action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <acls/>
+        <active>true</active>
+        <annotation/>
+        <callable_by_client_api>false</callable_by_client_api>
+        <category display_value="Custom">custom</category>
+        <copied_from/>
+        <copied_from_name/>
+        <description>Subflow that validates the In Progress -&gt; Pending transition on x_casemgmt_case. Per AAP Section 0.5.5, this transition has NO required condition; its only side effect is to stamp pending_reason on the case (Awaiting Info / Awaiting Third Party / Other). Defaults pending_reason to 'Other' when caller does not supply a value. Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Pending'. Replaces no specific code in ArkCase ChangeCaseFileStateService.changeCaseState() because ArkCase had no Pending sub-state with a typed reason; this subflow is target-side new behavior. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals. Inputs: case_record (Reference to x_casemgmt_case, mandatory) and pending_reason (Choice with values Awaiting Info / Awaiting Third Party / Other, optional, default 'Other'). No outputs, no Throw Error step, no Script Include call, no role check.</description>
+        <internal_name>x_casemgmt_validate_pending_transition</internal_name>
+        <label_cache>Validate Pending Transition</label_cache>
+        <latest_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_pending_transition",
+    "label": "Validate Pending Transition",
+    "type": "subflow",
+    "description": "Stamps pending_reason on the case row when status transitions to Pending. No required condition (AAP Section 0.5.5).",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose pending_reason will be stamped. Passed from the parent flow as $trigger.current."
+        },
+        {
+            "id": "input_pending_reason",
+            "name": "pending_reason",
+            "label": "Pending Reason",
+            "field_type": "choice",
+            "choice_list": [
+                { "value": "Awaiting Info", "label": "Awaiting Info" },
+                { "value": "Awaiting Third Party", "label": "Awaiting Third Party" },
+                { "value": "Other", "label": "Other" }
+            ],
+            "is_mandatory": false,
+            "default_value": "Other",
+            "description": "Reason the case is moving to Pending status. One of the three choice values from sys_choice_case_pending_reason. Defaults to 'Other' when not provided by the parent flow."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_default_pending_reason",
+            "order": 100,
+            "name": "Default pending_reason if empty",
+            "type": "set_flow_variable",
+            "description": "If the caller did not supply a pending_reason value, default it to 'Other' so the case row is never left with an empty pending_reason after a Pending transition.",
+            "inputs": {
+                "variable_name": "pending_reason",
+                "expression": "fd_data.subflow_inputs.pending_reason || 'Other'"
+            }
+        },
+        {
+            "id": "step_update_case_pending_reason",
+            "order": 200,
+            "name": "Set pending_reason on case",
+            "type": "update_record",
+            "description": "Updates the case_record's pending_reason field with the supplied (or defaulted) Choice value. This is the subflow's sole side effect.",
+            "inputs": {
+                "table": "x_casemgmt_case",
+                "record": "${inputs.case_record}",
+                "fields": [
+                    {
+                        "field_name": "pending_reason",
+                        "value": "${inputs.pending_reason}"
+                    }
+                ]
+            }
+        }
+    ]
+}]]></latest_snapshot>
+        <latest_snapshot_user display_value="System Administrator">admin</latest_snapshot_user>
+        <master_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_pending_transition",
+    "label": "Validate Pending Transition",
+    "type": "subflow",
+    "description": "Stamps pending_reason on the case row when status transitions to Pending. No required condition (AAP Section 0.5.5).",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose pending_reason will be stamped. Passed from the parent flow as $trigger.current."
+        },
+        {
+            "id": "input_pending_reason",
+            "name": "pending_reason",
+            "label": "Pending Reason",
+            "field_type": "choice",
+            "choice_list": [
+                { "value": "Awaiting Info", "label": "Awaiting Info" },
+                { "value": "Awaiting Third Party", "label": "Awaiting Third Party" },
+                { "value": "Other", "label": "Other" }
+            ],
+            "is_mandatory": false,
+            "default_value": "Other",
+            "description": "Reason the case is moving to Pending status. One of the three choice values from sys_choice_case_pending_reason. Defaults to 'Other' when not provided by the parent flow."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_default_pending_reason",
+            "order": 100,
+            "name": "Default pending_reason if empty",
+            "type": "set_flow_variable",
+            "description": "If the caller did not supply a pending_reason value, default it to 'Other' so the case row is never left with an empty pending_reason after a Pending transition.",
+            "inputs": {
+                "variable_name": "pending_reason",
+                "expression": "fd_data.subflow_inputs.pending_reason || 'Other'"
+            }
+        },
+        {
+            "id": "step_update_case_pending_reason",
+            "order": 200,
+            "name": "Set pending_reason on case",
+            "type": "update_record",
+            "description": "Updates the case_record's pending_reason field with the supplied (or defaulted) Choice value. This is the subflow's sole side effect.",
+            "inputs": {
+                "table": "x_casemgmt_case",
+                "record": "${inputs.case_record}",
+                "fields": [
+                    {
+                        "field_name": "pending_reason",
+                        "value": "${inputs.pending_reason}"
+                    }
+                ]
+            }
+        }
+    ]
+}]]></master_snapshot>
+        <master_snapshot_id/>
+        <name>x_casemgmt_validate_pending_transition</name>
+        <natlang/>
+        <nlu_model_version/>
+        <outputs/>
+        <protection_policy/>
+        <remote_published_version/>
+        <run_as>caller</run_as>
+        <sc_callable>false</sc_callable>
+        <show_draft_actions>false</show_draft_actions>
+        <show_triggered_flows>false</show_triggered_flows>
+        <status>published</status>
+        <sys_class_name>sys_hub_flow</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>94063d7d535c4e841ad7deb0b45e8ba5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_pending_transition</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_hub_flow_x_casemgmt_validate_pending_transition</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>subflow</type>
+        <validation_status>complete</validation_status>
+    </sys_hub_flow>
+</record_update>
