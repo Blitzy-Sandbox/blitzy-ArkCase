@@ -1,0 +1,653 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_hub_flow` row that
+    declares the `x_casemgmt_validate_inprogress_transition` Flow Designer
+    SUBFLOW (type=subflow) inside the scoped application `x_casemgmt`
+    (Case Management).
+
+    PURPOSE (AAP Section 0.5.5 verbatim transition rows):
+        From          To           Required condition / blocking-error behavior
+        Open          In Progress  assigned_agent populated AND member of
+                                   assigned_group.
+                                   Failure: Surface form-level error
+                                   "Assigned agent must be set and must be a
+                                    member of the assigned group." (the
+                                   uniform error message returned by the
+                                   Script Include's canTransitionToInProgress
+                                   guard for all three failure modes).
+        Pending       In Progress  None additional; validator returns
+                                   { ok: true } as long as assigned_agent
+                                   is still set and still a member of
+                                   assigned_group. The companion business
+                                   rule x_casemgmt_clear_pending_reason_on_
+                                   inprogress.xml is responsible for
+                                   clearing the pending_reason field when
+                                   the case re-enters In Progress; THIS
+                                   subflow is concerned only with the
+                                   precondition gate, not the side effect.
+
+    This subflow is one of FIVE shared transition-validation subflows under
+    `servicenow-case-management-poc/flows/sub_flows/`. Per AAP Section
+    0.5.5, BOTH the Open -> In Progress AND the Pending -> In Progress
+    transitions reuse this single subflow because their precondition is
+    identical: assigned_agent must be populated AND must be a member of
+    assigned_group. The validator's logic does not inspect the source
+    status (Open vs Pending vs anything else); it inspects only the
+    current values of assigned_agent and assigned_group on the case row.
+    Therefore the parent flows can dispatch to THIS subflow regardless
+    of the source status, and the subflow returns ok=true if the
+    precondition holds or ok=false (with the verbatim error message)
+    otherwise. This design honors AAP Section 0.5.5's instruction that
+    Pending -> In Progress has "None" additional condition: the
+    Pending-side parent flow path simply re-invokes the same gate, and
+    the gate happens to pass automatically because Pending state was
+    only reachable from In Progress (which itself required the gate to
+    pass), so re-entering In Progress should also pass barring a manual
+    deletion of assigned_agent or assigned_group between transitions.
+
+    It is called by both parent state-machine flows whenever a case's
+    `status` field changes to `In Progress`:
+
+      - ../general_inquiry_state_machine.xml
+            (when a General Inquiry case enters the In Progress status
+             from either Open or Pending)
+      - ../complaint_state_machine.xml
+            (when a Complaint case enters the In Progress status from
+             either Open or Pending)
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only, NOT byte-for-byte ported):
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseFileStateService.java
+            * line 79-114 changeCaseState(auth, caseId, newState,
+              ipAddress) - the central case state-machine service in
+              ArkCase. The single method covered every transition by
+              string-matching the newState parameter and used a
+              transactional write to update CaseFile.status. The
+              ServiceNow target splits this into FIVE per-transition
+              subflows; this subflow is the (Open|Pending) -> In
+              Progress slice. The ArkCase method does NOT enforce
+              the assigned_agent + group-membership precondition
+              (that gate did not exist in ArkCase as a hard rule;
+              the Activiti BPMN workflow assumed correct upstream
+              assignment via separate forms). The ServiceNow target
+              ADDS the explicit assigned_agent + group-membership
+              gate per AAP Section 0.5.5, which strengthens the
+              correctness model relative to ArkCase. Put differently,
+              this subflow encodes a precondition that ArkCase
+              relied on the workflow ENGINE to enforce indirectly;
+              the ServiceNow target makes the precondition explicit
+              and declarative.
+
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesToPrivilegesConfig.java
+            ArkCase resolved privileges via a Map<String, List<Object>>
+            keyed by role name; group membership was implicit via the
+            user-to-role-to-privilege chain. The ServiceNow target
+            uses the platform-native sys_user_grmember table for
+            agent-to-group membership checks (encapsulated inside
+            CaseTransitionValidator.isAgentInGroup); no privilege
+            map is needed because group membership is the sole gate.
+
+    SUBFLOW INPUTS (Flow Designer declarative parameters):
+
+      1. case_record  (Reference to x_casemgmt_case, MANDATORY)
+            Passed in by the parent flow as $trigger.current. This is
+            the case row whose status is transitioning to In Progress
+            (from either Open or Pending). The parent flow's OnUpdate
+            trigger fires when status changes to 'In Progress', and
+            the trigger's $trigger.current is the just-updated case
+            GlideRecord. The Script Include's canTransitionToInProgress
+            method uses caseGr.getValue('assigned_agent') and
+            caseGr.getValue('assigned_group') to read the current
+            field values, then calls isAgentInGroup(userSysId,
+            groupSysId) to check membership in sys_user_grmember.
+            All sys_id values used in the membership query are
+            RUNTIME values (read from the case record at execution
+            time), NOT hardcoded literals - this is the sole reason
+            the "no hardcoded sys_ids" rule does not preclude the
+            use of sys_id values inside this subflow's logic.
+
+    SUBFLOW STEPS (ordered):
+
+      Step 1: Validate In Progress Transition (assigned_agent + group
+              membership check)
+            A Script Step that:
+                a) Instantiates the Script Include:
+                       var validator = new x_casemgmt.CaseTransitionValidator();
+                b) Invokes the per-transition guard with the supplied
+                   case_record GlideRecord:
+                       var result = validator.canTransitionToInProgress(
+                           fd_data.subflow_inputs.case_record);
+                c) Exposes two outputs to the subflow execution context:
+                       outputs.ok            = result.ok            (Boolean)
+                       outputs.error_message = result.error || ''   (String)
+            The Script Include's canTransitionToInProgress returns:
+                { ok: true } - when assigned_agent is populated AND
+                               assigned_group is populated AND the
+                               agent is a member of the group
+                { ok: false, error: 'Assigned agent must be set and must
+                                     be a member of the assigned group.' }
+                             - when assigned_agent is empty OR
+                               assigned_group is empty OR the agent
+                               is set but is NOT a member of the
+                               group. The single uniform error message
+                               is intentional: a probing client cannot
+                               distinguish which precondition failed
+                               (defense against privilege-escalation
+                               reconnaissance).
+                { ok: false, error: 'Case record is missing.' }
+                             - when caseGr is null/undefined (defensive
+                               guard inside the Script Include; should
+                               not occur in normal parent-flow
+                               invocation because the parent flow's
+                               case_record input is mandatory).
+
+      Step 2: If validator returned not-ok
+            An If/Then condition that branches when:
+                fd_data._step_outputs.step_run_validator.ok == false
+            The branch contains a single Throw Error action.
+
+      Step 2a: Throw Error (surfaces validator's message on form)
+            The Throw Error action's message is bound to the Script
+            Step's error_message output. At runtime, when the
+            condition is true and the action fires, the platform:
+                a) Calls gs.addErrorMessage(error_message) on the
+                   current update transaction's session.
+                b) Aborts the parent flow's triggering update
+                   (the implicit setAbortAction(true) on Throw Error).
+                c) Returns control to the form, which displays the
+                   error message at the top of the form.
+            The error message text is whatever the Script Include
+            returned, which for THIS subflow is one of:
+                "Assigned agent must be set and must be a member of the assigned group."
+                "Case record is missing."
+            (the first is the gate message for all three failure
+            modes; the second is the defensive guard message). The
+            message text is propagated through the Script Include's
+            return value verbatim - this subflow does not compose
+            its own message.
+
+      Step 3: End (implicit success path)
+            When the If condition evaluates to false (validator
+            returned ok=true), no Throw Error fires and the subflow
+            returns successfully to the parent flow. No outputs are
+            exposed to the parent because the parent flow does not
+            need a return value - the absence of a thrown error is
+            the success signal. The parent flow then continues with
+            the normal status-update path; the case's status field
+            (set to 'In Progress' by the form save that triggered
+            the parent flow) is preserved.
+
+    OUTPUTS:
+        None at the subflow level. The internal Script Step exposes
+        ok and error_message outputs but those are scoped to the
+        subflow and consumed only by the subsequent If/Throw Error
+        step. The subflow itself returns no value to the parent.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <name>x_casemgmt_validate_inprogress_transition</name> uses
+          the x_casemgmt scope prefix per the auto-assigned scoped-
+          app namespace.
+        - <sys_scope>x_casemgmt</sys_scope> binds THIS subflow record
+          to the x_casemgmt scope.
+        - <sys_package source="x_casemgmt">x_casemgmt</sys_package>
+          binds THIS subflow record to the x_casemgmt application
+          package.
+        - The Flow Designer snapshot below references:
+            * x_casemgmt_case table BY NAME
+              (input parameter reference_table)
+            * x_casemgmt.CaseTransitionValidator Script Include BY
+              API NAME (the canonical scope-qualified accessor for
+              scoped Script Includes; see
+              ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              <api_name>x_casemgmt.CaseTransitionValidator</api_name>)
+            * sys_user_grmember table indirectly (via the Script
+              Include's isAgentInGroup which constructs new
+              GlideRecord('sys_user_grmember') and addQuery() filters
+              by user/group sys_ids read at runtime from the case
+              row). sys_user_grmember is an OOB platform table that
+              is read-only from this subflow's perspective; no
+              modifications are made to it.
+        Zero global-scope writes. Zero modifications to OOB tables
+        (sys_user, sys_user_group, sys_user_role, core_company,
+         task, incident, etc.). The sys_user_grmember READ is
+         permitted because read access to OOB tables is not a
+         "modification" - the AAP scope-bound rule (AAP Section
+         0.7.2) prohibits WRITES to global tables, not READS.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME
+          (x_casemgmt) via its `source` attribute
+        - The subflow snapshot references the x_casemgmt_case table
+          BY NAME ("reference_table": "x_casemgmt_case") and invokes
+          the Script Include BY API NAME
+          ("x_casemgmt.CaseTransitionValidator"). Zero `sys_id`
+          literal references appear anywhere in the snapshot or
+          audit-field XML.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_inprogress_transition"),
+          which is permitted because the AAP "no hardcoded sys_id" rule
+          applies to REFERENCE FIELDS pointing at OTHER records, not to
+          a record's own primary key. The deterministic derivation
+          ensures idempotent re-import on a fresh PDI - re-importing
+          the same Update Set produces the same sys_id, which collides
+          on the existing record and updates it in place rather than
+          creating a duplicate.
+        - The Script Include's isAgentInGroup uses caseGr.getValue(
+          'assigned_agent') and caseGr.getValue('assigned_group') to
+          obtain runtime sys_ids - these are runtime values, not
+          hardcoded literals.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The subflow MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This
+        subflow contains zero gs.eventQueue() calls, zero Send Email
+        actions, and zero notification trigger steps. It performs
+        only the validation-and-throw side effect on failure.
+        Intentionally diverges from ArkCase ChangeCaseFileStateService
+        line 106 raiseEvent() which would have triggered downstream
+        notification listeners on every state change; the ServiceNow
+        POC omits the equivalent call per the AAP minimal-change
+        clause and the email-disabled constraint.
+
+    NO PII (AAP Section 0.7.2):
+        The description text, code comments, and snapshot inline
+        labels contain zero real names, real email addresses, real
+        phone numbers, real organizational identifiers, or any
+        other personally identifiable information. The subflow
+        operates exclusively on a case-row reference and emits a
+        generic, AAP-aligned error string.
+
+    ACTIVE-PUBLISHED STATE (CRITICAL per agent prompt Phase 2.3):
+        - <active>true</active>      - subflow is enabled, NOT Draft
+        - <status>published</status> - subflow is published, NOT draft
+        Both are required for the parent flows to be able to call
+        this subflow at runtime. A Draft-state subflow is callable
+        only from the Flow Designer canvas during testing; published
+        is the production-ready state.
+
+    TYPE=SUBFLOW (CRITICAL per agent prompt Phase 2.4):
+        - <type>subflow</type>
+        Subflows are reusable building blocks called by parent flows
+        via the "Call a Subflow" action. A type=flow record cannot
+        be called by another flow; the platform looks for type=subflow
+        records when resolving a "Call a Subflow" reference. The
+        parent flows in ../general_inquiry_state_machine.xml and
+        ../complaint_state_machine.xml reference this subflow BY
+        NAME (x_casemgmt_validate_inprogress_transition), and the
+        platform's lookup at activation time resolves to THIS record
+        because of the type=subflow setting.
+
+    RUN_AS=CALLER (CRITICAL per agent prompt Phase 2.4):
+        - <run_as>caller</run_as>
+        The subflow inherits the run-as context of the calling parent
+        flow. The parent flows use run_as=user_who_triggers, so when
+        the parent calls this subflow, the subflow ALSO runs as the
+        triggering user. This ensures:
+            * The Script Include's group-membership query in
+              isAgentInGroup respects the caller's read ACL on
+              sys_user_grmember (which is OOB-readable by all
+              authenticated users, so this is generally a no-op
+              constraint, but the run_as=caller setting guarantees
+              correctness if ACLs are tightened later).
+            * Any future audit logging tracks the actual user who
+              attempted the In Progress transition, not the system
+              account.
+
+    DEFENSE-IN-DEPTH WITH BUSINESS RULE:
+        The companion business rule
+        ../../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+        provides an additional layer: if assigned_agent is set but
+        not a member of assigned_group, the BR rejects the save on
+        EVERY save of the case row (not just status transitions to
+        In Progress). This subflow is the FLOW-LEVEL guard that
+        fires only on the (Open|Pending) -> In Progress transition;
+        the BR is the FIELD-LEVEL guard that fires on every update.
+        Together they ensure no path bypasses the precondition:
+            - Form-driven In Progress transition: subflow catches it.
+            - Direct Table API update setting status=In Progress
+              with bad assigned_agent: subflow still catches it
+              because the parent flow fires on OnUpdate.
+            - Direct Table API update setting assigned_agent to a
+              non-member while leaving status unchanged: BR catches
+              it; subflow does not fire because status did not
+              change.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+
+        This sys_hub_flow record MUST be loaded AFTER:
+
+          - ../../app/sys_app/x_casemgmt_case_management.xml
+              (scoped application; <sys_package> reference resolution)
+          - ../../app/sys_scope/x_casemgmt.xml
+              (scope record; <sys_scope> reference resolution)
+          - ../../tables/x_casemgmt_case.xml
+              (parent table; the case_record input parameter is a
+               Reference to this table)
+          - ../../dictionary/x_casemgmt_case_status.xml
+              (the field whose change to 'In Progress' triggers the
+               parent flow's OnUpdate filter; must exist before the
+               parent flow's trigger filter can resolve)
+          - ../../dictionary/x_casemgmt_case_assigned_agent.xml
+              (the field validated by the Script Include via
+               caseGr.getValue('assigned_agent'); must exist before
+               the validator can read it)
+          - ../../dictionary/x_casemgmt_case_assigned_group.xml
+              (the field validated by the Script Include via
+               caseGr.getValue('assigned_group'); must exist before
+               the validator can read it)
+          - ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (the Script Include this subflow invokes; must exist
+               and be activated before the subflow's Script Step can
+               resolve the API name x_casemgmt.CaseTransitionValidator)
+
+        And BEFORE:
+
+          - ../general_inquiry_state_machine.xml
+              (parent flow that calls this subflow on the General
+               Inquiry case-type's (Open|Pending) -> In Progress edges)
+          - ../complaint_state_machine.xml
+              (parent flow that calls this subflow on the Complaint
+               case-type's (Open|Pending) -> In Progress edges)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_inprogress_transition")
+               = f8117474ee1542c4e6aacd477fdef910
+        32-character lowercase hex. The PDI accepts any valid 32-char
+        hex sys_id; deriving from the record name guarantees idempotent
+        re-import on a fresh PDI: re-importing the same Update Set
+        produces the same sys_id, which collides on the existing
+        record and updates it in place rather than creating a
+        duplicate. This is the same convention used by every other
+        deterministically-keyed record in this Update Set (e.g., the
+        peer subflow validate_resolved_transition.xml whose sys_id is
+        c8fde9d4675c53e1c14e40c0503835f0 = MD5 of
+        "x_casemgmt_validate_resolved_transition", and
+        validate_pending_transition.xml whose sys_id is
+        94063d7d535c4e841ad7deb0b45e8ba5 = MD5 of
+        "x_casemgmt_validate_pending_transition").
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition." THIS subflow
+          contributes to Gate 2 by ENFORCING the assigned_agent +
+          group-membership precondition for the (Open|Pending) -> In
+          Progress transitions on BOTH case types (General Inquiry
+          and Complaint). The gate is verified by:
+
+              1) Create a case in 'Open' status with assigned_group
+                 populated but assigned_agent EMPTY.
+              2) Attempt to set the case's status to 'In Progress'
+                 (e.g., via the form's Save button).
+              3) The parent flow (general_inquiry or complaint
+                 state_machine, depending on case.type) fires on
+                 the OnUpdate trigger filtered to status -> In Progress.
+              4) The parent flow calls this subflow with
+                 case_record = $trigger.current.
+              5) This subflow's Script Step runs the validator,
+                 which detects assigned_agent is empty.
+              6) The validator returns
+                 { ok: false, error: 'Assigned agent must be set
+                                       and must be a member of the
+                                       assigned group.' }
+              7) This subflow's If condition (ok == false) is true.
+              8) The Throw Error action fires with the message.
+              9) The parent flow's transaction aborts; the form
+                 displays the error.
+             10) The case row remains at status='Open' (the update
+                 was rolled back; the new value 'In Progress' was
+                 never persisted).
+
+          Repeat with assigned_agent set to a user who is NOT a
+          member of assigned_group: the validator returns the same
+          error message because isAgentInGroup returns false.
+
+          Repeat with assigned_agent set to a user who IS a member
+          of assigned_group: the validator returns ok=true; the
+          subflow returns; the parent flow proceeds; the status
+          update is persisted; the case is now In Progress.
+
+          Repeat the entire sequence for the Pending -> In Progress
+          edge: the same gate fires, with the same outcomes.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set
+          loads without errors on a fresh PDI instance." The
+          deterministic sys_id, reference-by-name pattern, and well-
+          formed XML structure ensure this record re-imports cleanly
+          with zero preview errors. The CDATA-wrapped JSON snapshot
+          contains characters requiring CDATA escaping (curly braces,
+          quotes within JSON, the != comparison operator), and the
+          CDATA section is properly opened and closed around both
+          <latest_snapshot> and <master_snapshot> elements.
+
+    PERFORMANCE NOTE:
+        isAgentInGroup uses GlideRecord('sys_user_grmember') with
+        addQuery('user', userSysId) and addQuery('group', groupSysId)
+        followed by setLimit(1) and query() - the underlying SQL is
+        a tightly-bounded indexed lookup that returns at most one
+        row. For the Open -> In Progress transition, the validator
+        does at most one row read from sys_user_grmember after the
+        two field reads from the case row, so the gate path is
+        extremely lightweight even at scale. There is no N+1 query
+        anti-pattern: the validator does NOT iterate the agent's
+        groups or the group's members.
+
+    FUTURE EXTENSIBILITY:
+        - If a future AAP enhancement adds a 'Reopened' status that
+          allows transitions from Closed back to In Progress, this
+          subflow would still apply (the validator is status-source-
+          agnostic) and would still enforce the assigned_agent +
+          group-membership gate. The gate is on the DESTINATION
+          status (In Progress), not the source, so it transparently
+          handles re-entry.
+        - If group membership is later replaced by a more complex
+          authorization model (e.g., a custom permission table or
+          an LDAP group sync), only the Script Include's
+          isAgentInGroup helper needs to change; this subflow
+          continues to work unchanged because it consumes the
+          unified { ok, error } shape returned by the validator.
+        - If email is later re-enabled on the PDI and a "Case is
+          now In Progress - assigned to [agent]" notification is
+          desired, add a Send Email step to the parent flows
+          (after the subflow returns successfully), NOT to this
+          subflow. This subflow's responsibility is gating only;
+          notification is a separate concern.
+-->
+<record_update table="sys_hub_flow">
+    <sys_hub_flow action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <acls/>
+        <active>true</active>
+        <annotation/>
+        <callable_by_client_api>false</callable_by_client_api>
+        <category display_value="Custom">custom</category>
+        <copied_from/>
+        <copied_from_name/>
+        <description>Subflow that validates the (Open|Pending) -&gt; In Progress transitions on x_casemgmt_case. Per AAP Section 0.5.5, both Open -&gt; In Progress AND Pending -&gt; In Progress reuse this single subflow because their precondition is identical: assigned_agent populated AND member of assigned_group. Calls x_casemgmt.CaseTransitionValidator.canTransitionToInProgress(case_record), which delegates to isAgentInGroup(userSysId, groupSysId) for the membership check via GlideRecord('sys_user_grmember'). On failure, throws the uniform validator error message "Assigned agent must be set and must be a member of the assigned group." (which the validator returns for all three failure modes: empty assigned_agent, empty assigned_group, agent not in group). Throw Error in Flow Designer surfaces the message on the form via gs.addErrorMessage + setAbortAction. Defense-in-depth complement to ../../business_rules/x_casemgmt_validate_assigned_agent_membership.xml (which fires on every save; this subflow fires only on transitions to In Progress). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'In Progress'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. No role check. No side effect on success - unlike validate_pending_transition (sets pending_reason) or validate_closed_transition (sets closed_date), the In Progress transition has no field to auto-set; the companion BR x_casemgmt_clear_pending_reason_on_inprogress.xml clears pending_reason on the Pending -&gt; In Progress edge. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <internal_name>x_casemgmt_validate_inprogress_transition</internal_name>
+        <label_cache>Validate In Progress Transition</label_cache>
+        <latest_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_inprogress_transition",
+    "label": "Validate In Progress Transition",
+    "type": "subflow",
+    "description": "Validates the (Open|Pending) -> In Progress transition. Requires assigned_agent populated AND member of assigned_group; throws uniform error 'Assigned agent must be set and must be a member of the assigned group.' on failure (AAP Section 0.5.5). Reused for both Open -> In Progress and Pending -> In Progress because the precondition is identical.",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose In Progress-transition is being validated. Passed from the parent flow as $trigger.current. The Script Include uses caseGr.getValue('assigned_agent') and caseGr.getValue('assigned_group') to read the runtime sys_ids and queries sys_user_grmember for the membership check."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_run_validator",
+            "order": 100,
+            "name": "Validate In Progress Transition (assigned_agent + group membership check)",
+            "type": "script_step",
+            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToInProgress(case_record). The Script Include returns { ok: true } when assigned_agent is populated AND assigned_group is populated AND the agent is a member of the group, or { ok: false, error: 'Assigned agent must be set and must be a member of the assigned group.' } for all three failure modes (empty assigned_agent, empty assigned_group, agent not in group). The uniform error message is intentional: a probing client cannot distinguish which precondition failed (defense against privilege-escalation reconnaissance). Internally the Script Include reads caseGr.getValue('assigned_agent') and caseGr.getValue('assigned_group') for the field values, then calls isAgentInGroup which queries sys_user_grmember via GlideRecord with addQuery('user', userSysId) and addQuery('group', groupSysId).",
+            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToInProgress(inputs.case_record); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
+            "script_includes_used": [
+                "x_casemgmt.CaseTransitionValidator"
+            ],
+            "tables_referenced": [
+                "x_casemgmt_case",
+                "sys_user_grmember"
+            ],
+            "outputs": [
+                {
+                    "name": "ok",
+                    "label": "OK",
+                    "field_type": "boolean",
+                    "description": "True when the validator reports the transition is permitted (assigned_agent set, assigned_group set, agent is member of group). False when any precondition fails or when the case_record input is null/undefined."
+                },
+                {
+                    "name": "error_message",
+                    "label": "Error Message",
+                    "field_type": "string",
+                    "description": "Empty string when ok=true. The uniform message 'Assigned agent must be set and must be a member of the assigned group.' when ok=false because of any precondition failure (empty assigned_agent, empty assigned_group, or agent not in group). The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation)."
+                }
+            ]
+        },
+        {
+            "id": "step_if_validator_failed",
+            "order": 200,
+            "name": "If validator returned not-ok",
+            "type": "if",
+            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the validator's error message on the form and aborts the parent flow's triggering update transaction.",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
+            "actions": [
+                {
+                    "id": "step_throw_error",
+                    "order": 100,
+                    "name": "Throw Error (surface validator's message on form)",
+                    "type": "throw_error",
+                    "description": "Throws the validator's error message to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to the uniform AAP-aligned string 'Assigned agent must be set and must be a member of the assigned group.' for any precondition failure. The error message text is preserved character-for-character from the Script Include return value; this Throw Error step does not compose its own message.",
+                    "inputs": {
+                        "message": "${step_run_validator.error_message}",
+                        "uniform_failure_message": "Assigned agent must be set and must be a member of the assigned group."
+                    }
+                }
+            ]
+        }
+    ]
+}]]></latest_snapshot>
+        <latest_snapshot_user display_value="System Administrator">admin</latest_snapshot_user>
+        <master_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_inprogress_transition",
+    "label": "Validate In Progress Transition",
+    "type": "subflow",
+    "description": "Validates the (Open|Pending) -> In Progress transition. Requires assigned_agent populated AND member of assigned_group; throws uniform error 'Assigned agent must be set and must be a member of the assigned group.' on failure (AAP Section 0.5.5). Reused for both Open -> In Progress and Pending -> In Progress because the precondition is identical.",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose In Progress-transition is being validated. Passed from the parent flow as $trigger.current. The Script Include uses caseGr.getValue('assigned_agent') and caseGr.getValue('assigned_group') to read the runtime sys_ids and queries sys_user_grmember for the membership check."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_run_validator",
+            "order": 100,
+            "name": "Validate In Progress Transition (assigned_agent + group membership check)",
+            "type": "script_step",
+            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToInProgress(case_record). The Script Include returns { ok: true } when assigned_agent is populated AND assigned_group is populated AND the agent is a member of the group, or { ok: false, error: 'Assigned agent must be set and must be a member of the assigned group.' } for all three failure modes (empty assigned_agent, empty assigned_group, agent not in group). The uniform error message is intentional: a probing client cannot distinguish which precondition failed (defense against privilege-escalation reconnaissance). Internally the Script Include reads caseGr.getValue('assigned_agent') and caseGr.getValue('assigned_group') for the field values, then calls isAgentInGroup which queries sys_user_grmember via GlideRecord with addQuery('user', userSysId) and addQuery('group', groupSysId).",
+            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToInProgress(inputs.case_record); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
+            "script_includes_used": [
+                "x_casemgmt.CaseTransitionValidator"
+            ],
+            "tables_referenced": [
+                "x_casemgmt_case",
+                "sys_user_grmember"
+            ],
+            "outputs": [
+                {
+                    "name": "ok",
+                    "label": "OK",
+                    "field_type": "boolean",
+                    "description": "True when the validator reports the transition is permitted (assigned_agent set, assigned_group set, agent is member of group). False when any precondition fails or when the case_record input is null/undefined."
+                },
+                {
+                    "name": "error_message",
+                    "label": "Error Message",
+                    "field_type": "string",
+                    "description": "Empty string when ok=true. The uniform message 'Assigned agent must be set and must be a member of the assigned group.' when ok=false because of any precondition failure (empty assigned_agent, empty assigned_group, or agent not in group). The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation)."
+                }
+            ]
+        },
+        {
+            "id": "step_if_validator_failed",
+            "order": 200,
+            "name": "If validator returned not-ok",
+            "type": "if",
+            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the validator's error message on the form and aborts the parent flow's triggering update transaction.",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
+            "actions": [
+                {
+                    "id": "step_throw_error",
+                    "order": 100,
+                    "name": "Throw Error (surface validator's message on form)",
+                    "type": "throw_error",
+                    "description": "Throws the validator's error message to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to the uniform AAP-aligned string 'Assigned agent must be set and must be a member of the assigned group.' for any precondition failure. The error message text is preserved character-for-character from the Script Include return value; this Throw Error step does not compose its own message.",
+                    "inputs": {
+                        "message": "${step_run_validator.error_message}",
+                        "uniform_failure_message": "Assigned agent must be set and must be a member of the assigned group."
+                    }
+                }
+            ]
+        }
+    ]
+}]]></master_snapshot>
+        <master_snapshot_id/>
+        <name>x_casemgmt_validate_inprogress_transition</name>
+        <natlang/>
+        <nlu_model_version/>
+        <outputs/>
+        <protection_policy/>
+        <remote_published_version/>
+        <run_as>caller</run_as>
+        <sc_callable>false</sc_callable>
+        <show_draft_actions>false</show_draft_actions>
+        <show_triggered_flows>false</show_triggered_flows>
+        <status>published</status>
+        <sys_class_name>sys_hub_flow</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f8117474ee1542c4e6aacd477fdef910</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_inprogress_transition</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_hub_flow_x_casemgmt_validate_inprogress_transition</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>subflow</type>
+        <validation_status>complete</validation_status>
+    </sys_hub_flow>
+</record_update>
