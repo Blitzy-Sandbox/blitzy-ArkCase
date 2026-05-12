@@ -443,6 +443,32 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 ## 4. Cycle 1 — Consolidated Remediation List
 
+**Cycle 1 final state:** BLOCKED (2 phases BLOCKED, 5 phases APPROVED, 1 informational observation).
+
+Per Refine PR rules: "If any phase resolves BLOCKED, the review MUST NOT terminate that cycle early; every remaining phase MUST still execute and record its verdict. At cycle end, every BLOCKED finding from every phase MUST be aggregated into a single consolidated remediation list … and the work item MUST be returned to code generation with that list as the complete remediation scope."
+
+This consolidated list aggregates every Cycle 1 BLOCKED finding, ordered by phase, grouped by file. Code generation MUST address EVERY finding in this list before declaring completion; Cycle 2 then restarts from the pre-flight gate with all prior approvals, verdicts, and findings discarded.
+
+### 4.1 Remediation Items
+
+| ID | Phase | Severity | File | Lines | Required Change |
+| --- | --- | --- | --- | --- | --- |
+| **INFRA-1** | Phase 1 — Infrastructure / DevOps | MINOR | `servicenow-case-management-poc/ui_action/x_casemgmt_case_set_pending.xml` | 257 | Replace stale filename reference `x_case_mgmt_case_management_update_set.xml` (note the rogue `_mgmt` infix) inside the `<description>` comment block with the correct `x_casemgmt_case_management_update_set.xml`. Documentation-only change inside a comment block; no executable behavior is affected. |
+| **FE-1** | Phase 5 — Frontend | MINOR | `servicenow-case-management-poc/docs/portal-pages.md` | 172, 180 | (a) Line 172 currently documents the lookup endpoint response as a 4-key object `{ "number": "...", "status": "...", "subject": "...", "opened_date": "..." }` — change to the actual 3-key response `{ "status": "...", "subject": "...", "opened_date": "..." }`. (b) Line 180 currently carries a rationale paragraph titled *"Documented choice on field count (4 vs. 3)"* explaining a design choice that was never made; delete this paragraph (or rewrite it to explain why exactly 3 fields are returned per AAP §0.7.4). Documentation-only changes; no code change required. The actual implementation in `script_includes/x_casemgmt_CasePortalService.xml` (`lookupCase` function) and `portal/rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml` (operation script) is already correct and returns only 3 fields. |
+
+### 4.2 Non-BLOCKED Observations (Informational, NOT Part of Remediation)
+
+| ID | Phase | Severity | File | Notes |
+| --- | --- | --- | --- | --- |
+| BUS-OBS-1 | Phase 4 — Business / Domain | INFORMATIONAL | `servicenow-case-management-poc/seed-data/parties/` | 8 demo parties span 5 of 10 demo cases (3 cases cover both Person+Organization). AAP §0.3.1 strict reading vs §0.5.1 lenient reading; the operative §0.3.1 goal ("to exercise the polymorphic UI policy") IS satisfied; §0.7.4 minimum thresholds don't list parties. **Not a remediation item. Recorded for transparency only.** |
+
+### 4.3 Cycle 1 Aggregation Summary
+
+- Total BLOCKED findings: 2 (INFRA-1, FE-1)
+- Severity distribution: 2 MINOR (both inside descriptive content — neither affects runtime behavior; both create maintenance hazards if left in place)
+- Files impacted by remediation: 2 (`ui_action/x_casemgmt_case_set_pending.xml`, `docs/portal-pages.md`)
+- Cycle 2 instruction: restart pre-flight gate against the post-remediation commit; re-execute all 7 phases; do NOT carry forward prior verdicts.
+
 *Populated at end of cycle once every phase has resolved.*
 
 ---
