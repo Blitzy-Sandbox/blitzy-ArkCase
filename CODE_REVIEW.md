@@ -190,7 +190,32 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 *Phases execute in fixed order. Every phase MUST run regardless of earlier-phase verdicts. Each phase resolves to exactly APPROVED or BLOCKED with file:line findings.*
 
-### 3.1 Phase 1 — Infrastructure / DevOps  *(Pending)*
+### 3.1 Phase 1 — Infrastructure / DevOps  *(Verdict: BLOCKED)*
+
+**Scope reviewed.** The 8 primary-domain files in §2.1 (sys_app, sys_scope, consolidated Update Set, 3 number-maintenance counters, deployment.md, round_trip_verify.md), plus the cross-cutting Update Set structural integrity and the scope-namespace consistency across all 157 in-scope files.
+
+**Positive findings.**
+
+1. `app/sys_app/x_casemgmt_case_management.xml` — scoped-app record correctly authored: `name="x_casemgmt Case Management"`, `scope="x_casemgmt"`, `vendor_prefix="x_casemgmt"`, `version="1.0.0"`, `active=true`, `enforce_license=false`, `private=false`. Aligns with AAP §0.4.1 + §0.5.1.
+2. `app/sys_scope/x_casemgmt.xml` — scope record correctly authored: `name="x_casemgmt"`, `scope="x_casemgmt"`, `source="x_casemgmt"`. Aligns with AAP §0.4.1.
+3. `update-set/x_casemgmt_case_management_update_set.xml` — root element is `<unload>` with `unload_date="2026-04-30 12:00:00"`; single `<sys_remote_update_set action="INSERT_OR_UPDATE">` envelope (name=`x_casemgmt_case_management v1.0.0`, application_scope=`x_casemgmt`); 149 `<sys_update_xml>` records distributed across 27 record-types. All structurally valid per ServiceNow Update Set XML schema.
+4. Dependency ordering of records in the consolidated Update Set is correct: Application (#1) → Table (#3) → Dictionary (#6) → Choice List (#31) → Number Maintenance (#38) → Role (#41) → ACL (#44) → Script Include (#70) → Flow (#72) → Business Rule (#79) → UI Policy (#85) → UI Action (#86) → Service Portal (#92) → Page (#93) → Widget (#95) → Scripted REST Service definition / `sys_ws_definition` (#98) → Scripted REST API operation / `sys_ws_operation` (#100) → Report (#102) → Dashboard (#110) → User (#112) → Group (#115) → Group Member (#116) → Role Assignment (#117) → Company (#120) → Case Record (#122) → Case Task Record (#132) → Case Party Record (#142). Parent definitions precede child operations and seed data is loaded last.
+5. `numbers/sys_number_x_casemgmt_case.xml` — `category=x_casemgmt_case`, `prefix=CASE`, `number=0`, `number_of_digits=7` → produces `CASE0000001`. Matches AAP §0.5.7 verbatim.
+6. `numbers/sys_number_x_casemgmt_case_task.xml` — `category=x_casemgmt_case_task`, `prefix=TASK`, `number_of_digits=7` → produces `TASK0000001`.
+7. `numbers/sys_number_x_casemgmt_case_party.xml` — `category=x_casemgmt_case_party`, `prefix=PARTY`, `number_of_digits=7` → produces `PARTY0000001`.
+8. `docs/deployment.md` (188 lines) — comprehensive 4-step procedure (Export → Verify → Confirm → Deliver) plus Rollback section, fully aligned with the user-prompt deployment block in AAP §0.7.2 and validation gates §0.7.3.
+9. `scripts/round_trip_verify.md` (238 lines) — manual procedure for fresh-PDI re-import verification: 4 phases (Upload → Preview → Commit → Re-Verify Gates 1–7) with pass criteria per phase.
+10. Scope-namespace exclusivity scan across all 157 in-scope files: every functional artifact name and every executable cross-reference uses `x_casemgmt_*`. Zero global-scope writes detected. Compliance with AAP §0.7.2 scoped-namespace-only constraint.
+
+**BLOCKED finding (1).**
+
+| ID | File | Line | Severity | Description |
+| --- | --- | --- | --- | --- |
+| INFRA-1 | `servicenow-case-management-poc/ui_action/x_casemgmt_case_set_pending.xml` | 257 | MINOR | Stale filename reference inside `<description>` comment block: `- ../update-set/x_case_mgmt_case_management_update_set.xml` uses the variant identifier `x_case_mgmt_` (extra underscore between `case` and `mgmt`). The actual on-disk filename is `x_casemgmt_case_management_update_set.xml`. This is a scope-namespace exclusivity violation in documentation and an incorrect path reference. **Remediation:** replace `x_case_mgmt_case_management_update_set.xml` with `x_casemgmt_case_management_update_set.xml` on line 257. |
+
+**Note on the second occurrence.** A grep of the in-scope tree finds `x_case_mgmt` in exactly two places: the one above (INFRA-1) and `update-set/x_casemgmt_case_management_update_set.xml:34`. The second occurrence is an **intentional historical-note** inside the Update Set's top-of-file `<!-- ... -->` comment explaining that the file was previously named `x_case_mgmt_...` and has been corrected to `x_casemgmt_...`. The note is itself self-correcting and does not point to a nonexistent file, so it is **not flagged**.
+
+**Verdict: BLOCKED** — 1 minor finding to remediate (INFRA-1).
 
 ### 3.2 Phase 2 — Security  *(Pending)*
 
