@@ -637,9 +637,29 @@ Per Refine PR rules, every phase MUST execute in fixed order in every cycle and 
 
 **Phase 5 verdict: APPROVED.**
 
-### 7.6 Phase 6 — QA / Test Integrity  *(Verdict: Pending)*
+### 7.6 Phase 6 — QA / Test Integrity  *(Verdict: APPROVED)*
 
-*To be populated.*
+**Scope:** 12 files — `reports/` (8), `dashboards/` (2), `docs/validation-gates.md`, `docs/dashboards.md`, `scripts/round_trip_verify.md`.
+
+**Findings:** None. Phase 6 re-issued APPROVED with the same findings as Cycle 1 (the remediation commit `95d8348c5a` did not touch any reports / dashboards / validation-gates / round-trip-verify file).
+
+**Re-verified properties:**
+
+1. **All 8 reports** correctly typed and filtered:
+   - `x_casemgmt_my_open_cases` — `type=list`, `table=x_casemgmt_case`, `filter=assigned_agent=javascript:gs.getUserID()^statusNOT INResolved,Closed`, `field_list=number,subject,priority,status,opened_date`
+   - `x_casemgmt_my_overdue_tasks` — `type=list`, `table=x_casemgmt_case_task`, `filter=assigned_to=javascript:gs.getUserID()^due_date<javascript:gs.daysAgoStart(0)^status!=Closed`, `field_list=subject,case,due_date,status`
+   - `x_casemgmt_case_count_by_status` — `type=pie`, `aggregate=COUNT`, `table=x_casemgmt_case`
+   - `x_casemgmt_all_cases_by_status` — `type=bar`, `aggregate=COUNT`, `table=x_casemgmt_case`
+   - `x_casemgmt_all_cases_by_type` — `type=pie`, `aggregate=COUNT`, `table=x_casemgmt_case`
+   - `x_casemgmt_all_cases_by_priority` — `type=bar`, `aggregate=COUNT`, `table=x_casemgmt_case`
+   - `x_casemgmt_avg_time_to_close` — `type=single_score`, `aggregate=AVG`, `filter=status=Closed` (uses `duration_to_close` Function Field per `dashboards.md` rationale)
+   - `x_casemgmt_cases_opened_30d` — `type=single_score`, `aggregate=COUNT`, `filter=opened_date>=javascript:gs.daysAgoStart(30)`
+2. **Both dashboards active and reference all expected reports** — Agent workspace references `my_open_cases`, `my_overdue_tasks`, `case_count_by_status`; Manager view references `all_cases_by_status`, `all_cases_by_type`, `all_cases_by_priority`, `avg_time_to_close`, `cases_opened_30d`. No broken references.
+3. **`docs/validation-gates.md` (187 lines)** preserves AAP §0.7.3 7-row table verbatim at lines 24–30 (Data model, Workflow, ACLs, Portal — submission, Portal — lookup, Dashboards, Update Set).
+4. **`docs/dashboards.md` (186 lines)** documents all 8 widgets with rationale for the `duration_to_close` Function Field design choice on the avg_time_to_close report.
+5. **`scripts/round_trip_verify.md` (238 lines)** contains the full 4-phase procedure: Phase 1 — Upload the Update Set XML, Phase 2 — Preview the Update Set, Phase 3 — Commit the Update Set, Phase 4 — Re-Verify Gates 1–6 on the Verification PDI (plus Gate 7 implicit via successful commit). Each phase has explicit Pass Criteria and Failure-handling sections.
+
+**Phase 6 verdict: APPROVED.**
 
 ### 7.7 Phase 7 — Other SME  *(Verdict: Pending)*
 
