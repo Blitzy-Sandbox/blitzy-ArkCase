@@ -469,10 +469,79 @@ This consolidated list aggregates every Cycle 1 BLOCKED finding, ordered by phas
 - Files impacted by remediation: 2 (`ui_action/x_casemgmt_case_set_pending.xml`, `docs/portal-pages.md`)
 - Cycle 2 instruction: restart pre-flight gate against the post-remediation commit; re-execute all 7 phases; do NOT carry forward prior verdicts.
 
-*Populated at end of cycle once every phase has resolved.*
+---
+
+## 5. Cycle 1 — Remediation Status
+
+| Finding | Status | Commit | Verification |
+| --- | --- | --- | --- |
+| **INFRA-1** | RESOLVED | `95d8348c5a` | `servicenow-case-management-poc/ui_action/x_casemgmt_case_set_pending.xml:257` now reads `../update-set/x_casemgmt_case_management_update_set.xml` (correct). 0 occurrences of stale `x_case_mgmt_case_management_update_set.xml` substring remain in this file. XML well-formedness preserved. |
+| **FE-1** | RESOLVED | `95d8348c5a` | `servicenow-case-management-poc/docs/portal-pages.md` rewritten at lines 169–199: step 4 now documents the 3-key response shape `{ status, subject, opened_date }`; step 5 uses the actual `"error"` key; the *"Documented choice on field count (4 vs. 3)"* rationale paragraph has been removed and replaced with a two-layer enforcement explanation (Script Include + REST operation); `number` and `type` are now in the EXCLUDED list. |
+
+Remediation commit `95d8348c5a` is the current PR head. Working tree is clean. Both fixes have been verified at file:line level.
+
+Per Refine PR rules, Cycle 2 now restarts from the pre-flight gate with all prior Cycle 1 approvals, verdicts, and findings discarded. The remediation commit itself is a non-CODE_REVIEW.md commit, which is the expected pattern (remediation runs between cycles).
 
 ---
 
-## 5. Final Reviewer Verdict
+## 6. Pre-flight Gate — Cycle 2
+
+**Verdict: PASS**
+
+Re-executed against the current PR head `95d8348c5a` (post-remediation) on the assigned branch `blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2`. All five mandatory pre-flight conditions hold.
+
+| # | Pre-flight Condition | Evidence |
+| --- | --- | --- |
+| 1 | All AAP deliverables exist under `servicenow-case-management-poc/` | All 13 critical deliverables present (update-set XML, sys_app, sys_scope, README, 7 docs files, both scripts). Full directory manifest: 30 directories, 147 XML files, 1 JS file, 9 MD files. |
+| 2 | Project builds clean | XML well-formedness: 147/147 files parse with `xml.etree.ElementTree` (0 failures). JS syntax: `node --check scripts/seed_demo_data.js` returns clean. |
+| 3 | All tests pass | Scope-namespace exclusivity: only 1 file (`update-set/x_casemgmt_case_management_update_set.xml`) still contains the legacy `x_case_mgmt` token, which is intentional self-correcting documentation inside `<!-- … -->` comments at lines 33–36 explaining the rename. Hardcoded sys_id literals in executable content (`<script>`, `<condition>`, `<filter>`, etc.): 0 violations across all 147 XML files. |
+| 4 | No production-path stubs | All occurrences of placeholder-like tokens (`x_[scope]`, `PLACEHOLDER`, `TODO`, `FIXME`) verified to be inside `<description>` blocks or Markdown comment text that explain the AAP-template-vs-implementation naming convention. No executable code returns a stub. |
+| 5 | CODE_REVIEW.md present at repo root | Present, committed, 478 lines as of pre-Cycle-2 state. |
+
+**Cycle 2 pre-flight passes. Proceeding to Phase 1.**
+
+---
+
+## 7. Cycle 2 — Phase Verdicts
+
+Per Refine PR rules, every phase MUST execute in fixed order in every cycle and MUST resolve to exactly APPROVED or BLOCKED. Reviewers do not modify code, run fixes, or re-run tests during phase review. Findings are recorded at file and line specificity.
+
+### 7.1 Phase 1 — Infrastructure / DevOps  *(Verdict: Pending)*
+
+*To be populated.*
+
+### 7.2 Phase 2 — Security  *(Verdict: Pending)*
+
+*To be populated.*
+
+### 7.3 Phase 3 — Backend Architecture  *(Verdict: Pending)*
+
+*To be populated.*
+
+### 7.4 Phase 4 — Business / Domain  *(Verdict: Pending)*
+
+*To be populated.*
+
+### 7.5 Phase 5 — Frontend  *(Verdict: Pending)*
+
+*To be populated.*
+
+### 7.6 Phase 6 — QA / Test Integrity  *(Verdict: Pending)*
+
+*To be populated.*
+
+### 7.7 Phase 7 — Other SME  *(Verdict: Pending)*
+
+*To be populated.*
+
+---
+
+## 8. Cycle 2 — Aggregation
+
+*Populated at end of Cycle 2 once every phase has resolved.*
+
+---
+
+## 9. Final Reviewer Verdict
 
 *Pending end of cycles.*
