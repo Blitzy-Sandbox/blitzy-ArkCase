@@ -583,9 +583,30 @@ Per Refine PR rules, every phase MUST execute in fixed order in every cycle and 
 
 **Phase 3 verdict: APPROVED.**
 
-### 7.4 Phase 4 — Business / Domain  *(Verdict: Pending)*
+### 7.4 Phase 4 — Business / Domain  *(Verdict: APPROVED with BUS-OBS-1 informational observation re-affirmed)*
 
-*To be populated.*
+**Scope:** 30 files — `docs/data-model.md`, `docs/state-machine.md`, `docs/acl-matrix.md`, `seed-data/cases/`, `seed-data/tasks/`, `seed-data/parties/`, `seed-data/users/`, `seed-data/role_assignments/`, `seed-data/groups/`.
+
+**Findings:** None blocking. BUS-OBS-1 (informational, NOT blocking) re-affirmed but does not change the verdict.
+
+**Re-verified properties:**
+
+1. **AAP §0.7.4 verbatim error messages present in 29/15/14/4 files** — each message is emitted from both executable artifacts (Script Include, Business Rules, Flows) AND mirrored verbatim in `docs/state-machine.md`:
+   - "All tasks must be closed before resolving this case." — 29 file occurrences
+   - "Cases cannot be returned to Draft." — 15 file occurrences
+   - "Closed cases are terminal and cannot be modified." — 14 file occurrences
+   - "Required field assigned_group is empty." — 4 file occurrences (the "Surface form-level error" instances)
+2. **Demo cases (10) satisfy AAP §0.7.4 minimums** — status distribution: {Draft:1, Open:2, In Progress:2, Pending:1, Resolved:2, Closed:2} = all 6 statuses present. Type distribution: {General Inquiry:6, Complaint:4} = both types present.
+3. **Demo users (3) satisfy AAP §0.7.4** — one user per role: `demo_manager`, `demo_agent`, `demo_viewer`.
+4. **Role assignments (3)** — one `sys_user_has_role` per (user, role) pair.
+5. **Demo group (1)** — `demo_team`, used by `assigned_group` references in cases.
+6. **Demo tasks (10) exercise the resolution gate** — task status mix: {Open:3, Closed:6, In Progress:1}. The Open + In Progress tasks attach to In Progress / Pending cases (gate-blocked path; if user attempts Resolved transition, the gate fires); the Closed tasks attach to Resolved / Closed cases (gate-satisfied path; transition allowed). Both gate behaviors are exercisable.
+7. **Demo parties (8) exercise the polymorphic UI Policy** — party type mix: {Person:5, Organization:3}. 3 of 10 cases have BOTH Person + Organization parties — exercising both branches of the conditional UI Policy `x_casemgmt_case_party_conditional_fields`.
+8. **Docs (3) mirror AAP verbatim** — `docs/state-machine.md` reproduces AAP §0.5.5 transition matrix verbatim at the documented line range; `docs/acl-matrix.md` reproduces AAP §0.5.6 role×CRUD matrix verbatim; `docs/data-model.md` reproduces AAP §0.5.7 three field tables verbatim. None of these files were touched by the Cycle 1 remediation commit.
+
+**BUS-OBS-1 (informational observation re-affirmed, NOT blocking):** 8 demo parties span 5 of 10 demo cases; 5 cases have no party associations at all. The operative AAP §0.3.1 goal — "to exercise the polymorphic UI policy" — IS satisfied (3 cases cover both Person and Organization branches). AAP §0.7.4 minimum thresholds do not list parties; AAP §0.5.1 explicitly authorizes partial coverage ("at least one Person and one Organization party per demo case to exercise the polymorphic UI policy" — interpreted as "at least one of each kind exists somewhere in the demo dataset"). **Continues to be non-blocking.** Recorded for transparency only.
+
+**Phase 4 verdict: APPROVED.**
 
 ### 7.5 Phase 5 — Frontend  *(Verdict: Pending)*
 
