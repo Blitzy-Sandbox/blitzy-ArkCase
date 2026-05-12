@@ -217,7 +217,38 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 **Verdict: BLOCKED** — 1 minor finding to remediate (INFRA-1).
 
-### 3.2 Phase 2 — Security  *(Pending)*
+### 3.2 Phase 2 — Security  *(Verdict: APPROVED)*
+
+**Scope reviewed.** The 37 primary-domain files in §2.2 (3 roles, 24 table-level ACLs, 2 field-level ACLs, 4 scripted-REST records, 3 demo users, 1 demo group, 3 role-assignments, `docs/acl-matrix.md`), plus cross-cutting sys_id-literal and PII scans across all 157 in-scope files.
+
+**Positive findings.**
+
+1. **Roles** — 3 scoped roles correctly authored in `servicenow-case-management-poc/roles/`:
+   - `x_casemgmt_case_manager` (full create/read/write/delete; only role permitted to close)
+   - `x_casemgmt_case_agent` (create + read/write only on assigned cases)
+   - `x_casemgmt_case_viewer` (read-only)
+   - All `grantable=true`, `elevated_privilege=false`, no global-scope side-effects.
+2. **Table-level ACL matrix (24 ACLs)** — perfectly matches AAP §0.5.6:
+
+   | Role | Create | Read | Write | Delete | ACL files |
+   | --- | --- | --- | --- | --- | --- |
+   | case_manager | ✅ (case, case_task, case_party) | ✅ All (case, case_task, case_party) | ✅ All (case, case_task, case_party) | ✅ (case, case_task, case_party) | `*_create_manager`, `*_read_manager`, `*_write_manager`, `*_delete_manager` |
+   | case_agent | ✅ (case, case_task, case_party) | ✅ Assigned only (case, case_task, case_party) | ✅ Assigned only (case, case_task, case_party) | ❌ | `*_create_agent`, `*_read_agent_assigned`, `*_write_agent_assigned` |
+   | case_viewer | ❌ | ✅ All (case, case_task, case_party) | ❌ | ❌ | `*_read_viewer` |
+3. **"Assigned only" condition** — Each `*_agent_assigned` ACL contains a scripted condition that returns true iff `current.assigned_agent == gs.getUserID()` OR `gs.getUser().isMemberOf(current.assigned_group.toString())`. For `case_task` and `case_party` agent-assigned ACLs, the formula dot-walks via `current.case.getRefRecord()` to inspect the parent case's `assigned_agent` and `assigned_group`. This correctly implements AAP §0.5.6's "Assigned only" semantics.
+4. **Field-level ACLs (2 ACLs)** — correctly restrict the two sensitive fields:
+   - `x_casemgmt_case.assigned_group` write: `x_casemgmt_case_manager` only (no script needed; role-only check).
+   - `x_casemgmt_case.assigned_agent` write: `x_casemgmt_case_manager` (unconditional) + `x_casemgmt_case_agent` (only when `current.assigned_agent == gs.getUserID()`, preventing self-grab and peer-poach). 2 158-character condition script with thorough inline rationale.
+5. **Anonymous portal endpoints** — both REST definitions and operations carry `requires_authentication=false` and `requires_acl_authorization=false`:
+   - POST `/api/x_casemgmt/case_submit` → delegates to `x_casemgmt.CasePortalService.submitCase()` which whitelists exactly 5 input fields (subject, type, description, requester_name, requester_email) and forces `status='Draft'`. All other payload keys are silently dropped.
+   - GET `/api/x_casemgmt/case_status_lookup?number=...` → delegates to `x_casemgmt.CasePortalService.lookupCase()` which queries by the public-facing `number` field (NOT `sys_id`) and returns ONLY `status`, `subject`, `opened_date` — no internal fields exposed. Returns the AAP-verbatim "No case found with that number." text on miss.
+6. **Demo users, group, role-assignments** — all 3 demo users use synthetic names (Demo Manager / Demo Agent / Demo Viewer), emails on the RFC-6761-reserved `.invalid` TLD (`demo-{role}@example.invalid`), and `user_name` prefixed with `x_casemgmt_`. The demo group `x_casemgmt_demo_team` is synthetic. Role-assignment records use the human-readable keys `user_name` and `role.name` (no `sys_id` literals). Zero PII; compliant with AAP §0.7.2 no-PII constraint.
+7. **No hardcoded sys_id literals in executable content** — Python AST walk over every `*.xml` file in the in-scope tree, scanning every `<script>`, `<condition>`, `<filter>`, `<when>`, `<computed_value>`, `<ajax_script>`, `<script_true>`, `<script_false>`, `<script_plain>`, `<client_script>`, `<server_script>`, `<operation_script>`, `<onCondition>`, `<script_create>`, `<script_update>`, `<script_delete>`, `<init_script>`, `<script_includes>`, and `<script_body>` element body for 32-character lowercase hex literals (the sys_id format). After filtering documentation/comment contexts: **0 violations**. Every cross-reference resolves by stable human-readable key (`user_name`, `name`, `number`, `role.name`).
+8. **`docs/acl-matrix.md`** — reproduces the AAP §0.5.6 matrix verbatim, defines "Assigned only" with both logical-expression and condition-script form, lists per-role narrative, field-level ACL design, UI Action visibility tied to ACL, and source-side ArkCase semantic mapping. Comprehensive and consistent with implementation.
+
+**No BLOCKED findings.**
+
+**Verdict: APPROVED.**
 
 ### 3.3 Phase 3 — Backend Architecture  *(Pending)*
 
