@@ -250,7 +250,57 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 **Verdict: APPROVED.**
 
-### 3.3 Phase 3 — Backend Architecture  *(Pending)*
+### 3.3 Phase 3 — Backend Architecture  *(Verdict: APPROVED)*
+
+**Scope reviewed.** The 49 primary-domain files in §2.3 (3 tables, 25 dictionary entries, 7 choice lists, 2 Script Includes, 2 parent flows + 5 subflows, 6 business rules, 1 seed script).
+
+**Positive findings.**
+
+1. **Tables (3)** — all three `sys_db_object` records correctly authored: name = `x_casemgmt_case` / `x_casemgmt_case_task` / `x_casemgmt_case_party`; label = `Case` / `Case Task` / `Case Party`; `number_ref` points at the matching `sys_number_*` counter; no `super_class` (root tables, not extensions); `is_extendable=false`.
+2. **Dictionary entries (25)** — perfect alignment with AAP §0.5.7:
+   - `x_casemgmt_case` (14 entries): `number` (string/40, ro, auto-numbered to `CASE0000001`), `type` (string/40, optional, choice), `status` (string/40, **mandatory**, default=`Draft`, choice), `priority` (string/40, default=`Medium`, choice), `subject` (string/255, **mandatory**), `description` (string/4000, **mandatory**), `opened_date` (glide_date_time/40, ro), `closed_date` (glide_date_time/40, ro), `assigned_group` (reference→`sys_user_group`), `assigned_agent` (reference→`sys_user`), `requester_name` (string/100, **mandatory**), `requester_email` (string/100), `pending_reason` (string/40, choice), `duration_to_close` (glide_duration/40, ro — function field used by the "Average time to close" Manager-View dashboard widget).
+   - `x_casemgmt_case_task` (6 entries): `case` (reference→`x_casemgmt_case`, **mandatory**), `subject` (string/255, **mandatory**), `type` (string/40, choice), `status` (string/40, default=`Open`, choice), `assigned_to` (reference→`sys_user`, **mandatory**), `due_date` (glide_date/40, **mandatory**).
+   - `x_casemgmt_case_party` (5 entries): `case` (reference→`x_casemgmt_case`, **mandatory**), `party_type` (string/40, **mandatory**, choice), `person` (reference→`sys_user`, optional — UI Policy enforces conditional mandatory), `organization` (reference→`core_company`, optional — UI Policy enforces conditional mandatory), `role_label` (string/100, **mandatory**).
+   - Note: `assigned_group` and `assigned_agent` are dictionary-level optional because the AAP defines them as Open-transition-time mandatory (workflow-time), not insert-time mandatory. The Open Flow Designer subflow enforces the workflow-time check.
+   - Note: `pending_reason` and `duration_to_close` are additive support fields required to implement the state machine (per AAP §0.5.5) and the Manager-View "Average time to close" widget (per AAP §0.4.4); they do not conflict with §0.5.7's verbatim schema.
+3. **Choice lists (7)** — match AAP §0.5.7 verbatim:
+   - `case.type`: General Inquiry (seq=100), Complaint (seq=200)
+   - `case.status`: Draft (100), Open (200), In Progress (300), Pending (400), Resolved (500), Closed (600)
+   - `case.priority`: Low (100), Medium (200), High (300), Critical (400)
+   - `case.pending_reason`: Awaiting Info (100), Awaiting Third Party (200), Other (300)
+   - `case_task.type`: Investigation (100), Review (200), Follow-up (300), Other (400)
+   - `case_task.status`: Open (100), In Progress (200), Closed (300)
+   - `case_party.party_type`: Person (100), Organization (200)
+4. **Script Include — `x_casemgmt.CaseTransitionValidator`** (22 706 chars; package_private, client_callable=false). Exposes 8 methods:
+   - `canTransitionToOpen(caseGr)` — checks `assigned_group` populated
+   - `canTransitionToInProgress(caseGr)` — checks `assigned_agent` populated AND `isAgentInGroup()` succeeds
+   - `canTransitionToResolved(caseGr)` — checks `getOpenTaskCountForCase()===0`; returns verbatim AAP error `"All tasks must be closed before resolving this case."`
+   - `canTransitionToClosed(caseGr, userId)` — checks caller has `x_casemgmt_case_manager` role
+   - `validateNoBacktransition(prev, next)` — returns verbatim AAP errors `"Closed cases are terminal and cannot be modified."` (prev=Closed) and `"Cases cannot be returned to Draft."` (next=Draft & prev∉{Draft,''})
+   - `isAgentInGroup(userSysId, groupSysId)` — `sys_user_grmember` query
+   - `getOpenTaskCountForCase(caseSysId)` — GlideAggregate
+   - `initialize()` — standard constructor
+5. **Script Include — `x_casemgmt.CasePortalService`** (14 017 chars; package_private). Exposes `submitCase(payload)` and `lookupCase(number)`; submission whitelists exactly 5 input fields (subject, type, description, requester_name, requester_email) and forces `status='Draft'`; lookup queries by the public-facing `number` field (not `sys_id`) and returns only `{status, subject, opened_date}`.
+6. **Business Rules (6)** — every rule has substantive body and is `active=true`, `when=before`:
+   - `block_draft_backtransition` (order=200, on update, 6716 chars) → delegates to `validator.validateNoBacktransition()` then `gs.addErrorMessage(result.error); current.setAbortAction(true);`. Surfaces AAP-verbatim `"Cases cannot be returned to Draft."` text.
+   - `block_terminal_closed` (order=100, on update, 5693 chars) → same delegate pattern; surfaces AAP-verbatim `"Closed cases are terminal and cannot be modified."`.
+   - `clear_pending_reason_on_inprogress` (order=400, on update, 3251 chars) → if prev=Pending && new=`In Progress`, sets `current.pending_reason = ''`.
+   - `set_closed_date` (order=500, on update, 3027 chars) → if prev=Resolved && new=Closed AND `current.closed_date.nil()`, sets `current.closed_date = gs.nowDateTime()`.
+   - `set_opened_date` (order=100, on insert, 1472 chars) → if `current.opened_date.nil()`, sets `current.opened_date = gs.nowDateTime()`.
+   - `validate_assigned_agent_membership` (order=300, on insert+update, 9580 chars) → when `assigned_agent` is set, validates it is a member of `assigned_group`; surfaces `"Assigned agent must be a member of the assigned group."` on failure.
+7. **Flow Designer (2 parent flows + 5 subflows)** — all 7 are `active=true`. Latest snapshots populated (5K-11K chars each):
+   - Parent `general_inquiry_state_machine` (type=flow, snap=10 639c) — 5 references to each subflow, 4 references to `CaseTransitionValidator`, 1 reference to verbatim `"All tasks must be closed"`, 4 references to `pending_reason`, 2 references to `x_casemgmt_case_manager`.
+   - Parent `complaint_state_machine` (type=flow, snap=10 576c) — identical reference counts.
+   - Subflow `validate_open_transition` (snap=5 641c) — 5 occurrences of `"Required field assigned_group"`, 4 Throw Error actions, references the validator.
+   - Subflow `validate_inprogress_transition` (snap=5 686c) — 5 occurrences of `"must be a member"`.
+   - Subflow `validate_pending_transition` (snap=2 801c) — 16 references to `pending_reason` (the subflow's responsibility is to set it via flow input).
+   - Subflow `validate_resolved_transition` (snap=5 068c) — 6 occurrences of `"All tasks must be closed"`, 3 Throw Errors.
+   - Subflow `validate_closed_transition` (snap=6 676c) — 6 occurrences of `"Only case managers can close"`, 3 references to `x_casemgmt_case_manager`.
+8. **Seed script `scripts/seed_demo_data.js`** — 1 452 lines, 17 functions, passes `node --check`. Lookup helpers (`lookupUserSysId`, `lookupGroupSysId`, `lookupRoleSysId`, `lookupCompanySysId`, `lookupCaseSysId`, `lookupCaseNumberBySubject`) resolve cross-references via `GlideRecord` queries on stable human-readable keys (`user_name`, `name`, `number`, `subject`). Ensure helpers (`ensureUser`, `ensureGroup`, `ensureGroupMembership`, `ensureRoleAssignment`, `ensureCompany`, `ensureCase`, `ensureTask`, `ensureParty`) implement idempotent upsert semantics. Zero 32-character hex literals in the source code after comment stripping.
+
+**No BLOCKED findings.**
+
+**Verdict: APPROVED.**
 
 ### 3.4 Phase 4 — Business / Domain  *(Pending)*
 
