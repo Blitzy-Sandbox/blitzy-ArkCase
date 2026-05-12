@@ -608,9 +608,34 @@ Per Refine PR rules, every phase MUST execute in fixed order in every cycle and 
 
 **Phase 4 verdict: APPROVED.**
 
-### 7.5 Phase 5 — Frontend  *(Verdict: Pending)*
+### 7.5 Phase 5 — Frontend  *(Verdict: APPROVED)*
 
-*To be populated.*
+**Scope:** 13 files — `portal/sp_portal_*.xml`, `portal/pages/`, `portal/widgets/`, `ui_policy/`, `ui_action/`, `docs/portal-pages.md`.
+
+**Required re-verification (from Cycle 1 FE-1):**
+
+| Re-Verification Target | Evidence | Result |
+| --- | --- | --- |
+| `docs/portal-pages.md:172` documents the lookup response as a 3-key object `{ status, subject, opened_date }` (NOT the prior 4-key shape that included `number`) | Line 172 now reads: `4. **If found:** returns 200 OK with body `{ "status": "...", "subject": "...", "opened_date": "..." }` — only those three fields, NOTHING else.` | PASS |
+| `docs/portal-pages.md` no longer contains the "Documented choice on field count (4 vs. 3)" rationale paragraph | `grep -c 'Documented choice on field count'` → 0; `grep -c '4 vs\. 3'` → 0. | PASS |
+| `docs/portal-pages.md` "Whitelisted Output Fields" section now describes a 2-layer enforcement model (Script Include + REST operation) | Lines 178+ contain: *"the field whitelist is enforced at two layers (Script Include + REST operation), so an accidental edit to either layer alone cannot widen the exposure"*. | PASS |
+| `number` is correctly listed in the EXCLUDED list of `docs/portal-pages.md` (with explanation that the widget already has the user-supplied value in scope and re-prints it from the input field, so echoing it back is redundant) | The EXCLUDED section now starts with `- 'number' — even though the requester supplied it as input, this implementation does NOT echo it back...` | PASS |
+| Underlying executable artifacts still emit the 3-field response (the documentation now matches; the implementation must continue to match the documentation) | Script Include `lookupCase()` returns `{ status, subject, opened_date }` only; REST operation `case_status_lookup_get` calls `response.setBody({ status: …, subject: …, opened_date: … })` only. | PASS |
+| `docs/portal-pages.md` parses as valid Markdown (no broken tables, etc.) | Section structure intact: "Lookup Behavior" → numbered steps 1–6 → "Whitelisted Output Fields" → enforcement explanation → INCLUDED list → EXCLUDED list. | PASS |
+
+**Other Phase 5 dimensions re-verified in Cycle 2:**
+
+1. **sp_portal record** — `active=true`, `public=true`, `url_suffix=x_casemgmt_case_portal`, `homepage=x_casemgmt_case_submit`, `title="Case Management Portal"`. The portal is reachable at `[instance URL]/x_casemgmt_case_portal` (per AAP §0.7.2 deployment-step block).
+2. **Both pages public** — `sp_page_x_casemgmt_case_submit` and `sp_page_x_casemgmt_case_status` both have `<public>true</public>`, satisfying the AAP §0.5.1 "two unauthenticated pages" requirement.
+3. **Submission widget ng-model bindings** — exactly 5 bindings: `c.formData.subject`, `c.formData.type`, `c.formData.description`, `c.formData.requester_name`, `c.formData.requester_email` — matching the AAP §0.7.4 + Script Include WHITELIST one-for-one.
+4. **Lookup widget hardcodes verbatim "No case found with that number."** — 10 file occurrences (multiple is fine; one in the rendered template, others in `<description>` blocks for traceability).
+5. **Confirmation widget present** — third widget at `sp_widget_x_casemgmt_case_confirmation_widget.xml`, displays the returned case number on submit success.
+6. **UI Policy for case_party** — `active=true`, `on_load=true`, `run_scripts=true`, conditions `party_typeISNOTEMPTY^ORparty_typeISEMPTY^EQ` (Service Portal native shape), table `x_casemgmt_case_party`. Implements the conditional show/hide of `person` vs `organization` fields per AAP §0.5.1.
+7. **UI Actions (6)** — all `active=true`, `form_button=true`, all with substantive role-gated conditions (`condition_len` between 76 and 271 chars). Names: Close, Open, Resolve, Resume, Set Pending, Start Progress — covering the AAP §0.5.5 transitions exposed to authorized roles.
+
+**Findings:** None. FE-1 is fully resolved at both the documentation level and the cross-layer-consistency level. No new frontend issues introduced.
+
+**Phase 5 verdict: APPROVED.**
 
 ### 7.6 Phase 6 — QA / Test Integrity  *(Verdict: Pending)*
 
