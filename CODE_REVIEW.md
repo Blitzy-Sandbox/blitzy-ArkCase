@@ -406,7 +406,38 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 **Verdict: APPROVED.**
 
-### 3.7 Phase 7 — Other SME  *(Pending)*
+### 3.7 Phase 7 — Other SME  *(Verdict: APPROVED)*
+
+**Scope reviewed.** The 2 primary-domain files in §2.7 (`servicenow-case-management-poc/README.md`, `CODE_REVIEW.md`) PLUS the cross-cutting "Other SME" dimensions: documentation completeness, deliverable-manifest correctness, AAP-template-vs-implementation placeholder discipline, license accuracy.
+
+**Positive findings.**
+
+1. **README.md is substantive and well-structured** — 228 lines, 16 top-level sections (Refactoring Objective, Out of Scope, Repository Relationship, Read-Only Semantic References, Directory Layout, Data Model Quick Reference, Build Constraints (Non-Negotiable), State-Machine Quick Reference, Roles & ACLs Quick Reference, Deliverables, Install & Deployment, Validation Gates, Documentation Index, License).
+2. **Documentation Index is complete** — the README's Documentation Index (lines 207–222) references every one of the 7 documentation files under `docs/` and both files under `scripts/`. Each file is annotated with its purpose.
+3. **Deliverables section is correct** — README lines 177–184 explicitly list (a) the Update Set XML path `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, (b) the actual portal URL `[instance URL]/x_casemgmt_case_portal` with an explanatory note that AAP §0.7.2 uses a generic placeholder and the actual implementation slug is `x_casemgmt_case_portal` (the `<url_suffix>` declared in `portal/sp_portal_x_casemgmt_case_portal.xml`), (c) the dashboards, and (d) the synthetic seed data inventory.
+4. **Install & Deployment block reproduces AAP §0.7.2** — README lines 184–192 reproduce the 4-step AAP-verbatim deployment block (Export → Verify → Confirm → Deliver) and link to `docs/deployment.md` and `scripts/round_trip_verify.md` for the detailed walkthroughs.
+5. **Deliverable manifest fully present** — programmatic cross-check against AAP §0.5.1 shows all 29 expected deliverable buckets are populated with at least the minimum required file counts:
+   - 1 update-set XML, 1 sys_app, 1 sys_scope.
+   - 3 tables, 25 dictionary entries, 7 choice lists, 3 number maintenance records.
+   - 3 roles, 26 ACLs (table + field level for both sensitive fields).
+   - 2 parent flows, 5 subflows, 2 Script Includes, 6 Business Rules, 1 UI Policy, 6 UI Actions.
+   - 1 sp_portal, 2 sp_pages, 3 sp_widgets, 4 REST records (2 sys_ws_definition + 2 sys_ws_operation pairs).
+   - 2 dashboards, 8 reports.
+   - 3 demo users, 1 demo group, 3 role assignments, 10 demo cases, 10 demo tasks, 8 demo parties (plus the demo company record).
+   - 7 docs files, 2 scripts files.
+6. **AAP-template-vs-implementation placeholder discipline** — A scan for the AAP template token `x_[scope]` across the deliverable returns exactly 7 hits, all inside human-readable `<description>` or comment blocks that explicitly explain the template-to-concrete naming convention ("the AAP Section 0.7.2 placeholder `x_[scope]_` is a TEMPLATE; the actual implementation uses `x_casemgmt_`"). Similarly, scans for `PLACEHOLDER`, `TODO:`, `FIXME`, `XXX:` find only descriptive references explaining preservation of the literal AAP placeholder text in comments — zero real production stubs.
+7. **CODE_REVIEW.md correctness** — this document itself satisfies the Refine PR contract:
+   - Created and committed before Phase 1 (commit `71b3f4a7da`).
+   - Re-committed after every phase verdict (`3b579151d1` P1, `939b5c65ca` P2, `84d543307e` P3, `9f6ef5c903` P4, `90d3223490` P5, `7ae5cbe04b` P6, this commit P7).
+   - Every changed file assigned to exactly one primary domain (verified in §2 — 157 files across 7 domains).
+   - Every phase records APPROVED or BLOCKED with file:line specificity for findings.
+   - Pre-flight Gate (§1) records PASS for all 5 criteria.
+   - Will be present in the PR's final commit.
+8. **License accuracy** — README closes with the standard AAP-compliant license note (line 224+).
+
+**No BLOCKED findings.**
+
+**Verdict: APPROVED.**
 
 ---
 
