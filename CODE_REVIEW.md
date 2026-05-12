@@ -556,9 +556,32 @@ Per Refine PR rules, every phase MUST execute in fixed order in every cycle and 
 
 **Phase 2 verdict: APPROVED.**
 
-### 7.3 Phase 3 — Backend Architecture  *(Verdict: Pending)*
+### 7.3 Phase 3 — Backend Architecture  *(Verdict: APPROVED)*
 
-*To be populated.*
+**Scope:** 49 files — `tables/`, `dictionary/`, `choices/`, `script_includes/`, `business_rules/`, `flows/` + `flows/sub_flows/`, `scripts/seed_demo_data.js`.
+
+**Findings:** None. Phase 3 re-issued APPROVED with the same findings as Cycle 1 (the remediation commit `95d8348c5a` did not touch any backend artifact).
+
+**Re-verified properties:**
+
+1. **Tables (3)** — `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`, all with `<sys_scope>x_casemgmt</sys_scope>`, no inheritance (`<super_class>` empty — i.e., extends the platform's base sys_metadata), labels "Case" / "Case Task" / "Case Party".
+2. **Dictionary entries (25)** — exact match to AAP §0.5.7:
+   - **Case (14 fields):** number, type, status, priority, subject, description, opened_date, closed_date, assigned_group, assigned_agent, requester_name, requester_email, pending_reason, duration_to_close. The 12 AAP-mandatory fields plus 2 additive fields (pending_reason for the Pending transition's prompt, duration_to_close as a Function Field used by the avg_time_to_close single-score widget per dashboards.md rationale).
+   - **Case Task (6 fields):** case, subject, type, status, assigned_to, due_date — verbatim AAP.
+   - **Case Party (5 fields):** case, party_type, person, organization, role_label — verbatim AAP.
+3. **Choice lists (7)** — verbatim AAP §0.5.7:
+   - case_type (General Inquiry, Complaint), case_status (Draft, Open, In Progress, Pending, Resolved, Closed), case_priority (Low, Medium, High, Critical), case_pending_reason (Awaiting Info, Awaiting Third Party, Other), case_task_type (Investigation, Review, Follow-up, Other), case_task_status (Open, In Progress, Closed), case_party_party_type (Person, Organization).
+4. **Script Include — CaseTransitionValidator** (22,707 chars, 8 methods: `initialize`, `canTransitionToOpen`, `canTransitionToInProgress`, `canTransitionToResolved`, `canTransitionToClosed`, `validateNoBacktransition`, `isAgentInGroup`, `getOpenTaskCountForCase`). Every method has substantive code — e.g., `validateNoBacktransition` (~1,080-char body) implements the AAP §0.5.5 "Any → Draft is PROHIBITED" rule with verbatim `'Cases cannot be returned to Draft.'` and `'Closed cases are terminal and cannot be modified.'` messages, defensive `String()` coercion for null/undefined/GlideElement inputs, and explicit Case 1 / Case 2 commenting. No stubs, no TODO, no placeholder.
+5. **Script Include — CasePortalService** (per Phase 2 re-verification) — 5-field input whitelist + 3-field output whitelist + `setValue('status','Draft')` defensive force. No stubs.
+6. **Business Rules (6)** — all substantive:
+   - `block_draft_backtransition` — emits verbatim `'Cases cannot be returned to Draft.'`
+   - `block_terminal_closed` — emits verbatim `'Closed cases are terminal and cannot be modified.'`
+   - `validate_assigned_agent_membership` — emits verbatim `'All tasks must be closed before resolving this case.'` (delegates to CaseTransitionValidator)
+   - `clear_pending_reason_on_inprogress`, `set_closed_date`, `set_opened_date` — non-error helpers; do not need verbatim messages.
+7. **Flows (2 parents + 5 subflows = 7)** — all `<active>true</active>`. Parent flows `x_casemgmt_general_inquiry_state_machine` and `x_casemgmt_complaint_state_machine` both have `<status>published</status>`. Subflows: `validate_open_transition`, `validate_inprogress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition` — one per transition rule from AAP §0.5.5.
+8. **Seed script** — `scripts/seed_demo_data.js`: 1,452 lines, 17 functions, `node --check` clean. Idempotent (per Cycle 1 inspection of seedDemoUsers / seedDemoCases reentrancy guards).
+
+**Phase 3 verdict: APPROVED.**
 
 ### 7.4 Phase 4 — Business / Domain  *(Verdict: Pending)*
 
