@@ -661,9 +661,55 @@ Per Refine PR rules, every phase MUST execute in fixed order in every cycle and 
 
 **Phase 6 verdict: APPROVED.**
 
-### 7.7 Phase 7 — Other SME  *(Verdict: Pending)*
+### 7.7 Phase 7 — Other SME  *(Verdict: APPROVED)*
 
-*To be populated.*
+**Scope:** 2 files — `README.md`, plus a holistic AAP §0.5.1 manifest cross-check covering everything else.
+
+**Findings:** None. Phase 7 re-issued APPROVED with the same findings as Cycle 1.
+
+**Re-verified properties:**
+
+1. **README.md (228 lines)** — 13 top-level sections including Refactoring Objective, Out of Scope, Repository Relationship, Directory Layout, Data Model Quick Reference, Build Constraints (Non-Negotiable), State-Machine Quick Reference, Roles & ACLs Quick Reference, Deliverables, Install & Deployment, Validation Gates, Documentation Index, License. The Documentation Index correctly cross-links to all 7 `docs/` files; the Install & Deployment section provides the 4-step procedure from AAP §0.7.2 verbatim.
+2. **AAP §0.5.1 deliverable-manifest cross-check** — All 29 directory buckets match the AAP file-count expectations exactly:
+
+   | Bucket | Expected | Actual | Status |
+   | --- | --- | --- | --- |
+   | update-set | 1 | 1 | ✓ |
+   | app/sys_app | 1 | 1 | ✓ |
+   | app/sys_scope | 1 | 1 | ✓ |
+   | tables | 3 | 3 | ✓ |
+   | dictionary | 25 | 25 | ✓ |
+   | choices | 7 | 7 | ✓ |
+   | numbers | 3 | 3 | ✓ |
+   | roles | 3 | 3 | ✓ |
+   | acl | 26 | 26 | ✓ |
+   | flows | 2 | 2 | ✓ |
+   | flows/sub_flows | 5 | 5 | ✓ |
+   | script_includes | 2 | 2 | ✓ |
+   | business_rules | 6 | 6 | ✓ |
+   | ui_policy | 1 | 1 | ✓ |
+   | ui_action | 6 | 6 | ✓ |
+   | portal (top-level XML) | 1 | 1 | ✓ |
+   | portal/pages | 2 | 2 | ✓ |
+   | portal/widgets | 3 | 3 | ✓ |
+   | portal/rest | 4 | 4 | ✓ |
+   | dashboards | 2 | 2 | ✓ |
+   | reports | 8 | 8 | ✓ |
+   | seed-data/users | 3 | 3 | ✓ |
+   | seed-data/groups | 1 | 1 | ✓ |
+   | seed-data/role_assignments | 3 | 3 | ✓ |
+   | seed-data/cases | 10 | 10 | ✓ |
+   | seed-data/tasks | 10 | 10 | ✓ |
+   | seed-data/parties | 8 | 8 | ✓ |
+   | docs | 7 | 7 | ✓ |
+   | scripts | 2 | 2 | ✓ |
+3. **All 9 Markdown documentation files present** — `README.md`, `docs/data-model.md`, `docs/state-machine.md`, `docs/acl-matrix.md`, `docs/portal-pages.md`, `docs/dashboards.md`, `docs/validation-gates.md`, `docs/deployment.md`, `scripts/round_trip_verify.md`.
+4. **3 TODO/FIXME/XXX matches confirmed to be documentation, not stubs:**
+   - `numbers/sys_number_x_casemgmt_case_party.xml:189` — inside a `<description>` comment block: `"PARTY0000XXX values"` (descriptive format pattern)
+   - `numbers/sys_number_x_casemgmt_case_task.xml:150` — inside a `<description>` comment block: `"TASK0000XXX values"` (descriptive format pattern)
+   - `portal/sp_portal_x_casemgmt_case_portal.xml:159` — inside a `<description>` comment block: `"https://devXXXXXX.service-now.com/x_<actual_scope>_case_portal"` (standard ServiceNow PDI URL placeholder where `XXXXXX` is the canonical 6-digit instance-id placeholder; not a production stub)
+
+**Phase 7 verdict: APPROVED.**
 
 ---
 
