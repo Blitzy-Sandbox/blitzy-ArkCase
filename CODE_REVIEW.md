@@ -532,9 +532,29 @@ Per Refine PR rules, every phase MUST execute in fixed order in every cycle and 
 
 **Phase 1 verdict: APPROVED.**
 
-### 7.2 Phase 2 — Security  *(Verdict: Pending)*
+### 7.2 Phase 2 — Security  *(Verdict: APPROVED)*
 
-*To be populated.*
+**Scope:** 37 files — `roles/`, `acl/`, `portal/rest/`, `script_includes/`, security-relevant business rules, plus seed-user PII discipline.
+
+**Findings:** None. Phase 2 re-issued APPROVED with the same findings as Cycle 1 (the remediation commit `95d8348c5a` did not touch any security-relevant artifact — only documentation files).
+
+**Re-verified properties:**
+
+1. **Three scoped roles correctly defined** — `x_casemgmt_case_manager` ("Full create/read/write/delete on x_casemgmt_case, x_casemgmt_case_task, x_casemgmt_case_party. Only role allowed to close cases."), `x_casemgmt_case_agent` ("Create + read/write only on cases where current user is the assigned agent or a member of the assigned group."), `x_casemgmt_case_viewer` ("Read-only on all x_casemgmt case data."). All three have `<elevated_privilege>false</elevated_privilege>`, `<scoped_admin>false</scoped_admin>`, `<grantable>true</grantable>`.
+2. **ACL CRUD matrix matches AAP §0.5.6 verbatim:**
+   - case_manager: CREATE ✓, READ ✓, WRITE ✓, DELETE ✓ (all 3 tables, all 4 ops = 12 ACLs)
+   - case_agent: CREATE ✓, READ ✓ (Assigned only), WRITE ✓ (Assigned only), DELETE ✗ (correctly absent) (3 tables × 3 ops = 9 ACLs)
+   - case_viewer: CREATE ✗, READ ✓, WRITE ✗, DELETE ✗ (3 tables × 1 op = 3 ACLs)
+   - Field-level: assigned_group write restricted to case_manager only; assigned_agent write restricted to case_manager + case_agent (2 ACLs)
+   - **Total: 12 + 9 + 3 + 2 = 26 ACLs**, matching the file count exactly.
+3. **"Assigned only" condition correctly encoded** — `x_casemgmt_case_read_agent_assigned.xml` and `x_casemgmt_case_write_agent_assigned.xml` both contain ACL scripts of the form `if (current.assigned_agent == currentUserId) return true; if (current.assigned_group && !current.assigned_group.nil()) { … }` — i.e., the AAP §0.5.6 condition `assigned_agent = current user OR assigned_group contains current user`.
+4. **Portal REST endpoints correctly anonymous** — both `sys_ws_definition_x_casemgmt_case_submit.xml` and `sys_ws_definition_x_casemgmt_case_status_lookup.xml` set `<requires_authentication>false</requires_authentication>`, `<requires_acl_authorization>false</requires_acl_authorization>`, `<requires_snc_internal_role>false</requires_snc_internal_role>`. Both operation files (submit POST + lookup GET) carry the same flags.
+5. **Submission endpoint enforces strict input whitelist** — `script_includes/x_casemgmt_CasePortalService.xml` `submitCase()` (lines 274–340) defines `WHITELIST = ['subject', 'type', 'description', 'requester_name', 'requester_email']` and iterates ONLY through whitelisted field names via `hasOwnProperty` guard + `String()` coercion. Any other key is silently dropped. Critically: `caseGr.setValue('status', 'Draft');` forces Draft status regardless of payload contents, defending against a payload-injected `status='Closed'` that would bypass the state machine.
+6. **Lookup endpoint enforces strict output whitelist** — `lookupCase()` (lines 401+) constructs the return object with EXPLICIT three-field assignment: `{ status: …, subject: …, opened_date: … }`. No other field name appears in the return path. The REST operation `sys_ws_operation_x_casemgmt_case_status_lookup_get.xml` mirrors this with `setBody({ status: …, subject: …, opened_date: … })` after a successful lookup, or `setBody({ error: 'No case found with that number.' })` on miss (verbatim AAP §0.7.4 message preserved at both layers).
+7. **No-PII discipline** — all 3 demo users use `*@example.invalid` (RFC 6761 reserved TLD), names are synthetic ("demo-agent" / "demo-manager" / "demo-viewer"). Reported `mary|maria|@gmail|@yahoo|@outlook|@hotmail` matches in the user seed are confirmed to be the *banned-pattern regex* inside the file's `<description>` block — documentation, not actual PII.
+8. **No-hardcoded-sys_id discipline** — pre-flight Python AST walk over all 147 XML files inside `<script>` / `<condition>` / `<filter>` / `<operation_script>` / etc. blocks returned 0 violations.
+
+**Phase 2 verdict: APPROVED.**
 
 ### 7.3 Phase 3 — Backend Architecture  *(Verdict: Pending)*
 
