@@ -169,25 +169,33 @@ Allows an unauthenticated external requester to look up the current status of a 
 1. Client-side validates the case number format (regex `^CASE\d{7}$`) and shows hint if malformed.
 2. On valid format, the widget calls scripted REST endpoint GET `/api/x_casemgmt/case_status_lookup?number=<value>`.
 3. The endpoint queries `x_casemgmt_case` by `number = <value>` using a `GlideRecord` lookup.
-4. **If found:** returns 200 OK with body `{ "number": "...", "status": "...", "subject": "...", "opened_date": "..." }` — only those four fields, NOTHING else.
-5. **If not found:** returns 404 Not Found with body `{ "message": "No case found with that number." }` (verbatim).
-6. The widget renders the result panel with the four returned fields, OR the verbatim "not found" message.
+4. **If found:** returns 200 OK with body `{ "status": "...", "subject": "...", "opened_date": "..." }` — only those three fields, NOTHING else.
+5. **If not found:** returns 404 Not Found with body `{ "error": "No case found with that number." }` (verbatim).
+6. The widget renders the result panel with the three returned fields, OR the verbatim "not found" message.
 
 ### Whitelisted Output Fields
 
-The lookup endpoint returns ONLY the following case fields. Per AAP Section 0.7.4, no internal fields are exposed under any circumstance. The scripted REST handler MUST construct the response object with EXPLICIT field assignment (`{number: gr.number, status: gr.status, subject: gr.subject, opened_date: gr.opened_date}`) — never `gr.toJSON()` or similar serialization shortcut.
+The lookup endpoint returns ONLY the following three case fields per AAP Section 0.7.4 ("lookup page returns ONLY status, subject, opened_date — no internal fields exposed"). The scripted REST handler in [`../portal/rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml`](../portal/rest/) constructs the response object with EXPLICIT field assignment to defend in depth against accidental field exposure in future edits:
 
-**Documented choice on field count (4 vs. 3):** AAP Section 0.4.4 specifies "shows status, subject, opened_date" (3 fields) for the lookup output. This implementation returns 4 fields by additionally echoing back the requester-supplied case `number`. The echoed number is NOT considered an exposure of internal data because the requester themselves provided the number as input — it is purely a confirmation that the lookup matched the supplied query. AAP Section 0.7.4 forbids exposing "internal fields", which the case `number` is not (it is the requester's own input). The choice is therefore an interpretation of AAP intent: the verbatim 3-field rule is preserved for the *new* data exposed; the echoed `number` is treated as a UX confirmation. If a stricter interpretation of AAP Section 0.4.4 is required by reviewers, remove `number` from the response object — no other implementation change is needed.
+```javascript
+response.setBody({
+    status:      String(result.status      || ''),
+    subject:     String(result.subject     || ''),
+    opened_date: String(result.opened_date || '')
+});
+```
 
-Fields explicitly INCLUDED in the response:
+The underlying Script Include [`../script_includes/x_casemgmt_CasePortalService.xml`](../script_includes/) (`lookupCase` function) returns the same three-field shape — i.e., the field whitelist is enforced at two layers (Script Include + REST operation), so an accidental edit to either layer alone cannot widen the exposure.
 
-- `number` — echoed back as a UX confirmation that the lookup matched the requester-supplied input (see "Documented choice" note above)
+Fields explicitly INCLUDED in the response (the AAP §0.7.4 whitelist):
+
 - `status`
 - `subject`
 - `opened_date`
 
-Fields explicitly EXCLUDED from the response (per AAP Section 0.7.4 — "lookup page returns ONLY status, subject, opened_date — no internal fields exposed"):
+Fields explicitly EXCLUDED from the response (per AAP Section 0.7.4 — "no internal fields exposed"; AAP interprets "internal fields" to mean every field on the case table other than the three above):
 
+- `number` — even though the requester supplied it as input, this implementation does NOT echo it back. The widget already has the user-supplied value in its own scope and re-prints it from the input field; including `number` in the response would be redundant and would weaken the whitelist discipline.
 - `description` — internal narrative
 - `priority` — internal triage
 - `closed_date` — internal disposition (and might be empty)
@@ -195,6 +203,7 @@ Fields explicitly EXCLUDED from the response (per AAP Section 0.7.4 — "lookup 
 - `assigned_agent` — internal assignment
 - `requester_name` — privacy
 - `requester_email` — privacy
+- `type` — internal classification
 - `pending_reason` — internal disposition
 - All `sys_*` audit fields (`sys_id`, `sys_created_on`, `sys_created_by`, `sys_updated_on`, `sys_updated_by`)
 

@@ -254,7 +254,7 @@
                work since UI Actions are not invoked at load time, but
                the AAP-mandated load order keeps user-facing behavior
                artifacts ahead of demo data)
-            - ../update-set/x_case_mgmt_case_management_update_set.xml
+            - ../update-set/x_casemgmt_case_management_update_set.xml
               (the final aggregated Update Set that includes this
                record)
 
