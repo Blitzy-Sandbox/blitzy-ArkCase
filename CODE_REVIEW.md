@@ -338,7 +338,54 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 **Verdict: APPROVED.**
 
-### 3.5 Phase 5 — Frontend  *(Pending)*
+### 3.5 Phase 5 — Frontend  *(Verdict: BLOCKED)*
+
+**Scope reviewed.** The 13 primary-domain files in §2.5 (`sp_portal_x_casemgmt_case_portal.xml`, 2 sp_pages, 3 sp_widgets, `ui_policy/x_casemgmt_case_party_conditional_fields.xml`, 6 ui_actions, `docs/portal-pages.md`).
+
+**Positive findings.**
+
+1. **Service Portal record (`sp_portal_x_casemgmt_case_portal.xml`)** — `active=true`, `public=true`, `url_suffix=x_casemgmt_case_portal`, `homepage=x_casemgmt_case_submit`, `theme` blank (platform default per AAP §0.4.4 "No custom CSS, no custom branding"). Anonymous access is the platform-correct combination of `<public>true</public>` on portal + `<public>true</public>` on pages + `requires_authentication=false` on the REST endpoints.
+2. **Portal pages (2)** — both have `<public>true</public>`. `sp_page_x_casemgmt_case_submit.xml`: id=`x_casemgmt_case_submit`, title=`Submit a Case`. `sp_page_x_casemgmt_case_status.xml`: id=`x_casemgmt_case_status`, title=`Case Status Lookup`. The combination of these two with the portal record matches the AAP §0.4.4 "two unauthenticated pages" requirement.
+3. **Submission widget (`sp_widget_x_casemgmt_case_submission_widget.xml`)** — Form exposes exactly 5 input fields (ng-model bindings): `formData.subject`, `formData.type`, `formData.description`, `formData.requester_name`, `formData.requester_email` — matches the AAP §0.4.4 "5 input fields" requirement verbatim. Substantive template (5650c), server-side script (2169c), client-side controller (11637c).
+4. **Lookup widget (`sp_widget_x_casemgmt_case_lookup_widget.xml`)** — Template renders **exactly 3 fields** via `<dt>/<dd>` (Status, Subject, Opened Date) per AAP §0.4.4. Verbatim AAP §0.7.4 not-found text `"No case found with that number."` is **hardcoded in the template** (not pulled from the server's error response body) — defensive against header-injection / response-smuggling attacks. Substantive template (2621c), server-side script (1252c), client-side controller (8194c).
+5. **Confirmation widget (`sp_widget_x_casemgmt_case_confirmation_widget.xml`)** — Displays the friendly AAP-mandated `"Your case has been submitted"` message and renders the auto-generated case number from `c.options.number`. Substantive template (428c), server-side script (1052c), client-side controller (1612c).
+6. **UI Policy (`ui_policy/x_casemgmt_case_party_conditional_fields.xml`)** — `table=x_casemgmt_case_party`, `active=true`, `run_scripts=true`, `on_load=true`, `order=100`, `conditions=party_typeISNOTEMPTY^ORparty_typeISEMPTY^EQ`. Embedded `script_true` implements the ServiceNow-native equivalent of ArkCase's `@DiscriminatorColumn` polymorphism: shows `person`+mandatory when party_type=Person, shows `organization`+mandatory when party_type=Organization.
+7. **UI Actions (6)** — all `active=true`, all `form_button=true`, all `table=x_casemgmt_case`, all have role-aware conditions matching AAP §0.5.5 transition matrix:
+   - `case_open` (order=100): visible when status=Draft AND caller=case_manager. **Manager-only** per AAP §0.5.5 row 1.
+   - `case_start_progress` (order=200): visible when status=Open AND (case_manager OR assigned_agent).
+   - `case_set_pending` (order=300): visible when status=In Progress AND (case_manager OR assigned_agent).
+   - `case_resume` (order=400): visible when status=Pending AND (case_manager OR assigned_agent).
+   - `case_resolve` (order=500): visible when status=In Progress AND (case_manager OR assigned_agent).
+   - `case_close` (order=600): visible when status=Resolved AND caller=case_manager. **Manager-only** per AAP §0.5.5 row 6.
+8. **Documentation `docs/portal-pages.md`** — substantive (199+ lines); covers Page 1 wireframes/fields/data-flow/error handling; covers Page 2 wireframes/fields/data-flow/error handling; covers output whitelist explicitly listing excluded internal fields (`description`, `assigned_group`, `assigned_agent`, `closed_date`, `requester_name`, `requester_email`, `priority`, `type`, `pending_reason`, all `sys_*`).
+
+**BLOCKED findings.**
+
+- **FE-1 (MINOR-BLOCKED) — Documentation-implementation drift for lookup endpoint response shape.**
+  - **File:** `servicenow-case-management-poc/docs/portal-pages.md`
+  - **Lines:** 172 and 180.
+  - **Issue:** Line 172 documents the lookup endpoint response as `{ "number": "...", "status": "...", "subject": "...", "opened_date": "..." }` — four fields. Line 180 adds a rationale paragraph titled *"Documented choice on field count (4 vs. 3)"* claiming "This implementation returns 4 fields by additionally echoing back the requester-supplied case `number`."
+  - **Reality:** The actual implementation in `script_includes/x_casemgmt_CasePortalService.xml` (`lookupCase` function) returns exactly 3 fields:
+      ```
+      return {
+          status:      String(caseGr.getValue('status') || ''),
+          subject:     String(caseGr.getValue('subject') || ''),
+          opened_date: String(caseGr.getValue('opened_date') || '')
+      };
+      ```
+    And the REST operation in `portal/rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml` (step 5 of the operation script) re-projects exactly 3 fields:
+      ```
+      response.setBody({
+          status:      String(result.status      || ''),
+          subject:     String(result.subject     || ''),
+          opened_date: String(result.opened_date || '')
+      });
+      ```
+  - **AAP impact:** The actual code IS compliant with AAP §0.7.4 ("returns ONLY status, subject, opened_date — no internal fields exposed"). The documentation, however, contradicts the code and would mislead operators / integrators / future maintainers.
+  - **Required fix:** Update `docs/portal-pages.md` line 172 to show the actual 3-field response shape `{ "status": "...", "subject": "...", "opened_date": "..." }`. Delete or rewrite the line-180 "4 vs. 3" rationale paragraph (it documents a design choice that was never made). Keep the existing "Fields explicitly EXCLUDED" list and the rest of the page intact.
+  - **Severity rationale:** MINOR because runtime behavior is correct and the user-facing widget template already displays only the 3 correct fields; BLOCKED nonetheless because a published deliverable doc that contradicts the production code creates downstream maintenance hazard.
+
+**Verdict: BLOCKED.**
 
 ### 3.6 Phase 6 — QA / Test Integrity  *(Pending)*
 
