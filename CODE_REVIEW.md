@@ -387,7 +387,24 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 **Verdict: BLOCKED.**
 
-### 3.6 Phase 6 — QA / Test Integrity  *(Pending)*
+### 3.6 Phase 6 — QA / Test Integrity  *(Verdict: APPROVED)*
+
+**Scope reviewed.** The 12 primary-domain files in §2.6 (8 reports, 2 dashboards, `docs/dashboards.md`, `docs/validation-gates.md`) PLUS the cross-cutting QA dimensions: AAP §0.7.3 validation-gate definitions, AAP §0.7.4 seed-data minimum thresholds, the round-trip-verify procedure in `scripts/round_trip_verify.md`, and the XML well-formedness baseline established in Phase A.
+
+**Positive findings.**
+
+1. **AAP §0.7.3 Validation-Gates table reproduced verbatim** — `docs/validation-gates.md` lines 22–30 carry the 7-row Gate / Criterion / Pass-Condition table character-for-character (Data model, Workflow, ACLs, Portal — submission, Portal — lookup, Dashboards, Update Set). Lines 32–148 add substantive per-gate detail with the explicit AAP cross-references and the failure-mode handling required by AAP §0.7.2 Minimal-Change Clause.
+2. **All 8 reports present and well-typed** — for the Agent Workspace dashboard: `x_casemgmt_my_open_cases.xml` (list; filter `assigned_agent=javascript:gs.getUserID()^statusNOT INResolved,Closed`; field list `number,subject,priority,status,opened_date`), `x_casemgmt_my_overdue_tasks.xml` (list; filter `assigned_to=javascript:gs.getUserID()^due_date<javascript:gs.daysAgoStart(0)^status!=Closed`; field list `subject,case,due_date,status`), `x_casemgmt_case_count_by_status.xml` (pie; group_by `status`; aggregate COUNT). For the Manager View dashboard: `x_casemgmt_all_cases_by_status.xml` (bar; status), `x_casemgmt_all_cases_by_type.xml` (pie; type), `x_casemgmt_all_cases_by_priority.xml` (bar; priority), `x_casemgmt_avg_time_to_close.xml` (single_score; AVG over the `duration_to_close` Function Field; filter `status=Closed`), `x_casemgmt_cases_opened_30d.xml` (single_score; COUNT; filter `opened_date>=javascript:gs.daysAgoStart(30)`).
+3. **Both dashboards present, active, scoped, and reference-clean** — `pa_dashboards_x_casemgmt_agent_workspace.xml` (`active=true`, `name=x_casemgmt_agent_workspace`, `title=Agent Workspace`, `canvas_id=x_casemgmt_agent_workspace_canvas`, `order=100`) and `pa_dashboards_x_casemgmt_manager_view.xml` (`active=true`, `name=x_casemgmt_manager_view`, `title=Manager View`, `canvas_id=x_casemgmt_manager_view_canvas`, `order=200`). String-presence scan of both dashboard XMLs confirms all expected report names appear as content (Agent Workspace references all 3 Agent-Workspace reports; Manager View references all 5 Manager-View reports). Zero broken report references → AAP §0.7.3 Validation Gate 6 pass criterion satisfied.
+4. **Dashboards.md aligns widget definitions with AAP §0.4.4** — Agent Workspace widget table (lines 35–43) lists 3 widgets matching the AAP exactly (My Open Cases / My Overdue Tasks / Case Count by Status). Manager View widget table (lines 85–95) lists 5 widgets matching the AAP exactly (All Cases by Status / Type / Priority + Avg Time to Close + Cases Opened 30 Days). The Manager-View Widget 4 entry (lines 125–135) documents the `duration_to_close` Function-Field design rationale required to satisfy `AVG(closed_date - opened_date)` aggregation at the database layer.
+5. **Round-trip-verify procedure substantive** — `scripts/round_trip_verify.md` is 238 lines with 4 phases (Upload, Preview, Commit, Re-Verify Gates 1–6 + Gate 7 final confirmation) plus a Pass/Fail Decision section. Phase 4 individually re-verifies every one of the 7 validation gates against the freshly-committed PDI, providing the full AAP §0.7 round-trip integrity check.
+6. **Seed-data thresholds (AAP §0.7.4) satisfied** — confirmed independently in Phase 4: 10 demo cases across all 6 statuses (Draft 1, Open 2, In Progress 2, Pending 1, Resolved 2, Closed 2), both case types present (General Inquiry 6, Complaint 4), 3 demo users (one per role). 10 demo tasks distributed across cases that exercise the task-closure gate from both directions.
+7. **XML well-formedness baseline maintained** — All 147 in-scope XML files parse cleanly with `xml.etree.ElementTree` (verified in Phase A). The single in-scope JS file (`scripts/seed_demo_data.js`, 1452 lines) passes `node --check`.
+8. **No `sys_id`-by-literal violations in QA-domain artifacts** — Reports use `javascript:gs.getUserID()` / `javascript:gs.daysAgoStart(...)` runtime expressions; dashboards use `name`-based widget binding; no 32-char hex `sys_id` literals appear in any QA-domain script, filter, or condition expression. Verified by the Phase 2 Python-AST walk.
+
+**No BLOCKED findings.**
+
+**Verdict: APPROVED.**
 
 ### 3.7 Phase 7 — Other SME  *(Pending)*
 
