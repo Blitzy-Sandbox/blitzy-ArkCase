@@ -506,9 +506,31 @@ Re-executed against the current PR head `95d8348c5a` (post-remediation) on the a
 
 Per Refine PR rules, every phase MUST execute in fixed order in every cycle and MUST resolve to exactly APPROVED or BLOCKED. Reviewers do not modify code, run fixes, or re-run tests during phase review. Findings are recorded at file and line specificity.
 
-### 7.1 Phase 1 — Infrastructure / DevOps  *(Verdict: Pending)*
+### 7.1 Phase 1 — Infrastructure / DevOps  *(Verdict: APPROVED)*
 
-*To be populated.*
+**Scope:** 32 files — `update-set/`, `app/sys_app/`, `app/sys_scope/`, `tables/`, `dictionary/`, `choices/`, `numbers/`, plus configuration plumbing.
+
+**Required re-verification (from Cycle 1 INFRA-1):**
+
+| Re-Verification Target | Evidence | Result |
+| --- | --- | --- |
+| `ui_action/x_casemgmt_case_set_pending.xml:257` correctly reads `../update-set/x_casemgmt_case_management_update_set.xml` (without the rogue `_mgmt` infix) | Direct `sed -n '255,260p'` of the file shows the corrected path. `grep -c 'x_case_mgmt_case_management_update_set.xml'` returns 0 inside this file. | PASS |
+| Repository-wide: only the intentional self-correcting note inside `update-set/x_casemgmt_case_management_update_set.xml` (lines 33–34, inside `<!-- … -->`) still references the legacy `x_case_mgmt` token | `grep -rl 'x_case_mgmt' servicenow-case-management-poc/` returns exactly 1 file (the update-set itself). | PASS |
+| Consolidated update-set XML's embedded payload for the set_pending UI Action (lines 8909–9180) carries NO stale `x_case_mgmt` reference | `sed -n '8909,9180p' \| grep 'x_case_mgmt'` returns 0 hits. | PASS |
+| Per-record UI Action file still parses as well-formed XML after the in-place comment edit | `xml.etree.ElementTree.parse()` succeeds for `x_casemgmt_case_set_pending.xml` and for all other 5 UI Action files. | PASS |
+| Per-record UI Action file shows the remediation commit (`95d8348c5a`) as its latest touchpoint | `git log --oneline -3 -- ui_action/x_casemgmt_case_set_pending.xml` confirms `95d8348c5a Cycle 1 remediation: fix INFRA-1…` as HEAD touch. | PASS |
+
+**Other Phase 1 dimensions re-verified in Cycle 2:**
+
+1. **Update Set structural validity** — 14,034 lines, well-formed XML, 149 real `<sys_update_xml>` elements (matches XPath count). The 150 vs 149 token-count delta is fully explained: 1 of the 150 raw `<sys_update_xml` string matches sits inside the file-preamble `<!-- … -->` comment at line 42 (`"Sequence of <sys_update_xml> records in dependency order"`), which is benign documentation, not an element.
+2. **sys_app / sys_scope cross-consistency** — `sys_app/x_casemgmt_case_management.xml` declares `<scope>x_casemgmt</scope>`, `<version>1.0.0</version>`, `<active>true</active>`. `sys_scope/x_casemgmt.xml` declares the matching `<name>x_casemgmt</name>` and `<version>1.0.0</version>`. Scope IDs are byte-identical.
+3. **ACL inventory** — 26 ACL files present, exactly matching the AAP §0.3.1 enumeration (10 case ACLs + 8 task ACLs + 8 party ACLs).
+4. **Number-maintenance records** — All 3 (case/task/party) carry distinct uppercase prefixes (`CASE` / `TASK` / `PARTY`), `<maximum>0</maximum>` and `<number>0</number>` starting counters, and correctly-scoped `<category>` values.
+5. **Build artifacts clean** — 147/147 XML parse successfully; 1/1 JS passes `node --check`; 0 hardcoded sys_id literals in `<script>` / `<condition>` / `<filter>` content across the entire repository.
+
+**Findings:** None. INFRA-1 is fully resolved (both at per-record level and embedded-payload level). No new infrastructure issues introduced by the remediation commit.
+
+**Phase 1 verdict: APPROVED.**
 
 ### 7.2 Phase 2 — Security  *(Verdict: Pending)*
 
