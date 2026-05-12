@@ -302,7 +302,41 @@ Every changed file is assigned to **exactly one primary domain** (per Refine PR 
 
 **Verdict: APPROVED.**
 
-### 3.4 Phase 4 — Business / Domain  *(Pending)*
+### 3.4 Phase 4 — Business / Domain  *(Verdict: APPROVED)*
+
+**Scope reviewed.** The 30 primary-domain files in §2.4 (10 demo cases, 10 demo tasks, 8 demo parties, `docs/data-model.md`, `docs/state-machine.md`) PLUS the AAP-canonical compliance dimensions for the matrices in §0.5.5, §0.5.6, §0.5.7.
+
+**Positive findings.**
+
+1. **State-machine transition matrix vs AAP §0.5.5** — `docs/state-machine.md` lines 54–63 reproduce the 8-row matrix character-for-character with the verbatim error strings in the Blocking-error column. Lines 93–105 add a per-transition implementation map that pins each row to its enforcing subflow or business rule.
+2. **ACL matrix vs AAP §0.5.6** — `docs/acl-matrix.md` lines 11–22 reproduce the 3-row role × CRUD table verbatim including the "Assigned only" footnote; lines 27–32 reproduce the logical expression and the ACL condition script.
+3. **Data model vs AAP §0.5.7** — `docs/data-model.md` Tables 1/2/3 (lines 67–80 for `x_casemgmt_case`, lines 124–134 for `x_casemgmt_case_task`, lines 156–162 for `x_casemgmt_case_party`) reproduce the AAP field tables verbatim (Field / Type / Constraints columns). The two additive fields (`pending_reason`, `duration_to_close`) are documented with AAP cross-references (§0.4.1, §0.5.5, §0.4.4, §0.7.2 Minimal-Change Clause, §0.7.3 Validation Gate 6) explaining why they are necessary to satisfy the matrix and the dashboards.
+4. **Verbatim blocking-error wording in executable artifacts (not just docs)** — Each of the 3 verbatim AAP error strings is emitted from runtime artifacts, not merely referenced in documentation:
+   - `"All tasks must be closed before resolving this case."` → emitted by `script_includes/x_casemgmt_CaseTransitionValidator.xml`, `flows/sub_flows/validate_resolved_transition.xml`, and both parent flow snapshots (`general_inquiry_state_machine.xml`, `complaint_state_machine.xml`).
+   - `"Cases cannot be returned to Draft."` → emitted by `script_includes/x_casemgmt_CaseTransitionValidator.xml`, `business_rules/x_casemgmt_block_draft_backtransition.xml`, and both parent flow snapshots.
+   - `"Closed cases are terminal and cannot be modified."` → emitted by `script_includes/x_casemgmt_CaseTransitionValidator.xml`, `business_rules/x_casemgmt_block_terminal_closed.xml`, and both parent flow snapshots.
+5. **Demo-data status × type coverage (AAP §0.7.4 minimums)** — Parsing all 10 case seed XMLs confirms full coverage:
+   - **Status counts:** Draft = 1, Open = 2, In Progress = 2, Pending = 1, Resolved = 2, Closed = 2 → all 6 statuses present.
+   - **Type counts:** General Inquiry = 6, Complaint = 4 → both case types present.
+   - 10 cases total → meets the AAP §0.7.4 minimum ("at least 10 cases across all statuses, both case types represented").
+6. **Demo-data task-closure-gate exercise** — The task seed dataset positively exercises the In Progress → Resolved gate from both directions:
+   - **Blocking direction** (cases that would block Resolved): CASE0000003 (In Progress) has 1 Open + 1 Closed task; CASE0000008 (In Progress) has 1 In Progress + 1 Open + 1 Closed task. Either case attempting Resolved would surface verbatim `"All tasks must be closed before resolving this case."`.
+   - **Satisfaction direction** (Resolved cases whose seed state is internally consistent): CASE0000005 (Resolved) has both child tasks Closed; CASE0000009 (Resolved) has its sole child task Closed.
+7. **Polymorphic UI-Policy exercise** — 3 of the 8 demo parties pair Person + Organization on the same case (CASE0000003, CASE0000005, CASE0000008), satisfying the operative AAP §0.3.1 goal "to exercise the polymorphic UI policy". The UI Policy in `ui_policy/x_casemgmt_case_party_conditional_fields.xml` is therefore demonstrably exercisable through the seed data.
+8. **No PII** — All seed values are synthetic: user emails use the IANA-reserved `.invalid` TLD (RFC 6761), names are role-descriptive (Demo Manager / Demo Agent / Demo Viewer), the demo group is `x_casemgmt_demo_team`, the demo company is also synthetic, and case subjects / descriptions are non-PII.
+
+**Observations (non-blocking).**
+
+- **BUS-OBS-1 (informational, NOT BLOCKED) — Parties distribution.** 8 demo parties are distributed across 5 of 10 demo cases (CASE0000003, CASE0000004, CASE0000005, CASE0000008, CASE0000009). The AAP contains two readings of this requirement:
+   - §0.3.1 strict reading: "*at least one Person and one Organization party **per demo case** to exercise the polymorphic UI policy*" — implies coverage on every demo case.
+   - §0.5.1 lenient reading: "*Demo parties; mix of Person and Organization rows **on selected demo cases**.*" — explicitly authorizes partial coverage.
+   - §0.7.4 minimum demo-data threshold list (the authoritative pass criterion): explicitly enumerates cases (10), case-types (2), users (3) — does **not** list parties as a minimum threshold.
+   - The operative goal stated in §0.3.1 itself ("to exercise the polymorphic UI policy") is satisfied because 3 cases (03, 05, 08) have both party types.
+   - Verdict on this observation: not blocking. The implementation aligns with §0.5.1 ("selected demo cases"), satisfies the operative §0.3.1 goal, and the §0.7.4 minimum threshold list (binding pass criterion) does not contradict it. Documented here for transparency.
+
+**No BLOCKED findings.**
+
+**Verdict: APPROVED.**
 
 ### 3.5 Phase 5 — Frontend  *(Pending)*
 
