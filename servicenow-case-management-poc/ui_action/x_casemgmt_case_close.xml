@@ -1,0 +1,758 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_ui_action` row that
+    declares the `Close` form button on the `x_casemgmt_case` custom table
+    inside the scoped application `x_casemgmt`.
+
+    The concrete scope identifier `x_casemgmt` is used consistently throughout
+    this repository per ../docs/state-machine.md: "ServiceNow Update Set imports
+    use a standard XML parser, so the scope id must be concrete in every record
+    before the Update Set is exported." All sibling XML records in this Update
+    Set use `x_casemgmt` byte-for-byte; this UI Action follows the same
+    convention. The AAP Section 0.7.2 placeholder `x_[scope]_` is a TEMPLATE
+    that resolves to `x_casemgmt_` at materialization time.
+
+    PURPOSE (AAP Section 0.5.5 verbatim, row 6):
+        From          To             Required condition / behavior
+        Resolved      Closed         Caller has x_casemgmt_case_manager role;
+                                     auto-set closed_date.
+                                     Failure: Surface form-level error.
+
+    This UI Action is the user-facing ENTRY POINT for the Resolved -> Closed
+    transition - the FINAL forward transition in the case state-machine
+    (Draft -> Open -> In Progress -> [Pending <-> In Progress] -> Resolved
+    -> Closed). It surfaces a "Close" button on the case form whenever the
+    case is currently in `Resolved` status AND the current user holds the
+    x_casemgmt_case_manager role. Clicking the button advances the case to
+    Closed status, provided that the transition guard `canTransitionToClosed`
+    from the central Script Include
+    ../script_includes/x_casemgmt_CaseTransitionValidator.xml passes (i.e.,
+    the user holds the case_manager role). Failure surfaces a verbatim
+    blocking error message via gs.addErrorMessage on the form per AAP
+    Section 0.7.1.
+
+    THE CLOSURE TRANSITION - WHY CLOSE IS THE TERMINAL TRANSITION:
+
+        Resolved -> Closed is the FINAL transition in the case lifecycle.
+        Once a case reaches Closed status, the
+        ../business_rules/x_casemgmt_block_terminal_closed.xml before-update
+        Business Rule (order=100) PROHIBITS any further modification per AAP
+        Section 0.5.5 row 8 (terminal state) with the verbatim AAP Section
+        0.7.4 message: "Closed cases are terminal and cannot be modified."
+        This is the canonical anti-regression guard that protects the
+        irreversibility of closure.
+
+        The role check (case_manager only) reflects AAP Section 0.5.6 ACL
+        matrix:
+          - case_manager: Create + Read All + Write All + Delete -> CAN close
+          - case_agent:   Create + Read Assigned + Write Assigned -> CANNOT close
+          - case_viewer:  Read All only                          -> CANNOT close
+        Only case_manager has the authority to terminally close a case
+        because closure is an irreversible administrative action. case_agents
+        progress cases through Open/In Progress/Pending/Resolved but cannot
+        terminally close them. case_viewers are read-only.
+
+        The check is delegated to the central Script Include's
+        canTransitionToClosed(caseGr, userId) method. Per AAP Section 0.7.2
+        Rule 5 ("Delegate to Script Include - DO NOT inline the role check"),
+        the UI Action does NOT inline the role-membership query. The Script
+        Include is the SINGLE SOURCE OF TRUTH for both the role check AND
+        the verbatim error message text "Only case managers can close
+        cases.", shared with:
+          - ../flows/sub_flows/validate_closed_transition.xml (the Flow
+            Designer subflow that fires on the OnUpdate trigger of the two
+            parent state-machine flows; covers non-form transition paths
+            like Table API and scripted REST)
+          - Any future scripted REST endpoint or scheduled job that performs
+            Resolved -> Closed transitions
+
+        Centralizing the guard in the Script Include guarantees that the
+        error message text is identical across all callers (no drift between
+        this UI Action's surfaced message and the flow's surfaced message),
+        and future rule changes (e.g., requiring a closure_reason or
+        closure_outcome) only need to be made in the Script Include.
+
+    THE CLOSED_DATE SIDE-EFFECT (set_closed_date Business Rule):
+
+        Per AAP Section 0.5.5 row 6 ("auto-set closed_date"), the closure
+        timestamp is auto-populated when status transitions to Closed. This
+        UI Action does NOT set current.closed_date directly; instead, it
+        sets current.status = 'Closed' and calls current.update(), and the
+        ../business_rules/x_casemgmt_set_closed_date.xml before-update
+        Business Rule (order=500) fires on the same transaction and sets
+        current.closed_date = gs.nowDateTime() before the database write
+        completes.
+
+        This separation is intentional and follows the SINGLE-RESPONSIBILITY
+        principle:
+          - The UI Action's responsibility: validate the transition and set
+            the new status.
+          - The Business Rule's responsibility: maintain the closed_date
+            invariant (closed_date is non-null IFF status == Closed).
+
+        The Business Rule fires for ALL Resolved -> Closed transitions,
+        including those triggered by:
+          - This UI Action (form button click)
+          - The Flow Designer subflow validate_closed_transition.xml
+          - Direct Table API edits (e.g., scripted REST endpoints)
+          - Future scheduled jobs or background scripts
+        Centralizing the closed_date logic in the BR guarantees consistency
+        regardless of the trigger path.
+
+    THE TERMINAL-STATE GUARD (block_terminal_closed Business Rule):
+
+        Per AAP Section 0.5.5 row 8 ("Closed -> *: PROHIBITED - Terminal state"),
+        once a case is Closed, ANY further update is rejected by the
+        ../business_rules/x_casemgmt_block_terminal_closed.xml Business Rule
+        (order=100, the highest priority). The BR's check is:
+            previous.status == 'Closed'  -> abort with verbatim message
+                "Closed cases are terminal and cannot be modified."
+        This BR fires BEFORE this UI Action's update would complete... but
+        only on the SUBSEQUENT update. For THIS UI Action's update, the
+        previous status is 'Resolved' (not 'Closed') - so the BR is a no-op
+        for this transition.
+
+        The terminal-state guard takes effect on the FIRST update AFTER this
+        UI Action commits. From that point forward, any attempt to modify
+        the case (whether via UI, Table API, scripted REST, or otherwise)
+        is rejected by the BR. This is the canonical anti-regression
+        guarantee that closure is irreversible.
+
+        Edge case: if a stale-form attack tries to click Close on an
+        already-Closed case, the platform's standard form-button verb
+        pipeline calls this UI Action's <script> body. The defense-in-depth
+        status check (current.status != 'Resolved') would catch this (since
+        a Closed case has status='Closed', not 'Resolved') and surface
+        "Only Resolved cases can be closed.". Even if that defensive check
+        somehow failed, the block_terminal_closed BR would catch the update
+        attempt and surface the verbatim AAP Section 0.7.4 message.
+
+    SERVER-SIDE-ONLY PATTERN (matches sibling case_open.xml, case_resolve.xml,
+    case_resume.xml, case_start_progress.xml; contrasts with case_set_pending.xml):
+
+        This Close UI Action runs ENTIRELY on the server. There is no input
+        to collect from the user beyond the click - the transition has no
+        required parameters (no closure_reason, no closure_outcome, etc. -
+        per the MINIMAL-CHANGE-CLAUSE in AAP Section 0.7.2). The single
+        click invokes the server script directly via the platform's
+        standard form-button verb pipeline, with no <onclick> JavaScript
+        and no client-side function definition.
+
+        Phase 1 - User clicks the "Close" button.
+        Phase 2 - The platform evaluates the visibility <condition> on the
+                  server when the form was rendered; the button is shown
+                  only if the condition was true (status==Resolved AND
+                  user has case_manager role).
+        Phase 3 - The platform invokes the form-submit verb derived from
+                  this UI Action's sys_name (`sysverb_x_casemgmt_case_close`).
+        Phase 4 - The platform binds `current` (the case GlideRecord),
+                  `gs` (GlideSystem), `action` (UI Action helper), and
+                  evaluates the <script> body in a server sandbox.
+        Phase 5 - The script performs three layers of defense-in-depth
+                  validation (role, status, transition guard via Script
+                  Include) before executing the transition.
+        Phase 6 - The script sets current.status = 'Closed' and calls
+                  current.update() ONCE to persist the change.
+        Phase 7 - The script calls action.setRedirectURL(current) to
+                  refresh the form so the operator sees the updated status
+                  AND the auto-populated closed_date stamp.
+
+        The single current.update() call triggers the platform's full
+        before-update Business Rule pipeline, including:
+          - x_casemgmt_block_terminal_closed.xml (no-op because previous
+            status is Resolved, not Closed)
+          - x_casemgmt_block_draft_backtransition.xml (no-op because
+            target is Closed, not Draft)
+          - x_casemgmt_validate_assigned_agent_membership.xml (passes if
+            assigned_agent is still a member of assigned_group; in normal
+            workflow this should already be true when the case reached
+            Resolved)
+          - x_casemgmt_clear_pending_reason_on_inprogress.xml (no-op
+            because target is Closed, not In Progress; pending_reason
+            should already be empty since Resolved has no pending_reason)
+          - x_casemgmt_set_closed_date.xml (FIRES - target is Closed and
+            previous is Resolved; auto-populates closed_date =
+            gs.nowDateTime() before the database write completes)
+
+        The two Flow Designer flows (general_inquiry_state_machine.xml
+        and complaint_state_machine.xml) also fire on this update via
+        their OnUpdate triggers filtered on `status` change, calling the
+        validate_closed_transition subflow which itself delegates to
+        x_casemgmt.CaseTransitionValidator.canTransitionToClosed() - the
+        SAME helper this UI Action calls. Together they form a defense-in-depth
+        guard pair: the UI Action blocks the transition at the form level
+        (better UX - user sees the error message immediately), and the
+        flow blocks it at the workflow level (catches Table API and other
+        non-form paths).
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.2.1):
+
+        acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java
+        line 79-114 - the central ArkCase case state-machine service. Its
+        `changeCaseState(auth, caseId, newState, ipAddress)` method
+        contains the canonical Java reference (line 97-100):
+
+            if ("CLOSED".equals(newState))
+            {
+                retval.setClosed(now);
+            }
+
+        This is the EXACT semantic counterpart of this UI Action's behavior
+        plus the cooperating set_closed_date BR: when the new state is
+        "CLOSED", the close timestamp is set. The ServiceNow target splits
+        the responsibility:
+          - This UI Action sets current.status = 'Closed' (the user's
+            intent, expressed via the button click) and calls current.update().
+          - The set_closed_date BR (order=500) sets current.closed_date =
+            gs.nowDateTime() during the same before-update pipeline.
+        The split is more maintainable than ArkCase's monolithic
+        changeCaseState method because:
+          - Future changes to the close-time semantics (e.g., capturing
+            the user who closed the case in addition to the timestamp)
+            only require a BR change, not a UI Action change.
+          - The closed_date side-effect fires for ALL Resolved -> Closed
+            transitions, not just those triggered through the UI button.
+
+        That single Java method covered EVERY transition by string-matching
+        the `newState` parameter. The ServiceNow target instead splits
+        per-transition logic across:
+          - This UI Action (Resolved -> Closed, the close edge)
+          - Sibling UI Actions for every other transition
+          - The central Script Include CaseTransitionValidator (single
+            source of truth for transition guards, called from this UI
+            Action AND from the Flow Designer subflow
+            validate_closed_transition.xml)
+          - The two parent state-machine flows (which also trigger on
+            this status change via their OnUpdate filters)
+          - The cooperating Business Rules (set_closed_date for the
+            timestamp side-effect; block_terminal_closed for subsequent
+            anti-regression)
+
+        Per AAP Section 0.7.2 the email-notification-disabled constraint
+        explicitly excludes the equivalent of ArkCase's raiseEvent() call
+        (line 106 in ChangeCaseFileStateService.java). The ServiceNow POC
+        contains zero gs.eventQueue() calls - the email-disabled PDI does
+        not need notification listeners and including them would violate
+        the AAP constraint.
+
+    BUTTON VISIBILITY CONDITION (the <condition> field):
+
+        The button is shown when ALL of the following are true:
+          1) current.status == 'Resolved'  (the source state of the
+             Resolved -> Closed transition)
+          2) The current user holds the x_casemgmt_case_manager role
+             (the ONLY role authorized to terminally close cases per
+             AAP Section 0.5.5 row 6 verbatim)
+
+        Unlike the sibling case_resolve.xml UI Action (which is visible
+        to BOTH case_manager AND assigned case_agent), this Close button
+        is visible to case_manager ONLY. The reason: per AAP Section
+        0.5.5 row 6, "Caller has x_casemgmt_case_manager role" is a
+        REQUIRED condition for the Resolved -> Closed transition. agents
+        cannot terminally close cases - they can only progress them
+        through the working states (Open/In Progress/Pending/Resolved).
+
+        The visibility check runs server-side (the <condition> field is
+        evaluated by the platform when rendering the form). The
+        defense-in-depth check inside the <script> body re-validates the
+        same conditions on the server when the button is clicked, providing
+        two layers of validation that protect against:
+          - Form-tampering attacks where the user edits hidden form fields
+            to attempt the transition from a non-Resolved state
+          - Race conditions where the user opens the form, the case
+            transitions out of Resolved in another browser tab, then the
+            user clicks Close in the original tab
+          - Role escalation attempts where a non-manager somehow gains
+            access to the form
+
+    ORDER WITHIN UI ACTION SEQUENCE:
+
+        order=600 places Close as the LAST UI Action in the workflow
+        sequence (the terminal transition):
+            1) Open               (order=100       - Draft -> Open)
+            2) Start Progress     (order=200       - Open -> In Progress)
+            3) Set Pending        (order=300       - In Progress -> Pending)
+            4) Resume             (order=400       - Pending -> In Progress)
+            5) Resolve            (order=500       - In Progress -> Resolved)
+            6) Close              (order=600, THIS - Resolved -> Closed)
+
+        The ordering is for UI display only - the platform renders form
+        buttons in ascending order. Only one button is visible at a time
+        (each visibility <condition> matches a different status), so the
+        ordering does not affect runtime correctness. Close carries
+        order=600 because it is the LAST transition in the canonical
+        forward sequence; it is rendered last in the button bar.
+
+    FORM_STYLE = destructive:
+
+        Close is the TERMINAL action. Once executed, the case can never be
+        modified again (per the block_terminal_closed BR). The button is
+        rendered with the platform's "destructive" visual style (typically
+        a red-tinted button) to draw the user's attention to the
+        irreversibility of the action. This contrasts with sibling UI
+        Actions:
+          - Open, Start Progress, Resume, Resolve all use form_style=primary
+            (blue/affirmative) - the case is moving forward through working
+            states
+          - Set Pending uses form_style=secondary (subdued) - the case is
+            paused but still active
+          - Close uses form_style=destructive (red/terminal) - the case
+            is permanently closed and cannot be modified again
+
+        The destructive style is the canonical platform pattern for
+        irreversible record-state changes. It is consistent with how
+        out-of-the-box ServiceNow tables (e.g., incident, problem, change)
+        style their terminal-transition buttons.
+
+    MANAGER-ONLY VISIBILITY (AAP Section 0.5.5 row 6 + AAP Section 0.5.6
+    ACL Matrix):
+
+        Only x_casemgmt_case_manager sees the Close button. The rationale
+        per AAP Section 0.5.6 ACL Matrix:
+
+          - case_manager has full access (Create + Read All + Write All +
+            Delete on the case table). Close is a Write operation that
+            also has the SPECIAL semantics of being TERMINAL (per AAP
+            Section 0.5.5 row 8 verbatim "Closed: Terminal state. No
+            transitions permitted from Closed."). Per AAP Section 0.5.5
+            row 6, ONLY case_manager has the authority to perform this
+            terminal transition.
+
+          - case_agent has Write Assigned only access. They can transition
+            cases through Open/In Progress/Pending/Resolved (the working
+            states) but cannot terminally close them. case_agent is
+            therefore EXCLUDED from the <roles> field.
+
+          - case_viewer has Read All only access (no Write). Close is a
+            Write operation. case_viewer is therefore excluded from the
+            <roles> field.
+
+        The visibility <condition> further filters case_manager visibility
+        to Resolved-status cases only:
+            current.status == 'Resolved'
+        case_manager would otherwise see the Close button on cases in
+        every status, which would be confusing UX. The status filter
+        ensures the button only appears on cases that are eligible for
+        the Resolved -> Closed transition.
+
+    DELEGATION TO Script Include (canTransitionToClosed):
+
+        Per the assigned-folder requirements: "[The UI Action] delegates
+        validation to x_casemgmt.CaseTransitionValidator.canTransitionToClosed()
+        - single source of truth across UI Actions, flows, and business
+        rules". This is encoded in the <script> body via:
+            var validator = new x_casemgmt.CaseTransitionValidator();
+            var result = validator.canTransitionToClosed(current, gs.getUserID());
+
+        The Script Include's canTransitionToClosed(caseGr, userId) method
+        returns:
+          { ok: true } when the user has the case_manager role, OR
+          { ok: false, error: 'Only case managers can close cases.' }
+            when the role check fails, OR
+          { ok: false, error: 'Case record is missing.' } when caseGr
+            is null/undefined (defensive guard against unexpected input)
+
+        The Script Include accepts the userId parameter (via gs.getUserID()
+        in this UI Action's calling context) so that the same method can
+        be called from non-current-user contexts (e.g., from a system-context
+        scheduled job that needs to verify the role membership of a
+        different user). The current-user-by-default branch is exercised
+        by THIS UI Action since gs.getUserID() always returns the current
+        session user. The non-current-user branch is exercised by future
+        scheduled jobs or scripted REST endpoints.
+
+        The result.error string is surfaced VERBATIM via gs.addErrorMessage,
+        NOT replaced with a hardcoded UI-Action-local message. This
+        guarantees that the surfaced error message text is identical
+        across all callers (this UI Action, the Flow Designer subflow
+        validate_closed_transition.xml, and any future scripted REST
+        endpoint or scheduled job).
+
+    DEFENSE-IN-DEPTH STATUS CHECK (current.status != 'Resolved' guard):
+
+        Even though the visibility <condition> already gates the button
+        on `current.status == 'Resolved'`, the <script> body re-validates
+        on the server when the button is clicked. The defensive re-check
+        protects against:
+
+          - Stale-form attack: User opens the form when status is
+            Resolved, the case transitions in another browser tab (e.g.,
+            another manager already closes it), then the user clicks
+            Close in the original tab. Without the defensive re-check,
+            the second click would attempt to "close" an already-Closed
+            case, which would either:
+              (a) fail silently (bad UX), OR
+              (b) fail with the cryptic block_terminal_closed BR error
+                  message, which while technically correct does not
+                  educate the user about the underlying staleness.
+            With the defensive re-check, the user receives an immediate
+            and informative blocking error: "Only Resolved cases can be
+            closed."
+
+          - Direct Table API attack: User crafts an HTTP POST to the
+            Table API endpoint that mimics the form-submit verb. Without
+            the defensive re-check, the POST would bypass the form-render
+            <condition> entirely. The defensive re-check catches this.
+
+          - Race condition with the OnUpdate flow: The Flow Designer
+            flow could potentially modify the case status between the
+            form render and the user's click. The defensive re-check
+            catches this.
+
+    DEFENSIVE ROLE RE-CHECK (gs.getUser().hasRole guard):
+
+        The visibility <condition> and <roles> field already restrict the
+        button to case_manager users. The <script> body re-validates the
+        role on the server-side click handler. The defensive re-check
+        protects against:
+
+          - Role-escalation attack: User holds the case_manager role
+            when the form is rendered (button is shown), then the role
+            is revoked between form render and click. Without the
+            defensive re-check, the click would still succeed.
+
+          - Direct Table API attack: User crafts an HTTP POST to the
+            Table API endpoint that mimics the form-submit verb. Without
+            the defensive re-check, the POST would bypass the <roles>
+            field's visibility filter entirely.
+
+          - Form-tampering attack: User edits hidden form fields or
+            otherwise crafts a malicious form-submit payload. The
+            server-side re-check catches this.
+
+        The defensive re-check is the FIRST guard (before the status
+        check) so that role-escalation attempts surface a role-specific
+        error message ("Only case managers can close cases.") rather
+        than a status-specific message that might leak workflow
+        information.
+
+    DETERMINISTIC SYS_ID:
+
+        Per AAP Section 0.7.2 Rule 2 ("No hardcoded sys_ids - every
+        cross-reference is a GlideRecord lookup by stable, human-readable
+        key"), this UI Action's <sys_id> below is computed deterministically
+        from the sys_name via:
+            printf '%s' 'x_casemgmt_case_close' | md5sum | cut -c1-32
+
+        Deriving from the record name guarantees idempotent re-import on
+        a fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in
+        place rather than creating a duplicate. This is the same convention
+        used by all sibling UI Actions in this folder (Open, Start Progress,
+        Set Pending, Resume, Resolve, Close).
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error". This
+          UI Action is the PRIMARY user-facing trigger for the Resolved
+          -> Closed transition (per AAP Section 0.5.5 row 6). The Script
+          Include's canTransitionToClosed enforces the case_manager role
+          check and surfaces the verbatim message "Only case managers
+          can close cases." if violated. The defense-in-depth role and
+          status re-checks prevent stale-form submissions from corrupting
+          the state machine.
+
+        - Gate 3 (ACLs): "Role-based access enforced - case_viewer cannot
+          write; case_agent cannot access unassigned cases; case_manager
+          has full access". This UI Action's visibility <condition>,
+          <roles> field, and server-side defense-in-depth check all
+          encode the role rules from AAP Section 0.5.6 verbatim.
+          case_viewer is excluded by the
+          <roles>x_casemgmt_case_manager</roles> field. case_agent is
+          excluded by the same field (Close requires manager role
+          regardless of assignment).
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance". The deterministic
+          sys_id, reference-by-name pattern, and absence of any external
+          lookups guarantee this UI Action re-imports cleanly with zero
+          preview errors.
+
+    COMPANION ARTIFACTS:
+
+        This UI Action handles the Resolved -> Closed transition at the
+        FORM-LEVEL (button click). Companion artifacts:
+
+          - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+            (the central transition-guard helper; this UI Action's
+             canTransitionToClosed call delegates to its method of the
+             same name)
+          - ../flows/sub_flows/validate_closed_transition.xml
+            (the Flow Designer subflow that runs the SAME guard via
+             the parent state-machine flows' OnUpdate trigger; covers
+             non-form transition paths like Table API and scripted REST)
+          - ../business_rules/x_casemgmt_set_closed_date.xml
+            (the cooperating order=500 BR that sets closed_date =
+             gs.nowDateTime() on the same before-update transaction
+             when status transitions to Closed; this UI Action TRIGGERS
+             that BR by calling current.update())
+          - ../business_rules/x_casemgmt_block_terminal_closed.xml
+            (the order=100 BR that PREVENTS subsequent updates to a
+             Closed case; this UI Action's update is allowed because
+             previous.status is Resolved, not Closed; future updates
+             will be rejected by this BR)
+          - ../ui_action/x_casemgmt_case_resolve.xml
+            (the PRECEDING UI Action that handles In Progress ->
+             Resolved; that transition makes Close eligible)
+          - ../flows/general_inquiry_state_machine.xml
+            (parent OnUpdate flow filtered on type=General Inquiry;
+             fires on this transition and re-validates via the
+             validate_closed_transition subflow)
+          - ../flows/complaint_state_machine.xml
+            (parent OnUpdate flow filtered on type=Complaint; fires on
+             this transition and re-validates via the
+             validate_closed_transition subflow)
+          - ../roles/sys_user_role_x_casemgmt_case_manager.xml
+            (the role checked by <roles>, <condition>, the script,
+             and the Script Include's canTransitionToClosed method)
+
+        The UI Action provides the FORM-LEVEL entry point (button). The
+        Script Include provides the GUARD LOGIC and the verbatim error
+        message (single source of truth). The flows provide the
+        WORKFLOW-LEVEL hook (covers non-form paths). The business rules
+        provide the FIELD-LEVEL housekeeping (set_closed_date) and the
+        TERMINAL-STATE GUARD (block_terminal_closed). They are
+        complementary, not redundant.
+
+    REGENERATION NOTE:
+
+        This XML file is generated as part of the Update Set authoring
+        process. To regenerate:
+          1. Re-run the source-of-truth template fill from the AAP.
+          2. Recompute the deterministic sys_id from MD5(sys_name):
+             printf '%s' 'x_casemgmt_case_close' | md5sum | cut -c1-32
+          3. Re-export the Update Set XML from the PDI.
+
+        Manual edits to this file are valid but should be reflected in
+        ../docs/state-machine.md if they alter the transition matrix or
+        error message text.
+-->
+
+<record_update table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name>x_casemgmt_case_close</action_name>
+        <active>true</active>
+        <client>false</client>
+        <comments>UI Action that transitions a Resolved case to Closed status. Visible only to x_casemgmt_case_manager users on cases with status=Resolved (per AAP Section 0.5.5 row 6 verbatim: "Resolved -&gt; Closed: Caller has x_casemgmt_case_manager role; auto-set closed_date - Surface form-level error"). Delegates the role check to x_casemgmt.CaseTransitionValidator.canTransitionToClosed() (single source of truth shared with ../flows/sub_flows/validate_closed_transition.xml). Server-side-only (no client prompt) - the transition has no required parameters beyond the existing Resolved status. Performs the transition on the server with defense-in-depth re-validation of role and status. Surfaces a form-level blocking error via gs.addErrorMessage if any guard fails (verbatim message "Only case managers can close cases." returned by the Script Include). The closed_date field is auto-populated by the cooperating ../business_rules/x_casemgmt_set_closed_date.xml before-update Business Rule (order=500) on the same current.update() transaction triggered by this UI Action - this UI Action sets only current.status='Closed', the BR sets current.closed_date=gs.nowDateTime(). After the transition completes, the ../business_rules/x_casemgmt_block_terminal_closed.xml before-update Business Rule (order=100) prevents any subsequent modifications to the case (per AAP Section 0.5.5 row 8 terminal-state rule). Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
+        <condition><![CDATA[current.status == 'Resolved' && gs.getUser().hasRole('x_casemgmt_case_manager')]]></condition>
+        <form_action>true</form_action>
+        <form_button>true</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>false</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style>destructive</form_style>
+        <format_for_configurable_workspace>false</format_for_configurable_workspace>
+        <hint>Close this case (case_manager role required; case must be in Resolved status). closed_date will be auto-populated. This action is TERMINAL - the case cannot be modified after closure.</hint>
+        <isolate_script>true</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <messages/>
+        <name>Close</name>
+        <onclick/>
+        <order>600</order>
+        <roles>x_casemgmt_case_manager</roles>
+        <script><![CDATA[(function() {
+    // Per AAP Section 0.5.5 row 6 (Resolved -> Closed):
+    //   "Caller has x_casemgmt_case_manager role; auto-set closed_date"
+    //   "Surface form-level error" on failure
+    // Per AAP Section 0.7.1: blocking errors must appear on the form.
+    // Per AAP Section 0.7.4: blocking-error messages must come from the
+    //   single-source-of-truth Script Include (no inlined hardcoded
+    //   error strings).
+    //
+    // This is the SERVER-side click handler for the Close form button.
+    // It runs in the server sandbox (no window, has current GlideRecord,
+    // has gs and action) and is responsible for:
+    //   1) Defense-in-depth role re-check (must be case_manager).
+    //   2) Defense-in-depth status re-check (must be 'Resolved').
+    //   3) Delegation to the central Script Include's canTransitionToClosed
+    //      method, which encapsulates the case_manager role guard AND
+    //      the verbatim error message text.
+    //   4) Status persistence (current.status = 'Closed'; current.update()).
+    //      The cooperating set_closed_date Business Rule (order=500)
+    //      fires on this update and auto-populates closed_date =
+    //      gs.nowDateTime() before the database write completes.
+    //   5) Form refresh (action.setRedirectURL(current)).
+    //
+    // Each of the three guards above maps to a row in the AAP Section
+    // 0.5.6 ACL matrix or the AAP Section 0.5.5 transition map:
+    //   - Guard 1: Role check enforces "Only case_manager can close
+    //     cases" (case_agent and case_viewer are excluded per AAP
+    //     Section 0.5.5 row 6 verbatim).
+    //   - Guard 2: Status check enforces "Only Resolved -> Closed" (no
+    //     other transition can fire this handler).
+    //   - Guard 3: The Script Include's canTransitionToClosed check
+    //     enforces the case_manager role per the AAP transition map;
+    //     on failure it returns the verbatim "Only case managers can
+    //     close cases." message.
+    //
+    // All three guards must pass before current.update() is called.
+    // Any guard failure surfaces a blocking gs.addErrorMessage and
+    // returns without persisting.
+
+    // Guard 1: Role check. The user must hold case_manager.
+    // The visibility <condition> and <roles> field already gate the
+    // button on this role, but the server-side re-check protects
+    // against the rare case where a user lost the role between form
+    // load and form submit, and against attempts to invoke the
+    // form-submit verb directly via Table API. The defensive role
+    // re-check is the FIRST guard so that role-escalation attempts
+    // surface a role-specific error rather than a status-specific
+    // message that might leak workflow information.
+    if (!gs.getUser().hasRole('x_casemgmt_case_manager')) {
+        gs.addErrorMessage('Only case managers can close cases.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // Guard 2: Status check. The case must currently be Resolved.
+    // Re-checking on the server protects against a stale-form attack
+    // where the user opens the form when status is Resolved, the
+    // case transitions in another tab (e.g., another manager closes
+    // it), then the user submits from the original tab. The check
+    // uses string comparison against the verbatim Title Case
+    // 'Resolved' label per AAP Section 0.5.7 (the choice value
+    // defined in ../choices/sys_choice_case_status.xml). Without the
+    // defensive re-check, a stale-form click on an already-Closed
+    // case would fail with the cryptic block_terminal_closed BR
+    // error message, which while technically correct does not
+    // educate the user about the underlying staleness. With this
+    // re-check, the user receives an immediate and informative
+    // blocking error: "Only Resolved cases can be closed."
+    if (current.status != 'Resolved') {
+        gs.addErrorMessage('Only Resolved cases can be closed.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // Guard 3: Transition guard. Delegate the role check to the
+    // central Script Include - the SINGLE SOURCE OF TRUTH for both
+    // the case_manager role check AND the verbatim error message
+    // text, shared with the Flow Designer subflow
+    // ../flows/sub_flows/validate_closed_transition.xml. Centralizing
+    // the guard guarantees that:
+    //   - The verbatim error message "Only case managers can close
+    //     cases." is identical across all callers (no drift between
+    //     this UI Action's surfaced message and the flow's surfaced
+    //     message).
+    //   - Future rule changes (e.g., requiring a closure_reason or
+    //     adding a second precondition like "all parties must be
+    //     associated") only need to be made in the Script Include.
+    //   - The role membership check lives in only one place (the
+    //     Script Include's canTransitionToClosed helper), avoiding
+    //     duplication and ensuring consistent role-resolution
+    //     semantics (current-user-by-default with explicit-userId
+    //     branch for non-current-user contexts).
+    //
+    // The Script Include's canTransitionToClosed(caseGr, userId) method
+    // returns:
+    //   { ok: true } when the user has the case_manager role, OR
+    //   { ok: false, error: 'Only case managers can close cases.' }
+    //     when the role check fails (the VERBATIM message), OR
+    //   { ok: false, error: 'Case record is missing.' } when caseGr
+    //     is null/undefined (defensive guard against unexpected input).
+    //
+    // The userId parameter is gs.getUserID() (the current session
+    // user); the Script Include's logic short-circuits to gs.getUser()
+    // for current-user-by-default, which is the most efficient
+    // role-membership-check path.
+    //
+    // The result.error string is surfaced VERBATIM via gs.addErrorMessage,
+    // NOT replaced with a hardcoded UI-Action-local message. This
+    // honors the agent prompt's Rule 5 ("Delegate to Script Include -
+    // single source of truth") and Rule 6 ("Surface Errors via
+    // gs.addErrorMessage() - Display the Script Include's result.error
+    // on form").
+    var validator = new x_casemgmt.CaseTransitionValidator();
+    var result = validator.canTransitionToClosed(current, gs.getUserID());
+    if (!result.ok) {
+        gs.addErrorMessage(result.error);
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // All three guards passed. Perform the Resolved -> Closed
+    // transition. The status assignment uses the verbatim Title Case
+    // 'Closed' label per AAP Section 0.5.7 and the sibling choice
+    // file ../choices/sys_choice_case_status.xml.
+    //
+    // The single current.update() call triggers the platform's full
+    // before-update Business Rule pipeline, including:
+    //   - block_terminal_closed (order=100, no-op for THIS update
+    //     because previous.status is Resolved, not Closed; will
+    //     PREVENT all subsequent updates after this one completes)
+    //   - block_draft_backtransition (no-op, target is Closed not
+    //     Draft)
+    //   - validate_assigned_agent_membership (passes if assigned_agent
+    //     is still a member of assigned_group; in normal workflow
+    //     this should already be true when the case reached Resolved)
+    //   - clear_pending_reason_on_inprogress (no-op, target is Closed
+    //     not In Progress; pending_reason should already be empty
+    //     since Resolved has no pending_reason)
+    //   - set_closed_date (FIRES, order=500: target is Closed and
+    //     previous is Resolved; auto-populates current.closed_date =
+    //     gs.nowDateTime() before the database write completes - this
+    //     is the AAP Section 0.5.5 row 6 "auto-set closed_date"
+    //     side-effect)
+    //
+    // The two parent state-machine flows (general_inquiry_state_machine
+    // and complaint_state_machine) ALSO fire on this update via their
+    // OnUpdate triggers filtered on `status` change, calling the
+    // validate_closed_transition subflow which itself delegates to
+    // x_casemgmt.CaseTransitionValidator.canTransitionToClosed() -
+    // the SAME helper this UI Action just called. Belt-and-suspenders
+    // defense in depth.
+    //
+    // After this update completes, ANY future modification attempt
+    // will be REJECTED by the block_terminal_closed BR (order=100)
+    // with the verbatim AAP Section 0.7.4 message "Closed cases are
+    // terminal and cannot be modified." This is the canonical
+    // anti-regression guarantee that closure is irreversible.
+    current.status = 'Closed';
+    current.update();
+
+    // Refresh the form to show the new status AND the auto-populated
+    // closed_date stamp. The standard ServiceNow UI-Action pattern
+    // is to call action.setRedirectURL(current) which navigates the
+    // browser to the same record's form view, picking up the new
+    // status and any side-effect field changes (e.g., closed_date
+    // populated by set_closed_date BR; audit timestamps updated by
+    // the platform's standard sys_* pipeline). After the refresh,
+    // the form will display the case in Closed status with the
+    // closed_date stamped to the current time.
+    action.setRedirectURL(current);
+})();]]></script>
+        <show_insert>false</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>true</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>c2988c82e1da1b3e1029196a6e0d0f9f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_close</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_ui_action_x_casemgmt_case_close</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>true</ui16_compatible>
+    </sys_ui_action>
+</record_update>
+

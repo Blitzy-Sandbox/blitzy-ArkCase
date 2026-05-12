@@ -1,0 +1,808 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_ui_action` row that
+    declares the `Resolve` form button on the `x_casemgmt_case` custom table
+    inside the scoped application `x_casemgmt`.
+
+    The concrete scope identifier `x_casemgmt` is used consistently throughout
+    this repository per ../docs/state-machine.md: "ServiceNow Update Set imports
+    use a standard XML parser, so the scope id must be concrete in every record
+    before the Update Set is exported." All sibling XML records in this Update
+    Set use `x_casemgmt` byte-for-byte; this UI Action follows the same
+    convention. The AAP Section 0.7.2 placeholder `x_[scope]_` is a TEMPLATE
+    that resolves to `x_casemgmt_` at materialization time.
+
+    PURPOSE (AAP Section 0.5.5 verbatim, row 5):
+        From          To             Required condition / behavior
+        In Progress   Resolved       All linked x_casemgmt_case_task records
+                                     have status = Closed
+                                     Failure: Surface "All tasks must be closed
+                                     before resolving this case."
+
+    This UI Action is the user-facing ENTRY POINT for the In Progress -> Resolved
+    transition - the FIFTH forward transition in the case state-machine
+    (Draft -> Open -> In Progress -> [Pending <-> In Progress] -> Resolved -> Closed).
+    It surfaces a "Resolve" button on the case form whenever the case is currently
+    in `In Progress` status AND the current user is authorized (case_manager OR
+    assigned case_agent). Clicking the button advances the case to Resolved
+    status, provided that the transition guard `canTransitionToResolved` from
+    the central Script Include
+    ../script_includes/x_casemgmt_CaseTransitionValidator.xml passes (i.e., zero
+    child x_casemgmt_case_task records have status != 'Closed'). Failure surfaces
+    the verbatim AAP Section 0.7.4 error message
+    "All tasks must be closed before resolving this case."
+    on the form via gs.addErrorMessage.
+
+    THE TASK-CLOSURE GUARD - WHY RESOLVE IS THE SEMANTIC CRUX OF THE STATE MACHINE:
+
+        The In Progress -> Resolved transition is the most semantically loaded
+        transition in the entire case lifecycle. It encodes the business rule
+        that a case cannot be considered "done" until all of its child work
+        items are themselves done. The rule is enforced by querying the
+        x_casemgmt_case_task table for child rows whose `case` reference
+        points at the current case AND whose `status` is not 'Closed' - if
+        any such row exists, the transition is blocked.
+
+        The check is delegated to the central Script Include's
+        canTransitionToResolved(caseGr) method, which itself delegates to
+        getOpenTaskCountForCase(caseSysId) - a GlideAggregate-based COUNT(*)
+        query for efficiency (avoids loading task rows). The boolean predicate
+        (count > 0) and the verbatim error message are computed inside the
+        Script Include so the validator's API stays uniform with the other
+        canTransitionTo* methods.
+
+        Per AAP Section 0.7.2 Rule 6 ("Delegate to Script Include - DO NOT
+        inline GlideRecord('x_casemgmt_case_task') query directly"), the UI
+        Action does NOT inline the open-task count query. The Script Include
+        is the SINGLE SOURCE OF TRUTH for both the count logic and the
+        verbatim error message text, shared with:
+          - ../flows/sub_flows/validate_resolved_transition.xml (the Flow
+            Designer subflow that fires on the OnUpdate trigger of the two
+            parent state-machine flows; covers non-form transition paths
+            like Table API and scripted REST)
+          - Any future scripted REST endpoint or scheduled job that performs
+            In Progress -> Resolved transitions
+
+        Centralizing the guard in the Script Include guarantees that the
+        verbatim error message text "All tasks must be closed before resolving
+        this case." (AAP Section 0.7.4) is identical across all callers (no
+        drift between this UI Action's surfaced message and the flow's
+        surfaced message), and future rule changes only need to be made in
+        one place.
+
+    SERVER-SIDE-ONLY PATTERN (matches sibling case_open.xml, case_resume.xml,
+    case_start_progress.xml; contrasts with case_set_pending.xml):
+
+        Unlike the Set Pending UI Action which uses a hybrid client+server
+        pattern (it must collect the `pending_reason` value via prompt() on
+        the client before submitting), this Resolve UI Action runs ENTIRELY
+        on the server. There is no input to collect - the transition has no
+        required parameters beyond the existing child task rows on the case.
+        The single click invokes the server script directly via the platform's
+        standard form-button verb pipeline, with no <onclick> JavaScript and
+        no client-side function definition.
+
+        Phase 1 - User clicks the "Resolve" button.
+        Phase 2 - The platform evaluates the visibility <condition> on the
+                  server when the form was rendered; the button is shown
+                  only if the condition was true (status==In Progress AND
+                  user is case_manager OR assigned case_agent).
+        Phase 3 - The platform invokes the form-submit verb derived from
+                  this UI Action's sys_name (`sysverb_x_casemgmt_case_resolve`).
+        Phase 4 - The platform binds `current` (the case GlideRecord),
+                  `gs` (GlideSystem), `action` (UI Action helper), and
+                  evaluates the <script> body in a server sandbox.
+        Phase 5 - The script performs four layers of defense-in-depth
+                  validation (role, status, "Assigned only" for agents,
+                  transition guard) before executing the transition.
+        Phase 6 - The script sets current.status = 'Resolved' and calls
+                  current.update() ONCE to persist the change.
+        Phase 7 - The script calls action.setRedirectURL(current) to
+                  refresh the form so the operator sees the updated status.
+
+        The single current.update() call triggers the platform's full
+        before-update Business Rule pipeline, including:
+          - x_casemgmt_block_terminal_closed.xml (skipped because previous
+            status was In Progress, not Closed)
+          - x_casemgmt_block_draft_backtransition.xml (skipped because
+            current status is Resolved, not Draft)
+          - x_casemgmt_validate_assigned_agent_membership.xml (passes if
+            assigned_agent is still a member of assigned_group; in normal
+            workflow this should already be true when the case reached
+            In Progress)
+          - x_casemgmt_clear_pending_reason_on_inprogress.xml (skipped
+            because target status is Resolved, not In Progress; pending_reason
+            should already be empty since In Progress has no pending_reason)
+          - x_casemgmt_set_closed_date.xml (skipped because target status
+            is Resolved, not Closed; the closed_date side-effect fires on
+            the SUBSEQUENT Resolved -> Closed transition via case_close.xml)
+
+        The two Flow Designer flows (general_inquiry_state_machine.xml and
+        complaint_state_machine.xml) also fire on this update via their
+        OnUpdate triggers filtered on `status` change, calling the
+        validate_resolved_transition subflow which itself delegates to
+        x_casemgmt.CaseTransitionValidator.canTransitionToResolved() - the
+        SAME helper this UI Action calls. Together they form a defense-in-depth
+        guard pair: the UI Action blocks the transition at the form level
+        (better UX - user sees the error message immediately), and the flow
+        blocks it at the workflow level (catches Table API and other non-form
+        paths).
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.2.1):
+
+        acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java
+        line 79-114 - the central ArkCase case state-machine service. Its
+        `changeCaseState(auth, caseId, newState, ipAddress)` method:
+
+            1) Loads the CaseFile by ID (line 85)
+            2) Returns early if status unchanged (lines 88-91) - mirrored
+               here by the defense-in-depth check `current.status != 'In
+               Progress'` (we do NOT redundantly re-check whether the new
+               state equals the old state, because the visibility <condition>
+               already gates the button on `current.status == 'In Progress'`,
+               and our only target newState is 'Resolved' so by definition
+               we are changing state)
+            3) Sets the new status (line 95: retval.setStatus(newState)) -
+               mirrored here by `current.status = 'Resolved'`
+            4) For "CLOSED" status, sets close timestamp (lines 97-100) -
+               irrelevant for this UI Action which targets Resolved (not
+               Closed); the closed_date stamp fires later on the Resolved
+               -> Closed transition via the case_close.xml UI Action
+            5) Saves the entity (line 102: getDao().save(retval)) -
+               mirrored here by `current.update()`
+            6) Raises an event for downstream listeners (line 106) -
+               INTENTIONALLY OMITTED per the email-disabled constraint
+               (AAP Section 0.7.2). ArkCase's raiseEvent() call would have
+               triggered downstream notification listeners; the ServiceNow
+               POC has no equivalent gs.eventQueue() call because email is
+               disabled on the PDI and no other in-scope listeners need
+               the event.
+
+        That single Java method covered EVERY transition by string-matching
+        the `newState` parameter. The ServiceNow target instead splits
+        per-transition logic across:
+          - This UI Action (In Progress -> Resolved, the resolve edge)
+          - Sibling UI Actions for every other transition
+          - The central Script Include CaseTransitionValidator (single
+            source of truth for transition guards, called from this UI
+            Action AND from the Flow Designer subflow
+            validate_resolved_transition.xml)
+          - The two parent state-machine flows (which also trigger on
+            this status change via their OnUpdate filters)
+
+        acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/service/CaseFileTasksService.java -
+        the source-side interface for "fetch tasks for this case". ArkCase
+        used this interface (and its Solr-backed implementation,
+        CaseFileTasksServiceImpl) to retrieve task lists for display.
+        The ServiceNow target's task-aggregation use case is narrower:
+        we only need to know whether ANY child task is open, not retrieve
+        the full list. The Script Include's getOpenTaskCountForCase
+        substitutes a GlideAggregate COUNT(*) for ArkCase's Solr query,
+        eliminating the need for a search engine entirely (Solr is out
+        of POC scope per AAP Section 0.3.2).
+
+    BUTTON VISIBILITY CONDITION (the <condition> field):
+
+        The button is shown when ALL of the following are true:
+          1) current.status == 'In Progress'  (the source state of the
+             In Progress -> Resolved transition)
+          2) The current user holds either:
+             a) the x_casemgmt_case_manager role (managers see the button
+                on EVERY In Progress case, regardless of assignment), OR
+             b) the x_casemgmt_case_agent role AND the case is "Assigned
+                only" to them, where "Assigned only" is encoded as:
+                current.assigned_agent == gs.getUserID() OR
+                gs.getUser().isMemberOf(current.assigned_group.toString())
+                per AAP Section 0.5.6 verbatim: "Assigned only = cases
+                where assigned_agent = current user OR assigned_group
+                contains current user".
+
+        The visibility check runs server-side (the <condition> field is
+        evaluated by the platform when rendering the form). The
+        defense-in-depth check inside the <script> body re-validates the
+        same conditions on the server when the button is clicked, providing
+        two layers of validation that protect against:
+          - Form-tampering attacks where the user edits hidden form fields
+            to attempt the transition from a non-In-Progress state
+          - Race conditions where the user opens the form, the case
+            transitions out of In Progress in another browser tab, then the
+            user clicks Resolve in the original tab
+          - Role escalation attempts where a viewer somehow gains access
+            to the form
+
+        The .toString() coercion on assigned_group resolves the GlideElement
+        reference to its sys_id string, which is what gs.getUser().isMemberOf()
+        expects. The defensive null-check (current.assigned_group ? ...) in
+        the script body protects against the edge case where assigned_group
+        is empty even though the case is in In Progress (shouldn't happen if
+        the Draft -> Open transition was properly enforced, but defense in
+        depth handles edge cases like direct Table API edits that bypassed
+        canTransitionToOpen).
+
+    DELIBERATE OMISSION FROM VISIBILITY CONDITION (open-task check):
+
+        The visibility <condition> deliberately does NOT include the
+        open-task count check (i.e., it does NOT pre-query
+        x_casemgmt_case_task to determine whether any child tasks are
+        open). This is intentional defense-in-depth UX:
+
+          - If the button were hidden whenever any task were open, the
+            user would have NO indication of how to advance the case.
+            They would see an In Progress case with no Resolve button
+            and be stuck guessing what to do.
+
+          - With the button always visible on In Progress cases (subject
+            only to the role/assignment check), the user can click it
+            and immediately receive the explicit blocking error
+            "All tasks must be closed before resolving this case."
+            This tells them exactly what to do: close all child tasks,
+            then retry.
+
+          - Pre-querying child task counts in EVERY form rendering would
+            add an N+1 query overhead to every case form load (one extra
+            COUNT query per row in any list rendering). Deferring the
+            check to click-time means the query runs only when the user
+            actually attempts the transition.
+
+        This matches the AAP Section 0.5.5 row 5 "Surface 'All tasks must
+        be closed before resolving this case.'" pattern - the user gets
+        explicit feedback rather than a silently hidden control. The same
+        UX philosophy applies to all sibling transition UI Actions in this
+        folder.
+
+    DELEGATION TO SCRIPT INCLUDE (single source of truth):
+
+        The transition-guard logic lives EXCLUSIVELY in
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml's
+        canTransitionToResolved(caseGr) method, which:
+
+          - Takes the case GlideRecord as a parameter
+          - Returns { ok: false, error: 'Case record is missing.' }
+            if caseGr is null/undefined
+          - Returns { ok: false, error: 'All tasks must be closed before
+            resolving this case.' } if any child x_casemgmt_case_task
+            has status != 'Closed' (the verbatim AAP Section 0.7.4
+            blocking-error message)
+          - Returns { ok: true } if the transition is permitted
+
+        Internally the Script Include calls getOpenTaskCountForCase(caseSysId),
+        which uses GlideAggregate('x_casemgmt_case_task') with
+        addQuery('case', caseSysId), addQuery('status', '!=', 'Closed'),
+        and addAggregate('COUNT'). This is more efficient than
+        GlideRecord.getRowCount() because it does not load row data.
+
+        The same helper is invoked by:
+          - This UI Action (the form-button entry point)
+          - ../flows/sub_flows/validate_resolved_transition.xml (the Flow
+            Designer subflow that runs the SAME guard via the parent
+            state-machine flows' OnUpdate trigger; covers non-form transition
+            paths like Table API and scripted REST)
+          - Any future scripted REST endpoint or scheduled job that
+            performs In Progress -> Resolved transitions
+
+        Centralizing the guard in the Script Include guarantees:
+          - The verbatim error message text "All tasks must be closed
+            before resolving this case." (AAP Section 0.7.4) is identical
+            across all callers (no drift between the UI Action's surfaced
+            message and the flow's surfaced message)
+          - Future rule changes (e.g., adding a second precondition like
+            "must have at least one party associated") only need to be made
+            in one place
+          - The single source of truth aligns with AAP Section 0.4.3
+            "Shared transition-guard Script Include" design pattern
+
+        The UI Action consumes the helper's { ok, error } contract:
+            var validator = new x_casemgmt.CaseTransitionValidator();
+            var result   = validator.canTransitionToResolved(current);
+            if (!result.ok) {
+                gs.addErrorMessage(result.error);
+                action.setRedirectURL(current);
+                return;
+            }
+        It does NOT inline the GlideAggregate query. The Rule 6 in the
+        agent prompt ("Delegate to Script Include - DO NOT inline a
+        GlideRecord('x_casemgmt_case_task') query directly in this UI
+        Action") is honored.
+
+    CHOICE-VALUE BYTE-FOR-BYTE REQUIREMENTS (AAP Section 0.5.7 verbatim):
+
+        The two case-status labels referenced in this UI Action are:
+
+            'In Progress'  (11 chars, two words separated by a literal SPACE,
+                            Title Case - NOT 'In_Progress', NOT 'InProgress',
+                            NOT 'IN PROGRESS', NOT 'in progress')
+            'Resolved'     (8 chars, single word, Title Case)
+
+        These MUST match the labels in ../choices/sys_choice_case_status.xml
+        byte-for-byte. ServiceNow Choice fields persist the LABEL string
+        by default (not an integer ID), so the comparison is against the
+        label text. Misspellings such as 'IN PROGRESS' (uppercase),
+        'in progress' (lowercase), or 'In_Progress' (with underscore) would
+        silently never match and the UI Action would never fire.
+
+        Additionally, the child-task status referenced indirectly through
+        the Script Include's getOpenTaskCountForCase query is 'Closed'
+        (8 chars, single word, Title Case), defined in
+        ../choices/sys_choice_case_task_status.xml. The check
+        addQuery('status', '!=', 'Closed') matches against this exact label.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+
+        - <table>x_casemgmt_case</table>             scoped table
+        - <sys_scope>x_casemgmt</sys_scope>          scoped namespace
+        - <sys_package>x_casemgmt</sys_package>      scoped application
+        - <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
+          scoped roles (comma-separated; both roles see the button, but
+          the visibility <condition> further filters case_agent visibility
+          to assigned cases only per AAP Section 0.5.6 ACL Matrix
+          "Assigned only" rule)
+        - script body references current.status, current.assigned_agent,
+          current.assigned_group (all on the scoped table x_casemgmt_case)
+          and instantiates new x_casemgmt.CaseTransitionValidator() (the
+          scoped Script Include)
+
+        Zero global-scope writes. Zero modifications to OOB tables.
+        Zero global ACL or role mutations.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+
+        - <table> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - <roles> resolves both roles BY NAME
+          (x_casemgmt_case_manager, x_casemgmt_case_agent)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; it operates only on the platform-injected `current`
+          GlideRecord and `gs.getUser()` / `gs.getUserID()` calls and
+          delegates to the named Script Include via
+          new x_casemgmt.CaseTransitionValidator().
+        - The script body uses NO gs.getReference() calls and NO
+          GlideRecord.get(sys_id) calls.
+        - The .toString() coercion on current.assigned_group resolves a
+          RUNTIME GlideElement reference to its sys_id string, NOT a
+          hardcoded literal. The platform method gs.getUser().isMemberOf()
+          accepts either a sys_id or a group name; passing the runtime
+          field value is the canonical pattern.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_case_resolve"), which is
+          permitted because the AAP "no hardcoded sys_id" rule applies
+          to REFERENCE FIELDS pointing at OTHER records, not to a
+          record's own primary key.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This UI
+        Action contains zero gs.eventQueue() calls, zero gs.email() calls,
+        and zero gs.notificationEngine() calls. It performs only the
+        status update and an action.setRedirectURL refresh.
+
+    NO PII CONSTRAINT (AAP Section 0.7.2):
+
+        The script body, code comments, description text, hint text, and
+        all error messages contain zero real names, real email addresses,
+        real phone numbers, real organizational identifiers, or any other
+        personally identifiable information. The UI Action operates
+        exclusively on synthetic case-status enumerations (In Progress,
+        Resolved, Closed) and synthetic role identifiers
+        (x_casemgmt_case_manager, x_casemgmt_case_agent).
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+
+        This sys_ui_action record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml
+              (the table this UI Action is bound to)
+            - ../tables/x_casemgmt_case_task.xml
+              (the table the Script Include's getOpenTaskCountForCase
+               queries; required so the table exists when the button
+               is clicked)
+            - ../dictionary/x_casemgmt_case_status.xml
+              (the field the visibility condition reads and the script writes)
+            - ../dictionary/x_casemgmt_case_assigned_agent.xml
+              (the field the visibility condition reads for "Assigned only")
+            - ../dictionary/x_casemgmt_case_assigned_group.xml
+              (the field the visibility condition reads for "Assigned only")
+            - ../dictionary/x_casemgmt_case_task_status.xml
+              (the field the Script Include's getOpenTaskCountForCase
+               filters on; required so the column exists)
+            - ../dictionary/x_casemgmt_case_task_case.xml
+              (the parent reference field the Script Include's
+               getOpenTaskCountForCase filters on; required so the
+               column exists)
+            - ../choices/sys_choice_case_status.xml
+              (the In Progress and Resolved Choice values)
+            - ../choices/sys_choice_case_task_status.xml
+              (the Closed Choice value referenced indirectly via the
+               Script Include)
+            - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (CRITICAL - the Script Include this UI Action delegates to;
+               loading the UI Action before the Script Include would
+               surface a runtime ReferenceError when the button is clicked
+               and the platform attempts to instantiate
+               x_casemgmt.CaseTransitionValidator)
+            - ../roles/sys_user_role_x_casemgmt_case_manager.xml
+              (the manager role referenced by <roles> and condition)
+            - ../roles/sys_user_role_x_casemgmt_case_agent.xml
+              (the agent role referenced by <roles> and condition)
+            - ../app/sys_app/x_casemgmt_case_management.xml
+              (the scoped application)
+            - ../app/sys_scope/x_casemgmt.xml
+              (the scope record)
+
+        And BEFORE:
+            - ../seed-data/cases/x_casemgmt_case_demo_05.xml
+              (the Resolved-status demo case from AAP Section 0.4.1 - the
+               UI Action will be the recommended path to transition demo
+               cases through this state during validation)
+            - ../seed-data/cases/x_casemgmt_case_demo_09.xml
+              (the Resolved Complaint demo case)
+            - ../update-set/x_casemgmt_case_management_update_set.xml
+              (the final aggregated Update Set that includes this record)
+
+    DETERMINISTIC SYS_ID:
+
+        sys_id = MD5("x_casemgmt_case_resolve")
+               = fcef26b5dd69234a0b4a8ea82d997b17
+        32-character lowercase hex. Recomputable via:
+            printf '%s' 'x_casemgmt_case_resolve' | md5sum | cut -c1-32
+
+        Deriving from the record name guarantees idempotent re-import on a
+        fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in
+        place rather than creating a duplicate. This is the same convention
+        used by all sibling UI Actions in this folder.
+
+    ORDER WITHIN UI ACTION SEQUENCE:
+
+        order=500 places Resolve as the FIFTH UI Action in the workflow
+        sequence (second-to-last, before Close at order=600):
+            1) Open               (order=100       - Draft -> Open)
+            2) Start Progress     (order=200       - Open -> In Progress)
+            3) Set Pending        (order=300       - In Progress -> Pending)
+            4) Resume             (order=400       - Pending -> In Progress)
+            5) Resolve            (order=500, THIS - In Progress -> Resolved)
+            6) Close              (order=600       - Resolved -> Closed)
+
+        The ordering is for UI display only - the platform renders form
+        buttons in ascending order. Only one button is visible at a time
+        (each visibility <condition> matches a different status), so the
+        ordering does not affect runtime correctness. Resolve carries
+        order=500 because it is the second-to-last transition in the
+        canonical forward sequence.
+
+    FORM_STYLE = primary:
+
+        Resolve is the AFFIRMATIVE PENULTIMATE STEP from In Progress. The
+        user is moving the case toward completion (the next-and-final step
+        is Close). The button is rendered with the platform's primary visual
+        style (typically a filled-color button) to draw attention. This
+        contrasts with Close, which uses form_style=destructive because
+        closing a case is a TERMINAL action (per AAP Section 0.5.5 row 8
+        "Closed: Terminal state. No transitions permitted from Closed.").
+        Resolve uses primary because the case is moving forward (resolution
+        is positive progress) but is not yet truly terminal - the case can
+        still be closed afterward by a manager.
+
+    MANAGER-AND-AGENT VISIBILITY (AAP Section 0.5.6 ACL Matrix):
+
+        Both x_casemgmt_case_manager and x_casemgmt_case_agent see the
+        Resolve button. The rationale per AAP Section 0.5.6:
+
+          - case_manager has full access (Create + Read All + Write All +
+            Delete on the case table). Resolve is a Write operation. Per
+            the ACL matrix, manager can write any case regardless of
+            assignment.
+
+          - case_agent has Write Assigned only access. Resolve is a Write
+            operation. Per the ACL matrix and verbatim "Assigned only =
+            cases where assigned_agent = current user OR assigned_group
+            contains current user", agent can resolve cases they are
+            assigned to OR cases assigned to a group they belong to.
+
+          - case_viewer has only Read All access (no Write). Resolve is
+            a Write operation. case_viewer is therefore excluded from
+            the <roles> field.
+
+        The visibility <condition> further filters case_agent visibility
+        to assigned cases only via the OR'd sub-clauses:
+            current.assigned_agent == gs.getUserID()
+            OR
+            gs.getUser().isMemberOf(current.assigned_group.toString())
+        case_manager bypasses this filter via the "OR has manager role"
+        clause at the top of the condition, so managers see the button
+        on every In Progress case.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition". This UI Action
+          is the PRIMARY user-facing trigger for the In Progress ->
+          Resolved transition (per AAP Section 0.5.5 row 5). The Script
+          Include's canTransitionToResolved enforces the task-closure
+          check and surfaces the verbatim AAP Section 0.7.4 blocking-error
+          message "All tasks must be closed before resolving this case."
+          if violated. The defense-in-depth role, status, and "Assigned
+          only" re-checks prevent stale-form submissions from corrupting
+          the state machine.
+
+        - Gate 3 (ACLs): "Role-based access enforced - case_viewer cannot
+          write; case_agent cannot access unassigned cases; case_manager
+          has full access". This UI Action's visibility <condition> and
+          server-side defense-in-depth check both encode the role rules
+          from AAP Section 0.5.6 verbatim. case_viewer is excluded by the
+          <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
+          field. case_agent on an unassigned case is excluded by the
+          "Assigned only" sub-condition.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance". The deterministic
+          sys_id, reference-by-name pattern, and absence of any external
+          lookups guarantee this UI Action re-imports cleanly with zero
+          preview errors.
+
+    COMPANION ARTIFACTS:
+
+        This UI Action handles the In Progress -> Resolved transition at
+        the FORM-LEVEL (button click). Companion artifacts:
+
+          - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+            (the central transition-guard helper; this UI Action's
+             canTransitionToResolved call delegates to its method of
+             the same name; the SAME Script Include holds the verbatim
+             AAP Section 0.7.4 error message string)
+          - ../flows/sub_flows/validate_resolved_transition.xml
+            (the Flow Designer subflow that runs the SAME guard via
+             the parent state-machine flows' OnUpdate trigger; covers
+             non-form transition paths like Table API and scripted REST)
+          - ../ui_action/x_casemgmt_case_close.xml
+            (the SUBSEQUENT UI Action that handles Resolved -> Closed;
+             only manager can click it; sets closed_date)
+          - ../flows/general_inquiry_state_machine.xml
+            (parent OnUpdate flow filtered on type=General Inquiry; fires
+             on this transition and re-validates via the
+             validate_resolved_transition subflow)
+          - ../flows/complaint_state_machine.xml
+            (parent OnUpdate flow filtered on type=Complaint; fires on
+             this transition and re-validates via the
+             validate_resolved_transition subflow)
+
+        The UI Action provides the FORM-LEVEL entry point (button). The
+        Script Include provides the GUARD LOGIC and the verbatim error
+        message (single source of truth). The flows provide the
+        WORKFLOW-LEVEL hook (covers non-form paths). They are
+        complementary, not redundant.
+
+    REGENERATION NOTE:
+
+        This XML file is generated as part of the Update Set authoring
+        process. To regenerate:
+          1. Re-run the source-of-truth template fill from the AAP.
+          2. Recompute the deterministic sys_id from MD5(sys_name).
+          3. Re-export the Update Set XML from the PDI.
+
+        Manual edits to this file are valid but should be reflected in
+        ../docs/state-machine.md if they alter the transition matrix or
+        error message text.
+-->
+<record_update table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name>x_casemgmt_case_resolve</action_name>
+        <active>true</active>
+        <client>false</client>
+        <comments>UI Action that transitions an In Progress case to Resolved status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when they are assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Delegates the all-tasks-closed check to x_casemgmt.CaseTransitionValidator.canTransitionToResolved() (single source of truth shared with ../flows/sub_flows/validate_resolved_transition.xml). Per AAP Section 0.5.5 row 5 verbatim: "In Progress -&gt; Resolved: All linked x_casemgmt_case_task records have status = Closed - Surface 'All tasks must be closed before resolving this case.'". Surfaces verbatim error message "All tasks must be closed before resolving this case." (per AAP Sections 0.5.5 and 0.7.4) when any child task has status != Closed. Server-side-only (no client prompt) - the transition has no required parameters beyond the existing child task rows on the case. Performs the transition on the server with defense-in-depth re-validation of role, status, and "Assigned only" assignment. Surfaces a form-level blocking error via gs.addErrorMessage if any guard fails (verbatim message returned by the Script Include). Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
+        <condition><![CDATA[current.status == 'In Progress' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]></condition>
+        <form_action>true</form_action>
+        <form_button>true</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>false</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style>primary</form_style>
+        <format_for_configurable_workspace>false</format_for_configurable_workspace>
+        <hint>Resolve this case (all child tasks must be Closed).</hint>
+        <isolate_script>true</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <messages/>
+        <name>Resolve</name>
+        <onclick/>
+        <order>500</order>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
+        <script><![CDATA[(function() {
+    // Per AAP Section 0.5.5 row 5 (In Progress -> Resolved):
+    //   "All linked x_casemgmt_case_task records have status = Closed"
+    //   "Surface 'All tasks must be closed before resolving this case.'"
+    //   - VERBATIM blocking-error message per AAP Section 0.7.4
+    // Per AAP Section 0.7.1: blocking errors must appear on the form.
+    //
+    // This is the SERVER-side click handler for the Resolve form button.
+    // It runs in the server sandbox (no window, has current GlideRecord,
+    // has gs and action) and is responsible for:
+    //   1) Defense-in-depth role re-check (case_manager OR case_agent).
+    //   2) Defense-in-depth status re-check (must be 'In Progress').
+    //   3) Defense-in-depth "Assigned only" re-check for case_agents.
+    //   4) Delegation to the central Script Include's canTransitionToResolved
+    //      method, which encapsulates the "all child tasks must be Closed"
+    //      guard AND the verbatim AAP Section 0.7.4 error message.
+    //   5) Status persistence (current.status = 'Resolved'; current.update()).
+    //   6) Form refresh (action.setRedirectURL(current)).
+    //
+    // Each of the four guards above maps to a row in the AAP Section
+    // 0.5.6 ACL matrix or the AAP Section 0.5.5 transition map:
+    //   - Guard 1: Role check enforces "Only case_manager or case_agent
+    //     can perform write transitions" (case_viewer is read-only per
+    //     ACL matrix).
+    //   - Guard 2: Status check enforces "Only In Progress -> Resolved"
+    //     (no other transition can fire this handler).
+    //   - Guard 3: Assigned only check enforces case_agent's assigned-only
+    //     write privilege (case_manager bypasses this guard).
+    //   - Guard 4: The Script Include's canTransitionToResolved check
+    //     enforces "all child x_casemgmt_case_task have status = Closed"
+    //     per the AAP transition map; on failure it returns the verbatim
+    //     AAP Section 0.7.4 message.
+    //
+    // All four guards must pass before current.update() is called.
+    // Any guard failure surfaces a blocking gs.addErrorMessage and
+    // returns without persisting.
+
+    // Guard 1: Role check. The user must hold case_manager OR case_agent.
+    // (case_viewer is excluded by the <roles> field already, but the
+    // server-side re-check protects against the rare case where a user
+    // lost the role between form load and form submit, and against
+    // attempts to invoke the form-submit verb directly via Table API.)
+    if (!gs.getUser().hasRole('x_casemgmt_case_manager') && !gs.getUser().hasRole('x_casemgmt_case_agent')) {
+        gs.addErrorMessage('Only case managers and assigned case agents can resolve cases.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // Guard 2: Status check. The case must currently be In Progress.
+    // Re-checking on the server protects against a stale-form attack
+    // where the user opens the form when status is In Progress, the
+    // case transitions in another tab, then the user submits from the
+    // original tab. The check uses string comparison against the
+    // verbatim Title Case 'In Progress' label (note the literal SPACE
+    // between 'In' and 'Progress') per AAP Section 0.5.7.
+    if (current.status != 'In Progress') {
+        gs.addErrorMessage('Only In Progress cases can be resolved.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // Guard 3: Assigned only check for case_agents. case_managers
+    // bypass this guard (they can resolve any case). For case_agents,
+    // the case must be assigned to them directly OR they must be a
+    // member of the assigned_group, per AAP Section 0.5.6 verbatim:
+    // "Assigned only = cases where assigned_agent = current user OR
+    // assigned_group contains current user".
+    //
+    // The .toString() coercion on assigned_group resolves the GlideElement
+    // reference to its sys_id string, which is what gs.getUser().isMemberOf()
+    // expects. Without the coercion, the GlideElement-vs-string comparison
+    // can behave inconsistently across releases. The defensive ternary
+    // null-check (assigned_group ? ... : '') protects against the edge
+    // case where assigned_group is empty even though the case is in In
+    // Progress (shouldn't happen if the Draft -> Open transition was
+    // properly enforced, but defense in depth handles edge cases like
+    // direct Table API edits that bypassed canTransitionToOpen).
+    if (gs.getUser().hasRole('x_casemgmt_case_agent') && !gs.getUser().hasRole('x_casemgmt_case_manager')) {
+        var groupIdForAuth = current.assigned_group ? current.assigned_group.toString() : '';
+        var isAssigned = (current.assigned_agent == gs.getUserID()) ||
+                         (groupIdForAuth && gs.getUser().isMemberOf(groupIdForAuth));
+        if (!isAssigned) {
+            gs.addErrorMessage('Only case managers and assigned case agents can resolve cases.');
+            action.setRedirectURL(current);
+            return;
+        }
+    }
+
+    // Guard 4: Transition guard. Delegate the all-tasks-closed check
+    // to the central Script Include - the SINGLE SOURCE OF TRUTH for
+    // both the count logic AND the verbatim error message text, shared
+    // with the Flow Designer subflow ../flows/sub_flows/validate_
+    // resolved_transition.xml. Centralizing the guard guarantees that:
+    //   - The verbatim AAP Section 0.7.4 error message "All tasks must
+    //     be closed before resolving this case." is identical across
+    //     all callers (no drift between this UI Action's surfaced
+    //     message and the flow's surfaced message).
+    //   - Future rule changes (e.g., adding a second precondition like
+    //     "must have at least one party associated") only need to be
+    //     made in the Script Include.
+    //   - The GlideAggregate query against x_casemgmt_case_task lives
+    //     in only one place (the Script Include's getOpenTaskCountForCase
+    //     helper), avoiding duplication and ensuring consistent query
+    //     semantics.
+    //
+    // The Script Include's canTransitionToResolved(caseGr) method
+    // returns:
+    //   { ok: true } when zero open child tasks remain, OR
+    //   { ok: false, error: 'All tasks must be closed before resolving
+    //     this case.' } when at least one child task has status != Closed
+    //     (the VERBATIM AAP Section 0.7.4 message), OR
+    //   { ok: false, error: 'Case record is missing.' } when caseGr is
+    //     null/undefined (defensive guard against unexpected input).
+    //
+    // The result.error string is surfaced verbatim via gs.addErrorMessage,
+    // NOT replaced with a hardcoded UI-Action-local message. This honors
+    // the agent prompt's Rule 5 ("VERBATIM Error Message - The error
+    // message MUST come from the Script Include's result.error field -
+    // NOT inlined as a hardcoded string in this UI Action") and Rule 6
+    // ("Delegate to Script Include - DO NOT inline a GlideRecord query
+    // here").
+    var validator = new x_casemgmt.CaseTransitionValidator();
+    var result = validator.canTransitionToResolved(current);
+    if (!result.ok) {
+        gs.addErrorMessage(result.error);
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // All four guards passed. Perform the In Progress -> Resolved
+    // transition. The status assignment uses the verbatim Title Case
+    // 'Resolved' label per AAP Section 0.5.7 and the sibling choice
+    // file ../choices/sys_choice_case_status.xml.
+    //
+    // The single current.update() call triggers the platform's full
+    // before-update Business Rule pipeline, including:
+    //   - block_terminal_closed (no-op, previous status was In Progress
+    //     not Closed)
+    //   - block_draft_backtransition (no-op, target is Resolved not Draft)
+    //   - validate_assigned_agent_membership (passes if assigned_agent
+    //     is still a member of assigned_group; in normal workflow this
+    //     should already be true when the case reached In Progress)
+    //   - clear_pending_reason_on_inprogress (no-op, target is Resolved
+    //     not In Progress; pending_reason should already be empty)
+    //   - set_closed_date (no-op, target is Resolved not Closed; the
+    //     closed_date stamp fires on the SUBSEQUENT Resolved -> Closed
+    //     transition via case_close.xml)
+    //
+    // The two parent state-machine flows (general_inquiry_state_machine
+    // and complaint_state_machine) ALSO fire on this update via their
+    // OnUpdate triggers filtered on `status` change, calling the
+    // validate_resolved_transition subflow which itself delegates to
+    // x_casemgmt.CaseTransitionValidator.canTransitionToResolved() -
+    // the SAME helper this UI Action just called. Belt-and-suspenders
+    // defense in depth.
+    current.status = 'Resolved';
+    current.update();
+
+    // Refresh the form to show the new status. The standard ServiceNow
+    // UI-Action pattern is to call action.setRedirectURL(current) which
+    // navigates the browser to the same record's form view, picking up
+    // the new status and any side-effect field changes (e.g., audit
+    // timestamps updated by the platform's standard sys_* pipeline).
+    action.setRedirectURL(current);
+})();]]></script>
+        <show_insert>false</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>true</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>fcef26b5dd69234a0b4a8ea82d997b17</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_resolve</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_ui_action_x_casemgmt_case_resolve</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>true</ui16_compatible>
+    </sys_ui_action>
+</record_update>

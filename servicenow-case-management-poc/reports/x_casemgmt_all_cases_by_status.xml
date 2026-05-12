@@ -1,0 +1,449 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_report` row that
+    declares the "All Cases by Status" bar chart report on the
+    `x_casemgmt_case` custom table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.1 (File-by-File Transformation Plan) verbatim:
+        servicenow-case-management-poc/reports/x_casemgmt_all_cases_by_status.xml
+            CREATE  Source: -
+            Key Changes: "Bar grouped by status"
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning) verbatim:
+        Manager View Dashboard widget inventory includes
+            "bar chart for 'All cases by status'"
+
+    Per AAP Section 0.4.4 (User Interface Design) verbatim:
+        Manager View Dashboard - "bar chart for 'All cases by status'"
+
+    Per AAP Section 0.7.3 (Validation Framework) verbatim, this report is
+    one of the data sources for Gate 6 (Dashboards):
+        "Both dashboards render with synthetic data ... All widgets display
+         data; no broken report references"
+
+    Per AAP Section 0.3.1 (Exhaustively In Scope) verbatim:
+        servicenow-case-management-poc/reports/sys_report_x_casemgmt_all_cases_by_status.xml
+            "bar on case.status"
+
+    THIS FILE'S ROLE IN THE OVERALL POC
+    ===================================
+    This report is the lifecycle-distribution bar chart shown on the
+    Manager View dashboard
+    (../dashboards/pa_dashboards_x_casemgmt_manager_view.xml). It sits
+    alongside four other widgets to give a manager a complete operational
+    picture of the team's case portfolio:
+
+      - THIS bar chart shows the DISTRIBUTION of all cases across the
+        six lifecycle states (Draft, Open, In Progress, Pending,
+        Resolved, Closed) - the lifecycle-stage view. Managers use it
+        to assess where cases pile up: a top-heavy Open/In Progress
+        distribution signals intake-throughput backlog; a top-heavy
+        Pending distribution signals dependency-blocking; a healthy
+        funnel-shape distribution (Open > In Progress > Resolved >
+        Closed) signals normal flow.
+      - "All Cases by Type" donut/pie chart
+        (../reports/x_casemgmt_all_cases_by_type.xml) shows the
+        SUBDOMAIN MIX between General Inquiry and Complaint -
+        case-handling-pipeline view.
+      - "All Cases by Priority" bar chart
+        (../reports/x_casemgmt_all_cases_by_priority.xml) shows the
+        DISTRIBUTION across urgency tiers (Low, Medium, High, Critical) -
+        urgency-tier view.
+      - "Average Time to Close" single-score widget
+        (../reports/x_casemgmt_avg_time_to_close.xml) shows the
+        operational throughput KPI.
+      - "Cases Opened in Last 30 Days" single-score widget
+        (../reports/x_casemgmt_cases_opened_30d.xml) shows the
+        intake-volume KPI.
+
+    Together the five widgets satisfy the Manager View dashboard goal
+    per AAP Section 0.4.4: "demonstrate that a case_manager ... see
+    operationally relevant aggregate views on day one".
+
+    SEMANTIC SOURCE-SIDE ANCHOR (READ-ONLY, NOT BYTE-FOR-BYTE PORTED)
+    =================================================================
+    The semantic ancestors of this report in the existing ArkCase
+    codebase are two Java artifacts in the case-file-plugin:
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/CaseFile.java
+        Lines 141-142:
+            @Column(name = "cm_case_status")
+            private String status;
+        ArkCase tracked case status as a free-form String column on the
+        `acm_case_file` MySQL table. Default value is "DRAFT" set in
+        @PrePersist (line 312: setStatus("DRAFT")) when status is null.
+        The CaseFileQueueHandler pipeline pre-save handler then promotes
+        the status to "ACTIVE" when assigned to a queue. The ServiceNow
+        target normalizes this to a Choice field with six explicit
+        values per AAP Section 0.5.7 (Draft, Open, In Progress, Pending,
+        Resolved, Closed) defined in ../choices/sys_choice_case_status.xml
+        and constrained to the transition matrix in AAP Section 0.5.5.
+        The <group_by>status</group_by> below references this Choice
+        field by element name; the bar chart renders one bar per
+        distinct Choice label.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/CaseByStatusDto.java
+        Lines 33-57:
+            public class CaseByStatusDto {
+                private String status;
+                private int    count;
+                ... getters and setters ...
+            }
+        The (key, count) DTO that ArkCase produced for status-aggregation
+        reports - precisely the (status, count) tuple shape this
+        ServiceNow report produces natively via GlideAggregate. The
+        Pentaho-rendered status bar chart in ArkCase consumed a
+        List<CaseByStatusDto>; the ServiceNow target replaces this
+        DTO + Pentaho pipeline with a native sys_report whose
+        `<group_by>status</group_by>` plus `<aggregate>COUNT</aggregate>`
+        produce the same tuple shape directly via the platform's
+        GlideAggregate engine - no DTO, no external BI tool, no Solr
+        facet. The dashboard widget renders the (status, count) pairs
+        as bars.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/
+        CaseSummaryByStatusAndTimePeriodDto.java:
+            private String                  timePeriod;
+            private List<CaseByStatusDto>   caseByStatusDtoList;
+        ArkCase aggregated cases by status across time periods using
+        custom DTOs consumed by Pentaho BI reports. The aggregator was
+        Pentaho-side, NOT JPA-side. The ServiceNow target replaces
+        Pentaho-driven dimensional aggregation with platform-native
+        sys_report records (this file plus the seven sibling reports
+        in this folder), all powered by ServiceNow's native
+        GlideAggregate engine instead of an external BI engine - per
+        AAP Section 0.1.2 ("Reporting transformation: Pentaho BI +
+        Solr aggregates -> ServiceNow Reports + Performance Analytics-
+        style dashboards").
+
+    DESIGN DECISIONS LOCKED IN BY THIS FILE
+    =======================================
+      - Aggregation discipline (AAP Section 0.5.1, this report's row):
+        type = bar. Per agent-prompt Mandatory Field Specification,
+        chart-type reports populate <type>, <group_by>, and <aggregate>;
+        they leave <field_list/> and <aggregation_source/> empty. The
+        rendered output is one vertical-bar chart with one bar per
+        distinct value of `status`.
+
+      - Group-by discipline (agent-prompt Rule 4 verbatim):
+        <group_by>status</group_by>. The Choice field defined in
+        ../dictionary/x_casemgmt_case_status.xml. The six bars correspond
+        to the six Choice values defined in
+        ../choices/sys_choice_case_status.xml: Draft, Open, In Progress,
+        Pending, Resolved, Closed (Title Case, "In Progress" with single
+        ASCII space - NOT "InProgress", NOT "in_progress", NOT
+        "IN PROGRESS").
+
+      - Filter discipline (agent-prompt Rule 5 verbatim):
+        <filter/> empty. This report counts ALL cases regardless of
+        status, priority, or assignment. The Manager View dashboard is
+        intentionally an unfiltered aggregate-perspective view -
+        per-viewer filtering belongs to Agent Workspace's "My Open
+        Cases" list (../reports/x_casemgmt_my_open_cases.xml) and
+        "My Overdue Tasks" list (../reports/x_casemgmt_my_overdue_tasks.xml).
+        Note: x_casemgmt_my_open_cases.xml DOES filter out Resolved/Closed
+        because it serves an operational queue purpose, but THIS report
+        retains Closed cases because the Manager View needs visibility
+        into terminal-state volume to assess case throughput.
+
+      - Aggregation discipline (agent-prompt Rule 6 verbatim):
+        <aggregate>COUNT</aggregate>. Counts records per status bucket.
+        <aggregation_source/> empty (COUNT does not require a numeric
+        source field; it counts rows, not values).
+
+      - Field-list discipline (agent-prompt Rule 9 verbatim):
+        <field_list/> empty. Chart reports do NOT specify a field list;
+        the field list is meaningful only for `type=list` reports per
+        the sibling pattern in ../reports/x_casemgmt_my_open_cases.xml
+        (which uses <field_list>number,subject,priority,status,opened_date</field_list>).
+        For chart reports, the chart-type and group-by fully determine
+        what is rendered.
+
+      - Per-viewer semantics: this report does NOT reference any
+        user-specific identity (e.g., gs.getUserID()); it returns the
+        SAME aggregated counts for every viewer. Therefore:
+          1) The platform does not need to re-compute the aggregate
+             per-user, only per-cache-cycle. <is_real_time>false</is_real_time>
+             below permits cached evaluation.
+          2) Different roles see the same numbers (modulo what their
+             ACL permits them to read). For a `case_viewer`, all six
+             bars appear (read-all ACL). For a `case_agent`, only
+             bars for cases assigned to them or their group appear
+             (assigned-only ACL per AAP Section 0.5.6). For a
+             `case_manager`, all six bars appear (full ACL). The Manager
+             View dashboard is gated to `case_manager` per AAP Section
+             0.4.4, so the typical viewer sees the full team picture.
+
+      - Why "type=bar" not "type=pie": per AAP Section 0.4.4 the Manager
+        View dashboard pairs different chart types to different
+        cardinalities of categorical data:
+          - Status (6 buckets): bar chart - magnitude comparison
+            across many discrete buckets favors absolute-count
+            readability. The eye reads vertical bars left-to-right
+            against a common baseline more accurately than radial
+            slices when N >= 5 buckets. The same data is ALSO rendered
+            on the Agent Workspace dashboard as a donut/pie via
+            ../reports/x_casemgmt_case_count_by_status.xml because at-a-
+            glance proportional readability is more important for an
+            individual contributor's morning-coffee dashboard than
+            absolute-count comparison.
+          - Priority (4 buckets): bar chart - same rationale at lower
+            cardinality; ordinal urgency tiers benefit from left-to-
+            right linear ordering.
+          - Type (2 buckets, extensible): donut/pie chart -
+            proportion comparison across a small number of buckets
+            favors "what percentage is each?" readability.
+        The deliberate diversity of chart types is a UX-quality
+        decision per AAP Section 0.4.4 and is NOT to be flattened
+        into "all bar" or "all pie" for consistency.
+
+      - Why this report co-exists with x_casemgmt_case_count_by_status.xml:
+        per AAP Section 0.4.4 widget inventory, the SAME aggregation
+        (group by status, COUNT) appears on BOTH dashboards but with
+        DIFFERENT chart types and DIFFERENT audiences:
+          * Agent Workspace -> x_casemgmt_case_count_by_status.xml
+            (type=pie, donut rendering) - quick visual proportion
+            check for the agent's morning standup.
+          * Manager View -> THIS file x_casemgmt_all_cases_by_status.xml
+            (type=bar) - precise count comparison for the manager's
+            operational review.
+        The two reports are deliberately separate sys_report records,
+        each bound to its respective dashboard widget by `name`. They
+        share the underlying GlideAggregate query shape but render
+        independently.
+
+      - Cache discipline: <is_real_time>false</is_real_time>. The
+        platform may cache the aggregated counts and refresh on a
+        cycle (typically 5 minutes for the Reports module). For a
+        POC dashboard with 10 demo cases this distinction is
+        cosmetic; for a production case-management deployment with
+        thousands of cases it materially affects dashboard load
+        time. The default-off setting matches the sibling reports
+        (../reports/x_casemgmt_all_cases_by_type.xml,
+         ../reports/x_casemgmt_case_count_by_status.xml,
+         ../reports/x_casemgmt_my_open_cases.xml,
+         ../reports/x_casemgmt_avg_time_to_close.xml,
+         ../reports/x_casemgmt_cases_opened_30d.xml).
+
+      - Chart-size discipline: <chart_size>medium</chart_size>. The
+        platform-default rendering size for embedded dashboard widgets.
+        Matches the sibling reports.
+
+      - Scope binding: <sys_scope>x_casemgmt</sys_scope> and
+        <sys_package source="x_casemgmt">x_casemgmt</sys_package>
+        bind THIS record to the same scoped-app row that the parent
+        sys_app record (../app/sys_app/x_casemgmt_case_management.xml)
+        publishes via the sys_scope record at
+        ../app/sys_scope/x_casemgmt.xml (where <name>x_casemgmt</name>
+        and <source>x_casemgmt</source>). Cross-file consistency: the
+        sibling reports (x_casemgmt_all_cases_by_type.xml,
+        x_casemgmt_case_count_by_status.xml, x_casemgmt_my_open_cases.xml,
+        x_casemgmt_my_overdue_tasks.xml, x_casemgmt_avg_time_to_close.xml,
+        x_casemgmt_cases_opened_30d.xml) use identical scope-reference
+        values, ensuring all reports resolve to the same sys_app row at
+        preview time. Reference-by-name not reference-by-sys_id per AAP
+        Section 0.7.2 (no hardcoded sys_ids constraint).
+
+      - <sys_id> determinism: the value
+        deeaca81d8626c9c2cc2974716efd08c is the lowercase MD5 of the
+        canonical record name "x_casemgmt_all_cases_by_status". This
+        matches the convention documented in
+        ../reports/x_casemgmt_all_cases_by_type.xml lines 232-253
+        (md5("x_casemgmt_all_cases_by_type") = f35f0a22b19d6e5385538eb3febb1a84),
+        ../reports/x_casemgmt_case_count_by_status.xml lines 223-242
+        (md5("x_casemgmt_case_count_by_status") = 32ae52ab8735ea76587edee6130abc06),
+        ../reports/x_casemgmt_my_open_cases.xml lines 219-236
+        (md5("x_casemgmt_my_open_cases") = ee04fa982b136ad35c6fe1512826f6ab),
+        ../reports/x_casemgmt_avg_time_to_close.xml lines 233-247
+        (md5("x_casemgmt_avg_time_to_close") = 79fabb5f5754b629205b2382face3ebb),
+        and ../reports/x_casemgmt_cases_opened_30d.xml lines 71-84
+        (md5("x_casemgmt_cases_opened_30d") = 95b2127b026a92ba5e041a8d4d7277ec).
+        Deterministic derivation makes the Update Set re-importable
+        on a fresh PDI without sys_id collisions: re-importing the
+        same XML on the same or any future PDI resolves the same
+        sys_id and idempotently updates the same report row rather
+        than creating a duplicate. This stability is REQUIRED because
+        the Manager View dashboard
+        (../dashboards/pa_dashboards_x_casemgmt_manager_view.xml)
+        references THIS report by `<name>x_casemgmt_all_cases_by_status</name>`,
+        and the dashboard widget binding must resolve consistently
+        across re-imports.
+
+    CROSS-DEPENDENCY GRAPH
+    ======================
+    DEPENDS ON (must load earlier in the Update Set):
+      - ../app/sys_app/x_casemgmt_case_management.xml
+      - ../app/sys_scope/x_casemgmt.xml
+      - ../tables/x_casemgmt_case.xml                  (parent table)
+      - ../dictionary/x_casemgmt_case_status.xml
+            (defines the Choice field used in <group_by>;
+             the dictionary entry's element name is `status` which
+             must match exactly in the <group_by> below)
+      - ../choices/sys_choice_case_status.xml
+            (defines the six status Choice values rendered as bars:
+             Draft, Open, In Progress, Pending, Resolved, Closed)
+
+    REFERENCED BY (must load later in the Update Set):
+      - ../dashboards/pa_dashboards_x_casemgmt_manager_view.xml
+        References THIS report by `<name>x_casemgmt_all_cases_by_status</name>`,
+        NOT by sys_id, so a fresh-PDI re-import correctly resolves the
+        widget binding to the deterministic MD5-derived sys_id above.
+
+    PARALLEL REPORTS (different aggregation, same dashboard):
+      - ../reports/x_casemgmt_all_cases_by_type.xml        (group by type, pie/donut)
+      - ../reports/x_casemgmt_all_cases_by_priority.xml    (group by priority, bar)
+      - ../reports/x_casemgmt_avg_time_to_close.xml        (single-score, AVG)
+      - ../reports/x_casemgmt_cases_opened_30d.xml         (single-score, COUNT
+                                                          with date filter)
+        All five reports compose the Manager View dashboard widgets.
+
+    PARALLEL REPORT (same aggregation, different dashboard):
+      - ../reports/x_casemgmt_case_count_by_status.xml     (group by status,
+                                                          COUNT, type=pie) on
+                                                          the Agent Workspace
+                                                          dashboard. Same
+                                                          underlying query, but
+                                                          a separate sys_report
+                                                          row because each
+                                                          widget binds to a
+                                                          distinct report by
+                                                          name.
+
+    SEED-DATA DEPENDENCY (Validation Gate 6 pass condition):
+      - ../seed-data/cases/x_casemgmt_case_demo_*.xml must include
+        cases of EVERY status (Draft, Open, In Progress, Pending,
+        Resolved, Closed) per AAP Section 0.4.1 demo-data plan.
+        Without seed cases of each status, the bar chart renders
+        with fewer than six bars (or none at all), which would fail
+        the "All widgets display data" criterion of Validation Gate 6
+        (AAP Section 0.7.3) even though the report DEFINITION itself
+        is correct. The AAP-prescribed seed plan satisfies this
+        requirement: demo_01=Draft, demo_02=Open, demo_03=In Progress,
+        demo_04=Pending, demo_05=Resolved, demo_06=Closed (all General
+        Inquiry); demo_07=Open, demo_08=In Progress, demo_09=Resolved,
+        demo_10=Closed (all Complaint). Status coverage is complete
+        across the 10 demo cases - all six bars guaranteed to render
+        with non-zero counts.
+
+    UPDATE-SET ORDERING
+    ===================
+    Per AAP Section 0.5.2 (Cross-File Dependencies):
+      - AFTER tables, dictionary, choices.
+      - AFTER seed-data so that running the report yields non-empty
+        results during validation.
+      - BEFORE the Manager View dashboard so that dashboard widget
+        binding resolves.
+
+    AUTHORING-RULES COMPLIANCE
+    ==========================
+      - AAP Section 0.7.2 verbatim:
+          "No-hardcoded-sys_id constraint. Anywhere - flows, ACL
+           conditions, scripts, seed data, UI Policies, UI Actions,
+           Business Rules. Every cross-reference is resolved by
+           GlideRecord lookup against a stable human-readable key
+           (name, user_name, number, role_label)."
+        This file: <sys_scope> and <sys_package> resolve by scope
+        name; <sys_id> is THIS record's own primary key (not a
+        hardcoded reference to another record), deterministically
+        derived as MD5(name). <table> resolves by table name. The
+        Choice values "Draft", "Open", "In Progress", "Pending",
+        "Resolved", "Closed" are NOT references to sys_id values -
+        they are Choice labels resolved at render time. All compliant.
+
+      - AAP Section 0.7.2 verbatim:
+          "No-PII constraint. Synthetic data only."
+        This file: report definition contains no PII; the report
+        merely AGGREGATES rows from a table. Whatever PII or non-PII
+        data is in those rows is the seed-data agent's responsibility
+        to keep synthetic. The report definition is PII-free.
+
+      - AAP Section 0.7.2 verbatim:
+          "Scope-namespace exclusivity: every artifact ... must live
+           in the auto-assigned `x_casemgmt` namespace; zero global-
+           scope writes are permitted."
+        This file: <name> is `x_casemgmt_all_cases_by_status`;
+        <table> is `x_casemgmt_case`; <sys_scope> and <sys_package>
+        bind to the scoped app. Zero global-scope writes.
+
+      - AAP Section 0.7.2 verbatim:
+          "Email-disabled constraint."
+        This file: does NOT include any scheduled-email-delivery
+        configuration. <is_scheduled>false</is_scheduled>. The only
+        consumer is the dashboard widget.
+
+      - AAP Section 0.7.2 verbatim:
+          "Single-Update-Set deliverable constraint."
+        This file: one of the records that compose the final Update
+        Set XML at ../update-set/x_casemgmt_case_management_update_set.xml.
+
+      - AAP Section 0.7.2 verbatim:
+          "Minimal-Change Clause. Build only what is specified in the
+           user's prompt."
+        This file: implements exactly one report row per AAP Section
+        0.5.1; no additional fields beyond those mandated by the
+        agent prompt; no new dimensions or aggregations beyond
+        group-by-status COUNT.
+
+    VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
+    ====================================================
+    [x] File path: servicenow-case-management-poc/reports/x_casemgmt_all_cases_by_status.xml
+    [x] Starts with the XML prolog
+    [x] Root: record_update with table="sys_report"
+    [x] Inner: sys_report with action="INSERT_OR_UPDATE"
+    [x] name = x_casemgmt_all_cases_by_status
+    [x] title = All Cases by Status
+    [x] table = x_casemgmt_case
+    [x] type = bar
+    [x] filter empty
+    [x] group_by = status
+    [x] aggregate = COUNT
+    [x] aggregation_source empty
+    [x] field_list empty
+    [x] chart_size = medium
+    [x] is_real_time = false
+    [x] sys_class_name = sys_report
+    [x] sys_scope and sys_package reference scoped app by name/source
+    [x] sys_update_name = sys_report_x_casemgmt_all_cases_by_status
+    [x] sys_name = All Cases by Status
+    [x] sys_policy empty
+    [x] No XML parsing errors
+    [x] No PII
+    [x] No hardcoded sys_ids except own primary key (MD5-derived)
+    [x] All x_casemgmt_ placeholders preserved literally
+    [x] 4-space indentation
+-->
+<record_update table="sys_report">
+    <sys_report action="INSERT_OR_UPDATE">
+        <aggregate>COUNT</aggregate>
+        <aggregation_source/>
+        <chart_size>medium</chart_size>
+        <description>Manager View dashboard bar widget data source. Aggregates ALL records in x_casemgmt_case grouped by the status Choice field with COUNT(*) per bucket. Six bars expected (Draft, Open, In Progress, Pending, Resolved, Closed) when seed data spans all statuses. UNFILTERED by design - shows the entire team backlog distribution across the case lifecycle including terminal Closed cases, enabling managers to assess case throughput and lifecycle-stage saturation. Replaces ArkCase's CaseByStatusDto + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report. Same aggregation as x_casemgmt_case_count_by_status (Agent Workspace donut/pie chart); different chart type and dashboard audience per AAP Section 0.4.4. Different aggregation than x_casemgmt_all_cases_by_type (group by type) and x_casemgmt_all_cases_by_priority (group by priority); same Manager View dashboard.</description>
+        <field_list/>
+        <filter/>
+        <format/>
+        <group_by>status</group_by>
+        <is_real_time>false</is_real_time>
+        <is_scheduled>false</is_scheduled>
+        <name>x_casemgmt_all_cases_by_status</name>
+        <roles/>
+        <sys_class_name>sys_report</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>deeaca81d8626c9c2cc2974716efd08c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>All Cases by Status</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_report_x_casemgmt_all_cases_by_status</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <title>All Cases by Status</title>
+        <type>bar</type>
+        <user/>
+    </sys_report>
+</record_update>

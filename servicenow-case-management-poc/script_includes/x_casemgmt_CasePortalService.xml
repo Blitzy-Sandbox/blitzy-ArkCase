@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_include`
+    record `x_casemgmt.CasePortalService` inside the scoped application
+    `x_casemgmt` (Case Management).
+
+    PURPOSE (AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4):
+
+        Server-side helper class that encapsulates the two operations
+        performed by the unauthenticated Experience Portal pages:
+
+          1. submitCase(payload) - anonymous case submission, called by
+             ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+             (and its paired sys_ws_operation handler) on the public
+             POST /api/x_casemgmt/case_submit endpoint.
+
+          2. lookupCase(number) - anonymous case status lookup, called by
+             ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+             (and its paired sys_ws_operation handler) on the public
+             GET /api/x_casemgmt/case_status_lookup endpoint.
+
+        Per AAP Section 0.4.3 ("Anonymous portal via scripted REST + Experience
+        widget"), this Script Include lives BETWEEN the scripted REST endpoints
+        and the x_casemgmt_case table, providing a whitelisted-field discipline
+        layer that prevents anonymous callers from setting forbidden fields on
+        insert and from reading internal fields on lookup.
+
+    SEMANTIC SOURCE-SIDE REFERENCES (read-only, NOT byte-for-byte ported):
+
+        - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+          com/armedia/acm/plugins/casefile/service/SaveCaseService.java -
+          ArkCase Spring service that orchestrated case persistence with
+          transactional semantics. The submitCase() method here performs
+          the equivalent platform-native insert via GlideRecord, omitting
+          the Spring/JPA cross-cutting concerns (Authentication, IP-address
+          tracking, multipart-file attachment, pipeline pre/post processors)
+          since the POC scope is intake-only and email/notifications are
+          disabled (AAP Section 0.7.2 email-disabled constraint).
+
+        - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+          com/armedia/acm/plugins/casefile/service/GetCaseByNumberServiceImpl.java
+          line 47-50:
+              public CaseFile getCaseByNumber(String caseNumber) {
+                  return getCaseFileDao().findByCaseNumber(caseNumber);
+              }
+          The lookupCase(number) method here performs the equivalent
+          platform-native lookup via GlideRecord.addQuery('number', ...),
+          replacing the JPA caseFileDao.findByCaseNumber() call. The Java
+          method returned a fully-populated CaseFile with all internal
+          fields; the ServiceNow target deliberately whitelists the
+          response payload to ONLY status/subject/opened_date per AAP
+          Section 0.7.4 ("the lookup page returns ONLY status, subject,
+          opened_date - no internal fields exposed").
+
+        - acm-services/acm-service-portal-gateway/src/main/java/com/armedia/
+          acm/portalgateway/... - ArkCase's portal-gateway pattern for
+          anonymous submission. Semantic reference for the
+          definition-vs-operation separation that the sibling
+          ../portal/rest/ records implement; this Script Include is the
+          equivalent of the persistence/whitelisting helper that the
+          ArkCase pluggable portal request providers delegated to.
+
+    WHITELIST-DISCIPLINE INVARIANTS (AAP Section 0.7.4 - non-negotiable):
+
+      submitCase whitelist (INPUT side - prevents privilege escalation):
+        - Accepts ONLY: subject, type, description, requester_name,
+          requester_email.
+        - Silently DROPS every other field, including but not limited to:
+          assigned_group, assigned_agent, closed_date, opened_date,
+          priority, pending_reason, number, sys_id, sys_created_by,
+          sys_created_on, sys_updated_by, sys_updated_on, status (caller-
+          provided), and any unrecognized custom field.
+        - status is FORCED to 'Draft' regardless of payload. A malicious
+          caller sending status=Closed (or any non-Draft value) is silently
+          overridden to 'Draft' before insert. This is the central security
+          guarantee that anonymous submissions cannot bypass the
+          state-machine workflow defined by the Flow Designer flows.
+        - Returns the auto-generated case number (CASE0000001 format)
+          on success. The number generator is configured in
+          ../numbers/sys_number_x_casemgmt_case.xml.
+
+      lookupCase whitelist (OUTPUT side - prevents PII / internal-data leak):
+        - Returns ONLY: status, subject, opened_date.
+        - NEVER returns: assigned_group, assigned_agent, description,
+          closed_date, requester_name, requester_email, priority, type,
+          pending_reason, sys_id, sys_created_by, sys_created_on,
+          sys_updated_by, sys_updated_on, or any other field.
+        - Returns null when no record matches. The calling scripted REST
+          endpoint translates null into HTTP 404 with the verbatim
+          message "No case found with that number." per AAP Section 0.7.4.
+          The literal not-found text is INTENTIONALLY absent from this
+          Script Include's body - it is the REST endpoint's responsibility
+          to surface the verbatim user-facing message.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <name>CasePortalService</name>                          bare class name
+        - <api_name>x_casemgmt.CasePortalService</api_name>       scope-qualified
+        - <sys_update_name>sys_script_include_x_casemgmt_CasePortalService</sys_update_name>
+        - <sys_scope>x_casemgmt</sys_scope>                       scoped namespace
+        - <sys_package>x_casemgmt</sys_package>                   scoped application
+        - script body references new GlideRecord('x_casemgmt_case') only
+        - Zero global-scope writes. Zero modifications to OOB tables
+          (sys_user, sys_user_group, sys_user_role, core_company, etc.).
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; lookupCase() queries by the case 'number' field, NOT by
+          sys_id. The post-insert re-query in submitCase() uses the sys_id
+          RETURNED BY the .insert() call (not a hardcoded literal); this
+          is the documented platform pattern for re-reading auto-numbered
+          values that are populated by the platform's Number Maintenance
+          subsystem during the insert pipeline.
+        - The script body uses NO gs.getReference(<32-char-hex>) calls.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_CasePortalService"), which is
+          permitted because the AAP "no hardcoded sys_id" rule applies
+          to REFERENCE FIELDS pointing at OTHER records, not to a record's
+          own primary key.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This Script
+        Include contains zero gs.eventQueue() calls, zero gs.email() calls,
+        and zero gs.notificationEngine() calls. ArkCase's
+        SaveCaseServiceImpl invoked downstream listeners that ultimately
+        sent confirmation emails to the requester; the ServiceNow POC
+        omits this entirely - the portal submission is silent at the
+        server side, with the confirmation surfaced by the calling widget
+        directly from the {number} return value.
+
+    NO-PII CONSTRAINT (AAP Section 0.7.2):
+        Code comments and gs.error()/gs.info() log messages contain ZERO
+        real names, real email addresses, real phone numbers, real
+        organizational identifiers, or any other personally identifiable
+        information. The example error log message in submitCase() includes
+        getLastErrorMessage() which returns a system-generated diagnostic
+        string (not user-supplied content); even if this string occasionally
+        echoes a snippet of input payload, that is a rare diagnostic case
+        acceptable for the POC scope. The script body does NOT log the
+        raw payload itself, NOT the requester_name/email values, and NOT
+        the case description text - all of which could carry PII at runtime.
+
+    ACCESS-LEVEL JUSTIFICATION:
+        <access>package_private</access> - this Script Include is callable
+        ONLY from code inside the same x_casemgmt scope. Per AAP Section
+        0.5.2 cross-dependency rules, the calling scripted REST endpoints
+        (../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml and
+        sys_ws_definition_x_casemgmt_case_status_lookup.xml) are in the
+        SAME scope, so package_private is sufficient and is the safer
+        default per ServiceNow scoped-application best practices. If a
+        future cross-scope caller needed to invoke this Script Include,
+        the access could be elevated to "public", but the POC has no such
+        requirement.
+
+        <client_callable>false</client_callable> - this Script Include is
+        SERVER-SIDE only. It writes/reads database rows and must NOT be
+        exposed to client scripts (where it would be reachable by any
+        authenticated user via the GlideAjax channel). The portal widget
+        clients reach this code only INDIRECTLY through the public
+        scripted REST endpoints, which is the correct attack-surface
+        boundary.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script_include record MUST be loaded AFTER:
+            - ../app/sys_app/x_casemgmt_case_management.xml   (scoped app)
+            - ../app/sys_scope/x_casemgmt.xml                 (scope record)
+            - ../tables/x_casemgmt_case.xml                   (case table queried by both methods)
+            - ../dictionary/x_casemgmt_case_number.xml        (auto-numbered field returned by submitCase, queried by lookupCase)
+            - ../dictionary/x_casemgmt_case_subject.xml       (whitelisted in/out field)
+            - ../dictionary/x_casemgmt_case_type.xml          (whitelisted input field)
+            - ../dictionary/x_casemgmt_case_status.xml        (forced to Draft on submit, returned on lookup)
+            - ../dictionary/x_casemgmt_case_description.xml   (whitelisted input field)
+            - ../dictionary/x_casemgmt_case_opened_date.xml   (returned on lookup)
+            - ../dictionary/x_casemgmt_case_requester_name.xml (whitelisted input field)
+            - ../dictionary/x_casemgmt_case_requester_email.xml (whitelisted input field)
+        And BEFORE:
+            - ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+              (paired sys_ws_operation calls new x_casemgmt.CasePortalService().submitCase(payload))
+            - ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+              (paired sys_ws_operation calls new x_casemgmt.CasePortalService().lookupCase(number))
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_CasePortalService")
+               = 95e90fa18471e42875f5f956ec7949d1
+        32-character lowercase hex. The PDI accepts any valid 32-char hex
+        sys_id; deriving from the record name guarantees idempotent re-import
+        on a fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in
+        place rather than creating a duplicate. This is the same convention
+        used by the sibling Script Include
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 4 (Portal - submission): "Case created from unauthenticated
+          portal submission - Case appears in internal list with Draft
+          status and correct case number."
+            * submitCase() inserts a row with status='Draft' (forced).
+            * Returns { number: '<auto-generated>' } matching format
+              CASE0000001 (per ../numbers/sys_number_x_casemgmt_case.xml).
+            * The case appears in the internal list view because no
+              field-level ACL conditions hide rows from authenticated
+              internal users; the case_viewer role (read-all) and
+              case_manager role (read-all) both see all Draft rows.
+
+        - Gate 5 (Portal - lookup): "Status lookup returns correct data
+          for valid case number - Correct status / subject / opened_date
+          returned; 'No case found with that number.' for invalid number."
+            * lookupCase(number) returns { status, subject, opened_date }
+              for valid numbers.
+            * Returns null for invalid numbers; the REST operation handler
+              translates null into HTTP 404 with the verbatim message
+              "No case found with that number." per AAP Section 0.7.4.
+            * Internal fields (assigned_*, description, closed_date,
+              requester_*, priority, type, pending_reason, audit fields)
+              are NEVER included in the response object.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance." The deterministic
+          sys_id, reference-by-name pattern, and well-formed XML structure
+          ensure this record re-imports cleanly with zero preview errors.
+-->
+<record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_casemgmt.CasePortalService</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase returns {number} on success or {error} on failure; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <name>CasePortalService</name>
+        <script><![CDATA[var CasePortalService = Class.create();
+CasePortalService.prototype = {
+    /**
+     * No-arg initializer. The class holds no per-instance state across
+     * calls (each request from the scripted REST handler instantiates a
+     * fresh CasePortalService), so initialize() is intentionally empty.
+     */
+    initialize: function() {
+    },
+
+    /**
+     * Anonymous case submission entry point.
+     *
+     * Whitelist-only field handling per AAP Section 0.7.4:
+     *   - Accepted fields: subject, type, description, requester_name,
+     *     requester_email
+     *   - All other fields are silently dropped (no error returned for
+     *     unrecognized keys; this matches the AAP requirement that the
+     *     portal not surface internal field names to anonymous callers
+     *     even by way of validation error messages).
+     *   - status is FORCED to 'Draft' regardless of payload. Even if a
+     *     malicious caller sends status='Closed' or any non-Draft value,
+     *     the server overwrites to 'Draft' before insert. This is the
+     *     single security guarantee that anonymous submissions cannot
+     *     bypass the state-machine workflow.
+     *   - Returns the auto-generated case number (CASE0000001 format)
+     *     on success. The number generator is configured in
+     *     ../numbers/sys_number_x_casemgmt_case.xml.
+     *
+     * Robust input handling per Rule 9 of the agent prompt: gracefully
+     * handle null, undefined, and non-object payloads without throwing
+     * uncaught exceptions (the unauthenticated REST endpoint can receive
+     * any malformed payload from the public Internet).
+     *
+     * @param {Object} payload - request payload from the scripted REST
+     *     endpoint, as parsed from the JSON request body.
+     * @return {Object} { number: 'CASE0000001' } on success; or
+     *     { error: '<message>' } on failure (invalid payload, insert
+     *     rejected by validation business rule, post-insert lookup failed).
+     */
+    submitCase: function(payload) {
+        // Defensive null/type check. The scripted REST endpoint should
+        // already have parsed JSON into an object, but a malformed
+        // request could yield null/undefined/string/array; guard against
+        // all of those without leaking implementation details to the caller.
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            return { error: 'Invalid payload.' };
+        }
+
+        var caseGr = new GlideRecord('x_casemgmt_case');
+        caseGr.initialize();
+
+        // Whitelisted input fields per AAP Section 0.7.4. The five fields
+        // below are EXACTLY the inputs the case submission page exposes
+        // to anonymous callers (../portal/pages/sp_page_x_casemgmt_case_submit.xml
+        // and the submission widget at
+        // ../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml).
+        // Any other key in the payload is silently dropped - we do not
+        // even acknowledge unrecognized keys via an error response, so a
+        // probing client cannot enumerate internal field names.
+        var WHITELIST = ['subject', 'type', 'description', 'requester_name', 'requester_email'];
+        for (var i = 0; i < WHITELIST.length; i++) {
+            var fieldName = WHITELIST[i];
+            // hasOwnProperty guards against prototype-pollution edge cases;
+            // the != null check (loose equality) excludes both null AND
+            // undefined while still allowing empty strings to pass through
+            // (an empty-string requester_email is a valid "I do not wish
+            // to provide email" answer that the dictionary marks optional).
+            if (Object.prototype.hasOwnProperty.call(payload, fieldName) && payload[fieldName] != null) {
+                // String() coercion normalizes any non-string primitive
+                // (number, boolean) into a string before the GlideRecord
+                // setValue call - GlideRecord.setValue expects strings
+                // for string-typed columns and the platform's behavior
+                // for non-string inputs is release-dependent.
+                caseGr.setValue(fieldName, String(payload[fieldName]));
+            }
+        }
+
+        // FORCE status='Draft' regardless of payload (security perimeter).
+        // Anonymous submissions ALWAYS start in Draft per AAP Sections
+        // 0.5.5 and 0.7.4; the state-machine in the Flow Designer flows
+        // (../flows/general_inquiry_state_machine.xml,
+        // ../flows/complaint_state_machine.xml) advances the case from
+        // Draft to subsequent statuses only via authenticated internal
+        // user actions. Even if the dictionary's default_value='Draft'
+        // already covers most insert paths, an explicit setValue() here
+        // defends against a payload that includes status='Closed' (or
+        // any other string) attempting to skip the state-machine entirely.
+        caseGr.setValue('status', 'Draft');
+
+        // Insert the new row. The insert() return value is the new
+        // record's sys_id on success or null on failure. Failure here
+        // typically indicates a before-insert business rule rejected the
+        // record (e.g., a missing mandatory field that the portal client
+        // forgot to send), or a database/platform error.
+        var newSysId = caseGr.insert();
+        if (!newSysId) {
+            // gs.error() emits a diagnostic to the system log. Per Rule 5
+            // of the agent prompt, we log getLastErrorMessage() (a
+            // system-generated diagnostic) but NOT the raw payload (which
+            // could carry PII like a real requester email). The error
+            // returned to the caller is intentionally generic ("Submission
+            // failed.") so a probing client cannot extract field-level
+            // validation hints.
+            gs.error('CasePortalService.submitCase: insert failed; lastErrorMessage=' + caseGr.getLastErrorMessage());
+            return { error: 'Submission failed.' };
+        }
+
+        // Re-query by sys_id to read the auto-generated 'number' field.
+        // The number is populated by the platform's Number Maintenance
+        // subsystem during the insert pipeline; on most platform releases
+        // the number is already visible on the original GlideRecord by
+        // the time insert() returns, but a fresh GlideRecord.get(sys_id)
+        // is the documented defensive pattern that works across all
+        // releases (Yokohama and later per AAP Section 0.6.1).
+        //
+        // The newSysId used here is the value returned by insert() in the
+        // line above - it is NOT a hardcoded sys_id literal, so this
+        // GlideRecord.get(newSysId) call complies with the AAP Section
+        // 0.7.2 no-hardcoded-sys_id constraint.
+        var savedGr = new GlideRecord('x_casemgmt_case');
+        if (!savedGr.get(newSysId)) {
+            gs.error('CasePortalService.submitCase: post-insert lookup failed for sys_id=' + newSysId);
+            return { error: 'Submission failed.' };
+        }
+
+        // Return ONLY the auto-generated number - no other fields, no
+        // sys_id, no audit fields. The portal confirmation widget
+        // (../portal/widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml)
+        // displays this number to the requester so they can later look up
+        // their case via the status page.
+        return { number: String(savedGr.getValue('number')) };
+    },
+
+    /**
+     * Anonymous case status lookup entry point.
+     *
+     * Whitelist-only field return per AAP Section 0.7.4:
+     *   - Looks up by case number (CASE0000001 style; the public-facing
+     *     identifier returned by submitCase).
+     *   - Returns ONLY: status, subject, opened_date.
+     *   - NEVER returns: assigned_group, assigned_agent, description,
+     *     closed_date, requester_name, requester_email, priority, type,
+     *     pending_reason, sys_id, sys_created_by, sys_created_on,
+     *     sys_updated_by, sys_updated_on, or any other field. The
+     *     three-field whitelist is the privacy perimeter for anonymous
+     *     lookups - returning the full record would expose internal
+     *     assignment data and PII that the requester themselves
+     *     supplied at submission time.
+     *   - Returns null when no case matches. The calling scripted REST
+     *     endpoint translates null into the HTTP 404 not-found response
+     *     whose verbatim body is specified in AAP Section 0.7.4. The
+     *     user-facing not-found message is INTENTIONALLY absent from this
+     *     Script Include's runtime path - it is the REST endpoint's
+     *     responsibility to surface that message.
+     *
+     * Robust input handling per Rule 9 of the agent prompt: gracefully
+     * handle empty strings, whitespace-only strings, and non-string
+     * inputs without throwing.
+     *
+     * @param {String} number - case number (e.g., 'CASE0000001'). Any
+     *     leading/trailing whitespace is stripped before query.
+     * @return {Object|null} { status, subject, opened_date } when a case
+     *     with the given number is found, or null when no case matches
+     *     (including when the number argument is null, undefined, empty,
+     *     non-string, or whitespace-only).
+     */
+    lookupCase: function(number) {
+        // Defensive null/type check. The scripted REST endpoint passes
+        // through whatever the caller supplied as the 'number' query
+        // parameter; a missing parameter yields undefined, an empty
+        // parameter yields '', and the platform may sometimes coerce
+        // numeric-looking strings into numbers. All of these should
+        // produce a clean "not found" response without throwing.
+        if (number === null || number === undefined) {
+            return null;
+        }
+        // Coerce to string defensively before calling .trim() - the
+        // string primitive may be received as a Number or other type.
+        var trimmed = String(number).trim();
+        if (trimmed === '') {
+            return null;
+        }
+
+        var caseGr = new GlideRecord('x_casemgmt_case');
+        // Query by the public-facing 'number' field, NOT by sys_id. The
+        // case number is the stable human-readable identifier shown to
+        // the requester on the submission confirmation; it is the only
+        // identifier the requester ever sees, so it is the only key the
+        // lookup endpoint accepts. This compliance with the AAP Section
+        // 0.7.2 no-hardcoded-sys_id constraint is also a privacy win:
+        // anonymous callers cannot probe the system by guessing
+        // 32-character hex sys_id values.
+        caseGr.addQuery('number', trimmed);
+        // setLimit(1) is a defensive optimization - the case number is
+        // a unique field per the auto-numbering generator, so at most
+        // one row can match. Setting the limit eliminates any potential
+        // for a misconfiguration to return multiple rows and tells the
+        // database engine to stop after the first hit.
+        caseGr.setLimit(1);
+        caseGr.query();
+
+        if (!caseGr.next()) {
+            // No case with the given number was found. Return null; the
+            // caller (the scripted REST operation script) translates
+            // null into the HTTP 404 response whose verbatim body is
+            // specified in AAP Section 0.7.4. We deliberately do NOT
+            // include that verbatim text in this Script Include - the
+            // REST endpoint owns the user-facing message, and embedding
+            // the literal here would create a maintenance hazard if the
+            // message ever needed to be reworded (which would then
+            // require a schema/Update-Set re-export rather than just a
+            // REST endpoint update).
+            return null;
+        }
+
+        // Whitelisted output fields per AAP Section 0.7.4. EXACTLY three
+        // fields are exposed to anonymous lookup callers:
+        //
+        //   - status: lets the requester see if their case is still
+        //     Draft, has progressed to Open / In Progress / Pending /
+        //     Resolved, or has been Closed.
+        //   - subject: lets the requester confirm they're looking up the
+        //     correct case (the requester chose this string at
+        //     submission time, so echoing it back confirms identity
+        //     without exposing other-party content).
+        //   - opened_date: lets the requester compute how long the case
+        //     has been open. Note: opened_date is auto-set on insert
+        //     by the before-insert business rule
+        //     ../business_rules/x_casemgmt_set_opened_date.xml.
+        //
+        // The String() coercion normalizes the GlideElement primitive
+        // values into plain strings (so JSON.stringify on the result
+        // produces clean JSON without any GlideElement object metadata).
+        // The `|| ''` defaults handle the rare edge case where a column
+        // is unexpectedly null-valued at runtime (e.g., a partially-
+        // initialized seed-data row); empty strings are safer than null
+        // in JSON responses to widget code that may not handle null
+        // gracefully.
+        return {
+            status:      String(caseGr.getValue('status') || ''),
+            subject:     String(caseGr.getValue('subject') || ''),
+            opened_date: String(caseGr.getValue('opened_date') || '')
+        };
+    },
+
+    /**
+     * Class-name marker. ServiceNow's Class.create() pattern conventionally
+     * exposes a `type` property whose value matches the class name (without
+     * the scope prefix). This is used by the platform's introspection
+     * tooling and by some debug logging. It MUST be 'CasePortalService'
+     * (NOT 'x_casemgmt_CasePortalService') - the scope prefix lives only in
+     * the <api_name> element above, not in the class name itself.
+     */
+    type: 'CasePortalService'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>95e90fa18471e42875f5f956ec7949d1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CasePortalService</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_include_x_casemgmt_CasePortalService</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_script_include>
+</record_update>

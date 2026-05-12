@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the FOUR `sys_choice` rows
+    that enumerate the legal values of the `type` Choice field on the
+    `x_casemgmt_case_task` custom table inside the scoped application
+    `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
+
+        Field    Type     Constraints
+        type     Choice   Investigation, Review, Follow-up, Other
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning):
+        choices/sys_choice_case_task_type.xml -> Investigation, Review,
+                                                 Follow-up, Other
+
+    The values authored here are the EXHAUSTIVE, CLOSED enumeration that the
+    AAP mandates - exactly four records, no more and no fewer. Per the
+    MINIMAL CHANGE CLAUSE in AAP Section 0.7.2, additional task types such
+    as `Audit`, `Triage`, `Approval`, `Notification`, `Escalation`, etc.
+    are explicitly out of scope for this POC. ArkCase's `AcmTask.java`
+    domain object carried a free-form `String type` field with no platform-
+    level enumeration check (see Source-side reference below); the POC
+    target collapses that unconstrained string into these four controlled
+    Title Case labels through the parent dictionary entry's
+    `<choice>3</choice>` setting plus the four sibling sys_choice records
+    declared below.
+
+    Per AAP Sections 0.5.2, 0.4.1, and 0.5.7, the labels declared here are
+    read by:
+
+      The parent dictionary entry that declares this field as Choice:
+        ../dictionary/x_casemgmt_case_task_type.xml
+            (mandatory=true, choice=3 means "Choice list - dropdown only";
+            because the field is mandatory, "Other" exists as a fallback
+            bucket so a user can always file a task whose category does
+            not fit Investigation, Review, or Follow-up without leaving
+            the type field empty and tripping the form-level mandatory
+            validation gate)
+
+      Synthetic demo task seed records satisfying AAP Section 0.4.1
+      minimum-data threshold ("at least one open and one closed task per
+      demo case in `In Progress` or `Pending` state, to exercise the
+      all-tasks-closed gate"):
+        ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml
+            (each demo task picks one of the four Title Case labels
+            below by string-equality value - mixing all four categories
+            across the demo task population so the dropdown rendering
+            and the future "tasks by type" reports both have meaningful
+            data on a fresh PDI re-import)
+
+      The idempotent server-side seed script:
+        ../scripts/seed_demo_data.js
+            (writes synthetic task type labels via
+            GlideRecord.setValue('type', 'Investigation' | 'Review' |
+            'Follow-up' | 'Other'); the script-side string literals
+            byte-match the labels declared here, so any drift between
+            this Choice list and the seed script will leave the demo
+            task `type` column blank on the seeded rows because
+            ServiceNow rejects unknown choice values for dictionary
+            entries declared with `<choice>3</choice>`.)
+
+    Unlike the sibling ../choices/sys_choice_case_task_status.xml file,
+    these four `type` values do NOT participate in any state-machine guard,
+    transition validator, or blocking-error message on the case form.
+    Per AAP Section 0.5.5, the case-resolution gate (the "All tasks must
+    be closed before resolving this case." blocking error per AAP
+    Section 0.7.4 verbatim) checks ONLY the task `status` field, not the
+    `type` field. Task type is purely categorical metadata used for
+    reporting and human filtering; choosing any of the four values
+    (or transitioning between them, which the form actually permits
+    via standard ServiceNow Choice-field semantics) does NOT alter the
+    parent case's state-machine eligibility, the ACL evaluation, or the
+    Resolved-transition gate.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java line 85:
+            private String type;
+        ArkCase's task `type` was a free-form String field on the
+        AcmTask domain object. The field carried NO Bean Validation
+        constraints (no @Size, no @NotNull, no @Pattern), so any
+        caller could assign any string. ArkCase's task-type vocabulary
+        was distributed across BPMN process variables and ad-hoc
+        Activiti taskDefinitionKey values; common observed labels in
+        the legacy code base included free-form review-flow names,
+        adhoc task descriptors, and engine-internal identifiers - none
+        of which were enforceable at the JPA layer. The ServiceNow
+        target replaces this fragmented free-form String with a
+        controlled Choice vocabulary of four labels (Investigation,
+        Review, Follow-up, Other) through the parent dictionary entry's
+        `<choice>3</choice>` setting plus the sibling sys_choice
+        records below. AAP Section 0.1.2 codifies this kind of
+        free-form-String -> Choice tightening as the ServiceNow-side
+        equivalent of ArkCase's bean-validation enforcement.
+      - The four AAP-mandated values represent typical case-management
+        task categories:
+            Investigation - fact-finding, evidence-gathering work
+            Review        - examination of submitted material or
+                            decisions made by another party
+            Follow-up     - additional contact or work flowing from
+                            an earlier action
+            Other         - fallback bucket for tasks that do not fit
+                            any of the more specific categories;
+                            without this fallback, the mandatory
+                            `type` field would block creation of any
+                            task whose category was not one of the
+                            three more specific labels
+        These four values are entirely defined by the AAP (Section
+        0.5.7), not derived from any specific ArkCase source code.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - EXACTLY four records: no fewer, no more. Per AAP Section 0.5.7
+        verbatim. The four records below are the COMPLETE enumeration
+        for this POC. The "extensible" annotation that appears next to
+        the case `type` field in the AAP is NOT repeated for case_task
+        `type` - this Choice list is treated as closed by the POC
+        scope.
+      - Title Case labels: `Investigation`, `Review`, `Follow-up`,
+        `Other`. NOT all-uppercase (which ArkCase's BPMN engine commonly
+        used: INVESTIGATION, REVIEW), NOT all-lowercase, NOT camelCase.
+        The agent prompt explicitly warns that `Follow-up` MUST contain
+        a single ASCII hyphen-minus character (U+002D) - NOT
+        `Follow up` (with space), NOT `Followup` (no separator), NOT
+        `Follow_up` (snake_case underscore), NOT `Follow-Up` (Title-
+        cased after the hyphen), NOT en-dash, em-dash, or any other
+        Unicode dash. The hyphen below is the same ASCII byte 0x2D
+        used universally in plaintext writing.
+      - Label = Value pattern: each `<value>` matches its sibling
+        `<label>` byte-for-byte. The stored value IS the human-
+        readable label - no integer state codes, no enum ordinals,
+        no separate machine-key. This matches the pattern used by
+        every other sibling Choice list in this app (case.type,
+        case.status, case.priority, case.pending_reason, case_task.
+        status, case_party.party_type) and lets reports group by the
+        label without per-table lookup tables.
+      - Sequence ordering aligned with the AAP-listed order in
+        increments of 100:
+            Investigation (100) -> Review (200) -> Follow-up (300)
+                                -> Other (400)
+        This drives:
+            (a) the dropdown order on the case_task form (Investigation
+                appears first because it is the most common task
+                category in case-management workflows; Other appears
+                last because it is the fallback)
+            (b) the slice/bar order on any future task-type reports
+            (c) the future extensibility - increment-of-100 spacing
+                leaves room for inserting new types without
+                renumbering (e.g., a hypothetical `Audit` could slot
+                at sequence 150 between Investigation and Review),
+                though the AAP MINIMAL CHANGE CLAUSE prohibits adding
+                any in this POC build.
+      - All four records are <inactive>false</inactive>: every value
+        is active and selectable in the dropdown. There are no
+        deprecated legacy values to filter out (this is a greenfield
+        Choice list).
+      - No <dependent_value/>: type is a TOP-LEVEL categorical
+        indicator whose legal values do NOT depend on the parent case's
+        type, on `status`, on `assigned_to`, or on any other field.
+        The dependent_value mechanism is for declarative cascading
+        choices at the form-rendering level only and is not used here
+        because all four task types are valid on every case_task row
+        regardless of context.
+      - No <hint/>: the labels are self-documenting. The agent prompt
+        explicitly suppresses helper text per the POC scope. Future
+        builds may add hint text such as "Use 'Other' when the task
+        does not fit a more specific category" if user feedback
+        warrants it.
+      - Scope-namespace exclusivity: every record's `<sys_scope>` and
+        `<sys_package>` resolve into the `x_casemgmt`
+        scoped application by `source` attribute lookup. NO global-
+        scope writes - the OOB tables sys_user, sys_user_group,
+        sys_user_role, core_company, task, incident, etc. are never
+        modified by these records.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_casemgmt`), not by literal sys_id. Each
+        record's `<sys_id>` element value is THIS record's own
+        deterministic primary key - computed as MD5 of the canonical
+        identifier `x_casemgmt_case_task.type.<Value>` so that
+        re-generation of this XML yields byte-identical output (no
+        random UUIDs). This is the same derivation pattern used by
+        the sibling ../choices/sys_choice_case_task_status.xml file
+        and ../choices/sys_choice_case_status.xml file. The sys_id
+        is NOT a reference to any other record - it is this record's
+        OWN identity, which the no-hardcoded-sys_id rule (AAP Section
+        0.7.2) explicitly permits.
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves
+        into the final scope namespace.
+      - English language only: `<language>en</language>` on every
+        record per the POC scope. The platform supports localization
+        via additional sys_choice records keyed by `language`, but
+        no non-English locales are in scope.
+      - `<sys_domain>global</sys_domain>` on every record: domain
+        separation is not used by this scoped application.
+      - No PII: the labels are categorical task-type terms only; no
+        real names, email addresses, organizational identifiers, or
+        case-content phrases are derived from or stored in these
+        records.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD SET MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application
+          record; the sys_package source target)
+        - ../app/sys_scope/x_casemgmt.xml (scope record; the sys_scope
+          target)
+        - ../tables/x_casemgmt_case_task.xml (parent table; the type
+          field's host)
+        - ../dictionary/x_casemgmt_case_task_type.xml (parent dictionary
+          entry; declares the column shape, choice=3, mandatory=true.
+          Without this entry the four sys_choice records below have no
+          column to attach to; per AAP Section 0.5.2 "Choices after
+          their parent dictionary entry", the dictionary entry MUST
+          load first.)
+
+      THIS RECORD SET MUST LOAD BEFORE all consumers enumerated above
+      (demo task seed records and the seed_demo_data.js script).
+      Loading order is enforced by the alphabetical Update Set preview
+      ordering plus the record-by-record dependency-resolution pass.
+
+    Source for the deterministic sys_id derivations:
+        echo -n "x_casemgmt_case_task.type.Investigation" | md5sum
+            => c509a1c2ee11b17bb33984334f603baf
+        echo -n "x_casemgmt_case_task.type.Review"        | md5sum
+            => b0337f92dc4ec6a9eb8e5a3e4faeccaf
+        echo -n "x_casemgmt_case_task.type.Follow-up"     | md5sum
+            => 13e5648ac5e3de04d88ab1aef64f0165
+        echo -n "x_casemgmt_case_task.type.Other"         | md5sum
+            => 2edff77acab5fc790a92ad36e2772600
+
+    The MD5 input is the canonical identifier <table>.<element>.<value>,
+    matching the same derivation pattern used by the sibling
+    ../choices/sys_choice_case_task_status.xml file. The MD5 derivation
+    guarantees that re-generation of this Update Set on any agent run
+    produces byte-identical sys_ids (no random UUIDs), which is required
+    for clean Update-Set re-import on a fresh PDI without creating
+    duplicate sys_choice rows.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>type</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Investigation</label>
+    <language>en</language>
+    <name>x_casemgmt_case_task</name>
+    <sequence>100</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>c509a1c2ee11b17bb33984334f603baf</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Investigation</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>type</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Review</label>
+    <language>en</language>
+    <name>x_casemgmt_case_task</name>
+    <sequence>200</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>b0337f92dc4ec6a9eb8e5a3e4faeccaf</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Review</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>type</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Follow-up</label>
+    <language>en</language>
+    <name>x_casemgmt_case_task</name>
+    <sequence>300</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>13e5648ac5e3de04d88ab1aef64f0165</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Follow-up</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>type</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Other</label>
+    <language>en</language>
+    <name>x_casemgmt_case_task</name>
+    <sequence>400</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>2edff77acab5fc790a92ad36e2772600</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Other</value>
+</sys_choice>
+</unload>

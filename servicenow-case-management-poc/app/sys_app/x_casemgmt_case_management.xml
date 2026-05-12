@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<record_update table="sys_app">
+    <sys_app action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Proof-of-concept ServiceNow scoped application that re-platforms a defined subset of ArkCase 2021.03 case-management capabilities onto the ServiceNow Now Platform. Implements seven enumerated POC capabilities: (1) the case lifecycle as the x_casemgmt_case table replicating ArkCase CaseFile fields; (2) the task domain as x_casemgmt_case_task replicating ArkCase AcmTask fields; (3) polymorphic party association as a single x_casemgmt_case_party table that collapses ArkCase PersonAssociation and PersonOrganizationAssociation; (4) three scoped roles (case_manager, case_agent, case_viewer) with table-level and field-level ACLs replacing ArkCase ApplicationRolesToPrivilegesConfig; (5) two Flow Designer flows (one per case type: General Inquiry, Complaint) replacing the Activiti BPMN state machine; (6) an Experience Portal with two unauthenticated pages (case submission and case status lookup); and (7) two Performance Analytics dashboards (Agent Workspace and Manager View). All artifacts live in the auto-assigned x_casemgmt namespace; zero global-scope writes are made. No external integrations, no email notifications, no document management, and no data migration from ArkCase are performed.</description>
+        <enforce_license>false</enforce_license>
+        <licensable>false</licensable>
+        <logo />
+        <name>x_casemgmt Case Management</name>
+        <private>false</private>
+        <scope>x_casemgmt</scope>
+        <short_description>Proof-of-concept ServiceNow re-platforming of ArkCase case-management capabilities.</short_description>
+        <sys_id>82b99028936f74320d74d6f88357a5af</sys_id>
+        <trackable>true</trackable>
+        <vendor>ServiceNow Case Management POC</vendor>
+        <vendor_prefix>x_casemgmt</vendor_prefix>
+        <version>1.0.0</version>
+    </sys_app>
+</record_update>

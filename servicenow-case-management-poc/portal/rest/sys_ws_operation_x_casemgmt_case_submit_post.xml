@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sys_ws_operation`
+    row that defines the **POST handler** of the Case Submit Scripted REST
+    API for the scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4):
+
+      AAP Section 0.4.3 (Design Pattern): "Anonymous portal via scripted REST
+      + Experience widget - Two scripted REST endpoints execute at platform-
+      default elevated privilege, but their request/response shapes whitelist
+      exactly the fields specified by the user, giving anonymous callers no
+      path to internal data."
+
+      AAP Section 0.4.4 (UI Design - External Experience Portal UI):
+      "Page 1 - Case Submission: a simple form with five inputs (subject,
+      type, description, requester_name, requester_email). On submit, calls
+      the scripted REST endpoint, displays a confirmation panel showing the
+      returned case number and a friendly 'Your case has been submitted'
+      message."
+
+      AAP Section 0.5.1 (in-scope artifact verbatim):
+      "servicenow-case-management-poc/portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml -
+      Scripted REST endpoint: POST anonymously allowed; creates x_casemgmt_case
+      in Draft; returns {number}. Whitelisted fields only."
+
+      This is the foundational artifact that, together with the parent
+      sys_ws_definition record, registers the URL POST /api/x_casemgmt/case_submit
+      with the ServiceNow REST router and provides the actual HTTP-method
+      handler. Without this record, the parent definition would have no
+      handler for POST requests and the platform would reject incoming
+      submissions with HTTP 405 Method Not Allowed (or HTTP 404 from the
+      routing layer if no operations existed at all).
+
+    DEFINITION-VS-OPERATION RECORD SEPARATION (ServiceNow data-model):
+
+      ServiceNow's Scripted REST API data-model splits a single REST
+      endpoint across two records:
+
+        1. sys_ws_definition (parent file
+             ./sys_ws_definition_x_casemgmt_case_submit.xml) - the API
+             "container":
+             - Defines `name`, `api_id`, `namespace`, `active` flag, and
+               authentication policy (`requires_authentication`,
+               `requires_acl_authorization`, `requires_snc_internal_role`,
+               `enforce_acl`).
+             - Contains NO handler scripts.
+             - One definition can host multiple operations (e.g., a single
+               API with both POST and GET on different paths). For our
+               case, each definition has exactly ONE operation, but the
+               separation is still required by the platform's data model.
+
+        2. sys_ws_operation (THIS file) - the actual HTTP-method handler:
+             - References the parent definition via `<web_service_definition>`
+               field (resolved by `<namespace>_<api_id>` concatenation
+               that matches the parent's stable identifier).
+             - Defines `http_method` (POST), `relative_path` (empty / root
+               for this single-operation API), `consumes`/`produces`
+               (application/json), and the `operation_script` body that
+               actually handles incoming HTTP requests.
+             - Delegates field whitelisting and persistence to
+               ../../script_includes/x_casemgmt_CasePortalService.xml via
+               `new x_casemgmt.CasePortalService().submitCase(payload)`.
+
+      This separation matches ArkCase's Spring-bean architecture in
+      acm-services/acm-service-portal-gateway/src/main/java/com/armedia/
+      acm/portalgateway/service/DefaultPluggablePortalRequestService.java:
+
+        - Line 48 ("public class DefaultPluggablePortalRequestService
+          implements PortalRequestService") is the Spring-bean container -
+          the analog of the parent sys_ws_definition record (the URL
+          namespace + auth policy).
+        - Line 60-65 (`submitRequest(String portalId, String portalUserId,
+          PortalRequest request)`) is the actual handler method - the
+          analog of THIS sys_ws_operation record. ArkCase's submitRequest
+          delegated to a per-request-type provider via
+          `getServiceProvider(request.getRequestType()).submitRequest(...)`;
+          the ServiceNow target collapses that indirection - this handler
+          delegates directly to the single CasePortalService.submitCase()
+          Script Include method.
+
+      The same separation-of-concerns principle is preserved: the
+      "container" knows the URL/auth policy; the "handler" knows the
+      actual request processing. No Java code is byte-for-byte ported
+      (the Java code is consulted ONLY for semantic reference per AAP
+      Section 0.5.1 and Section 0.8.1).
+
+    ANONYMOUS-ACCESS POLICY (AAP Section 0.4.4 - the two unauthenticated
+    pages):
+
+      The four critical fields below permit unauthenticated callers to
+      invoke this endpoint:
+
+        - <requires_authentication>false</requires_authentication>
+            Bypasses ServiceNow's authentication layer. Without this,
+            anonymous callers would receive HTTP 401 before the handler
+            script runs.
+        - <requires_acl_authorization>false</requires_acl_authorization>
+            Skips ACL enforcement. Without this, anonymous callers would
+            receive HTTP 403 because they have no roles.
+        - <requires_snc_internal_role>false</requires_snc_internal_role>
+            No internal-role gate (ServiceNow's optional snc_internal
+            role check used by some OOB endpoints).
+        - <enforce_acl/> - empty
+            No table-level ACL enforcement on the response body.
+
+      The privacy/security perimeter for anonymous access is NOT this
+      operation's auth flags - it is the field whitelist enforced by
+      x_casemgmt.CasePortalService.submitCase():
+
+        - INPUT whitelist: only subject, type, description,
+          requester_name, requester_email are accepted from the payload.
+          Every other key is silently dropped (including assigned_group,
+          assigned_agent, status, closed_date, opened_date, priority,
+          pending_reason, number, sys_id, and any audit field).
+        - status FORCED to 'Draft' regardless of payload (the cornerstone
+          security guarantee that anonymous submissions cannot bypass
+          the state-machine workflow).
+        - OUTPUT shape: only { number, message } - no internal fields,
+          no audit fields, no payload echo.
+
+      This "thin handler / thick Script Include" pattern is the central
+      design contract. The handler trusts NOTHING from the client; the
+      Script Include trusts NOTHING from the handler.
+
+    HANDLER-SCRIPT DESIGN (AAP Key Insights from agent prompt):
+
+      The handler is INTENTIONALLY THIN. Its only responsibilities are
+      HTTP-layer concerns:
+        1. Extract the JSON payload from request.body.data (defensive
+           null check on request.body).
+        2. Call new x_casemgmt.CasePortalService().submitCase(payload).
+        3. Map the Script Include's return value to HTTP status codes
+           and response bodies:
+             { error: '...' }       -> HTTP 400 + { error: <message> }
+             { number: 'CASE...' }  -> HTTP 201 + { number, message }
+             null/undefined/other   -> HTTP 500 + { error: 'Submission failed.' }
+
+      Rationale for HTTP 201 (vs 200): REST convention - 201 Created
+      indicates that a NEW resource was created on the server. The
+      submission widget at ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml
+      can rely on this status code to distinguish successful creation
+      from any other 2xx outcome.
+
+      Rationale for HTTP 400 on payload errors: HTTP 400 Bad Request is
+      the standard code for malformed/invalid client input. The Script
+      Include returns { error: 'Invalid payload.' } when the payload is
+      null/non-object/array, and { error: 'Submission failed.' } when
+      GlideRecord.insert() rejects the row (typically a missing mandatory
+      field caught by a before-insert business rule). Both surface as
+      HTTP 400 to give the calling widget actionable feedback.
+
+      Rationale for HTTP 500 fallback: This branch should never trigger
+      if the Script Include is correctly implemented (its contract is
+      to ALWAYS return either { number } or { error }). The defensive
+      fallback exists for production reliability - if a future refactor
+      breaks the Script Include's contract, the handler returns a clean
+      500 rather than serializing undefined / throwing an uncaught error.
+
+      No try/catch with full-stack-trace exposure: anonymous callers
+      MUST NOT receive ServiceNow internals via stack traces. The only
+      error text exposed is the generic strings produced by the Script
+      Include ("Invalid payload.", "Submission failed.") which give no
+      hint about field names, validation rules, or platform internals.
+
+    NO-HARDCODED sys_id REFERENCES (AAP Section 0.7.2):
+
+      All cross-references in THIS file resolve to target records by
+      stable, human-readable keys at Update Set import time:
+
+        - <web_service_definition>x_casemgmt_case_submit</web_service_definition>
+          resolves against the parent definition's stable identifier
+          (`namespace_apiid` concatenation matches the parent's
+          sys_update_name = sys_ws_definition_x_casemgmt_case_submit).
+        - <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+          resolves against the scope record's <name>x_casemgmt</name>
+          (per ../../app/sys_scope/x_casemgmt.xml).
+        - <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+          resolves against the application record's name (per
+          ../../app/sys_app/x_casemgmt_case_management.xml).
+
+      The handler script invokes the Script Include via the scope-
+      qualified API name `new x_casemgmt.CasePortalService()`, NOT by
+      sys_id. This conforms to AAP Section 0.7.2 ("No-hardcoded-sys_id
+      constraint. Anywhere - flows, ACL conditions, scripts, seed data,
+      UI Policies, UI Actions, Business Rules. Every cross-reference is
+      resolved by GlideRecord lookup against a stable human-readable
+      key (`name`, `user_name`, `number`, `role_label`).").
+
+      The ONLY sys_id literal in this file is <sys_id> on THIS record
+      itself - this is its own deterministic primary key. AAP Section
+      0.7.2 prohibits literal sys_ids in REFERENCE FIELDS, not on a
+      record's own identity primary key.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+
+      The handler script MUST NOT call gs.eventQueue('...') for any
+      email notification event since email is disabled on the PDI. This
+      handler contains zero gs.eventQueue() calls, zero gs.email()
+      calls, and zero gs.notificationEngine() calls. ArkCase's
+      DefaultPluggablePortalRequestService.submitRequest() ultimately
+      triggered downstream listeners that sent confirmation emails to
+      the requester; the ServiceNow POC omits this entirely - the
+      portal submission is silent at the server side, with the
+      confirmation surfaced by the calling widget directly from the
+      { number, message } return body.
+
+    NO-PII CONSTRAINT (AAP Section 0.7.2):
+
+      Code comments, gs.error(), and gs.info() log messages contain
+      ZERO real names, real email addresses, real phone numbers, real
+      organizational identifiers, or any other personally identifiable
+      information. The handler script does NOT log payload contents
+      (subject, description, requester_name, requester_email) which
+      could carry PII at runtime; only system-level errors emerge from
+      inside the Script Include via gs.error(getLastErrorMessage()),
+      and that diagnostic string is system-generated rather than
+      payload-echo.
+
+    RECORD IDENTITY:
+
+      Three identifiers anchor this record:
+        - <sys_id>e1b7bfa9aff542fa88a645612a73e54c</sys_id> - 32-char
+          deterministic hex primary key derived from
+          MD5("sys_ws_operation_x_casemgmt_case_submit_post"). The
+          deterministic derivation guarantees idempotent re-import on
+          a fresh PDI: re-importing the same Update Set produces the
+          same sys_id, which collides on the existing record and
+          updates it in place rather than creating a duplicate.
+        - <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
+          - the Update Set engine's logical record key. Pattern is
+          <table_name>_<scope>_<api_id>_<http_method_lower>.
+        - <name>Case Submit POST</name> - human-readable label shown
+          in the System Web Services -> Scripted REST API list view.
+          Pattern is <api_human_name> <HTTP_METHOD>.
+
+    UPDATE SET ORDERING (AAP Section 0.5.2):
+
+      THIS operation record MUST be loaded AFTER:
+        - ./sys_ws_definition_x_casemgmt_case_submit.xml
+          (parent definition - <web_service_definition> resolves to it)
+        - ../../script_includes/x_casemgmt_CasePortalService.xml
+          (Script Include called by the handler script via
+          `new x_casemgmt.CasePortalService().submitCase(payload)`)
+        - ../../tables/x_casemgmt_case.xml (transitively, since the
+          Script Include inserts into this table)
+        - ../../dictionary/x_casemgmt_case_*.xml (transitively, since
+          the Script Include sets these fields: subject, type,
+          description, requester_name, requester_email, status)
+        - ../../numbers/sys_number_x_casemgmt_case.xml (transitively,
+          since the auto-numbering generates the case number returned
+          in the HTTP 201 response body)
+        - ../../business_rules/x_casemgmt_set_opened_date.xml
+          (transitively, since this BR stamps opened_date during the
+          Script Include's insert pipeline)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped app)
+        - ../../app/sys_scope/x_casemgmt.xml (scope record)
+
+      THIS operation record MUST be loaded BEFORE:
+        - ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml
+          (the submission widget calls POST /api/x_casemgmt/case_submit,
+          which routes to this operation; without this operation, the
+          widget would receive HTTP 405 Method Not Allowed from the
+          platform's routing layer).
+
+    VALIDATION GATE 4 (AAP Section 0.7.3):
+      "Portal - submission: Case created from unauthenticated portal
+       submission - Case appears in internal list with Draft status
+       and correct case number."
+
+      THIS file is the foundational artifact for Gate 4. Without this
+      operation, the parent definition would have no HTTP-method
+      handler, and the submission widget would fail with HTTP 405 from
+      the platform's routing layer. Gate 4 is satisfied by the
+      combination of:
+        - <requires_authentication>false</requires_authentication> here
+          (enables anonymous access)
+        - The handler script's delegation to
+          new x_casemgmt.CasePortalService().submitCase(payload)
+          (which forces status='Draft' and returns the auto-generated
+          number)
+        - The HTTP 201 response with { number, message } (which the
+          submission widget displays in its confirmation panel via the
+          confirmation widget at
+          ../widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml)
+
+      Gates 1-3, 5-7 are not directly affected by THIS file (Gate 5 is
+      governed by the parallel sys_ws_operation_x_casemgmt_case_status_lookup_get.xml
+      record; Gate 7 requires this file to be well-formed XML, which
+      it is, and to preview without errors when re-imported on a fresh
+      PDI).
+
+    THIS RECORD'S CONTRIBUTION:
+      Configures the platform's routing and authentication layers to:
+        - Accept anonymous (unauthenticated) POST requests
+        - Route them to the inline handler script
+        - Allow the handler to delegate to the CasePortalService
+          Script Include for the actual data-layer write
+        - Enforce the field whitelist + status='Draft' force via the
+          Script Include (NOT via this operation directly)
+        - Return HTTP 201 with { number, message } on success,
+          HTTP 400 with { error } on validation failure,
+          HTTP 500 with { error } on defensive fallback
+        - Match the verbatim AAP Section 0.4.4 confirmation message
+          "Your case has been submitted" so the calling widget can
+          display it without modification
+-->
+<record_update table="sys_ws_operation">
+    <sys_ws_operation action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <consumes>application/json</consumes>
+        <consumes_customized>false</consumes_customized>
+        <default_operation_uri>/api/x_casemgmt/case_submit</default_operation_uri>
+        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
+        <enforce_acl/>
+        <http_method>POST</http_method>
+        <name>Case Submit POST</name>
+        <operation_script><![CDATA[(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+    // Per AAP Section 0.4.3 + Section 0.4.4 + Section 0.7.4:
+    // Anonymous case-submission endpoint. The whitelisted-field discipline
+    // (input fields restricted to subject, type, description, requester_name,
+    // requester_email) plus the forced status='Draft' enforcement live in
+    // the Script Include x_casemgmt.CasePortalService.submitCase(). This
+    // handler is intentionally thin: only HTTP-layer concerns (status codes,
+    // body shapes, payload extraction) live here.
+    //
+    // Per AAP Section 0.4.4 (verbatim, non-negotiable): the success
+    // response includes the message text 'Your case has been submitted'.
+    // The submission widget displays this text verbatim in its confirmation
+    // panel; paraphrasing would break the AAP contract.
+
+    // ----------------------------------------------------------------------
+    // 1. Extract the JSON payload defensively.
+    //
+    //    request.body may be undefined (no body supplied - rare but
+    //    possible if a malicious client sends POST with no Content-Type
+    //    or empty body).
+    //    request.body.data is the auto-parsed JSON object when the
+    //    Content-Type is application/json (per <consumes>application/json
+    //    </consumes> on this operation). It may be undefined if the body
+    //    failed to parse.
+    //    Pass null to the Script Include when either is missing - the
+    //    Script Include's defensive type-check returns
+    //    { error: 'Invalid payload.' } which this handler translates to
+    //    HTTP 400.
+    // ----------------------------------------------------------------------
+    var payload = request.body && request.body.data ? request.body.data : null;
+
+    // ----------------------------------------------------------------------
+    // 2. Delegate to the Script Include. The Script Include is the single
+    //    source of truth for:
+    //      - The field whitelist (only subject, type, description,
+    //        requester_name, requester_email accepted)
+    //      - The status='Draft' force (regardless of payload contents)
+    //      - The GlideRecord.insert() call against x_casemgmt_case
+    //      - The post-insert re-query for the auto-generated number
+    //
+    //    Contract:
+    //      - submitCase(payload) returns:
+    //          * { error: '<message>' }   - validation/insert failure
+    //          * { number: 'CASE0000001' } - success, auto-generated number
+    //
+    //    The Script Include is invoked via the scope-qualified API name
+    //    `x_casemgmt.CasePortalService` (NOT by sys_id), which complies
+    //    with AAP Section 0.7.2's no-hardcoded-sys_id constraint.
+    // ----------------------------------------------------------------------
+    var svc = new x_casemgmt.CasePortalService();
+    var result = svc.submitCase(payload);
+
+    // ----------------------------------------------------------------------
+    // 3. Validation failure -> HTTP 400 Bad Request.
+    //
+    //    The Script Include returns { error: 'Invalid payload.' } when
+    //    the payload is null/non-object/array, and
+    //    { error: 'Submission failed.' } when GlideRecord.insert() rejects
+    //    the row (typically a before-insert BR rejection or a missing
+    //    mandatory field). Both surface as HTTP 400 to give the calling
+    //    widget actionable feedback.
+    //
+    //    String() coercion on result.error defends against a future
+    //    refactor that returns a non-string error value (e.g., an Error
+    //    object); the JSON serializer would otherwise produce
+    //    unpredictable output.
+    // ----------------------------------------------------------------------
+    if (result && result.error) {
+        response.setStatus(400);
+        response.setBody({ error: String(result.error) });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 4. Defensive fallback -> HTTP 500 Internal Server Error.
+    //
+    //    This branch should NEVER trigger if the Script Include conforms
+    //    to its contract (always returns either { number } or { error }).
+    //    The fallback exists for production reliability:
+    //      - If a future refactor breaks the Script Include's contract,
+    //        the handler returns a clean 500 rather than serializing
+    //        undefined or throwing an uncaught error.
+    //      - The error message is intentionally generic ('Submission
+    //        failed.') to avoid leaking implementation details to
+    //        anonymous callers.
+    // ----------------------------------------------------------------------
+    if (!result || !result.number) {
+        response.setStatus(500);
+        response.setBody({ error: 'Submission failed.' });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 5. Success -> HTTP 201 Created with { number, message }.
+    //
+    //    HTTP 201 (vs 200): REST convention - 201 indicates a NEW
+    //    resource was created on the server. The submission widget can
+    //    rely on this status code to distinguish successful creation
+    //    from any other 2xx outcome.
+    //
+    //    Response body shape (exactly two keys, no others):
+    //      {
+    //        number:  '<auto-generated CASE0000001-format string>',
+    //        message: 'Your case has been submitted'
+    //      }
+    //
+    //    String(result.number) coercion defends against any future
+    //    GlideElement-typed return value (the Script Include already
+    //    coerces with String(savedGr.getValue('number')), but this
+    //    handler-level coercion is defense-in-depth).
+    //
+    //    The verbatim message 'Your case has been submitted' matches AAP
+    //    Section 0.4.4: "displays a confirmation panel showing the
+    //    returned case number and a friendly 'Your case has been
+    //    submitted' message". The widget displays this text verbatim
+    //    in its confirmation panel.
+    // ----------------------------------------------------------------------
+    response.setStatus(201);
+    response.setBody({
+        number: String(result.number),
+        message: 'Your case has been submitted'
+    });
+})(request, response);]]></operation_script>
+        <operation_uri>/api/x_casemgmt/case_submit</operation_uri>
+        <produces>application/json</produces>
+        <produces_customized>false</produces_customized>
+        <relative_path/>
+        <request_example/>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error } on validation failure, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
+        <sys_class_name>sys_ws_operation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e1b7bfa9aff542fa88a645612a73e54c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Submit POST</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <web_service_definition display_value="Case Submit">x_casemgmt_case_submit</web_service_definition>
+        <web_service_version/>
+    </sys_ws_operation>
+</record_update>

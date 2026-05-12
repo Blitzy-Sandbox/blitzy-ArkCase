@@ -1,0 +1,430 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `status` Choice field on the `x_casemgmt_case_task` custom
+    table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
+
+        Field    Type     Constraints
+        status   Choice   Open, In Progress, Closed
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning):
+        choices/sys_choice_case_task_status.xml -> Open, In Progress, Closed
+        case_task.status default = Open
+
+    THIS DICTIONARY ENTRY ONLY DECLARES THAT THE `status` CHOICE FIELD EXISTS
+    ON THE PARENT TABLE. The choice values themselves (Open, In Progress,
+    Closed) are authored as separate sys_choice records in
+    ../choices/sys_choice_case_task_status.xml. This separation is a
+    deliberate consequence of the ServiceNow Choice-field design pattern: a
+    sys_dictionary row declares the column shape; sibling sys_choice rows
+    declare the allowed string-label values keyed by `name` + `element`
+    lookup against this entry. The set of three labels (Open, In Progress,
+    Closed) is intentionally minimal compared to x_casemgmt_case.status's
+    six-state lifecycle; tasks in this POC are simple work items - they do
+    not have a Draft pre-state (every task is created Open and immediately
+    visible to its assignee), they do not have a Pending sub-state (a task
+    that is paused remains "In Progress" with the work simply not advancing),
+    and they do not have a Resolved-but-not-Closed half-state (closing a
+    task is a single atomic step performed by the assignee). This three-
+    label vocabulary is authoritative for the entire POC.
+
+    THIS FIELD IS THE LINCHPIN OF THE CASE-RESOLUTION GUARD. Per AAP Section
+    0.5.5 ("In Progress -> Resolved: All linked x_casemgmt_case_task records
+    have status = Closed") and AAP Section 0.7.4 verbatim, the case state-
+    machine flow surfaces the literal blocking error message
+        "All tasks must be closed before resolving this case."
+    when ANY child task on the case has status != Closed. The query that
+    drives the gate, executed by ../flows/sub_flows/validate_resolved_transition.xml
+    and by the canTransitionToResolved() static method on
+    ../script_includes/x_casemgmt_CaseTransitionValidator.xml, is:
+
+        var gr = new GlideRecord('x_casemgmt_case_task');
+        gr.addQuery('case', current.sys_id);
+        gr.addQuery('status', '!=', 'Closed');
+        gr.setLimit(1);
+        gr.query();
+        if (gr.next()) {
+            // Block the transition and surface the AAP Section 0.7.4
+            // verbatim message on the form.
+        }
+
+    The query string literal `'Closed'` MUST byte-match the choice value
+    authored in ../choices/sys_choice_case_task_status.xml; any divergence
+    (e.g., "CLOSED", "closed", "Done", "Complete") would silently let
+    cases resolve while open work remained, defeating the AAP Section
+    0.7.3 workflow validation gate.
+
+    Operational role of the `status` field on case_task rows:
+      - Categorizes each task into exactly one of three lifecycle stages
+        so that internal users (case_manager and assigned case_agent)
+        can triage at-a-glance: an "Open" task is queued and not yet
+        being worked; an "In Progress" task is currently being executed;
+        a "Closed" task is finished and contributes to satisfying the
+        case-resolution gate.
+      - Surfaces on the auto-generated x_casemgmt_case_task list view per
+        AAP Section 0.4.4 ("Internal user UI" requires "ServiceNow's
+        automatic native list and form views for the three custom
+        tables").
+      - Surfaces on the auto-generated form layout when a user opens an
+        individual task record - the assignee toggles status from Open
+        to In Progress when starting work and from In Progress to Closed
+        when finishing. The form may further be governed by ACLs in
+        ../acl/ that restrict write access to the assignee.
+      - Surfaces in the parent case's Related List of tasks (rendered
+        via the `case` reference field declared in
+        ../dictionary/x_casemgmt_case_task_case.xml). The Status column
+        appears beside Subject, Type, and Due Date so that an internal
+        user reviewing a case sees at-a-glance how many child tasks are
+        still preventing resolution.
+      - Drives the Agent Workspace dashboard's "My overdue tasks" list
+        report (per AAP Section 0.5.1: list filtered by
+        `due_date < javascript:gs.daysAgoStart(0) AND status != Closed
+        AND assigned_to = javascript:gs.getUserID()`). The `status !=
+        Closed` clause uses the exact label declared in the sibling
+        sys_choice file. Closed tasks are deliberately excluded because
+        a finished task cannot be overdue regardless of when its
+        due_date fell.
+      - The synthetic seed data per AAP Section 0.4.1 minimum-data
+        thresholds ("at least one open and one closed task per demo
+        case in `In Progress` or `Pending` state, to exercise the
+        all-tasks-closed gate") populates this field across both
+        Open and Closed labels to deterministically exercise the
+        case-resolution gate during fresh-PDI re-import validation.
+        Demo cases in Resolved or Closed status carry only Closed
+        tasks (otherwise the gate would have blocked the parent case's
+        prior In Progress -> Resolved transition); demo cases in
+        In Progress or Pending status carry a mix of statuses on
+        purpose so that an attempt to advance them through Resolved
+        will trigger the verbatim blocking error and confirm the gate
+        works end-to-end.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java line 81:
+            private String status;
+        ArkCase's task `status` was a free-form String field on the
+        AcmTask domain object. The field carried NO Bean Validation
+        constraints (no @Size, no @NotNull, no @Pattern), so any
+        caller could assign any string (despite implementing
+        AcmStatefulEntity at AcmTask.java line 33 / 61) and the JPA /
+        Activiti layer enforced no enumeration. ArkCase's task-status
+        vocabulary was distributed across BPMN process variables and
+        Activiti ProcessInstance state; the legal labels included
+        ASSIGNED, IN_PROGRESS, COMPLETE, CLOSED, DELETE, NOT_STARTED,
+        and several engine-internal identifiers. The ServiceNow
+        target replaces this fragmented free-form String with a
+        controlled Choice vocabulary of three labels (Open, In Progress,
+        Closed) through the `<choice>3</choice>` setting plus the
+        sibling sys_choice records. AAP Section 0.1.2 codifies this
+        kind of free-form-String -> Choice tightening as the
+        ServiceNow-side equivalent of ArkCase's bean-validation
+        enforcement.
+      - AcmTask.java line 82 also declared `private String pendingStatus;`
+        which ArkCase used as a transient sub-state holder while a
+        task was being routed through buckslip approvals. The
+        ServiceNow target intentionally OMITS pendingStatus because
+        the POC scope (AAP Section 0.3.2) explicitly excludes
+        BPMN/Activiti, buckslip, and any approval-routing capability;
+        all transient state is collapsed back into the single `status`
+        Choice. This is consistent with the AAP Section 0.5.7 verbatim
+        case_task field set, which lists status as the sole lifecycle
+        column.
+      - The field name is `status` (lowercase, 6 chars; NOT `state`,
+        NOT `taskStatus`, NOT `task_status`) per AAP Section 0.5.7
+        verbatim. The intentional naming symmetry with x_casemgmt_case
+        .status means cross-table reports can render a unified "Status"
+        column header without per-table label aliasing, mirroring the
+        same naming-symmetry rationale that established `subject` on
+        both x_casemgmt_case and x_casemgmt_case_task and `type` on
+        both as well.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_casemgmt_case_task` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. NO global-scope
+        writes - the OOB tables `task`, `incident`, `sys_user`, etc.
+        are never modified by this dictionary entry or any other
+        artifact in the Update Set.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_casemgmt`), not by literal sys_id. The
+        `<sys_id>` text-node value is THIS record's own deterministic
+        primary key (MD5 of the canonical field identifier
+        `x_casemgmt_case_task.status`) and is NOT a reference to any
+        other record. The MD5 derivation guarantees that re-generation
+        of this Update Set on any agent run produces a byte-identical
+        `<sys_id>` (no random UUIDs), which is required for clean
+        Update-Set re-import on a fresh PDI without creating duplicate
+        sys_dictionary rows. The same derivation pattern is used by
+        every sys_dictionary record in this Update Set (e.g.,
+        x_casemgmt_case_task.subject -> 8cd658b766c404ce4445d191adabd14c,
+        x_casemgmt_case_task.type    -> 180d00dda06c4b93e4c2c106b621d153,
+        x_casemgmt_case.status       -> 5f0be2eaed29d45b1d63d64e876d22c4).
+      - The concrete scope identifier `casemgmt` is used per AAP convention. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in the XML before export. The identifier appears in `<name>`, `<sys_scope>`, `<sys_package>`,
+        and `<sys_update_name>` consistently.
+      - mandatory=false at the dictionary level per AAP Section 0.5.7
+        verbatim ("status | Choice | Open, In Progress, Closed" -
+        no Mandatory marker) and AAP Section 0.7.1 strict-literal
+        "no additions, no renames, no type relaxations" rule. The
+        AAP authoritative text takes precedence over the earlier
+        functional argument for adding a constraint. The case-
+        resolution gate (AAP Section 0.5.5 / 0.7.4) is still safe
+        because:
+          * The default_value=Open below ensures every newly inserted
+            task lands in Open status automatically. The platform
+            applies the default at insert time even without a
+            mandatory constraint, so in practice no task row exists
+            with a NULL status. The case-resolution gate's query
+            (`addQuery('status', '!=', 'Closed')` in
+            ../flows/sub_flows/validate_resolved_transition.xml and
+            ../script_includes/x_casemgmt_CaseTransitionValidator.xml)
+            therefore never encounters a NULL status that would
+            silently pass the gate.
+          * Internal-form callers, Table API consumers, and the
+            synthetic demo tasks per
+            ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml
+            populate this field explicitly with one of the three
+            supported labels at insert time, never relying on
+            absence-of-value.
+          * Should a future ServiceNow upgrade or seed-script edit
+            attempt to insert a task with NULL status, the platform's
+            default-value evaluator still applies "Open" before the
+            row reaches the database. The mandatory=false setting
+            does NOT permit a literal NULL on insert; it only
+            permits the field to be EMPTY in the form-validation
+            sense before save, after which the default applies.
+        The contrast with case_task.subject (which IS marked Mandatory
+        in AAP Section 0.5.7 and therefore carries mandatory=true in
+        ../dictionary/x_casemgmt_case_task_subject.xml) is intentional:
+        AAP authoritative text differentiates the two fields and the
+        dictionary entries reflect that exactly. If a future
+        requirement makes status strictly mandatory at the dictionary
+        level, AAP Section 0.5.7 will be updated first and this
+        dictionary entry will follow.
+      - read_only=false: an internal user (case_manager or the
+        assigned case_agent within the AAP Section 0.5.6 "Assigned
+        only" condition, transitively through the parent case) editing
+        the task record changes status to drive the task's lifecycle
+        forward (Open -> In Progress -> Closed). The read_only=false
+        setting permits the write through the standard form, the
+        Table API, and the seed scripts. Internal-user write
+        authorization is governed by the table-level ACLs in ../acl/ -
+        this dictionary entry deliberately does NOT carry per-role
+        write_roles since the table-level ACLs apply uniformly across
+        all editable fields on x_casemgmt_case_task. There is no
+        backward-transition prohibition on case_task.status (unlike
+        x_casemgmt_case.status, which prohibits any backward transition
+        to Draft and prohibits any transition out of Closed); a task
+        accidentally moved from Closed to In Progress by an authorized
+        user is recoverable in the POC. If the surrounding parent
+        case has already advanced to Resolved or Closed, the
+        resolution-gate logic is one-shot evaluated at the moment of
+        the parent case's transition - re-opening a child task does
+        NOT retroactively roll back the parent case.
+      - default_value=Open (Title Case, NOT "OPEN", NOT "open", NOT
+        "New") per AAP Section 0.4.1 verbatim ("case_task.status
+        default = Open") and the agent prompt's Phase 4. New tasks -
+        whether created via the internal form, the Table API, or seed
+        scripts - start in Open status. This default is what allows
+        seed scripts and bulk-task-creation flows to omit the status
+        field from their INSERT payload while still landing every
+        new task in the correct starting state. It also means a
+        case_manager creating a fresh task on an active case does
+        NOT need to remember to pick a status; the form is pre-
+        populated and the task is immediately visible to its
+        assignee at creation time.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and
+        the agent prompt's Phase 4. Unlike x_casemgmt_case.status
+        (which uses audit=true so that compliance teams can
+        reconstruct the lifecycle of every case), the case_task POC
+        does not require per-field audit history on the task. Record-
+        level changes are still captured by the standard sys_*
+        audit columns (sys_updated_on, sys_updated_by) declared at
+        the table level in ../tables/x_casemgmt_case_task.xml. If a
+        future enhancement requires per-status forensics on tasks
+        (e.g., to compute average task-cycle time from Open to
+        Closed), audit=true can be added without breaking any
+        existing artifact in this Update Set.
+      - max_length=40 per the agent prompt's Phase 3 verbatim. The
+        longest defined label is "In Progress" (11 characters); the
+        40-character ceiling accommodates extensible future labels
+        (e.g., "Awaiting Review", "Pending Reassignment") without a
+        schema migration. The same 40-character ceiling is used on
+        every Choice field in this Update Set (case.type, case.status,
+        case.priority, case.pending_reason, case_task.type,
+        case_party.party_type) for consistency.
+      - choice=3 = "Choice list, no description column" per the agent
+        prompt's Phase 3 verbatim. This is the standard Choice-field
+        configuration when a sibling sys_choice record set defines
+        the allowed values; the form renderer presents the field as
+        a select dropdown sourced from the matching sys_choice rows.
+        choice=0 (free-form String) would defeat the purpose of
+        constraining the field to a controlled vocabulary; choice=1
+        (Choice list with description) would impose a description
+        column that AAP Section 0.5.7 does not specify; choice=2
+        (Suggestion list) would let users input arbitrary strings
+        adjacent to the suggested ones, which would silently break
+        the resolution-gate query (a typo'd "closed" or "Closd" would
+        evade `status != 'Closed'` and falsely pass the gate).
+      - unique=false: multiple tasks with the same status are
+        explicitly permitted, both within a single case (a case in
+        early lifecycle may have three Open tasks queued for the same
+        assignee) and across cases (every active case may have an
+        Open task). Uniqueness is not a meaningful concept for a
+        categorical Choice field.
+      - text_index=false per the agent prompt's Phase 6 verbatim. A
+        Choice field with three labels does not benefit from a text
+        index; users navigate status via the Choice dropdown and
+        list-view filters, not free-form full-text search. The
+        resolution-gate query uses `addQuery('status', '!=', 'Closed')`
+        which is served by the standard column index, not a text
+        index.
+      - spell_check=false per the agent prompt's Phase 6 verbatim.
+        A controlled Choice vocabulary is by definition correctly
+        spelled; spell_check on a Choice field would produce false
+        positives on label tokens that the platform dictionary does
+        not recognize.
+      - No reference target: this is a String-backed Choice field,
+        not a Reference field. All `<reference*>` elements are empty
+        and `<table_reference>false</table_reference>`. The field
+        does NOT reference an external lookup table; the choice
+        values live as sys_choice rows keyed by element name.
+      - No PII: the field stores only categorical labels chosen from
+        a controlled vocabulary; no real names, email addresses,
+        organizational identifiers, or any source-side ArkCase
+        production data are derived from or stored in this column at
+        any point in the build (per AAP Section 0.3.2 synthetic-data-
+        only constraint).
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case_task.xml (parent table; the
+            `<name>x_casemgmt_case_task</name>` element below references
+            the table by name, and the table must exist before any of
+            its dictionary entries can be attached)
+          * ../app/sys_app/x_casemgmt_case_management.xml and
+            ../app/sys_scope/x_casemgmt.xml (scoped application records;
+            <sys_scope> and <sys_package> resolve against them by source
+            name)
+      - This record MUST load BEFORE:
+          * ../choices/sys_choice_case_task_status.xml (the choice
+            values Open, In Progress, Closed - which reference this
+            dictionary entry by `name` + `element` lookup against the
+            strings `x_casemgmt_case_task` and `status`)
+          * ../flows/sub_flows/validate_resolved_transition.xml (the
+            subflow that queries `addQuery('status', '!=', 'Closed')`
+            to gate the In Progress -> Resolved transition on the
+            parent case; failure of the gate surfaces the AAP Section
+            0.7.4 verbatim blocking error message "All tasks must be
+            closed before resolving this case.")
+          * ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+            (canTransitionToResolved() static method queries this
+            field via GlideRecord to check task closure; shared by
+            both general_inquiry_state_machine.xml and
+            complaint_state_machine.xml)
+          * ../reports/x_casemgmt_my_overdue_tasks.xml (filter:
+            `due_date < javascript:gs.daysAgoStart(0) AND status !=
+            Closed AND assigned_to = javascript:gs.getUserID()`;
+            consumed by the Agent Workspace dashboard)
+          * ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml
+            (synthetic demo tasks per AAP Section 0.4.1 must populate
+            this mandatory field; the seeded mix of Open and Closed
+            statuses is what exercises the resolution-gate during
+            fresh-PDI re-import validation)
+          * ../scripts/seed_demo_data.js (the idempotent server-side
+            seed script writes synthetic task status labels via
+            GlideRecord.setValue('status', ...))
+
+    Source for the deterministic sys_id derivation:
+        echo -n "x_casemgmt_case_task.status" | md5sum
+        => af19c46ec8457885c75512edec980172
+
+    The MD5 input is the canonical field identifier <name>.<element>,
+    matching the same derivation pattern used across all other
+    sys_dictionary records in this Update Set.
+
+    Critical naming note carried forward to ../choices/sys_choice_case_task_status.xml:
+        The middle label is "In Progress" (with a single ASCII space
+        between "In" and "Progress", title case on both words), NOT
+        "InProgress" (no space) and NOT "in_progress" (snake case).
+        AAP Section 0.5.7 verbatim spells the label "In Progress".
+        The third label is "Closed" (NOT "Complete", NOT "Done", NOT
+        "Resolved"); the resolution-gate query in
+        ../flows/sub_flows/validate_resolved_transition.xml uses the
+        exact string "Closed" and any deviation in the sibling
+        sys_choice rows would silently break the gate.
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>3</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Status</column_label>
+        <comments>Optional Choice tracking task lifecycle per AAP Section 0.5.7 verbatim (no Mandatory marker). Values: Open, In Progress, Closed. Default: Open - so every newly inserted task lands in the correct starting state automatically without requiring a mandatory constraint. Authored as separate sys_choice rows in ../choices/sys_choice_case_task_status.xml. Used by the case state-machine flow's "all tasks closed" guard for the In Progress -&gt; Resolved transition (AAP Section 0.5.5); failure surfaces the verbatim blocking error "All tasks must be closed before resolving this case." (AAP Section 0.7.4). Replaces ArkCase AcmTask.status (free-form String, no validator).</comments>
+        <create_roles/>
+        <default_value>Open</default_value>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>status</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>string</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_casemgmt_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>af19c46ec8457885c75512edec980172</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_task_status</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

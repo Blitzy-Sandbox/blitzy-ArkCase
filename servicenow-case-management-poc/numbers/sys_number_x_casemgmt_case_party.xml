@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_number` row that
+    creates the auto-numbering counter for the `x_casemgmt_case_party` custom
+    table inside the scoped application `x_casemgmt`.
+
+    This counter is what produces the human-readable, sequential identifiers
+    (PARTY0000001, PARTY0000002, ...) for every row inserted into the
+    x_casemgmt_case_party table - whether the row is created by an authorized
+    internal user via the native ServiceNow form, by the seed-data Update
+    Set block, or by the seed_demo_data.js server-side script. It is the
+    parallel sibling of ./sys_number_x_casemgmt_case.xml (which produces
+    CASE0000001) and ./sys_number_x_casemgmt_case_task.xml (which produces
+    TASK0000001) and is structurally identical except for the prefix, table,
+    sys_id, category, and sys_update_name fields.
+
+    Per AAP Section 0.4.1 (target directory layout) and AAP Section 0.5.1
+    (File-by-File Transformation Plan):
+        servicenow-case-management-poc/numbers/sys_number_x_casemgmt_case_party.xml
+            CREATE | (no source counterpart) | "Number prefix PARTY, padding 7"
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim), x_casemgmt_case_party
+    does NOT enumerate a `number` field as one of its 5 user-prompt-required
+    fields (case, party_type, person, organization, role_label). However,
+    every ServiceNow sys_db_object record provisions an auto-number column
+    by default via its <number_ref> linkage; the parent table record at
+    ../tables/x_casemgmt_case_party.xml explicitly declares
+        <number_ref display_value="PARTY" source="x_casemgmt">
+            x_casemgmt_case_party_number
+        </number_ref>
+    which means the table row REQUIRES this sys_number record to exist for
+    its number_ref to resolve cleanly during Update Set preview. Without
+    this record, the Update Set preview gate (AAP Section 0.7.3 Gate 7)
+    would surface a "missing reference" error.
+
+    The auto-numbered PARTY0000001 identifier supports:
+      (a) human-readable identification of demo party rows in
+          ../seed-data/parties/x_casemgmt_case_party_demo_*.xml so the AAP's
+          "at least one Person and one Organization party per demo case"
+          verification can be done by browsing party numbers like
+          PARTY0000001 - critical for visual validation of the AAP Section
+          0.7.4 minimum demo-data thresholds and for exercising the
+          polymorphic UI Policy in
+          ../ui_policy/x_casemgmt_case_party_conditional_fields.xml.
+      (b) any future audit trail or report that lists party rows alongside
+          their parent case (e.g., "Party PARTY0000003 - Witness on case
+          CASE0000007"); without an auto-number, party rows would only be
+          identifiable by sys_id which is not user-friendly.
+      (c) the activity stream and journal entries on the parent case that
+          reference associated parties by their auto-number.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+      com/armedia/acm/plugins/person/model/PersonAssociation.java
+        Line 80-84:
+            @Id
+            @TableGenerator(name = "acm_person_assoc_gen",
+                            table = "acm_person_assoc_id",
+                            pkColumnName = "cm_seq_name",
+                            valueColumnName = "cm_seq_num",
+                            pkColumnValue = "acm_person_assoc",
+                            initialValue = 100,
+                            allocationSize = 1)
+            @GeneratedValue(strategy = GenerationType.TABLE,
+                            generator = "acm_person_assoc_gen")
+            @Column(name = "cm_person_assoc_id") private Long id;
+      The source-side primary key uses JPA's @TableGenerator strategy: a
+      separate MySQL bookkeeping table (acm_person_assoc_id) holds a single
+      row whose `cm_seq_num` column is incremented with each new
+      PersonAssociation insert (initialValue=100, allocationSize=1). The
+      target consolidates both the platform-internal primary key (sys_id -
+      a 32-char UUID assigned automatically by ServiceNow) AND the
+      human-readable external identifier (PARTY0000001) into ServiceNow's
+      native two-column model: sys_id is the immutable UUID; the
+      auto-number column driven by THIS record is the user-facing
+      identifier. The ArkCase initialValue=100 starting point is
+      intentionally NOT preserved here - the POC starts the sequence
+      cleanly at 1 (rendered as PARTY0000001), which is the conventional
+      ServiceNow default and matches the format of OOB tables like
+      INC0000001, CHG0000001. The bespoke acm_person_assoc_id MySQL
+      bookkeeping table is replaced by ServiceNow's platform-native
+      sys_number facility - a single declarative low-code equivalent that
+      requires zero custom DDL.
+
+      The sibling source class
+      com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java
+      uses an identical @TableGenerator pattern targeting a separate
+      acm_person_org_assoc_id MySQL bookkeeping table. Per AAP Section
+      0.4.3 (Polymorphic association via single-table choice + UI Policy),
+      both source entities collapse into the SINGLE x_casemgmt_case_party
+      table; correspondingly, both ArkCase generator tables collapse into
+      THIS SINGLE sys_number record. One scoped table, one auto-numbering
+      counter - reflecting the schema simplification.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: this record's <sys_scope> and
+        <sys_package> bind it to the scoped application
+        `x_casemgmt`. The <table> element points at the
+        SCOPED case_party table `x_casemgmt_case_party` - NOT at the OOB
+        `task`, `incident`, or any other global table. Per AAP Section
+        0.3.2 verbatim: "no edits to ... `task`, `incident`, or any
+        out-of-the-box ServiceNow tables." NO global-scope writes occur
+        in this record.
+      - Zero hardcoded cross-reference sys_ids: every cross-reference
+        (<sys_scope>, <sys_package>, <table>) resolves by NAME (the
+        scope source name `x_casemgmt` and the table
+        name `x_casemgmt_case_party`), not by literal sys_id. The
+        <sys_id> text-node value is THIS record's own deterministic
+        primary key (MD5 of the canonical record name
+        `sys_number_x_casemgmt_case_party` =
+        2358f94646aa1afdf84c10b836dce064) and is NOT a reference to
+        any other record. Per AAP Section 0.7.2 / Key Insight 6 of the
+        agent prompt: "the `sys_id` of THIS record is the record's own
+        primary key - not a reference field". The AAP's
+        no-hardcoded-sys_id rule applies to reference fields pointing
+        to OTHER records, which is fully respected here.
+      - The concrete scope identifier `casemgmt` is used per AAP convention;
+        ServiceNow Update Set imports use a standard XML parser, so the
+        scope id must be concrete in the XML before export. Do NOT substitute it with a real scope id.
+      - <prefix>PARTY</prefix> is uppercase, exactly 5 characters, NOT
+        `Party`, NOT `party`, NOT `PRTY`. Per AAP Section 0.5.1 verbatim
+        ("Number prefix PARTY, padding 7") and per the agent prompt's
+        Phase 3, PARTY is the prefix component of the required
+        PARTY0000001 format. The platform's default auto-number padding
+        is 7 digits when the prefix is short and the initial maximum is
+        0, so the first generated identifier is PARTY0000001 - matching
+        ServiceNow's standard convention for similar OOB tables
+        (INC0000001, CHG0000001, PRB0000001, SCTASK0000001) and parallel
+        to the case sibling's CASE0000001 format and the case_task
+        sibling's TASK0000001 format. The prefix matches the
+        display_value of the parent table's <number_ref> exactly:
+          ../tables/x_casemgmt_case_party.xml:
+            <number_ref display_value="PARTY" ...>
+        This match is required for the number_ref binding to resolve
+        cleanly during Update Set preview.
+      - <maximum>0</maximum> and <number>0</number>: both starting at 0.
+        After the platform processes the first GlideRecord.insert() of
+        an x_casemgmt_case_party row, the counter increments to 1 and
+        renders as PARTY0000001. Successive inserts produce PARTY0000002,
+        PARTY0000003, etc. The counter persists across server restarts
+        because it lives in the sys_number table (not in volatile
+        memory).
+      - <category>x_casemgmt_case_party</category>: ServiceNow's convention
+        for the `category` column on sys_number is to set it to the
+        target table name (mirroring the <table> field). This is purely
+        an organizational grouping; the platform does not derive runtime
+        behavior from it.
+      - No PII: the counter stores only synthetic auto-generated
+        identifiers (PARTY0000001, etc.); no real names, email addresses,
+        or organizational identifiers are derived from or stored here.
+      - Re-exportability: the deterministic <sys_id> (MD5-derived
+        32-char lowercase hex `2358f94646aa1afdf84c10b836dce064`)
+        ensures that re-exporting the Update Set produces the same
+        sys_id every time, preventing "duplicate-record" errors during
+        fresh-PDI re-import preview (AAP Section 0.7.3 Gate 7). The
+        hash matches the parallel computation for the sibling sys_number
+        records (CASE -> 4fc55a26e01ab60d8ea5ce13ce35f6f3,
+        TASK -> ee298f5e8c95d67c6fa9a97f5b390782,
+        PARTY -> 2358f94646aa1afdf84c10b836dce064), so the three
+        sys_number records form a self-consistent, reproducible set.
+      - MINIMAL CHANGE CLAUSE (AAP Section 0.7.2): this record contains
+        ONLY the elements enumerated in the agent prompt - <category>,
+        <prefix>, <maximum>, <number>, <table>, <sys_scope>,
+        <sys_package>, <sys_policy/>, <sys_id>, <sys_mod_count>,
+        <sys_created_by>, <sys_created_on>, <sys_updated_by>,
+        <sys_updated_on>, <sys_class_name>, <sys_update_name>. No
+        additional fields are added beyond what is required.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      This record MUST load AFTER:
+        - ../app/sys_scope/x_casemgmt.xml (scope record - must exist
+          before any scoped record can resolve <sys_scope>)
+        - ../app/sys_app/x_casemgmt_case_management.xml (application
+          record - <sys_package> resolves by source name to this)
+        - ../tables/x_casemgmt_case_party.xml (target table - <table>
+          element references it by name; the parent table record carries
+          the <number_ref> that binds to THIS record)
+      This record MUST load BEFORE consumers that read or write the
+      auto-generated party identifier:
+        - The number_ref resolution check during Update Set preview for
+          ../tables/x_casemgmt_case_party.xml (the parent table's
+          <number_ref display_value="PARTY"> binding is checked at
+          preview time and requires this sys_number record to be present
+          in the Update Set with a matching <prefix>PARTY</prefix>).
+        - All ../seed-data/parties/x_casemgmt_case_party_demo_*.xml
+          records (demo party rows would receive auto-numbers from this
+          counter when inserted; per the agent prompt's Phase 7 caveat,
+          demo party seed records may or may not carry pre-populated
+          PARTY0000XXX values).
+        - ../scripts/seed_demo_data.js (idempotent server-side seed
+          script; if the script enumerates seeded parties by their
+          auto-number for idempotent lookup, the format produced by
+          this counter must align).
+        - ../ui_policy/x_casemgmt_case_party_conditional_fields.xml does
+          NOT depend on this counter directly (it only binds to the
+          party_type Choice field), but it operates on rows whose
+          identifiers come from this counter.
+
+    Validation gate impact (AAP Section 0.7.3):
+      - Gate 1 (Data model): "All 3 custom tables created with correct
+        fields and types - Zero missing mandatory fields." This record
+        contributes by providing the auto-number machinery for the
+        x_casemgmt_case_party table; the gate passes when the parent
+        table's <number_ref> resolves cleanly during Update Set preview.
+      - Gate 7 (Update Set): "Update Set loads without errors on a
+        fresh PDI instance." This record's deterministic sys_id makes
+        re-exports stable and idempotent on re-import. Without this
+        record, the parent table's <number_ref> resolution would fail
+        and gate 7 would fail.
+-->
+<record_update table="sys_number">
+    <sys_number action="INSERT_OR_UPDATE">
+        <category>x_casemgmt_case_party</category>
+        <maximum>0</maximum>
+        <number>0</number>
+        <number_of_digits>7</number_of_digits>
+        <prefix>PARTY</prefix>
+        <sys_class_name>sys_number</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2358f94646aa1afdf84c10b836dce064</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_number_x_casemgmt_case_party</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case_party</table>
+    </sys_number>
+</record_update>

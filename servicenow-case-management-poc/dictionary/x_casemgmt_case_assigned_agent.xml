@@ -1,0 +1,431 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `assigned_agent` Reference field on the `x_casemgmt_case`
+    custom table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field            Type                    Constraints
+        assigned_agent   Reference -> sys_user   Optional; must be member of assigned_group
+
+    THIS FIELD IS A LOAD-BEARING PILLAR OF THE STATE-MACHINE GATE for
+    Open -> In Progress AND of the role-based authorization model. Per
+    AAP Section 0.5.5 the transition matrix's second non-trivial gate is:
+
+        From   To           Required condition                                    Blocking-error behavior
+        Open   In Progress  assigned_agent populated AND member of assigned_group Surface form-level error
+
+    The "Optional" qualifier from AAP Section 0.5.7 is a strict
+    DICTIONARY-LEVEL declaration: a Draft or Open case MUST be permitted
+    to exist without an assigned_agent. This is what enables the
+    unauthenticated portal-submission endpoint
+    (../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml) to land
+    new portal-submitted cases in Draft status without requiring the
+    anonymous external requester to know about, much less choose, an
+    internal ServiceNow user. It also reflects the standard intake
+    pattern: case_manager users assign the responsible group during
+    Draft -> Open promotion, and only later (during Open -> In Progress)
+    is an individual agent picked up from within that group. The
+    dictionary entry therefore declares `<mandatory>false</mandatory>`,
+    and the Open -> In Progress gate is enforced by the Flow Designer
+    subflow at ../flows/sub_flows/validate_inprogress_transition.xml.
+    Setting `<mandatory>true</mandatory>` here would block save of
+    Draft and Open cases without an agent, which directly contradicts
+    AAP Section 0.5.7's enumerated state list (Draft and Open are both
+    allowed prior to In Progress) and AAP Section 0.5.1's portal-
+    submission contract ("the submission page writes a new
+    x_casemgmt_case record with status = Draft and returns the auto-
+    numbered number").
+
+    Beyond the Open -> In Progress gate, this field participates in
+    THREE other critical mechanisms (AAP Sections 0.4.1, 0.5.6):
+
+      1. AGENT MEMBERSHIP VALIDATION
+         (../business_rules/x_casemgmt_validate_assigned_agent_membership.xml)
+         Per AAP Section 0.5.7: "assigned_agent | Reference -> sys_user |
+         Optional; must be member of assigned_group". When a manager or
+         agent populates assigned_agent, a before-update business rule
+         on the parent x_casemgmt_case table verifies the chosen sys_user
+         is a direct or indirect member of the chosen assigned_group via
+         the OOB `sys_user_grmember` join table. If the agent is NOT a
+         member, the rule calls current.setAbortAction(true) and surfaces
+         a form-level blocking error. This validation cannot be expressed
+         at the dictionary level (a reference qualifier could only filter
+         the picker, not block out-of-band Table-API or scripted REST
+         updates), so it lives in the business-rule layer alongside the
+         identical guard inside the Flow Designer subflow.
+
+      2. FIELD-LEVEL ACL (write restricted to case_manager and the
+         currently-assigned case_agent)
+         (../acl/x_casemgmt_case_assigned_agent_field_acl.xml)
+         Per AAP Section 0.5.6: "ACLs MUST be defined at table level AND
+         field level for sensitive fields (assigned_group, assigned_agent)."
+         The field-level ACL restricts write access to:
+           a) The x_casemgmt_case_manager role (who may freely re-assign
+              cases between agents within an assigned_group), AND
+           b) The x_casemgmt_case_agent role IF the current user IS the
+              currently-assigned agent (so an agent may RE-assign to a
+              different agent during handoff, but a case_agent who is
+              NOT the assignee cannot poach the assignment).
+         The dictionary entry's own `<write_roles/>` element below is
+         intentionally empty so that the dedicated ACL system (not the
+         dictionary's role lists) governs write access. This is the
+         standard ServiceNow pattern for fine-grained field protection.
+
+      3. "ASSIGNED ONLY" READ/WRITE ACL CONDITION FOR case_agent
+         (../acl/x_casemgmt_case_read_agent_assigned.xml,
+          ../acl/x_casemgmt_case_write_agent_assigned.xml)
+         Per AAP Section 0.5.6: "'Assigned only' = cases where
+         assigned_agent = current user OR assigned_group contains current
+         user." The table-level read/write ACLs for case_agent encode
+         this condition as a scripted ACL expression that compares
+         current.assigned_agent against gs.getUserID() OR queries
+         sys_user_grmember for membership in current.assigned_group.
+         This field is therefore one of the TWO gates (alongside
+         assigned_group) that determine the visible case set for any
+         agent. The "My Open Cases" report in
+         ../reports/x_casemgmt_my_open_cases.xml further narrows the list
+         to (assigned_agent = javascript:gs.getUserID()) AND
+         (status NOT IN [Resolved, Closed]) - making this field central
+         to the agent's daily workspace dashboard.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 892-899:
+            public String getAssigneeLdapId()
+            {
+                return getParticipants().stream().filter(
+                    p -> CaseFileConstants.ASSIGNEE.equals(p.getParticipantType())
+                ) ...
+            }
+        ArkCase did NOT have a first-class `assignee` JPA column on
+        `acm_case_file`. Instead, the assignee was derived at runtime
+        from the participants collection by filtering for participants
+        whose `participantType` equaled the constant
+        `CaseFileConstants.ASSIGNEE`, then projecting the
+        `participantLdapId` (a free-form String username from the OpenLDAP
+        directory backing ArkCase). Several derived getters
+        (`getAssigneeLdapId()`, `getAssigneeGroup()`, `getAssigneeGroupId()`,
+        `getAssigneeFullName()`, `getAssigneeTitle()`, `getAssigneePhone()`)
+        materialised the assignee as transient String fields each time
+        they were called, with no referential integrity to any user table.
+        This was a known pain point: the LDAP id could be misspelled,
+        could refer to a deactivated user, or could fail to map to a
+        sys_user-equivalent row entirely - the participant record was the
+        only authority and was free-form. The ServiceNow target replaces
+        the entire participants-list-as-source-of-truth pattern with a
+        single proper foreign-key Reference column on the case row,
+        gaining four critical capabilities:
+          * Referential integrity: only existing, active sys_user rows
+            may be chosen (the platform's reference picker enforces this;
+            the scripted REST submission endpoint may bypass at insert
+            time only because Draft cases legitimately have no agent yet).
+          * Membership semantics: the OOB `sys_user_grmember` join table
+            provides direct user-group membership lookups via
+            `gs.getUser().isMemberOf(groupSysId)`, which is what the
+            "Assigned only" ACL condition and the agent-membership
+            business rule both rely on. This was IMPOSSIBLE to express
+            cleanly in ArkCase since the assignee was a String
+            participantLdapId, not a foreign key.
+          * Single source of truth: the same `sys_user` table that
+            ServiceNow uses for all OOB authentication, role assignment,
+            notification delivery, and dashboard scoping is now the
+            canonical user backing case ownership.
+          * Cascade safety: the platform's reference-deletion semantics
+            (cascade rule, controlled by the `<reference_cascade_rule/>`
+            element below - left empty for default "no cascade" behavior)
+            prevent accidental orphaning of cases when a user is
+            deactivated. ArkCase's String-username pattern silently
+            broke when LDAP entries were renamed or removed.
+      - The field name is `assigned_agent` (lowercase, snake_case; NOT
+        `assignee`, NOT `assignedAgent`, NOT `assigneeLdapId`,
+        NOT `assigned_to`) per AAP Section 0.5.7 verbatim. This is an
+        INTENTIONAL rename from ArkCase's derived `assignee*` getter
+        family to align with the ServiceNow convention used by OOB
+        tables (incident.assigned_to, sc_request.assigned_to,
+        change_request.assigned_to all use `assigned_to` for the
+        per-record-assignee column; AAP Section 0.5.7 chose
+        `assigned_agent` as a near-identical variant that explicitly
+        evokes the case-management persona "agent" rather than the
+        generic "assigned_to" used by ITSM tables - this is the same
+        rationale behind `assigned_group` vs the OOB `assignment_group`).
+        The sibling x_casemgmt_case_task table also carries an assignee
+        column (`assigned_to`, NOT `assigned_agent`, per AAP Section
+        0.5.7) - the asymmetry is intentional: at the task level the
+        OOB convention is preserved verbatim; at the case level the
+        domain-specific "agent" terminology is used.
+      - ArkCase's participantLdapId String had no explicit length cap
+        (defaulting to the database-engine VARCHAR(255) for MySQL
+        InnoDB). The ServiceNow target uses the standard 32-character
+        Reference-field width to store the sys_id of the chosen
+        sys_user row; the platform's auto-generated form picker, list
+        view, and report builder all dereference to the user's display
+        column (typically `name` or `user_name`) for human-readable
+        display via the OOB sys_user dictionary's display=true column.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope by `source` attribute
+        lookup. The `<reference>` element resolves to OOB `sys_user` by
+        table name (NOT by sys_id), preserving zero-hardcoded-sys_id
+        compliance. NO global-scope writes - the OOB `sys_user` table is
+        REFERENCED but never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>`,
+        `<sys_package>`, and `<reference>` text-node values resolve by
+        scope source name and table name respectively, not by literal
+        sys_id. The `<sys_id>` text-node value is THIS record's own
+        deterministic primary key (MD5 of the canonical field identifier
+        `x_casemgmt_case.assigned_agent`) and is NOT a reference to any
+        other record. Per AAP Section 0.7.2 this scheme guarantees that
+        a fresh PDI re-import of the Update Set produces byte-identical
+        sys_id values, which is necessary for round-trip-verify
+        (../scripts/round_trip_verify.md) zero-error preview.
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export.
+      - mandatory=false at the dictionary level (CRITICAL: AAP Section
+        0.5.7's "Optional; must be member of assigned_group" is BOTH a
+        TRANSITION-LEVEL constraint enforced by the Flow Designer
+        subflow at ../flows/sub_flows/validate_inprogress_transition.xml
+        AND a RELATIONAL constraint enforced by the business rule at
+        ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml,
+        but is EXPLICITLY NOT a FIELD-LEVEL constraint enforced by the
+        dictionary). Setting this to true would prevent Draft and Open
+        cases from being saved without an agent, breaking AAP Section
+        0.5.7's enumerated state list (Draft and Open are both allowed
+        prior to In Progress) and AAP Section 0.5.1's portal-submission
+        contract (anonymous external requesters submit cases that land
+        in Draft with no agent or group set; an authenticated internal
+        case_manager later picks up the Draft, assigns a group during
+        Draft -> Open, and assigns an agent during Open -> In Progress).
+      - read_only=false: case_manager users edit this field directly to
+        assign the responsible agent. The field-level ACL in
+        ../acl/x_casemgmt_case_assigned_agent_field_acl.xml enforces
+        ROLE-BASED write access (case_manager always; case_agent only
+        if currently assigned); the dictionary-level read_only flag
+        remains false so the field is editable in principle by
+        qualifying roles.
+      - default_value (empty): no automatic agent assignment. The
+        portal-submitted Draft case has no agent; the case_manager
+        explicitly chooses an agent when promoting Open -> In Progress.
+      - audit=false: per AAP Section 0.3.1 minimal-change clause and
+        consistent with the sibling DateTime / Choice / String fields
+        in this same dictionary set, only the `status` field carries
+        audit=true (it is the most important field for state-machine
+        forensics). Agent reassignment is logged through the standard
+        sys_history_set / sys_audit infrastructure on demand but does
+        not trigger the per-field audit overhead by default. The agent
+        prompt's Phase 4 explicitly directs `audit=false` for this field.
+      - max_length=32: the standard ServiceNow Reference-field width.
+        The dictionary stores the 32-character lowercase-hex sys_id of
+        the referenced sys_user row as the actual column value; the
+        platform's auto-generated form picker, list view, and report
+        builder all dereference to the user's display column (name)
+        for human-readable display via the OOB sys_user dictionary's
+        display=true column. The agent prompt's Phase 3 verbatim
+        specifies "max_length=32 because reference fields store
+        32-char sys_id values internally".
+      - choice=0: this is a Reference field, NOT a Choice field. The
+        sibling sys_choice_* records under ../choices/ apply only to
+        the `type`, `status`, `priority`, `pending_reason`,
+        `case_task.type`, `case_task.status`, and `case_party.party_type`
+        columns - none are needed here.
+      - choice_field, choice_table empty: same reason as choice=0 above.
+      - reference=sys_user: OOB ServiceNow user table. AAP Section 0.5.7
+        specifies this exact target table by name. No scoped wrapper or
+        facade is needed; cases reference users directly across the
+        scoped/global boundary, which ServiceNow permits for OOB tables
+        (the reverse direction - global tables referencing scoped tables
+        - would require a Cross-Scope Privilege record, but is not
+        needed for this POC).
+      - reference_cascade_rule (empty): default platform behavior, which
+        is "do nothing on referenced-record deletion." If a user is
+        deleted (a rare administrative operation), cases retain the
+        orphaned reference; this is acceptable for the POC since user
+        deletion is a global-admin-level operation already gated by
+        global ACLs and is rare in practice. AAP does not specify a
+        cascade rule.
+      - reference_qual, reference_qual_condition (empty): no filter on
+        which users may be selected. ANY active sys_user is eligible at
+        the picker level. The membership constraint (must be a member
+        of assigned_group) is enforced by the business rule and the
+        flow subflow, NOT by a dictionary-level reference qualifier.
+        This is by design per the agent prompt's Phase 3 ("the
+        membership constraint is enforced by the business rule, not
+        the dictionary") and Key Insight #5 ("Filtering the dropdown
+        to 'only members of assigned_group' would require a dynamic
+        reference qualifier referencing the OTHER field
+        (assigned_group). For POC simplicity, we allow any sys_user to
+        be selected; the business rule rejects invalid selections at
+        save time."). A future enhancement could add a dynamic ref
+        qual: `gs.getUser().isMemberOf(current.assigned_group)`.
+      - use_reference_qualifier=simple: standard ServiceNow setting
+        when no advanced (scripted) reference qualifier is in use.
+      - dynamic_ref_qual (empty): no dynamic reference qualifier - see
+        reference_qual rationale above.
+      - reference_floor, reference_key, reference_type (empty): standard
+        defaults for a basic table-to-table reference; no advanced
+        reference semantics (typeahead override, reference floor table,
+        document reference, etc.) are needed here.
+      - element_reference=false: this is a TABLE reference, not an
+        ELEMENT reference (which would point at a specific dictionary
+        column on another table). AAP specifies a row-level reference
+        target.
+      - table_reference=false: this is NOT a "Document ID" / "Table"
+        polymorphic reference (which is what `glide_var` style fields
+        on the OOB task table use to reference any-table-any-row). It
+        is a fixed-target reference to sys_user only.
+      - text_index=false: Reference fields are not full-text-indexed.
+        Searches by user are performed via GlideRecord addJoinQuery
+        against sys_user on its sys_id column; full-text indexing of
+        the 32-char sys_id has no value.
+      - unique=false: a single user is correctly responsible for many
+        cases (that is the entire point of agent-based case routing -
+        a case_agent's "My Open Cases" workspace is meant to display
+        many cases with the agent's sys_id in this column), so
+        uniqueness on this column would be semantically wrong.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation. The actual sys_id of the chosen sys_user
+        row is persisted on every record (in contrast to ArkCase's
+        ON-THE-FLY derivation from participants).
+      - spell_check=false: Reference fields hold a 32-char sys_id and
+        the platform renders the dereferenced display value at view
+        time; spell-check is meaningless for the persisted value and
+        would be misapplied to the dereferenced human-name display.
+      - No PII: the field stores a 32-char sys_id pointer to a user
+        record; the user record itself stores categorical
+        organizational identity (synthetic user_name, fabricated
+        display name, fabricated email at the demo seed level only)
+        per AAP Section 0.7.2 ("synthetic only"). The seed users at
+        ../seed-data/users/sys_user_x_casemgmt_demo_*.xml are
+        fabricated synthetic accounts (one per role: case_manager,
+        case_agent, case_viewer); no real names, real email addresses,
+        or PII derived from the source ArkCase database are placed in
+        this column at any point in the build.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case.xml (parent table; `<name>` here
+            references the scoped table by name)
+          * sys_user (OOB; always present on every PDI; never modified
+            by this Update Set per AAP Section 0.3.2)
+      - This record MUST load BEFORE the consumers that read or write
+        the `assigned_agent` column:
+          * ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+            (uses this field as the chosen-agent input to the membership
+            check; queries sys_user_grmember for
+            (current.assigned_agent, current.assigned_group) and blocks
+            save with a form-level error if the agent is NOT a member
+            of the group)
+          * ../flows/sub_flows/validate_inprogress_transition.xml (the
+            Open -> In Progress gate; the subflow inspects
+            current.assigned_agent and throws a blocking error if
+            empty OR if the agent is not a group member)
+          * ../flows/general_inquiry_state_machine.xml (the parent flow
+            for type=General Inquiry that calls
+            validate_inprogress_transition)
+          * ../flows/complaint_state_machine.xml (the parent flow for
+            type=Complaint that calls validate_inprogress_transition)
+          * ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+            (canTransitionToInProgress static method that reads
+            current.assigned_agent and is called by both the flows and
+            the business rules)
+          * ../acl/x_casemgmt_case_assigned_agent_field_acl.xml
+            (field-level ACL: write restricted to case_manager and the
+            currently-assigned case_agent)
+          * ../acl/x_casemgmt_case_read_agent_assigned.xml
+            (table-level read ACL for case_agent; condition uses
+            current.assigned_agent against gs.getUserID() to evaluate
+            the first half of "Assigned only")
+          * ../acl/x_casemgmt_case_write_agent_assigned.xml
+            (table-level write ACL for case_agent; same condition as
+            the read ACL above)
+          * ../reports/x_casemgmt_my_open_cases.xml (list-style report
+            filtered by `assigned_agent = javascript:gs.getUserID()` -
+            the agent's daily workspace dashboard)
+          * ../seed-data/users/sys_user_x_casemgmt_demo_*.xml (the
+            synthetic demo users - one per role - that the demo cases
+            will reference; this dictionary entry must precede the seed
+            users for the preview engine to reconcile the field schema)
+          * ../seed-data/cases/x_casemgmt_case_demo_*.xml (synthetic demo
+            cases that populate this field by lookup of the demo user's
+            `user_name` attribute via the seed_demo_data.js script -
+            never via hard-coded sys_id, per AAP Section 0.7.2 the
+            no-hardcoded-sys_id constraint applies to flows, ACL
+            conditions, scripts, seed data, UI Policies, UI Actions,
+            Business Rules, and client scripts)
+          * ../scripts/seed_demo_data.js (the idempotent seed script
+            that calls `gs.getUserID('x_casemgmt_demo_agent')` or
+            equivalent GlideRecord lookup by user `user_name` to resolve
+            the sys_id at seed time, never via hard-coded literals)
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Assigned Agent</column_label>
+        <comments>Optional reference to sys_user - the agent assigned to this case. Must be a member of assigned_group (validated by ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml). Required for Open-&gt;In Progress transition (../flows/sub_flows/validate_inprogress_transition.xml). Field-level ACL restricts write access to case_manager and the assigned case_agent. Replaces ArkCase CaseFile.assignee (String username).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>assigned_agent</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>reference</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>32</max_length>
+        <name>x_casemgmt_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference>sys_user</reference>
+        <reference_cascade_rule/>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>71f23b3da166caace302a5c4ea7052d0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_assigned_agent</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

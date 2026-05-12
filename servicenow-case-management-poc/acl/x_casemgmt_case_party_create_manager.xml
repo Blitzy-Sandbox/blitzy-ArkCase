@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the table-level CREATE ACL that
+    grants the scoped role `x_casemgmt_case_manager` UNCONDITIONAL create access
+    on records of the `x_casemgmt_case_party` custom table inside the scoped
+    application `x_casemgmt`. This is the CREATE companion to the case_manager
+    read / write / delete ACLs on the case_party table whose granting ACLs are
+    materialized by the sibling files:
+        - ../acl/x_casemgmt_case_party_read_agent_assigned.xml
+          (manager reads via the same broader ACL pattern: read-all is
+          granted to manager, read-assigned to agent - the agent-assigned
+          ACL also lists manager so the union grants manager unconditional
+          read access)
+        - ../acl/x_casemgmt_case_party_write_agent_assigned.xml
+          (similar union: manager + agent-assigned)
+        - ../acl/x_casemgmt_case_party_delete_manager.xml
+          (only manager can delete; agent and viewer denied by absence)
+    Together those four files realize the AAP Section 0.5.6 manager row
+    mirrored at the case_party table level per AAP Section 0.5.1 row
+    "servicenow-case-management-poc/acl/x_casemgmt_case_party_*.xml"
+    ("Mirror ACL pattern at party level"):
+        | Role                    | Create | Read | Write | Delete |
+        | x_casemgmt_case_manager  |  Yes   | All  |  All  |  Yes   |
+
+    Of the four CRUD operations, CREATE is the "entry-point" privilege for
+    the case_party domain: it is the operation that brings new
+    x_casemgmt_case_party rows into existence so that every downstream
+    privilege (read, write, delete) and every downstream UI Policy guard -
+    in particular the AAP Section 0.5.7 / 0.4.3 polymorphic
+    party_type=Person|Organization rule encoded in
+    ../ui_policy/x_casemgmt_case_party_conditional_fields.xml - has party
+    records to act upon. Without this ACL no x_casemgmt_case_manager-tier
+    user could file a new party association against an existing case from
+    the internal native form view's Related List for case_party (per AAP
+    Section 0.4.4 "Related Lists on the case form for both case_task and
+    case_party"), and the manager would be reduced to a
+    read/write/delete-only role on party records originating elsewhere
+    (specifically: agent-originated parties). That outcome would directly
+    contradict the AAP Section 0.5.6 "Create=Yes" cell for the manager row
+    mirrored to the case_party table, and it would also break the
+    operational pattern in which a manager opens a case, immediately
+    associates one or more parties (Requester, Respondent, Witness, etc.
+    via the role_label String(100) field per AAP Section 0.5.7 case_party
+    table contract), and routes any resulting tasks to case_agent
+    assignees through ../acl/x_casemgmt_case_task_create_manager.xml.
+
+    AAP cross-references:
+      - Section 0.5.6 (ACL Matrix) - case_manager row, mirrored at the
+        case_party table level per AAP Section 0.5.1 row
+        "servicenow-case-management-poc/acl/x_casemgmt_case_party_*.xml"
+        ("Mirror ACL pattern at party level"):
+            | Role                    | Create | Read | Write | Delete |
+            | x_casemgmt_case_manager  |  Yes   | All  |  All  |  Yes   |
+        This file authors the single "Create = Yes" cell of the manager
+        row for the case_party table. The "All" Read cell is authored by
+        ../acl/x_casemgmt_case_party_read_agent_assigned.xml (which lists
+        BOTH manager and agent in its <roles> field so a single ACL
+        covers the union of unconditional manager-read and conditional
+        agent-read); the "All" Write cell by
+        ../acl/x_casemgmt_case_party_write_agent_assigned.xml (similar
+        union pattern); the "Yes" Delete cell by
+        ../acl/x_casemgmt_case_party_delete_manager.xml (manager-only).
+        Each row of the ACL matrix maps to exactly one or zero ACL XML
+        files - this per-cell granularity is what lets the Update Set
+        add or remove role privileges independently without entangling
+        roles or operations.
+      - Section 0.5.6 (ACL Matrix) - all-roles create coverage on
+        x_casemgmt_case_party:
+            - case_manager: Create=Yes -> THIS FILE
+            - case_agent:   Create=Yes -> ../acl/x_casemgmt_case_party_create_agent.xml
+                                          (also unconditional; per AAP
+                                           both manager and agent can
+                                           create party associations)
+            - case_viewer:  Create=No  -> deliberate absence of any
+                                          x_casemgmt_case_party_create_viewer.xml
+                                          (deny-by-default: ServiceNow
+                                          record-level ACLs are deny-by-
+                                          default; a role with no granting
+                                          ACL for an operation cannot
+                                          perform that operation)
+        Together these three facts implement the user prompt's contract
+        that managers (operational oversight tier) and agents (operational
+        worker tier) can both originate party-association records, while
+        the lowest-privilege viewer (audit / compliance / supervisor tier
+        with read-only access) cannot. The agent's create is paired with
+        read/write _agent_assigned restrictions that limit the agent's
+        subsequent visibility of and edits to their own creations to
+        "Assigned only" rows (where the parent case has assigned_agent =
+        current user OR assigned_group contains current user per AAP
+        Section 0.5.6 "Assigned only" definition); the manager has no
+        such post-create restriction (manager Read=All, Write=All,
+        Delete=Yes on case_party).
+      - Section 0.7.3 (Validation Framework, Gate 3 - ACLs):
+            "Role-based access enforced - case_viewer cannot write;
+             case_agent cannot access unassigned cases; case_manager
+             has full access."
+        The clause "case_manager has full access" requires that the
+        manager role be able to perform every CRUD operation on the
+        case_party table; of the four operations, CREATE is the
+        operation that brings new rows into the domain. This ACL
+        satisfies that clause for the create operation on the party
+        domain; the parallel clauses about case_viewer (no write on
+        case_party - enforced by absence of any case_party write/create/
+        delete ACL listing case_viewer) and case_agent (no unassigned
+        access - enforced by the scripted "Assigned only" condition in
+        the read/write _agent_assigned ACLs) are unaffected by this ACL
+        and are enforced by separate sibling ACL files.
+      - Section 0.4.3 (Design Pattern Applications - Scoped role-based
+        access control): "Three named roles paired with table-level and
+        field-level ACLs whose conditions are encoded as scripted ACL
+        expressions, replacing ArkCase's
+        ApplicationRolesToPrivilegesConfig map." This ACL is the
+        table-level CREATE binding for the highest-tier scoped role on
+        the party domain and is one of the declarative facts the
+        platform's sys_security_acl evaluator consumes when authorizing
+        a row insertion at runtime against the case_party table.
+      - Section 0.1.2 (Technical Interpretation - Access-control
+        transformation): "ApplicationRolesConfig + RolesPrivilegesService
+        + URL-based privilege metadata -> scoped roles + ACLs." In
+        ArkCase the equivalent of THIS file would have been TWO entries
+        in the rolesToPrivileges map (because ArkCase modeled
+        person-association and organization-association in TWO separate
+        tables, acm_person_assoc and acm_person_org_assoc) binding the
+        manager-equivalent role to create privilege identifiers such as
+        `acm-person-association-create` and
+        `acm-organization-association-create`, evaluated at HTTP request
+        time by AcmPluginUrlPrivilege against the POST verb on the
+        person plugin's REST endpoints (e.g., the
+        OrganizationAssociationAPIController referenced in AAP
+        Section 0.2.1.3). The ServiceNow target replaces both map
+        bindings AND the URL-privilege evaluator with this single
+        declarative ACL record - because the target's case_party table
+        is polymorphic (party_type Choice = Person | Organization with
+        conditional person and organization reference fields per AAP
+        Section 0.4.3 Polymorphic association via single-table choice +
+        UI Policy), one ACL governs create for both Person and
+        Organization variants.
+      - Section 0.4.3 (Polymorphic association via single-table choice +
+        UI Policy): the case_party table collapses ArkCase's two
+        separate association tables (acm_person_assoc,
+        acm_person_org_assoc) into a single polymorphic ServiceNow
+        table with a `party_type` Choice discriminator
+        (Person | Organization). Because both polymorphic sub-shapes are
+        stored in a single physical table, a single ACL record
+        (this one) governs create access for the manager role across
+        BOTH variants - there is no need for separate Person /
+        Organization manager-create ACLs. This is a deliberate
+        simplification of the source ArkCase model and is the same
+        polymorphic-collapse pattern realized by every other ACL on the
+        case_party table.
+      - Section 0.5.7 (Data-Model Mapping, x_casemgmt_case_party):
+        "case (Reference -> x_casemgmt_case, Mandatory), party_type
+        (Choice: Person, Organization), person (Reference -> sys_user,
+        Conditional: required if party_type = Person), organization
+        (Reference -> core_company, Conditional: required if party_type
+        = Organization), role_label (String(100), Mandatory)." A user
+        with the case_manager role and this ACL grant can populate any
+        valid combination of these five fields when inserting a new
+        case_party row from the internal form. The mandatory-field
+        enforcement on case (parent case reference), party_type, and
+        role_label is implemented at the dictionary level by
+        ../dictionary/x_casemgmt_case_party_case.xml,
+        ../dictionary/x_casemgmt_case_party_party_type.xml, and
+        ../dictionary/x_casemgmt_case_party_role_label.xml respectively;
+        this ACL only governs WHO may attempt the insert, not WHAT the
+        insert payload must contain.
+
+    Why advanced=false (no scripted condition for create):
+      Per AAP Section 0.5.6, the case_manager role's privileges are
+      unconditional ("All", "Full access") - there is no "Assigned only"
+      or other row-level filter. Therefore:
+        - <advanced>false</advanced>      - no scripted condition
+        - <condition/>                    - empty encoded query (no row filter)
+        - <script/>                       - empty server-side script
+      With no condition and no script, the ACL evaluates to "permit" for
+      any caller who carries the x_casemgmt_case_manager role. This is the
+      correct semantic for the AAP's "manager has full create" requirement.
+      Setting advanced=true with an empty script would be functionally
+      equivalent but stylistically incorrect - the ServiceNow convention
+      is to reserve advanced=true for ACLs that actually carry a scripted
+      body (e.g., the ../acl/x_casemgmt_case_party_read_agent_assigned.xml
+      and ../acl/x_casemgmt_case_party_write_agent_assigned.xml siblings,
+      which DO carry "Assigned only" filter scripts that traverse the
+      case_party.case reference up to the parent case row to evaluate the
+      AAP Section 0.5.6 "Assigned only" rule).
+
+    Why CREATE is granted to manager (design rationale):
+      - Operational responsibility: per AAP Section 0.5.6 the manager is
+        the role tier that bears full responsibility for the case
+        lifecycle; party associations are a fundamental part of every
+        case's "who is involved" facts (per AAP Section 0.5.7 the
+        role_label field captures values such as "Requester",
+        "Respondent", "Witness"). Denying the manager the ability to
+        create such associations would create the absurd situation of a
+        manager who can read/write/delete party records but must wait
+        for an agent to bring them into being.
+      - Mirror parity with case and case_task tables: the manager has
+        Create=Yes on x_casemgmt_case (per
+        ../acl/x_casemgmt_case_create_manager.xml) and Create=Yes on
+        x_casemgmt_case_task (per
+        ../acl/x_casemgmt_case_task_create_manager.xml). Granting
+        Create=Yes on x_casemgmt_case_party preserves the manager's
+        uniform "full access on every table" posture across all three
+        custom tables in the scoped application.
+      - Demo-data seeding: the synthetic seed-data files
+        ../seed-data/parties/x_casemgmt_case_party_demo_*.xml (per AAP
+        Section 0.3.1 "at least one Person and one Organization party
+        per demo case to exercise the polymorphic UI policy") rely on
+        the demo manager user (per
+        ../seed-data/users/sys_user_x_casemgmt_demo_manager.xml) being
+        able to create case_party rows during round-trip-verification.
+        Although the seed script
+        ../scripts/seed_demo_data.js runs as admin (which bypasses ACLs
+        via admin_overrides=true), post-seed smoke tests against the
+        demo manager's authenticated session depend on this ACL being
+        in force so that interactive party creation is verified end-to-
+        end.
+      - Polymorphic data integrity: because the case_party table is
+        polymorphic (Person | Organization variants share one table per
+        AAP Section 0.4.3), the manager's create privilege uniformly
+        covers both polymorphic variants. The choice of which variant
+        to populate (person ref vs organization ref) is a per-row
+        decision driven by the Choice field party_type and enforced at
+        the form level by the UI Policy
+        ../ui_policy/x_casemgmt_case_party_conditional_fields.xml; this
+        ACL does not gate the choice itself, only the act of bringing a
+        new row into existence.
+
+    Semantic source-side reference (read-only context per AAP Section
+    0.3.2; no code or configuration is byte-for-byte ported from these
+    files):
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesToPrivilegesConfig.java
+        ArkCase mapped roles to privileges through a single
+        configuration map (`Map<String, List<Object>> rolesToPrivileges`)
+        keyed by the property `application.rolesToPrivileges`. In that
+        model, a "manager-equivalent" role (e.g., ROLE_PERSON_MANAGER /
+        ROLE_ORG_MANAGER) would have been associated with create
+        privilege identifiers such as `acm-person-association-create`
+        and `acm-organization-association-create` (one identifier per
+        association table, since ArkCase used two separate tables). The
+        ServiceNow target replaces this map-based privilege association
+        with declarative, scoped record-level ACLs - this XML record is
+        the direct equivalent of the union of those two ArkCase map
+        cells: the (case_manager, CREATE) pairing on the polymorphic
+        case_party domain that subsumes both Person and Organization
+        variants.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/
+        com/armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        Encapsulated role-CRUD and privilege-paging behavior in
+        ArkCase (`retrieveRoles()`, `retrievePrivileges()`,
+        `retrievePrivilegesByAuthorization(...)`,
+        `retrievePrivilegesByRole(...)`,
+        `updateRolePrivileges(...)`,
+        `removeRolesPrivileges(...)`). The role-name normalization
+        logic (uppercase, whitespace -> underscore, periods -> double
+        underscore, prepend ROLE_PREFIX from
+        RolePrivilegesConstants.ROLE_PREFIX = "ROLE_") was applied at
+        runtime to every role name before lookup. All of this Java
+        service surface is replaced in the ServiceNow target by the
+        platform's built-in sys_security_acl evaluator; no scripted
+        privilege resolver is needed and no role-name normalization is
+        performed because the target uses the ServiceNow-native role
+        naming convention `x_casemgmt_<role>` (no ROLE_ prefix, no
+        case mangling). THIS ACL governs the creation of CASE_PARTY
+        RECORDS, not the creation of the role itself - role creation
+        is handled by ../roles/sys_user_role_x_casemgmt_case_manager.xml
+        (and the analogous role records for case_agent and case_viewer).
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - Scope-namespace exclusivity: every cross-reference resolves into
+        the x_casemgmt scope (sys_scope = x_casemgmt, sys_package source =
+        x_casemgmt). No global-scope ACLs are written. The <name> field
+        references the scoped table x_casemgmt_case_party (not any OOB
+        global table such as `task` or any sibling association table),
+        and <roles> references the scoped role x_casemgmt_case_manager.
+        There are zero global writes from this file.
+      - Zero hardcoded cross-reference sys_id literals: <name>, <roles>,
+        <sys_scope>, and <sys_package> all resolve their targets by
+        name / source attribute lookup at Update Set apply time. The
+        <sys_id> below is THIS record's own deterministic primary key
+        (MD5 of "x_casemgmt_case_party.create.case_manager", a stable
+        canonical identifier for this exact ACL) and is not a
+        cross-reference to any other record. Computing the sys_id
+        deterministically guarantees the ACL is re-applyable / idempotent
+        across fresh PDIs and round-trip Update Set previews per AAP
+        Section 0.7.3 Gate 7 ("Update Set loads without errors on a
+        fresh PDI instance").
+      - Table-level (not field-level): <name> is `x_casemgmt_case_party`
+        with NO dot. The case_party table - unlike the parent case
+        table - has no field-level ACLs at all by AAP design; the
+        case-table field-level ACLs on assigned_group / assigned_agent
+        (../acl/x_casemgmt_case_assigned_group_field_acl.xml and
+        ../acl/x_casemgmt_case_assigned_agent_field_acl.xml) have no
+        case_party analog because case_party fields (party_type,
+        person, organization, role_label, case) carry no role-based
+        write restrictions per AAP Section 0.5.6.
+      - Operation = create: corresponds exactly to the "Create = Yes"
+        cell in the AAP matrix for the case_manager role mirrored to
+        the case_party table.
+      - admin_overrides = true: standard ServiceNow pattern that allows
+        the platform `admin` role to bypass this ACL. This is required
+        so platform administrators can troubleshoot, repair, or seed
+        scoped data (per AAP Section 0.7.4 the
+        ../scripts/seed_demo_data.js script runs as admin and uses
+        admin_overrides to bypass scoped ACLs when seeding). It does
+        NOT widen case_manager privileges - non-admin managers see
+        exactly what this ACL permits.
+      - active = true: ACL is in force the moment the Update Set
+        commits.
+      - advanced = false: see "Why advanced=false" rationale above. The
+        platform skips the empty <script/> body entirely.
+      - condition (empty): the <condition/> encoded-query field is
+        empty; no row-level filter applies to manager creates (manager
+        has "full" access, not "Assigned only"). For an INSERT operation
+        a row-level pre-filter would in any case be meaningless because
+        there is no pre-existing row to filter against; ServiceNow's
+        platform ACL evaluator ignores the condition field entirely
+        for operation=create.
+      - script (empty): the <script/> field is empty; the platform
+        skips it because advanced=false.
+      - type = record: ServiceNow's type field distinguishes
+        record-level ACLs from UI/REST/SOAP-flavored ACLs. CREATE is a
+        record-level operation (it brings a new row into the table) and
+        therefore type=record is the correct value.
+
+    Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
+      MUST be loaded AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped app record)
+        - ../app/sys_scope/x_casemgmt.xml (scope record - resolves
+          sys_scope and sys_package source="x_casemgmt")
+        - ../tables/x_casemgmt_case_party.xml (resolves
+          <name>x_casemgmt_case_party</name> by table name lookup at
+          apply time)
+        - ../roles/sys_user_role_x_casemgmt_case_manager.xml (resolves
+          <roles>x_casemgmt_case_manager</roles> by role name lookup at
+          apply time)
+      MUST be loaded BEFORE:
+        - ../seed-data/role_assignments/sys_user_has_role_x_casemgmt_demo_manager.xml
+          (the demo manager's create access during round-trip
+          verification depends on this ACL being applied first)
+        - ../seed-data/parties/x_casemgmt_case_party_demo_*.xml (the
+          demo party rows are inserted under the seeding context which
+          runs as admin and uses admin_overrides; nevertheless the ACL
+          must be present so post-seed manager-as-user smoke tests
+          succeed)
+      The deny-by-default sibling pair that this file works with:
+        - x_casemgmt_case_party_create_viewer.xml (DOES NOT EXIST - by design)
+      Adding that file would VIOLATE the AAP Section 0.5.6 matrix
+      ("case_viewer Create=No") and MUST NOT be done by any future
+      agent.
+
+    Mirror relationship to ../acl/x_casemgmt_case_create_manager.xml,
+    ../acl/x_casemgmt_case_task_create_manager.xml, and
+    ../acl/x_casemgmt_case_party_delete_manager.xml:
+      This file is the case_party-table analog of the manager-create
+      ACLs already authored for the case and case_task tables, and is
+      the create-operation analog of the manager-delete ACL already
+      authored for the case_party table. The ONLY differences between
+      this file and its sibling case_party_delete_manager.xml are:
+        - <operation>        create  (vs delete)
+        - <sys_id>           MD5("x_casemgmt_case_party.create.case_manager")
+                                                   (vs MD5("x_casemgmt_case_party.delete.case_manager"))
+        - <sys_update_name>  sys_security_acl_x_casemgmt_case_party_create_manager
+                                                   (vs sys_security_acl_x_casemgmt_case_party_delete_manager)
+        - <description>      references the create operation
+                                                   (vs delete)
+      All other fields (active, admin_overrides, advanced, condition,
+      name, roles, script, sys_class_name, sys_created_by, sys_name,
+      sys_package, sys_policy, sys_scope, type, audit timestamps) are
+      byte-for-byte identical so that the manager's privilege is
+      uniformly unconditional across every CRUD operation on every
+      table in the scoped application as the AAP matrix mandates.
+
+    The concrete scope identifier `casemgmt` is used per AAP convention
+    (Section 0.7.2 "Scoped-namespace-only constraint"); ServiceNow
+    Update Set imports use a standard XML parser, so the scope id
+    must be concrete in the XML before export. The same identifier
+    is used consistently across every artifact in this scoped
+    application. The deterministic sys_id below is computed against
+    the `casemgmt` literal and remains stable across re-imports onto
+    fresh PDIs.
+-->
+<record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <admin_overrides>true</admin_overrides>
+        <advanced>false</advanced>
+        <condition/>
+        <description>Allows users with the x_casemgmt_case_manager role to create case_party records.</description>
+        <name>x_casemgmt_case_party</name>
+        <operation>create</operation>
+        <roles>x_casemgmt_case_manager</roles>
+        <script/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8aa70279954d55c853beac37e0cdb560</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_party</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_security_acl_x_casemgmt_case_party_create_manager</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>record</type>
+    </sys_security_acl>
+</record_update>

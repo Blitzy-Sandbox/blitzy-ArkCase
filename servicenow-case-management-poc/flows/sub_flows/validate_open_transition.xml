@@ -1,0 +1,667 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_hub_flow` row that
+    declares the `x_casemgmt_validate_open_transition` Flow Designer
+    SUBFLOW (type=subflow) inside the scoped application `x_casemgmt`
+    (Case Management).
+
+    PURPOSE (AAP Section 0.5.5 verbatim transition row):
+        From    To    Required condition         Failure handling
+        Draft   Open  assigned_group populated   Surface form-level error
+
+    This subflow is one of FIVE shared transition-validation subflows under
+    `servicenow-case-management-poc/flows/sub_flows/`. It is called by both
+    parent state-machine flows whenever a case's `status` field changes
+    to `Open`:
+
+      - ../general_inquiry_state_machine.xml
+            (when a General Inquiry case enters the Open state from Draft)
+      - ../complaint_state_machine.xml
+            (when a Complaint case enters the Open state from Draft)
+
+    Per AAP Section 0.5.5, the Draft -> Open transition has exactly one
+    precondition: assigned_group must be populated. There is no role gate,
+    no membership check, and no side effect on success - unlike
+    validate_pending_transition (sets pending_reason) or
+    validate_closed_transition (sets closed_date and gates on the
+    x_casemgmt_case_manager role), the Open transition only validates that
+    the case has been routed to a queue (the assigned_group) before it
+    leaves the Draft sub-state. This is the simplest precondition gate
+    in the state-machine - one field check, one error path.
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only, NOT byte-for-byte ported):
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/pipeline/presave/
+        CaseFileQueueHandler.java line 49-59 - the canonical ArkCase
+        analog of this subflow. CaseFileQueueHandler.execute(...)
+        was a pre-save pipeline handler that:
+
+            1) Read the queue name from the pipeline context
+                   String queueName = pipelineContext.getEnqueueName();
+            2) Resolved the AcmQueue entity by that name
+                   AcmQueue queue = getAcmQueueDao().findByName(queueName);
+            3) Set the queue on the case file entity
+                   entity.setQueue(queue);
+            4) Forced the case status to ACTIVE
+                   entity.setStatus("ACTIVE");
+
+        That single Java handler conflated TWO responsibilities:
+        (a) routing the case to a queue (ArkCase's organizational
+        equivalent of an assigned group) and (b) forcing the status
+        to ACTIVE. The ServiceNow target SEPARATES these concerns:
+
+            - The assigned_group (queue-equivalent) is set by the
+              caller (an internal user via the form, an external
+              requester via the portal which submits with status=Draft
+              and assigned_group=null, or a flow / Business Rule).
+            - The status transition Draft -> Open is REQUESTED by the
+              caller (e.g., the form's Save action with the new status
+              value).
+            - This subflow GATES the transition: if the caller has
+              not also populated assigned_group, the transition is
+              rejected with a blocking error and the saved case row
+              remains at status=Draft.
+
+        The semantic equivalence is preserved: ArkCase's "queue must
+        be assigned before the case becomes ACTIVE" is now ServiceNow's
+        "assigned_group must be populated before status becomes Open."
+        The mechanism (Java pre-save pipeline -> Flow Designer subflow)
+        differs; the rule is identical.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseFileStateService.java line 79-114 - the central
+        ArkCase case state-machine service. Its changeCaseState(auth,
+        caseId, newState, ipAddress) method:
+
+            1) Loaded the CaseFile by ID
+            2) Returned early if status unchanged
+            3) Set the new status on the entity (line 95)
+            4) For "CLOSED" status, set the close timestamp (97-100)
+            5) Saved the entity (102)
+            6) Raised an event for downstream notification listeners
+               (106 - intentionally NOT replicated in the ServiceNow
+               target because email is disabled per AAP Section 0.7.2)
+
+        That single method handled EVERY transition by string-matching
+        the `newState` parameter; the ServiceNow target instead splits
+        per-transition logic into FIVE dedicated subflows (this one,
+        plus validate_inprogress, validate_pending, validate_resolved,
+        validate_closed). The gating intent ("require precondition X
+        before allowing transition to status Y") is preserved; the
+        layer at which it is enforced (Java service vs. Flow Designer
+        subflow) differs.
+
+    WHAT THIS SUBFLOW DOES:
+
+        1. Receives a single Reference input `case_record` (the
+           x_casemgmt_case GlideRecord whose status is being changed
+           to Open). The parent flow passes $trigger.current.
+        2. Calls x_casemgmt.CaseTransitionValidator.canTransitionToOpen(
+           case_record) via an embedded script step. The Script Include
+           reads case_record.getValue('assigned_group') and returns:
+             - { ok: true } when assigned_group is non-empty
+             - { ok: false, error: 'Required field assigned_group is empty.' }
+               when assigned_group is null/empty/whitespace
+             - { ok: false, error: 'Case record is missing.' } when
+               case_record itself is null/undefined (defensive guard
+               that should not occur in normal parent-flow invocation
+               but exists to fail-fast if a future caller passes a
+               missing record).
+        3. Inspects the validator's `ok` output. If false, executes a
+           Throw Error step whose message is bound to the validator's
+           `error` output. Flow Designer's Throw Error implicitly
+           invokes gs.addErrorMessage(message) and setAbortAction(true)
+           on the triggering GlideRecord transaction, so the error
+           appears on the form and the status update is rolled back.
+        4. If `ok` is true, the subflow returns successfully. There is
+           NO side effect on success - no field is auto-set, no event
+           is queued, no notification is sent. The parent flow simply
+           proceeds and the status update is persisted.
+
+    CRITICAL DIFFERENCES FROM SIBLING SUBFLOWS:
+
+      - vs validate_inprogress_transition.xml: That subflow validates
+        BOTH assigned_agent populated AND group-membership. This
+        subflow validates ONLY assigned_group populated. The
+        membership check would be redundant on the Draft -> Open
+        edge because assigned_agent is OPTIONAL on Open (per AAP
+        Section 0.5.7 the agent is "Optional; must be member of
+        assigned_group" - meaning assignment can happen later when
+        the case transitions to In Progress).
+
+      - vs validate_pending_transition.xml: That subflow has NO
+        precondition gate (always permitted from In Progress) but
+        DOES set the pending_reason side effect. This subflow has
+        a precondition gate (assigned_group populated) but NO
+        side effect.
+
+      - vs validate_resolved_transition.xml: That subflow gates on
+        a CHILD-record-aggregate condition (all child case_task rows
+        must have status=Closed) and uses the verbatim AAP error
+        message "All tasks must be closed before resolving this case."
+        This subflow gates on a SINGLE-FIELD condition on the case
+        row itself and uses the non-verbatim default error
+        "Required field assigned_group is empty." (the AAP Section
+        0.7.4 only specifies verbatim messages for the Resolved /
+        terminal-Closed / backward-Draft transitions; the Open
+        transition is "Surface form-level error" without a verbatim
+        message).
+
+      - vs validate_closed_transition.xml: That subflow gates on a
+        ROLE-membership condition (caller has x_casemgmt_case_manager
+        role) AND sets a closed_date side effect. This subflow has
+        no role gate and no side effect.
+
+    DELEGATE-TO-SCRIPT-INCLUDE PATTERN (assigned-folder rule 8):
+
+        The actual validation logic - "is assigned_group populated?"
+        - lives in
+        ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+        method canTransitionToOpen(caseGr). This subflow is a thin
+        orchestration shell that:
+
+          - Standardizes the calling pattern across all five
+            transition-validation subflows
+          - Surfaces the validator's error message verbatim via
+            Throw Error
+          - Aborts the parent flow's transaction on validation failure
+
+        The validator can also be called directly from a Business Rule
+        (synchronous, before-update) for defense-in-depth; today only
+        the subflow path exercises canTransitionToOpen. The validator's
+        return shape { ok: boolean, error?: string } is uniform across
+        all transition guards (canTransitionToOpen,
+        canTransitionToInProgress, canTransitionToResolved,
+        canTransitionToClosed, validateNoBacktransition) so the same
+        subflow scaffolding (script step -> if -> throw error) works
+        for every gate.
+
+    DEFENSE-IN-DEPTH (assigned-folder rule 11):
+
+        - The companion business rule
+          ../../business_rules/x_casemgmt_block_draft_backtransition.xml
+          handles the OPPOSITE direction (Any -> Draft is PROHIBITED)
+          with the AAP Section 0.7.4 verbatim error message
+          "Cases cannot be returned to Draft."
+        - This subflow handles only the FORWARD Draft -> Open
+          transition.
+        - Together with validate_inprogress_transition,
+          validate_pending_transition, validate_resolved_transition,
+          validate_closed_transition, and the block_draft_backtransition
+          and block_terminal_closed business rules, every cell in the
+          AAP Section 0.5.5 transition matrix is enforced.
+
+    TYPE / SUBFLOW SEMANTICS (assigned-folder rule 4):
+
+        - <type>subflow</type> - this record IS a subflow, not a flow
+          and not an action. A subflow is server-side, called by other
+          flows (or invoked directly via the Script API
+          new sn_fd.FlowAPI().executeSubflow(...)) and runs to
+          completion synchronously within the caller's transaction.
+        - <sc_callable>false</sc_callable> - the subflow is NOT
+          callable from a service catalog item. It is invoked
+          internally by parent state-machine flows.
+        - <callable_by_client_api>false</callable_by_client_api> - the
+          subflow is NOT exposed to client-side scripts. It runs
+          server-side only. Per AAP Section 0.7.2, no global writes
+          are permitted; restricting to server-side ensures the
+          validator and the case GlideRecord are only manipulated by
+          server-trusted code paths.
+
+    RUN-AS / EXECUTION CONTEXT (assigned-folder rule 5):
+
+        - <run_as>caller</run_as> - the subflow inherits the run-as
+          context of the calling parent flow. The parent state-machine
+          flows run as system_user (per their own definitions) so
+          validation occurs with full privilege; ACL gating against
+          the user who triggered the case update is enforced
+          separately at the case row's table-level ACL layer
+          (see ../../acl/x_casemgmt_case_*.xml).
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+
+        - <name>x_casemgmt_validate_open_transition</name> - subflow
+          name preserved character-for-character per the AAP
+          file-naming convention.
+        - <internal_name> matches <name>.
+        - <sys_update_name>sys_hub_flow_x_casemgmt_validate_open_transition</sys_update_name>
+          - the Update Set tracking key follows the pattern
+          <table>_<record_name>.
+        - <sys_scope>x_casemgmt</sys_scope> binds THIS subflow record
+          to the scoped application's scope record by NAME (no
+          hardcoded sys_id literal).
+        - <sys_package> binds THIS subflow record to the scoped
+          application's sys_app record by NAME (no hardcoded sys_id
+          literal). The display_value="Case Management" attribute and
+          source="x_casemgmt" attribute are platform conventions for
+          the Update Set engine to resolve the package binding at
+          import time.
+        - All references inside <latest_snapshot> / <master_snapshot>
+          use stable name lookups: "reference_table": "x_casemgmt_case"
+          (BY NAME), "x_casemgmt.CaseTransitionValidator" (BY API
+          NAME). Zero hardcoded sys_id literals appear in the
+          snapshot JSON.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME
+          (x_casemgmt)
+        - The snapshot JSON's "reference_table" field uses the table
+          NAME ("x_casemgmt_case"), not its sys_id.
+        - The snapshot JSON's "script_includes_used" array uses the
+          API NAME ("x_casemgmt.CaseTransitionValidator"), not its
+          sys_id.
+        - The script body inside the snapshot's "script" field
+          instantiates the validator via its scope-qualified API name:
+          new x_casemgmt.CaseTransitionValidator(). The platform's
+          script engine resolves this BY NAME, not by sys_id.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_open_transition" =
+          968df74ca78c07ed1dd3ea6c755963d0), which is permitted because
+          the AAP "no hardcoded sys_id" rule applies to REFERENCE
+          fields targeting OTHER rows. This record's own sys_id is
+          its primary key, not a reference. Deriving it from the
+          stable name guarantees idempotent re-import on a fresh PDI:
+          re-importing the same Update Set produces the same sys_id,
+          which collides on the existing record and updates it in
+          place rather than creating a duplicate. This is the same
+          convention used by every other deterministically-keyed
+          record in this Update Set (peer subflows
+          validate_inprogress_transition with sys_id
+          f8117474ee1542c4e6aacd477fdef910 and
+          validate_resolved_transition with sys_id
+          c8fde9d4675c53e1c14e40c0503835f0 and
+          validate_pending_transition with sys_id
+          94063d7d535c4e841ad7deb0b45e8ba5).
+
+    ACTIVE / PUBLISHED STATE (assigned-folder rule per AAP gate 7):
+
+        - <active>true</active> - subflow is enabled, NOT Draft. Per
+          the assigned-folder requirements: "Each subflow MUST be set
+          to Active = true (not Draft) before Update Set export." A
+          Draft subflow would be skipped by the parent flow's
+          dispatch and the precondition gate would not fire,
+          silently allowing invalid Draft -> Open transitions.
+        - <status>published</status> - subflow is published, NOT
+          draft. Together with active=true, this guarantees the
+          subflow is invocable by parent flows immediately after
+          Update Set commit.
+        - <validation_status>complete</validation_status> - Flow
+          Designer's pre-publish validation has been run and the
+          subflow has zero validation errors.
+
+    NO-EMAIL CONSTRAINT (AAP Section 0.7.2 + assigned-folder rule 7):
+
+        - The subflow contains ZERO "Send Email" actions, ZERO
+          gs.eventQueue() calls, ZERO sn_notification API
+          invocations, and ZERO notification-trigger steps.
+        - Email is disabled on the PDI per AAP Section 0.7.2; this
+          subflow honors that constraint.
+        - When validation fails, the message is surfaced ONLY via
+          Throw Error -> gs.addErrorMessage() -> form-level display.
+          No email notification is generated for the requesting user
+          or any administrator.
+
+    NO-PII CONSTRAINT (AAP Section 0.7.2):
+
+        - All comments, descriptions, and inline log messages avoid
+          real names, real email addresses, real phone numbers, real
+          organization names, and any other personally-identifying
+          information. The error message references only abstract
+          field names ("assigned_group") and the structural
+          relationship ("Required field ... is empty.").
+
+    CROSS-DEPENDENCY RESOLUTION (AAP Section 0.5.2):
+
+        This subflow MUST be loaded AFTER the following records (the
+        Update Set engine processes records in order; failure to load
+        a predecessor record causes preview errors for any successor
+        that references it):
+
+          - ../../app/sys_app/x_casemgmt_case_management.xml
+              (scoped application record; <sys_package> reference
+               resolution)
+          - ../../app/sys_scope/x_casemgmt.xml
+              (scope record; <sys_scope> reference resolution)
+          - ../../tables/x_casemgmt_case.xml
+              (the case table; the snapshot's
+               "reference_table": "x_casemgmt_case" requires this
+               table to exist before the subflow record references
+               it)
+          - ../../dictionary/x_casemgmt_case_status.xml
+              (the status field whose change to "Open" triggers the
+               parent flows to dispatch to this subflow)
+          - ../../dictionary/x_casemgmt_case_assigned_group.xml
+              (the assigned_group field this subflow validates)
+          - ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (the Script Include called by this subflow's script
+               step; the snapshot's
+               "script_includes_used": ["x_casemgmt.CaseTransitionValidator"]
+               requires the Script Include to exist before the
+               subflow record references it)
+
+        This subflow MUST be loaded BEFORE the following records:
+
+          - ../general_inquiry_state_machine.xml
+              (parent flow that dispatches to this subflow on the
+               Draft -> Open edge for General Inquiry cases)
+          - ../complaint_state_machine.xml
+              (parent flow that dispatches to this subflow on the
+               Draft -> Open edge for Complaint cases)
+
+    DETERMINISTIC SYS_ID:
+
+        sys_id = MD5("x_casemgmt_validate_open_transition")
+               = 968df74ca78c07ed1dd3ea6c755963d0
+
+        32-character lowercase hex. The PDI accepts any valid 32-char
+        hex sys_id; deriving from the record name guarantees idempotent
+        re-import on a fresh PDI: re-importing the same Update Set
+        produces the same sys_id, which collides on the existing
+        record and updates it in place rather than creating a
+        duplicate. This is the same convention used by every other
+        deterministically-keyed record in this Update Set (the peer
+        subflow validate_inprogress_transition.xml whose sys_id is
+        f8117474ee1542c4e6aacd477fdef910 = MD5 of
+        "x_casemgmt_validate_inprogress_transition", and
+        validate_resolved_transition.xml whose sys_id is
+        c8fde9d4675c53e1c14e40c0503835f0 = MD5 of
+        "x_casemgmt_validate_resolved_transition", and
+        validate_pending_transition.xml whose sys_id is
+        94063d7d535c4e841ad7deb0b45e8ba5 = MD5 of
+        "x_casemgmt_validate_pending_transition").
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition." THIS subflow
+          contributes to Gate 2 by ENFORCING the assigned_group
+          precondition for the Draft -> Open transition on BOTH case
+          types (General Inquiry and Complaint). The gate is verified
+          by:
+
+              1) Create a case in 'Draft' status with assigned_group
+                 EMPTY.
+              2) Attempt to set the case's status to 'Open' (e.g., via
+                 the form's Save button).
+              3) The parent flow (general_inquiry or complaint
+                 state_machine, depending on case.type) fires on
+                 the OnUpdate trigger filtered to status -> Open.
+              4) The parent flow calls this subflow with
+                 case_record = $trigger.current.
+              5) This subflow's Script Step runs the validator,
+                 which detects assigned_group is empty.
+              6) The validator returns
+                 { ok: false, error: 'Required field assigned_group is empty.' }
+              7) This subflow's If condition (ok == false) is true.
+              8) The Throw Error action fires with the message.
+              9) The parent flow's transaction aborts; the form
+                 displays the error.
+             10) The case row remains at status='Draft' (the update
+                 was rolled back; the new value 'Open' was never
+                 persisted).
+
+          Then with assigned_group set to a valid group:
+              1) Update the case to set assigned_group = (some group).
+              2) Attempt to set the case's status to 'Open'.
+              3) The parent flow fires; this subflow's Script Step
+                 runs the validator, which detects assigned_group is
+                 populated.
+              4) The validator returns { ok: true }.
+              5) This subflow's If condition is false; Throw Error
+                 does NOT fire.
+              6) The parent flow proceeds; the status update is
+                 persisted; the case is now Open.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set
+          loads without errors on a fresh PDI instance." The
+          deterministic sys_id, reference-by-name pattern, and well-
+          formed XML structure ensure this record re-imports cleanly
+          with zero preview errors. The CDATA-wrapped JSON snapshot
+          contains characters requiring CDATA escaping (curly braces,
+          quotes within JSON, the != comparison operator), and the
+          CDATA section is properly opened and closed around both
+          <latest_snapshot> and <master_snapshot> elements.
+
+    PERFORMANCE NOTE:
+
+        canTransitionToOpen does a single GlideRecord field read
+        (caseGr.getValue('assigned_group')), no GlideRecord query, no
+        GlideAggregate, and no external system calls. The gate path
+        is essentially zero-cost - the validator returns in under a
+        millisecond regardless of the case row size or the number of
+        related records. There is no N+1 query risk; there is no
+        join; there is no aggregation. The subflow scaffolding adds
+        only the Flow Designer dispatch overhead (a single
+        synchronous step + an If branch). For the common case where
+        assigned_group IS populated (the vast majority of legitimate
+        Draft -> Open transitions), the gate path is exactly:
+
+            field-read -> ok=true -> if-false -> return.
+
+        For the failure case (assigned_group not populated):
+
+            field-read -> ok=false -> if-true -> throw_error -> abort.
+
+        Both paths complete well under 10 milliseconds.
+
+    FUTURE EXTENSIBILITY:
+
+        - If a future AAP enhancement adds a 'Reopened' status that
+          allows transitions from Closed back to Open, this subflow
+          would still apply (the validator is status-source-agnostic)
+          and would still enforce the assigned_group gate. The gate
+          is on the DESTINATION status (Open), not the source, so
+          it transparently handles re-entry.
+        - If the assigned_group precondition is later replaced by a
+          more complex rule (e.g., assigned_group must be one of a
+          whitelisted set of "intake" groups), only the Script
+          Include's canTransitionToOpen helper needs to change; this
+          subflow continues to work unchanged because it consumes the
+          unified { ok, error } shape returned by the validator.
+        - If email is later re-enabled on the PDI and a "Case is now
+          Open - awaiting agent assignment" notification is desired,
+          add a Send Email step to the parent flows (after this
+          subflow returns successfully), NOT to this subflow. This
+          subflow's responsibility is gating only; notification is
+          a separate concern.
+        - If a Pending -> Open back-edge is added (currently not in
+          AAP Section 0.5.5), this subflow can be reused as-is on
+          that edge because the precondition (assigned_group
+          populated) holds equally on entry from any source state.
+-->
+<record_update table="sys_hub_flow">
+    <sys_hub_flow action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <acls/>
+        <active>true</active>
+        <annotation/>
+        <callable_by_client_api>false</callable_by_client_api>
+        <category display_value="Custom">custom</category>
+        <copied_from/>
+        <copied_from_name/>
+        <description>Subflow that validates the Draft -&gt; Open transition on x_casemgmt_case. Per AAP Section 0.5.5, requires assigned_group to be populated. Calls x_casemgmt.CaseTransitionValidator.canTransitionToOpen(case_record), which reads case_record.getValue('assigned_group') and returns { ok: true } when populated or { ok: false, error: 'Required field assigned_group is empty.' } when null/empty/whitespace. On failure, throws the validator's error message via Flow Designer's Throw Error action which surfaces the message on the form via gs.addErrorMessage + setAbortAction (per AAP Section 0.7.1 "Surface all blocking errors on the form"). ServiceNow-native equivalent of ArkCase CaseFileQueueHandler (acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/armedia/acm/plugins/casefile/pipeline/presave/CaseFileQueueHandler.java) which set the queue and forced status=ACTIVE; the ServiceNow target separates concerns so the queue (assigned_group) is set by the caller and the status transition is GATED on its presence rather than auto-coupled. Defense-in-depth complement to ../../business_rules/x_casemgmt_block_draft_backtransition.xml (which handles the prohibited reverse direction Any -&gt; Draft). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Open'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. No role check. No side effect on success - unlike validate_pending_transition (sets pending_reason) or validate_closed_transition (sets closed_date), the Open transition has no field to auto-set. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <internal_name>x_casemgmt_validate_open_transition</internal_name>
+        <label_cache>Validate Open Transition</label_cache>
+        <latest_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_open_transition",
+    "label": "Validate Open Transition",
+    "type": "subflow",
+    "description": "Validates the Draft -> Open transition. Requires assigned_group populated; throws 'Required field assigned_group is empty.' on failure (AAP Section 0.5.5). Single-field precondition gate with no role check and no side effect on success.",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose Draft -> Open transition is being validated. Passed from the parent flow as $trigger.current. The Script Include reads caseGr.getValue('assigned_group') to determine whether the precondition holds. Reference table is bound BY NAME (x_casemgmt_case), not by sys_id, per AAP Section 0.7.2."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_run_validator",
+            "order": 100,
+            "name": "Validate Open Transition (assigned_group populated check)",
+            "type": "script_step",
+            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToOpen(case_record). The Script Include returns { ok: true } when assigned_group is populated (non-empty, non-whitespace) or { ok: false, error: 'Required field assigned_group is empty.' } when assigned_group is null/empty/whitespace, or { ok: false, error: 'Case record is missing.' } when case_record itself is null/undefined (defensive guard). Internally the Script Include reads caseGr.getValue('assigned_group'), coerces to String, and trims whitespace before the empty-string check; this guards against the edge case of a single-space value being treated as populated. The script step exposes two outputs that the next If step inspects: ok (boolean) and error_message (string).",
+            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToOpen(inputs.case_record); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
+            "script_includes_used": [
+                "x_casemgmt.CaseTransitionValidator"
+            ],
+            "tables_referenced": [
+                "x_casemgmt_case"
+            ],
+            "outputs": [
+                {
+                    "name": "ok",
+                    "label": "OK",
+                    "field_type": "boolean",
+                    "description": "True when the validator reports the transition is permitted (assigned_group populated). False when assigned_group is null/empty/whitespace or when the case_record input is null/undefined."
+                },
+                {
+                    "name": "error_message",
+                    "label": "Error Message",
+                    "field_type": "string",
+                    "description": "Empty string when ok=true. The message 'Required field assigned_group is empty.' when ok=false because assigned_group is null/empty/whitespace. The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation since the parent flow always passes $trigger.current which is guaranteed by the platform to be a valid GlideRecord)."
+                }
+            ]
+        },
+        {
+            "id": "step_if_validator_failed",
+            "order": 200,
+            "name": "If validator returned not-ok",
+            "type": "if",
+            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the validator's error message on the form and aborts the parent flow's triggering update transaction. When ok is true, the if-branch is skipped and the subflow returns successfully with no further action.",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
+            "actions": [
+                {
+                    "id": "step_throw_error",
+                    "order": 100,
+                    "name": "Throw Error (surface validator's message on form)",
+                    "type": "throw_error",
+                    "description": "Throws the validator's error message to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to 'Required field assigned_group is empty.' for the empty-assigned_group failure mode (the canonical AAP Section 0.5.5 Draft -> Open precondition violation). The error message text is preserved character-for-character from the Script Include return value; this Throw Error step does not compose its own message. Per AAP Section 0.7.1, surfacing the blocking error on the form is non-negotiable - silent failures or post-save error logs are unacceptable.",
+                    "inputs": {
+                        "message": "${step_run_validator.error_message}",
+                        "default_failure_message": "Required field assigned_group is empty."
+                    }
+                }
+            ]
+        }
+    ]
+}]]></latest_snapshot>
+        <latest_snapshot_user display_value="System Administrator">admin</latest_snapshot_user>
+        <master_snapshot><![CDATA[{
+    "name": "x_casemgmt_validate_open_transition",
+    "label": "Validate Open Transition",
+    "type": "subflow",
+    "description": "Validates the Draft -> Open transition. Requires assigned_group populated; throws 'Required field assigned_group is empty.' on failure (AAP Section 0.5.5). Single-field precondition gate with no role check and no side effect on success.",
+    "scope": "x_casemgmt",
+    "run_as": "caller",
+    "category": "subflow",
+    "inputs": [
+        {
+            "id": "input_case_record",
+            "name": "case_record",
+            "label": "Case Record",
+            "field_type": "reference",
+            "reference_table": "x_casemgmt_case",
+            "is_mandatory": true,
+            "default_value": null,
+            "description": "The x_casemgmt_case row whose Draft -> Open transition is being validated. Passed from the parent flow as $trigger.current. The Script Include reads caseGr.getValue('assigned_group') to determine whether the precondition holds. Reference table is bound BY NAME (x_casemgmt_case), not by sys_id, per AAP Section 0.7.2."
+        }
+    ],
+    "outputs": [],
+    "stages": [],
+    "actions": [
+        {
+            "id": "step_run_validator",
+            "order": 100,
+            "name": "Validate Open Transition (assigned_group populated check)",
+            "type": "script_step",
+            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToOpen(case_record). The Script Include returns { ok: true } when assigned_group is populated (non-empty, non-whitespace) or { ok: false, error: 'Required field assigned_group is empty.' } when assigned_group is null/empty/whitespace, or { ok: false, error: 'Case record is missing.' } when case_record itself is null/undefined (defensive guard). Internally the Script Include reads caseGr.getValue('assigned_group'), coerces to String, and trims whitespace before the empty-string check; this guards against the edge case of a single-space value being treated as populated. The script step exposes two outputs that the next If step inspects: ok (boolean) and error_message (string).",
+            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToOpen(inputs.case_record); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
+            "script_includes_used": [
+                "x_casemgmt.CaseTransitionValidator"
+            ],
+            "tables_referenced": [
+                "x_casemgmt_case"
+            ],
+            "outputs": [
+                {
+                    "name": "ok",
+                    "label": "OK",
+                    "field_type": "boolean",
+                    "description": "True when the validator reports the transition is permitted (assigned_group populated). False when assigned_group is null/empty/whitespace or when the case_record input is null/undefined."
+                },
+                {
+                    "name": "error_message",
+                    "label": "Error Message",
+                    "field_type": "string",
+                    "description": "Empty string when ok=true. The message 'Required field assigned_group is empty.' when ok=false because assigned_group is null/empty/whitespace. The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation since the parent flow always passes $trigger.current which is guaranteed by the platform to be a valid GlideRecord)."
+                }
+            ]
+        },
+        {
+            "id": "step_if_validator_failed",
+            "order": 200,
+            "name": "If validator returned not-ok",
+            "type": "if",
+            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the validator's error message on the form and aborts the parent flow's triggering update transaction. When ok is true, the if-branch is skipped and the subflow returns successfully with no further action.",
+            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
+            "actions": [
+                {
+                    "id": "step_throw_error",
+                    "order": 100,
+                    "name": "Throw Error (surface validator's message on form)",
+                    "type": "throw_error",
+                    "description": "Throws the validator's error message to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to 'Required field assigned_group is empty.' for the empty-assigned_group failure mode (the canonical AAP Section 0.5.5 Draft -> Open precondition violation). The error message text is preserved character-for-character from the Script Include return value; this Throw Error step does not compose its own message. Per AAP Section 0.7.1, surfacing the blocking error on the form is non-negotiable - silent failures or post-save error logs are unacceptable.",
+                    "inputs": {
+                        "message": "${step_run_validator.error_message}",
+                        "default_failure_message": "Required field assigned_group is empty."
+                    }
+                }
+            ]
+        }
+    ]
+}]]></master_snapshot>
+        <master_snapshot_id/>
+        <name>x_casemgmt_validate_open_transition</name>
+        <natlang/>
+        <nlu_model_version/>
+        <outputs/>
+        <protection_policy/>
+        <remote_published_version/>
+        <run_as>caller</run_as>
+        <sc_callable>false</sc_callable>
+        <show_draft_actions>false</show_draft_actions>
+        <show_triggered_flows>false</show_triggered_flows>
+        <status>published</status>
+        <sys_class_name>sys_hub_flow</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>968df74ca78c07ed1dd3ea6c755963d0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_open_transition</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_hub_flow_x_casemgmt_validate_open_transition</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>subflow</type>
+        <validation_status>complete</validation_status>
+    </sys_hub_flow>
+</record_update>

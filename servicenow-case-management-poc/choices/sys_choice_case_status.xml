@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SIX `sys_choice` rows that
+    enumerate the legal values of the `status` Choice field on the
+    `x_casemgmt_case` custom table inside the scoped application
+    `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field    Type     Constraints
+        status   Choice   Draft, Open, In Progress, Pending, Resolved, Closed
+
+    The values authored here are the EXHAUSTIVE, CLOSED enumeration that the
+    AAP mandates - exactly six records, no more and no fewer. Per the
+    MINIMAL CHANGE CLAUSE in AAP Section 0.7.2, additional statuses such as
+    `Reopened`, `Cancelled`, `Suspended`, `On Hold`, etc. are explicitly out
+    of scope.
+
+    THIS IS THE MOST CROSS-REFERENCED CHOICE LIST IN THE ENTIRE SCOPED APP.
+    Per AAP Sections 0.5.5 and 0.5.2, the labels declared here are read by:
+
+      Two type-specific Flow Designer flows (OnUpdate filtered on status):
+        ../flows/general_inquiry_state_machine.xml
+        ../flows/complaint_state_machine.xml
+
+      Five subflows that gate individual transitions:
+        ../flows/sub_flows/validate_open_transition.xml      (Draft -> Open)
+        ../flows/sub_flows/validate_inprogress_transition.xml (Open -> In Progress)
+        ../flows/sub_flows/validate_pending_transition.xml    (In Progress -> Pending)
+        ../flows/sub_flows/validate_resolved_transition.xml   (In Progress -> Resolved)
+        ../flows/sub_flows/validate_closed_transition.xml     (Resolved -> Closed)
+
+      Six business rules enforcing entity-level guards and side-effects:
+        ../business_rules/x_casemgmt_block_draft_backtransition.xml   (* -> Draft prohibited)
+        ../business_rules/x_casemgmt_block_terminal_closed.xml        (Closed -> * prohibited)
+        ../business_rules/x_casemgmt_set_opened_date.xml              (before-insert)
+        ../business_rules/x_casemgmt_set_closed_date.xml              (Resolved -> Closed)
+        ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+        ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+
+      One Script Include exposing reusable transition guards used by both
+      flows and business rules:
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+        (canTransitionToOpen / ToInProgress / ToResolved / ToClosed)
+
+      Two scripted REST endpoints serving the unauthenticated portal pages:
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+            (sets status='Draft' on insert; relies on the Title Case label
+            declared by Record 1 below)
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+            (returns this field's stored value as one of the THREE whitelisted
+            output fields per AAP Section 0.7.4: "the lookup page returns
+            ONLY status, subject, opened_date - no internal fields exposed".
+            The exact label string the anonymous external requester sees is
+            the Title Case string defined here, e.g., 'In Progress'.)
+
+      Three reports (one Agent Workspace, two Manager View widgets):
+        ../reports/x_casemgmt_my_open_cases.xml
+            (filter: status NOT IN (Resolved, Closed))
+        ../reports/x_casemgmt_case_count_by_status.xml
+            (donut grouped by status; six slices, one per label below)
+        ../reports/x_casemgmt_all_cases_by_status.xml
+            (bar grouped by status; six bars, one per label below)
+
+      Ten synthetic demo cases satisfying AAP Section 0.4.1 minimum-data
+      threshold ("at least one demo case in each of the six statuses"):
+        ../seed-data/cases/x_casemgmt_case_demo_01.xml ... _demo_10.xml
+
+    THREE VERBATIM BLOCKING-ERROR MESSAGES from AAP Section 0.7.4 reference
+    the labels declared below by Title Case string-equality comparisons:
+        - "All tasks must be closed before resolving this case."
+          (fires when a Resolved transition is attempted while any child task
+           has status != Closed - compares against the label declared in
+           Record 5 below and Record 3 of sys_choice_case_task_status.xml)
+        - "Cases cannot be returned to Draft."
+          (fires when ANY transition attempts to land in Draft - compares
+           against the label declared in Record 1 below)
+        - "Closed cases are terminal and cannot be modified."
+          (fires when previous.status was Closed - compares against the
+           label declared in Record 6 below)
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 141-142:
+            @Column(name = "cm_case_status")
+            private String status;
+        ArkCase's `status` was a free-form `String` JPA column with NO
+        platform-level enumeration check. Any caller could assign any
+        arbitrary string. The legal values were scattered across constants
+        files, the queue handler, and the state-change service - making it
+        impossible to know the closed set without code archaeology. The
+        ServiceNow target FIXES this by declaring a controlled vocabulary
+        of EXACTLY six labels here, enforced at platform-validation time
+        through the parent dictionary entry's `<choice>3</choice>` setting
+        in ../dictionary/x_casemgmt_case_status.xml.
+      - CaseFile.java line 307-316 contains the @PrePersist lifecycle hook:
+            if (getStatus() == null || getStatus().trim().isEmpty())
+                setStatus("DRAFT");
+        defaulting null/empty to UPPERCASE "DRAFT". The ServiceNow target
+        normalizes this to TITLE CASE `Draft` (Record 1 below). The default
+        behavior is preserved at the platform level via the dictionary's
+        <default_value>Draft</default_value> declaration; this Choice list
+        merely enumerates the legal values, and Title Case is intentional
+        per AAP Section 0.1.2 verbatim ("`case.status` default = `Draft`").
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFileConstants.java does
+        NOT declare a status enumeration; it only declares OBJECT_TYPE,
+        EVENT_TYPE_*, and queue-action constants. The status enumeration
+        was therefore implicit / undocumented in ArkCase - the target
+        FIXES that defect by declaring the six values here explicitly.
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/ChangeCaseStatus.java line
+        88-89 declares `private String status = "ACTIVE";` for the
+        change-history entity - using values like "IN_APPROVAL", "DRAFT",
+        "APPROVED" (all uppercase). These are reference-only and NOT
+        replicated in the ServiceNow target. The history is captured by
+        the platform's standard `sys_audit` table, enabled via the parent
+        dictionary entry's <audit>true</audit> flag.
+      - The ArkCase CaseFileQueueHandler also overrode status to "ACTIVE"
+        on save, which has no analog here. The ServiceNow target uses
+        `Open` (Record 2 below) for the equivalent post-Draft active state,
+        deliberately renamed for clarity since "ACTIVE" was ambiguous in
+        ArkCase (active in queue? active casework? active for retention?).
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - EXACTLY six records: no fewer, no more. Per AAP Section 0.5.7
+        verbatim. The six records below are the COMPLETE enumeration.
+      - Title Case labels: `Draft`, `Open`, `In Progress`, `Pending`,
+        `Resolved`, `Closed`. NOT uppercase (ArkCase legacy), NOT
+        lowercase, NOT camelCase. The agent prompt's "Most common error
+        point" warning specifically calls out: `In Progress` is TWO words
+        separated by a SINGLE ASCII space - NOT `InProgress`, NOT
+        `In_Progress`, NOT `IN PROGRESS`.
+      - Label = Value pattern: each `<value>` matches its sibling
+        `<label>` byte-for-byte. The stored value IS the human-readable
+        label - no integer state codes, no enum ordinals, no separate
+        machine-key. This is a standard ServiceNow Choice-field idiom
+        and matches the pattern used by sibling Choice lists in this app
+        (sys_choice_case_type, sys_choice_case_priority, etc.).
+      - Sequence ordering by lifecycle progression in increments of 100:
+            Draft (100) -> Open (200) -> In Progress (300) -> Pending (400)
+                -> Resolved (500) -> Closed (600)
+        This matches the AAP Section 0.5.5 transition matrix's natural
+        narrative arc and drives:
+            (a) the dropdown order on the case form
+            (b) the slice/bar order on the dashboard reports (donut + bar)
+            (c) the lifecycle visualization intuition for end users
+            (d) the future extensibility - increment-of-100 spacing leaves
+                room for inserting new statuses without renumbering, though
+                the AAP MINIMAL CHANGE CLAUSE prohibits adding any in this
+                POC.
+      - All six records are <inactive>false</inactive>: every value is
+        active and selectable in the dropdown. There are no deprecated
+        legacy values to filter out (this is a greenfield Choice list).
+      - No <dependent_value/>: status is a TOP-LEVEL lifecycle indicator
+        whose legal values do NOT depend on `type`, `priority`, or any
+        other field. The flow-level transition guards enforce which
+        VALUES are legal at runtime; the dependent_value mechanism is
+        for declarative cascading at the form-rendering level only.
+      - No <hint/>: the labels are self-documenting (Draft, Open, In
+        Progress, Pending, Resolved, Closed are universally understood
+        case-management terms). The agent prompt explicitly suppresses
+        helper text per the POC scope.
+      - Scope-namespace exclusivity: every record's `<sys_scope>` and
+        `<sys_package>` resolve into the `x_casemgmt`
+        scoped application by `source` attribute lookup. NO global-scope
+        writes - the OOB tables sys_user, sys_user_group, sys_user_role,
+        core_company, task, incident, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_casemgmt`), not by literal sys_id. Each
+        record's `<sys_id>` element value is THIS record's own
+        deterministic primary key - computed as MD5 of the canonical
+        identifier `x_casemgmt_case.status.<Value>` so that re-generation
+        of this XML yields byte-identical output (no random UUIDs). The
+        sys_id is NOT a reference to any other record.
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves into the final
+        scope namespace.
+      - English language only: `<language>en</language>` on every record
+        per the POC scope. The platform supports localization via
+        additional sys_choice records keyed by `language`, but no
+        non-English locales are in scope.
+      - `<sys_domain>global</sys_domain>` on every record: domain
+        separation is not used by this scoped application.
+      - No PII: the labels are categorical lifecycle terms only; no
+        real names, email addresses, or organizational identifiers
+        are derived from or stored in these records.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD SET MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../tables/x_casemgmt_case.xml (parent table; status field's host)
+        - ../dictionary/x_casemgmt_case_status.xml (parent dictionary entry;
+          declares the column shape, choice=3, default_value=Draft, and
+          audit=true. Without this entry the sys_choice records below
+          have no column to attach to.)
+
+      THIS RECORD SET MUST LOAD BEFORE all consumers enumerated above
+      (flows, subflows, business rules, script includes, scripted REST
+      endpoints, reports, and demo seed data). Loading order is enforced
+      by the alphabetical Update Set preview ordering plus the
+      record-by-record dependency-resolution pass.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>status</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Draft</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>100</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>469743ab68c473967a2b400e96b9ec3b</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Draft</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>status</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Open</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>200</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>c7016389461b0514a6c32ef560c8cc15</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Open</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>status</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>In Progress</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>300</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>c6f64c7588534aa4afc57b3ddb9b94be</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>In Progress</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>status</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Pending</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>400</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>b7e4f3630eba2bbb58369d1de1c9f64f</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Pending</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>status</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Resolved</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>500</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>c07dd6871aa382dadba4c1462574ad88</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Resolved</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>status</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Closed</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>600</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>e954f5727169003243f2db2ae9c872e0</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Closed</value>
+</sys_choice>
+</unload>

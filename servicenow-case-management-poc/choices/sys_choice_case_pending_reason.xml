@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the THREE `sys_choice` rows that
+    enumerate the legal values of the `pending_reason` Choice field on the
+    `x_casemgmt_case` custom table inside the scoped application
+    `x_casemgmt`.
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning):
+        choices/sys_choice_case_pending_reason.xml -> Awaiting Info,
+        Awaiting Third Party, Other
+
+    Per AAP Section 0.5.5 (State-Machine Transition Map verbatim):
+        From          To           Required condition / behavior
+        In Progress   Pending      None; sets pending_reason
+                                   (Awaiting Info / Awaiting Third Party / Other)
+        Pending       In Progress  None; clears pending_reason
+
+    The forward-slash separator in the AAP transition spec means the
+    Pending state requires the user to select EXACTLY ONE of these three
+    discriminator values - no other value is permitted. The three records
+    below are the EXHAUSTIVE, CLOSED enumeration that the AAP mandates -
+    exactly three records, no more and no fewer. Per the MINIMAL CHANGE
+    CLAUSE in AAP Section 0.7.2, additional pending reasons such as
+    `Awaiting Approval`, `Awaiting Documentation`, `Awaiting Internal
+    Review`, `Awaiting Customer Confirmation`, etc. are explicitly out of
+    scope for this POC. The increment-of-100 sequence spacing leaves room
+    for future extensibility (e.g., inserting `Awaiting Approval` at
+    sequence 150 between `Awaiting Info` and `Awaiting Third Party`)
+    without renumbering, but no extension is authorized in this build.
+
+    Per AAP Sections 0.5.5, 0.5.2, and 0.4.1, the labels declared here are
+    read by:
+
+      The parent dictionary entry that declares this field as Choice:
+        ../dictionary/x_casemgmt_case_pending_reason.xml
+            (declares the column as a Choice via `<choice>3</choice>`,
+            optional/non-mandatory at the schema level since `pending_reason`
+            is only populated when the case is in the Pending state, and
+            cleared by ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+            when the case transitions back to In Progress.)
+
+      The Flow Designer subflow that prompts the user during the
+      In Progress -> Pending transition:
+        ../flows/sub_flows/validate_pending_transition.xml
+            (per AAP Section 0.5.5, the subflow has NO blocking-error
+            condition - it merely captures the discriminator value via
+            a prompt-user step. The prompt's options are exactly the
+            three labels declared below: `Awaiting Info`,
+            `Awaiting Third Party`, `Other`. If a label here changes,
+            the subflow's prompt list MUST change too.)
+
+      The Business Rule that clears this field on the reverse transition:
+        ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+            (per AAP Section 0.5.5, when a case transitions
+            Pending -> In Progress, the previously-set `pending_reason`
+            is cleared - i.e., set to empty string. The rule does NOT
+            reference specific labels here; it just clears whatever
+            value is currently stored. So adding/removing labels in
+            this Choice list does NOT require updating the business
+            rule's body, only the subflow's prompt-options list.)
+
+      The synthetic demo cases satisfying AAP Section 0.4.1 minimum-data
+      threshold (specifically demo_04, the Pending-state General Inquiry
+      case per AAP Section 0.4.1: "x_casemgmt_case_demo_04.xml (Pending,
+      General Inquiry)"). The seed value MUST match one of the three labels
+      declared below byte-for-byte for the GlideRecord seed insert to
+      succeed against the parent dictionary's `<choice>3</choice>`
+      enforcement.
+
+    Note on the Experience Portal: per AAP Section 0.4.4 the public
+    submission form has only five inputs (subject, type, description,
+    requester_name, requester_email) and the lookup page returns ONLY
+    status/subject/opened_date. The `pending_reason` field is therefore
+    NEVER exposed to anonymous external requesters - it is an
+    internal-only operational discriminator. The portal cannot create
+    cases in the Pending state (anonymous submissions land in `Draft`
+    per ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml) and
+    cannot read `pending_reason` (the lookup widget's whitelist excludes
+    it per ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml).
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java does NOT
+        declare a `pending_reason` field. ArkCase's CaseFile.java contains
+        only a `status` field (line 141-142):
+            @Column(name = "cm_case_status")
+            private String status;
+        and references `ChangeCaseStatus` (line 199) for transition
+        history. There is no separate "pending reason" discriminator.
+        ArkCase's actual pending-state reasons - if any - were tracked
+        via the free-form Activiti BPMN variables side-channel, custom
+        Frevvo form extensions, or Solr `comment` fields, none of which
+        are in scope for this POC per AAP Section 0.3.2.
+
+        The ServiceNow target FIXES this gap by introducing an explicit
+        `pending_reason` Choice field with a controlled vocabulary of
+        EXACTLY three labels here, enforced at platform-validation time
+        through the parent dictionary entry's `<choice>3</choice>`
+        setting in ../dictionary/x_casemgmt_case_pending_reason.xml. This
+        gives the AAP-required Pending state a structured, queryable
+        discriminator that internal users can filter on (e.g., a
+        case_manager building a saved query "all cases pending external
+        information" filters where `status=Pending AND pending_reason=
+        Awaiting Third Party`) without resorting to free-text comment
+        scraping.
+
+        This is one of the few intentional ENRICHMENTS the target makes
+        relative to the source ArkCase domain model - all other field
+        additions are explicitly forbidden per AAP Section 0.7.4
+        ("Preserve the user-prompt's data-model field set verbatim ...
+        no additions, no renames, no type relaxations"). The
+        `pending_reason` field is permitted because it is ITSELF
+        AAP-mandated by Section 0.5.5 (its three values are listed
+        verbatim in the transition-map row "In Progress -> Pending").
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFileConstants.java
+        declares only OBJECT_TYPE, EVENT_TYPE_*, and queue-action
+        constants - no pending-reason enumeration. The target therefore
+        introduces this enumeration entirely from the AAP, not from any
+        ArkCase source.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/ChangeCaseStatus.java
+        defines its own status enumeration (IN_APPROVAL, DRAFT, APPROVED)
+        which is entirely separate from this `pending_reason` Choice
+        list and is OUT OF SCOPE per AAP Section 0.3.2. The target's
+        case status enumeration is in ../choices/sys_choice_case_status.xml
+        (Draft, Open, In Progress, Pending, Resolved, Closed); the
+        `pending_reason` declared here is an ORTHOGONAL discriminator
+        that further qualifies the `Pending` status only.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - EXACTLY three records: no fewer, no more. Per AAP Section 0.5.5
+        verbatim. The three records below are the COMPLETE enumeration.
+      - Title Case labels with single-space separators: `Awaiting Info`,
+        `Awaiting Third Party`, `Other`. NOT camelCase (`AwaitingInfo`,
+        `AwaitingThirdParty`), NOT kebab-case (`Awaiting-Info`,
+        `Awaiting-Third-Party`), NOT lowercase (`awaiting info`), NOT
+        snake_case (`awaiting_info`, `awaiting_third_party`). Each label
+        is exact AAP-spelling and AAP-casing.
+      - `Awaiting Third Party` has THREE words separated by single ASCII
+        spaces. Not double spaces, not non-breaking spaces (U+00A0),
+        not tab characters - just plain ASCII 0x20.
+      - Label = Value pattern: each `<value>` matches its sibling
+        `<label>` byte-for-byte. The stored value IS the human-readable
+        label - no integer codes, no enum ordinals, no separate
+        machine-key. This matches the pattern used by sibling Choice
+        lists in this app (sys_choice_case_status, sys_choice_case_type,
+        sys_choice_case_priority, sys_choice_case_task_status,
+        sys_choice_case_task_type, sys_choice_case_party_party_type)
+        and is essential for the Flow Designer subflow's prompt-user
+        step to round-trip the selected value back into the GlideRecord
+        column without translation, and for any GlideAggregate
+        groupBy('pending_reason') queries to produce coherent labels.
+      - Sequence ordering matches the AAP Section 0.5.5 listing order
+        ("Awaiting Info / Awaiting Third Party / Other") in increments
+        of 100:
+            Awaiting Info (100) -> Awaiting Third Party (200) -> Other (300)
+        This drives:
+            (a) the dropdown order on the case form (when the case is
+                in Pending status and the field is rendered)
+            (b) the prompt-user option order in the Flow Designer subflow
+                ../flows/sub_flows/validate_pending_transition.xml
+            (c) the future extensibility - increment-of-100 spacing leaves
+                room for inserting new values (e.g., `Awaiting Approval`
+                at sequence 150 between `Awaiting Info` and `Awaiting
+                Third Party`) without renumbering existing rows, though
+                the AAP MINIMAL CHANGE CLAUSE prohibits adding any in
+                this POC.
+        Note that "Other" is intentionally LAST per the conventional
+        catch-all positioning - it appears at the bottom of the dropdown
+        as the fallback selection when none of the specific reasons
+        match.
+      - All three records are <inactive>false</inactive>: every value is
+        active and selectable in the dropdown. There are no deprecated
+        legacy values to filter out (this is a greenfield Choice list
+        with no source ArkCase analog).
+      - No <dependent_value/>: pending_reason is a TOP-LEVEL discriminator
+        whose legal values do NOT depend on `type`, `priority`, or any
+        other field. A General Inquiry can be Pending for any of the
+        three reasons; a Complaint can be Pending for any of the three
+        reasons. No cascading dropdown is needed. (The Choice IS implicitly
+        "scoped" by status=Pending in that it is only ever populated when
+        status=Pending, but that is enforced by the
+        ../flows/sub_flows/validate_pending_transition.xml subflow and
+        the ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+        business rule, not by a `dependent_value` on the Choice records.)
+      - No <hint/>: the labels are self-documenting. `Awaiting Info` is
+        universally understood as "waiting for additional information
+        from the requester or another party"; `Awaiting Third Party` is
+        "waiting for an external organization not directly involved in
+        the case"; `Other` is the catch-all. The agent prompt explicitly
+        suppresses helper text per the POC scope (Key Insight #3:
+        "Other is a fallback. The AAP doesn't restrict what Other means;
+        the Pending subflow may capture additional details in a future
+        enhancement, but for POC, the bare label is sufficient.").
+      - No default value at this Choice level: the parent dictionary
+        entry ../dictionary/x_casemgmt_case_pending_reason.xml has an
+        empty <default_value/> because the field is null/empty when
+        the case is in any status other than Pending. The value is
+        explicitly captured by the validate_pending_transition subflow
+        at the moment of transition - there is no auto-applied default.
+      - Scope-namespace exclusivity: every record's `<sys_scope>` and
+        `<sys_package>` resolve into the `x_casemgmt`
+        scoped application by `source` attribute lookup. NO global-scope
+        writes - the OOB tables sys_user, sys_user_group, sys_user_role,
+        core_company, task, incident, etc. are never modified.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
+        `<sys_package>` text-node values resolve by scope source name
+        (`x_casemgmt`), not by literal sys_id. Each
+        record's `<sys_id>` element value is THIS record's own
+        deterministic primary key - computed as MD5 of the canonical
+        identifier `x_casemgmt_case.pending_reason.<Value>` so that
+        re-generation of this XML yields byte-identical output (no
+        random UUIDs). The sys_id is NOT a reference to any other
+        record. The MD5 inputs are documented in the trailing comment
+        block below for full traceability.
+      - The concrete scope identifier `casemgmt` is used per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export, which the import process resolves into the final
+        scope namespace.
+      - English language only: `<language>en</language>` on every record
+        per the POC scope. The platform supports localization via
+        additional sys_choice records keyed by `language`, but no
+        non-English locales are in scope.
+      - `<sys_domain>global</sys_domain>` on every record: domain
+        separation is not used by this scoped application.
+      - No PII: the labels are categorical waiting-state terms only;
+        no real names, email addresses, or organizational identifiers
+        are derived from or stored in these records.
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD SET MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../tables/x_casemgmt_case.xml (parent table; pending_reason
+          field's host)
+        - ../dictionary/x_casemgmt_case_pending_reason.xml (parent
+          dictionary entry; declares the column shape, choice=3,
+          mandatory=false. Without this entry the sys_choice records
+          below have no column to attach to.)
+
+      THIS RECORD SET MUST LOAD BEFORE:
+        - ../flows/sub_flows/validate_pending_transition.xml
+            (the subflow that prompts the user to select one of these
+            three values when transitioning In Progress -> Pending. The
+            subflow's prompt-user step expects exactly the labels
+            defined here.)
+        - ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+            (the business rule that clears this field on the reverse
+            transition Pending -> In Progress. The rule does NOT
+            reference specific labels but does reference the field
+            name `pending_reason`, which depends on the parent
+            dictionary entry being loaded - and the dictionary entry's
+            choice column type means the sys_choice records here MUST
+            be in place before any seed data tries to populate the
+            field.)
+        - ../seed-data/cases/x_casemgmt_case_demo_04.xml
+            (the Pending-state General Inquiry demo case that exercises
+            this Choice field. Per AAP Section 0.4.1, this is the only
+            demo case in the Pending state in the seed data set, so
+            it MUST set `pending_reason` to one of the three labels
+            here byte-for-byte. Other demo cases that are NOT in the
+            Pending state leave this field empty.)
+
+      Loading order is enforced by the alphabetical Update Set preview
+      ordering plus the record-by-record dependency-resolution pass.
+
+    The MD5 input for each record's <sys_id> is the canonical identifier
+    <table>.<element>.<value>, matching the convention used by the
+    sibling Choice files (sys_choice_case_status.xml,
+    sys_choice_case_type.xml, sys_choice_case_priority.xml,
+    sys_choice_case_task_status.xml, sys_choice_case_task_type.xml,
+    sys_choice_case_party_party_type.xml):
+        MD5("x_casemgmt_case.pending_reason.Awaiting Info")        = 4c80901f97d80493815d6e5035350545
+        MD5("x_casemgmt_case.pending_reason.Awaiting Third Party") = f9f1b37a725e88b044b6b7e39c215670
+        MD5("x_casemgmt_case.pending_reason.Other")                = 6bfddaadc6361fe46d2756027eefec2f
+    These hashes are recomputable from the AAP-mandated canonical input,
+    guaranteeing deterministic XML re-generation across all build runs and
+    idempotent re-imports on any fresh PDI without sys_id collisions.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>pending_reason</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Awaiting Info</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>100</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>4c80901f97d80493815d6e5035350545</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Awaiting Info</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>pending_reason</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Awaiting Third Party</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>200</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>f9f1b37a725e88b044b6b7e39c215670</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Awaiting Third Party</value>
+</sys_choice>
+<sys_choice action="INSERT_OR_UPDATE">
+    <dependent_value/>
+    <element>pending_reason</element>
+    <hint/>
+    <inactive>false</inactive>
+    <label>Other</label>
+    <language>en</language>
+    <name>x_casemgmt_case</name>
+    <sequence>300</sequence>
+    <sys_class_name>sys_choice</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>6bfddaadc6361fe46d2756027eefec2f</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <value>Other</value>
+</sys_choice>
+</unload>

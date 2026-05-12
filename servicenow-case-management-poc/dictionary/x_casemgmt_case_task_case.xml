@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `case` Reference field on the `x_casemgmt_case_task` custom
+    table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
+
+        Field         Type                          Constraints
+        case          Reference -> x_casemgmt_case   Mandatory
+
+    THIS FIELD IS THE PARENT LINKAGE that ties every case-task row back to
+    its parent case. It is the single most important field on the entire
+    case_task table - without it, a task is an orphan with no semantic
+    connection to any case, and the "all tasks must be closed before
+    resolving" gate (AAP Section 0.5.5) becomes inoperable. Every other
+    field on x_casemgmt_case_task (subject, type, status, assigned_to,
+    due_date) describes properties of the task; only `case` describes
+    WHICH case the task belongs to.
+
+    Critical behaviors that depend on this field (AAP Sections 0.4.1,
+    0.5.5, 0.5.6, 0.5.7):
+
+      1. STATE-MACHINE "ALL TASKS CLOSED" GATE FOR Resolved TRANSITION
+         (../flows/sub_flows/validate_resolved_transition.xml,
+          ../script_includes/x_casemgmt_CaseTransitionValidator.xml)
+         Per AAP Section 0.5.5 verbatim:
+            From         To        Required condition
+            In Progress  Resolved  All linked x_casemgmt_case_task records
+                                   have status = Closed
+         The validator subflow and Script Include both perform the exact
+         GlideRecord query specified in the agent prompt:
+            new GlideRecord('x_casemgmt_case_task')
+              .addQuery('case', current.sys_id)
+              .addQuery('status', '!=', 'Closed')
+              .query();
+         If even one row is returned, the subflow throws a blocking
+         form-level error with the literal text:
+            "All tasks must be closed before resolving this case."
+         (AAP Section 0.7.4 verbatim "Case-resolution-blocking rule
+         wording"). The query above WILL NOT WORK without this dictionary
+         entry; the field name `case` declared here is the column the
+         GlideRecord query targets, and the reference target
+         `x_casemgmt_case` is what makes `addQuery('case', current.sys_id)`
+         resolve correctly when the parent case's sys_id is passed as
+         the right-hand-side filter value.
+
+      2. RELATED-LIST RENDERING ON THE CASE FORM
+         (parent table ../tables/x_casemgmt_case.xml automatic form layout
+          per AAP Section 0.4.4 "Internal user UI" requirements)
+         When a user opens a case record, ServiceNow's auto-generated
+         form layout includes a Related List for x_casemgmt_case_task
+         filtered by `case = current.sys_id`. This relationship is
+         materialized SOLELY through this dictionary entry's `<reference>`
+         element pointing at `x_casemgmt_case` - the platform's reverse-
+         relationship engine inspects every reference field on every
+         child table and synthesizes an inbound related list on the
+         parent. Without `<reference>x_casemgmt_case</reference>` set
+         here, the case form would have no Related List of tasks, and
+         the AAP Section 0.4.4 internal-UI requirement ("configures
+         Related Lists on the case form for both `case_task` (parent =
+         current case) and `case_party` (parent = current case)") would
+         fail.
+
+      3. ACL "ASSIGNED ONLY" CASCADE FOR CASE_AGENT
+         (../acl/x_casemgmt_case_task_*.xml)
+         Per AAP Section 0.5.6: case_agent has "Assigned only" CRUD
+         access. For tasks, "Assigned only" propagates THROUGH this
+         field: a case_agent may read/write a task ONLY IF the parent
+         case (resolved by `current.case`) satisfies the case-level
+         "Assigned only" condition (assigned_agent = current user OR
+         assigned_group contains current user). The ACL condition
+         scripts on x_casemgmt_case_task therefore traverse this
+         reference to evaluate authorization:
+            current.case.assigned_agent == gs.getUserID()
+              || gs.getUser().isMemberOf(current.case.assigned_group.toString())
+         This dot-walk chain (`current.case.assigned_agent`,
+         `current.case.assigned_group`) requires that this dictionary
+         entry's `<reference>` correctly target `x_casemgmt_case` so the
+         platform can dereference the parent case's columns at ACL
+         evaluation time.
+
+      4. SEED-DATA POPULATION VIA NUMBER LOOKUP
+         (../seed-data/tasks/x_casemgmt_case_task_demo_*.xml,
+          ../scripts/seed_demo_data.js)
+         Per AAP Section 0.5.2 reference-resolution rules: "Case
+         references (e.g., on case_task.case, case_party.case, demo
+         task/party seed) -> look up x_casemgmt_case by `number`." The
+         seed-data XMLs and the idempotent seed_demo_data.js script
+         resolve the parent-case sys_id at seed time via:
+            var caseGr = new GlideRecord('x_casemgmt_case');
+            caseGr.addQuery('number', 'CASE0000001');
+            caseGr.query();
+            if (caseGr.next()) { task.case = caseGr.sys_id; }
+         There are NO hard-coded sys_id literals in any seed file
+         pointing into this column - all references resolve by the
+         human-readable case number, per AAP Section 0.7.2 "no
+         hardcoded sys_id constraint" applied to seed data.
+
+      5. CASCADE-DELETE BEHAVIOR (INTENTIONALLY DISABLED)
+         (this dictionary entry's `<reference_cascade_rule>` element)
+         Per the agent prompt's "reference_cascade_rule=none" instruction
+         and AAP Section 0.7.4 minimum demo-data thresholds: when a
+         parent case is deleted, the platform DOES NOT auto-cascade-
+         delete its child tasks. This is the POC-safe default for two
+         reasons:
+           * In the POC scenario, manual cleanup of orphaned tasks is
+             acceptable and surfaces operator awareness; silent cascade
+             deletion of dozens of child tasks would be a destructive
+             action with no audit signal.
+           * AAP Section 0.5.5 makes Closed cases TERMINAL ("Closed
+             cases are terminal and cannot be modified") which already
+             precludes deletion of cases that have business meaning;
+             only Draft cases without tasks would realistically be
+             deleted, and those have no children to cascade against.
+         The "none" value (synonymous with empty / "no action") matches
+         AAP Section 0.3.1's MINIMAL CHANGE CLAUSE - if the AAP wanted
+         cascade-delete semantics, it would have said so. Note the
+         sibling reference fields x_casemgmt_case.assigned_group and
+         x_casemgmt_case.assigned_agent use empty `<reference_cascade_rule/>`
+         which is functionally equivalent; this entry uses the explicit
+         "none" literal per the agent prompt's explicit-over-implicit
+         instruction for THIS field.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java line 72-74:
+            private String attachedToObjectType;
+            private String attachedToObjectName;
+            private Long   attachedToObjectId;
+        ArkCase's AcmTask used a POLYMORPHIC PARENT LINKAGE composed of
+        three separate columns:
+          * attachedToObjectType - String discriminator naming the parent
+            object type (e.g., "CASE_FILE", "COMPLAINT", "REQUEST",
+            "DOCUMENT_REPOSITORY"). This was a free-form String column
+            with no platform-level enum/check constraint.
+          * attachedToObjectName - human-readable display name of the
+            parent (cached/denormalized to avoid runtime joins).
+          * attachedToObjectId - Long sys_id pointer to the parent row,
+            interpreted in the context of attachedToObjectType to know
+            which physical table to join against.
+        This pattern allowed a single `acm_task` row to attach to ANY
+        ArkCase entity - a CaseFile, a Complaint matter, a FOIA request,
+        a Document Repository folder, etc. The trade-off was that the
+        DBMS could not enforce referential integrity (no foreign key was
+        possible because the target table varied), and every join
+        required the application layer to first read attachedToObjectType
+        and then route to the correct DAO.
+
+        The ServiceNow target COLLAPSES this polymorphism into a single
+        fixed-target reference for three reasons (AAP Section 0.1.2,
+        AAP Section 0.5.7):
+          * AAP Section 0.3.2 declares the FOIA portal, the document
+            repository, the complaint matters as separate entities, and
+            every other ArkCase parent type OUT OF SCOPE. The POC's
+            entire universe of "things a task can attach to" is one
+            table: x_casemgmt_case. Polymorphism without multiple
+            attach-target types is dead weight.
+          * Referential integrity: a single fixed-target reference field
+            on the ServiceNow platform is enforced by the reference
+            picker (only existing rows in the target table are
+            selectable) and by the dictionary's `<reference>` element
+            (the platform resolves cross-table references at query time
+            and rejects writes that point at a deleted target).
+          * Dot-walk dereferencing: ACL conditions and form layouts can
+            traverse `current.case.assigned_group` only if the column
+            type is a reference, not a polymorphic String+Long pair.
+        The collapse is therefore a semantic SIMPLIFICATION, not a loss
+        of functionality, in the context of this specific POC's scope.
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java line 61:
+            implements AcmAssignedObject, Serializable, AcmLegacySystemEntity,
+                       AcmParentObjectInfo, AcmNotifiableEntity, AcmStatefulEntity
+        The AcmParentObjectInfo interface was the contract that surfaced
+        the attachedToObjectType + attachedToObjectId pair to the rest
+        of ArkCase's plugin ecosystem. In the ServiceNow target, this
+        interface contract has no analogue - the case_task table simply
+        carries a `case` reference column, and the platform's reference
+        engine handles every consumer use case (related-list rendering,
+        form picker, dot-walk ACL conditions, GlideRecord queries) with
+        no Java interface needed.
+      - The field name is `case` (lowercase, 4 chars, no underscore;
+        NOT `case_id`, NOT `parent_case`, NOT `parent`, NOT
+        `attached_to`, NOT `case_file`) per AAP Section 0.5.7 verbatim.
+        This deliberately matches the parallel field name on the sibling
+        x_casemgmt_case_party table (which also uses `case` as its parent
+        linkage, declared in ../dictionary/x_casemgmt_case_party_case.xml)
+        for naming consistency across the three-table data model. The
+        single-word `case` is also consistent with how the parent flows
+        and Script Includes refer to the column in their inline scripts
+        (e.g., `addQuery('case', current.sys_id)`).
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_casemgmt_case_task` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope by `source` attribute lookup. The `<reference>`
+        element resolves to the SCOPED `x_casemgmt_case` table by name
+        (NOT by sys_id), preserving zero-hardcoded-sys_id compliance and
+        keeping the entire parent-child relationship inside the scope
+        boundary. NO global-scope writes occur.
+      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>`,
+        `<sys_package>`, and `<reference>` text-node values resolve by
+        scope source name and table name respectively, not by literal
+        sys_id. The `<sys_id>` text-node value is THIS record's own
+        deterministic primary key (MD5 of the canonical field identifier
+        `x_casemgmt_case_task.case` = 25cae07ed16e95fd89a4c8013152ecc2)
+        and is NOT a reference to any other record. Per AAP Section
+        0.7.2 this scheme guarantees that a fresh PDI re-import of the
+        Update Set produces byte-identical sys_id values, which is
+        necessary for round-trip-verify
+        (../scripts/round_trip_verify.md) zero-error preview.
+      - The concrete scope identifier `casemgmt` is used per AAP convention. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in the XML before export.
+      - mandatory=true at the dictionary level: AAP Section 0.5.7
+        verbatim declares the `case` field on x_casemgmt_case_task as
+        Mandatory with no qualifying suffix (in contrast to
+        x_casemgmt_case.assigned_group which says "Mandatory on Open
+        transition" - a transition-level constraint NOT enforced at the
+        dictionary level). For case_task.case, mandatoriness is
+        absolute: a task without a parent case is semantically
+        meaningless (the entire raison d'etre of the case_task table
+        is to subdivide work on a case), and the platform's mandatory
+        flag enforces the constraint at every entry point - manual
+        save in the form, GlideRecord.insert() from server-side
+        scripts, and Table API POST. There is NO submission path in
+        this scoped application that legitimately creates a task
+        without a parent case (no portal-anonymous task creation, no
+        bulk-import of headless tasks, etc.), so a hard mandatory flag
+        produces zero false-positive rejections.
+      - read_only=false: case_manager and case_agent both edit this
+        field directly when creating tasks under a case. The
+        auto-generated New Task form on the case's Related List
+        pre-populates the `case` reference with the parent case's
+        sys_id, but the field remains user-editable in case the user
+        opens the standalone task list and chooses to associate the
+        new task with a different case. Field-level write access is
+        governed by the table-level ACLs at
+        ../acl/x_casemgmt_case_task_*.xml (no separate field-level ACL
+        is needed for `case` since AAP Section 0.5.6 enumerates the
+        field-level-ACL-required fields as `assigned_group` and
+        `assigned_agent` on the case table only).
+      - default_value (empty): no automatic parent-case assignment.
+        The platform's Related-List "New" button provides a contextual
+        default at form-creation time (it pre-populates `case` with the
+        parent case's sys_id), but that is a UX-layer convenience, not
+        a dictionary-level default. AAP does not specify a default.
+      - audit=false: per AAP Section 0.3.1 minimal-change clause and
+        consistent with the sibling Reference / DateTime / Choice
+        / String fields in this same dictionary set. The `case` field's
+        value is set once at task creation and almost never changes
+        thereafter (in the POC scenario, you do not "move" a task from
+        one case to another; you close it and create a new one). Audit
+        on this field would inflate sys_audit storage with low-value
+        entries.
+      - max_length=32: the standard ServiceNow Reference-field width.
+        The dictionary stores the 32-character lowercase-hex sys_id of
+        the referenced x_casemgmt_case row as the actual column value;
+        the platform's auto-generated form picker, list view, and
+        report builder all dereference to the case's display column
+        (which is x_casemgmt_case.number per the AAP-prescribed
+        CASE0000001 auto-numbering format) for human-readable display.
+      - choice=0: this is a Reference field, NOT a Choice field. The
+        sibling sys_choice_* records under ../choices/ apply only to
+        the `type`, `status`, `priority`, `pending_reason`,
+        `case_task.type`, `case_task.status`, and `case_party.party_type`
+        columns - none are needed here.
+      - choice_field, choice_table empty: same reason as choice=0
+        above.
+      - reference=x_casemgmt_case: the SCOPED parent table (NOT an OOB
+        ServiceNow table; NOT the OOB `task` table even though the AcmTask
+        source has the word "task" in it - see the parent table comment
+        block at ../tables/x_casemgmt_case_task.xml for the rationale).
+        AAP Section 0.5.7 specifies this exact target table by name.
+      - reference_cascade_rule=none: per the agent prompt's explicit
+        "reference_cascade_rule=none" instruction. Functionally
+        equivalent to empty / no_action; means deleting a parent case
+        does NOT auto-cascade-delete its child tasks. The POC default
+        prefers explicit "none" over the implicit empty value to
+        document the intent inside the Update Set XML for any future
+        maintainer who reads it. AAP does not specify a cascade rule
+        but the POC-safe default is "do nothing on referenced-record
+        deletion" - manual cleanup of orphaned tasks is acceptable and
+        surfaces operator awareness rather than silent destructive
+        cascade.
+      - reference_qual, reference_qual_condition (empty): no filter
+        on which cases may be selected as the parent. Any active
+        x_casemgmt_case row is eligible. AAP does not require filtering
+        by case status, type, priority, or any other criterion. (One
+        could envision a future-state qualifier preventing tasks from
+        being attached to Closed cases, but that is OUT OF SCOPE per
+        AAP Section 0.3.1's MINIMAL CHANGE CLAUSE - the AAP-specified
+        ../business_rules/x_casemgmt_block_terminal_closed.xml already
+        prevents Closed-case modification, which transitively prevents
+        new tasks from being added.)
+      - use_reference_qualifier=simple: standard ServiceNow setting
+        when no advanced (scripted) reference qualifier is in use.
+      - dynamic_ref_qual (empty): no dynamic reference qualifier.
+      - reference_floor, reference_key, reference_type (empty):
+        standard defaults for a basic table-to-table reference; no
+        advanced reference semantics (typeahead override, reference
+        floor table, document reference, etc.) are needed here.
+      - element_reference=false: this is a TABLE reference, not an
+        ELEMENT reference (which would point at a specific dictionary
+        column on another table). AAP specifies a row-level reference
+        target (a parent case as a whole, not a particular column on
+        that case).
+      - table_reference=false: this is NOT a "Document ID" / "Table"
+        polymorphic reference (which is what the OOB `task` table uses
+        for its reference field that can point at any table). It is a
+        FIXED-TARGET reference to x_casemgmt_case only. This is
+        precisely the simplification being applied: ArkCase's AcmTask
+        had a polymorphic parent linkage (attachedToObjectType +
+        attachedToObjectId) - the ServiceNow target's case_task.case is
+        a fixed-target reference, eliminating the polymorphism per AAP
+        Section 0.1.2 ("the polymorphism is collapsed").
+      - text_index=false: Reference fields are not full-text-indexed.
+        Searches by parent case are performed via GlideRecord
+        addJoinQuery against x_casemgmt_case on its sys_id column; full-
+        text indexing of the 32-char sys_id has no value.
+      - unique=false: a single case is correctly the parent of MANY
+        tasks (that is the entire point of the parent-child relationship -
+        a case is decomposed into tasks for resolution). AAP Section
+        0.7.4 minimum demo-data thresholds explicitly require "at least
+        one open and one closed task per demo case in 'In Progress' or
+        'Pending' state, to exercise the 'all-tasks-closed' gate" -
+        which mandates non-uniqueness. Uniqueness on this column would
+        be semantically wrong and would break AAP's seed-data plan.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation. The actual sys_id of the chosen
+        x_casemgmt_case row is persisted on every task record.
+      - spell_check=false: Reference fields hold a 32-char sys_id and
+        the platform renders the dereferenced display value at view
+        time; spell-check is meaningless for the persisted value and
+        would be misapplied to the dereferenced human-readable case
+        number (CASE0000001) display.
+      - No PII: the field stores a 32-char sys_id pointer to a
+        x_casemgmt_case row; the case row itself stores synthetic
+        requester data (per AAP Section 0.7.2 "synthetic only"). The
+        seed cases at ../seed-data/cases/x_casemgmt_case_demo_*.xml are
+        fabricated - no real names, no real email addresses, no real
+        case content - so no PII is present in any case sys_id pointed
+        at by any task's `case` column.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case_task.xml (parent table; `<name>`
+            here references the scoped task table by name; the platform
+            requires the table to exist before its dictionary entries
+            can be created)
+          * ../tables/x_casemgmt_case.xml (target of the reference;
+            `<reference>` resolves to the scoped case table by name; the
+            platform requires the referenced table to exist before a
+            reference field can be declared against it; AAP Section
+            0.5.2 explicitly states "Reference fields before referencing
+            tables" - paraphrased: the referenced TABLE must exist
+            before the reference FIELD)
+      - This record MUST load BEFORE the consumers that read or write
+        the `case` column on x_casemgmt_case_task:
+          * ../dictionary/x_casemgmt_case_task_subject.xml,
+            ../dictionary/x_casemgmt_case_task_type.xml,
+            ../dictionary/x_casemgmt_case_task_status.xml,
+            ../dictionary/x_casemgmt_case_task_assigned_to.xml,
+            ../dictionary/x_casemgmt_case_task_due_date.xml (the other
+            five fields on the case_task table; ordering among the
+            six dictionary entries is not strictly required by the
+            platform but for clarity this entry should be among the
+            first since it is the parent linkage)
+          * ../flows/sub_flows/validate_resolved_transition.xml (the
+            "all tasks closed" gate; the subflow performs:
+                addQuery('case', current.sys_id)
+                  .addQuery('status', '!=', 'Closed')
+            and throws "All tasks must be closed before resolving this
+            case." if any rows are returned)
+          * ../flows/general_inquiry_state_machine.xml (the parent flow
+            for type=General Inquiry that calls
+            validate_resolved_transition)
+          * ../flows/complaint_state_machine.xml (the parent flow for
+            type=Complaint that calls validate_resolved_transition)
+          * ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+            (canTransitionToResolved static method that queries
+            x_casemgmt_case_task on this field; called by both the flows
+            and any business rules that need the same gate)
+          * ../acl/x_casemgmt_case_task_*.xml (table-level ACLs on the
+            case_task table; the case_agent "Assigned only" condition
+            dot-walks current.case.assigned_agent and
+            current.case.assigned_group via this reference field)
+          * ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml (synthetic
+            demo tasks that populate this field by lookup of the parent
+            case's `number` attribute via the seed_demo_data.js script -
+            never via hard-coded sys_id, per AAP Section 0.7.2 the
+            no-hardcoded-sys_id constraint applies to flows, ACL
+            conditions, scripts, seed data, UI Policies, UI Actions,
+            Business Rules, and client scripts)
+          * ../scripts/seed_demo_data.js (the idempotent seed script
+            that creates the demo task rows; for each demo task it
+            performs:
+                var caseGr = new GlideRecord('x_casemgmt_case');
+                caseGr.addQuery('number', '<demo-case-number>');
+                caseGr.query();
+                if (caseGr.next()) { taskGr.case = caseGr.sys_id; }
+            to resolve the parent-case sys_id at seed time, never via
+            hard-coded literals)
+-->
+<record_update table="sys_dictionary">
+    <sys_dictionary action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Case</column_label>
+        <comments>Mandatory reference to the parent case (x_casemgmt_case). Queried by the case state-machine flow's "all tasks closed" guard for the In Progress -&gt; Resolved transition (../flows/sub_flows/validate_resolved_transition.xml, ../script_includes/x_casemgmt_CaseTransitionValidator.xml) via addQuery('case', current.sys_id).addQuery('status', '!=', 'Closed') - if any rows are returned the flow throws the literal blocking error "All tasks must be closed before resolving this case." (AAP Section 0.7.4 verbatim). Replaces ArkCase AcmTask.attachedToObjectId/attachedToObjectType polymorphic parent linkage; in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_task via dot-walk current.case.assigned_agent / current.case.assigned_group. Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child tasks (POC-safe default; manual cleanup required).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>true</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>case</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type>reference</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>32</max_length>
+        <name>x_casemgmt_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference>x_casemgmt_case</reference>
+        <reference_cascade_rule>none</reference_cascade_rule>
+        <reference_floor/>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>25cae07ed16e95fd89a4c8013152ecc2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_task_case</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type/>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

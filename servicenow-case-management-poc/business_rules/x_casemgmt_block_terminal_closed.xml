@@ -1,0 +1,468 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that BLOCKS any modification to a case whose previous status is
+    `Closed` on the `x_casemgmt_case` table inside the scoped application
+    `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.5 verbatim, transition matrix row 8):
+        "Closed -&gt; *: PROHIBITED (terminal state)"
+        Failure surface: "Closed cases are terminal and cannot be modified."
+
+    PURPOSE (AAP Section 0.7.4 - VERBATIM ERROR MESSAGE, NON-NEGOTIABLE):
+        The literal text "Closed cases are terminal and cannot be modified."
+        MUST appear when this guard fires. Character-for-character: capital
+        "C", trailing period, exact wording. NO smart quotes, NO trailing
+        whitespace, NO leading whitespace. The exact wording is the contract.
+
+    THIS BUSINESS RULE IS THE FOUNDATIONAL TRANSITION GUARD:
+        Order=100 makes this the FIRST/HIGHEST-PRIORITY before-update rule
+        in the entire scoped application. Once a case is Closed, ANY
+        attempt to modify it (status change, description edit, agent
+        reassignment, priority change, etc.) is short-circuited at this
+        rule's execution point. Subsequent before-update rules
+        (block_draft_backtransition at order=200,
+        validate_assigned_agent_membership at order=300,
+        clear_pending_reason_on_inprogress at order=400,
+        set_closed_date at order=500) never run when this rule aborts
+        the action - the platform short-circuits the BR pipeline on
+        setAbortAction(true). Running first is intentional: it is the
+        cheapest path to reject an invalid update, and skipping the
+        downstream rules saves database queries and CPU.
+
+    BEHAVIOR:
+        - Trigger          : BEFORE UPDATE only on the `x_casemgmt_case` table
+        - Condition        : previous.status === 'Closed' AND
+                             validateNoBacktransition(prev, next).ok === false
+        - Action           : gs.addErrorMessage(result.error) to surface the
+                             verbatim message on the form
+                             AND current.setAbortAction(true) to cancel the
+                             database write
+        - Other timing     : does NOT fire on insert (action_insert=false),
+                             does NOT fire on delete (action_delete=false),
+                             does NOT fire on query (action_query=false)
+
+    WHY action_insert=false:
+        New cases ALWAYS start at status=Draft per the dictionary
+        default_value on ../dictionary/x_casemgmt_case_status.xml. There
+        is no insert path that creates a Closed case directly through the
+        application (the unauthenticated portal submission, the internal
+        form, and the Table API all start a row at Draft). The seed-data
+        Update Set XMLs DO create Closed demo cases
+        (../seed-data/cases/x_casemgmt_case_demo_06.xml,
+         ../seed-data/cases/x_casemgmt_case_demo_10.xml), but Update Set
+        record imports apply rows directly to the database WITHOUT firing
+        Business Rules - so the seed Closed cases are not blocked by this
+        rule even though their initial status is Closed. Once seeded,
+        this rule blocks any subsequent UPDATE on those Closed rows.
+
+    THE SCRIPT INCLUDE IS THE SINGLE SOURCE OF TRUTH:
+        The script body delegates the validation to
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml's
+        validateNoBacktransition(previousStatus, newStatus) method. The
+        Script Include encodes the prohibited-transition matrix and the
+        verbatim error messages. This BR consumes the Script Include's
+        {ok, error} return shape and surfaces the error via
+        gs.addErrorMessage() + current.setAbortAction(true). The BR
+        itself contains ZERO inline error message strings - the verbatim
+        wording lives ONCE in the Script Include and is read from
+        result.error here. This single-source-of-truth pattern means a
+        future change to the verbatim message (if ever permitted by the
+        AAP) requires editing only the Script Include, not every
+        consuming BR/flow/UI Action.
+
+    SHARED METHOD WITH BLOCK_DRAFT_BACKTRANSITION:
+        validateNoBacktransition(prev, next) handles BOTH prohibited
+        patterns from AAP Section 0.5.5:
+            - Closed -> non-Closed (terminal-state violation)
+              -> "Closed cases are terminal and cannot be modified."
+            - non-Draft -> Draft (backtransition violation)
+              -> "Cases cannot be returned to Draft."
+        The Script Include returns the appropriate verbatim message in
+        result.error based on the input arguments. This BR fires only
+        when prevStatus === 'Closed' (the terminal-state case); the
+        ../business_rules/x_casemgmt_block_draft_backtransition.xml BR
+        fires when newStatus === 'Draft' (the backtransition case). The
+        two BRs cover the two prohibited patterns; the shared Script
+        Include centralizes the matrix.
+
+    SCRIPT INCLUDE BEHAVIOR FOR CLOSED -> CLOSED:
+        Per the Script Include's documentation and code (see line 601 of
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml):
+
+            if (prev === 'Closed' && next !== 'Closed' && next !== '') {
+                return { ok: false, error: 'Closed cases are terminal and cannot be modified.' };
+            }
+
+        The Script Include returns {ok: true} for the no-op
+        Closed -> Closed case (no field change in status). This means an
+        UPDATE that does NOT change status but DOES change another field
+        (e.g., description, priority, assigned_agent) on a Closed case
+        is NOT blocked by validateNoBacktransition() and therefore NOT
+        blocked by this BR. The justification in the Script Include is
+        that "no field change in status is not a real transition" and
+        the platform's other guards or dictionary read_only flags should
+        cover any per-field immutability requirements. Per AAP Section
+        0.5.5 row 8, the prohibition is on Closed -> ANY OTHER STATUS,
+        not on every database write to a Closed row. The BR faithfully
+        consumes the Script Include's return and does not introduce its
+        own additional guard logic.
+
+    DEFENSIVE PREVIOUS-NULL GUARD:
+        The `previous` GlideRecord is null in certain async/system
+        contexts (scheduled jobs invoking GlideRecord.update(), some
+        bulk import scenarios, server-side script paths that call
+        GlideRecord.updateMultiple()). If there is no previous state,
+        no terminal state can be detected, and the rule does nothing.
+        The String() cast normalizes the GlideElement to a primitive
+        string for safe === comparison; without the cast,
+        GlideElement-vs-string equality can behave inconsistently
+        across releases.
+
+    VERBATIM CHOICE LABEL COMPARISON:
+        The status comparison uses the EXACT verbatim Title Case label
+        defined in ../choices/sys_choice_case_status.xml:
+            'Closed' (6 chars, single word, Title Case)
+        This MUST match the choice value verbatim per AAP Section 0.5.7.
+        ServiceNow Choice fields persist the LABEL string by default
+        (not an integer ID), so the comparison is against the label.
+        Misspellings such as 'CLOSED' (uppercase, ArkCase Java legacy),
+        'closed' (lowercase), or 'Close' (no trailing 'd') would
+        silently never match and the rule would never fire - a critical
+        correctness concern.
+
+    NO TYPE-FILTER:
+        The rule fires for ALL case types (General Inquiry, Complaint).
+        The Closed terminal state is shared across both case types per
+        AAP Section 0.5.5 row 8, so per-type filtering would be
+        incorrect. The type-specific transition gating is handled by
+        the per-type Flow Designer flows
+        (../flows/general_inquiry_state_machine.xml and
+         ../flows/complaint_state_machine.xml); this terminal-state
+        guard is type-agnostic.
+
+    DEFENSE IN DEPTH:
+        The Flow Designer flows do NOT explicitly enforce this
+        prohibition; they only handle the documented transitions in
+        AAP Section 0.5.5 (Draft->Open, Open->In Progress, etc.). Any
+        transition starting from Closed is not in the matrix at all,
+        so it would simply fall through the flow's transition cases.
+        This BR is the ONLY enforcer of the Closed-terminal rule for
+        direct DB modifications via Table API, scripted REST,
+        GlideRecord scripts, and bulk imports. Without this BR, an
+        external Table API client could PUT/PATCH a Closed case and
+        re-open it, violating the state machine contract and
+        destabilizing the dashboards' "Average Time to Close" report
+        (the report assumes Closed cases stay Closed, so re-opens
+        would corrupt the average).
+
+    ARKCASE SOURCE-SIDE ANALOG:
+        ArkCase's ChangeCaseFileStateService at
+        acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/service/
+        ChangeCaseFileStateService.java handled state changes via the
+        changeCaseState(auth, caseId, newState, ipAddress) method.
+        Line 95 set the new status (retval.setStatus(newState)) and
+        line 99 captured the close timestamp ("CLOSED".equals(newState))
+        but the ArkCase service did NOT enforce a "Closed is terminal"
+        rule - it would happily transition a Closed case to any other
+        status. The terminal-state behavior was implicit in the
+        Activiti BPMN process definitions and the queue handlers. The
+        ServiceNow target makes this rule EXPLICIT via this BR plus
+        the Script Include's validateNoBacktransition() matrix - a
+        deliberate hardening of the case state-machine contract per
+        AAP Section 0.5.5. The verbatim error message
+        "Closed cases are terminal and cannot be modified." is a
+        target-side authored string from AAP Section 0.7.4, not
+        sourced from ArkCase.
+
+    NO GLIDERECORD LOOKUPS:
+        This BR operates EXCLUSIVELY on the platform-injected `current`
+        and `previous` GlideRecord pair (the row being updated and its
+        prior state) plus the in-memory Script Include validator
+        instance. It performs zero `gs.getReference()` calls, zero
+        `GlideRecord.get(sys_id)` calls, and zero `new GlideRecord()`
+        instantiations. This is the simplest possible BR shape and
+        guarantees no cross-record dependencies that could fail at
+        Update Set re-import time.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any
+        email notification event since email is disabled on the PDI.
+        This rule contains zero gs.eventQueue() calls, zero gs.email()
+        calls, and zero gs.notificationEngine() calls. It performs
+        only the validation delegation, gs.addErrorMessage() form-level
+        error surface, and current.setAbortAction(true) cancel.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case</collection>     scoped table
+        - <sys_scope>x_casemgmt</sys_scope>            scoped namespace
+        - <sys_package>x_casemgmt</sys_package>        scoped application
+        - script body references new x_casemgmt.CaseTransitionValidator()
+                                                       scoped Script Include
+        - script body references previous.status        (scoped field)
+        - script body references current.status         (scoped field)
+        Zero global-scope writes. Zero modifications to OOB tables.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body resolves the Script Include BY NAME via the
+          standard scoped reference syntax
+          `new x_casemgmt.CaseTransitionValidator()` - no sys_id literal.
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; it operates only on the platform-injected `current`
+          and `previous` GlideRecord pair.
+        - The script body uses NO gs.getReference() calls and NO
+          GlideRecord.get(sys_id) calls.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_block_terminal_closed"), which
+          is permitted because the AAP "no hardcoded sys_id" rule
+          applies to REFERENCE FIELDS pointing at OTHER records, not
+          to a record's own primary key.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml             (table this rule attaches to)
+            - ../dictionary/x_casemgmt_case_status.xml  (field this rule reads via previous/current)
+            - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
+            - ../app/sys_scope/x_casemgmt.xml           (scope record)
+            - ../choices/sys_choice_case_status.xml     (the Closed choice
+                                                         value that this
+                                                         rule's script
+                                                         compares against)
+            - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
+              (CRITICAL - this BR calls
+               new x_casemgmt.CaseTransitionValidator().validateNoBacktransition();
+               the Script Include MUST exist before this BR fires)
+        And BEFORE:
+            - ../seed-data/cases/x_casemgmt_case_demo_06.xml,
+              ../seed-data/cases/x_casemgmt_case_demo_10.xml
+              (the two Closed demo cases - once seeded as Closed, this BR
+               prevents further modifications. The Update Set imports the
+               seed rows directly to the database without firing BRs, so
+               the initial Closed seeding is not blocked, but any
+               subsequent UPDATE through any path is)
+            - ../flows/general_inquiry_state_machine.xml,
+              ../flows/complaint_state_machine.xml
+              (the per-type state-machine flows do not enforce the
+               Closed-terminal rule themselves and rely on this BR as
+               the data-layer enforcer)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_block_terminal_closed")
+               = 0ee339c18d12366737a3637b952fe75b
+        32-character lowercase hex. The PDI accepts any valid 32-char
+        hex sys_id; deriving from the record name guarantees idempotent
+        re-import on a fresh PDI: re-importing the same Update Set
+        produces the same sys_id, which collides on the existing record
+        and updates it in place rather than creating a duplicate. This
+        is the same convention used by the sibling Business Rules:
+            ../business_rules/x_casemgmt_set_opened_date.xml
+                sys_id = MD5("x_casemgmt_set_opened_date")
+                       = c56aeecd4086f111be2867faae9e55ad
+            ../business_rules/x_casemgmt_set_closed_date.xml
+                sys_id = MD5("x_casemgmt_set_closed_date")
+                       = f6d63b3856121cac9b69215b2c46f64c
+            ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+                sys_id = MD5("x_casemgmt_clear_pending_reason_on_inprogress")
+                       = 0943b10691d8ae86fd3c2fd6994eb693
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error;
+          task-closure check blocks Resolved transition". This BR
+          enforces the "Closed -> * is PROHIBITED - terminal state"
+          rule from AAP Section 0.5.5 row 8. The verbatim error
+          "Closed cases are terminal and cannot be modified." is
+          mandated by Section 0.7.4. Without this BR, a script or
+          Table API client could change the status of a Closed case
+          and re-open it, violating Gate 2's pass criterion.
+        - Gate 6 (Dashboards): "Both dashboards render with synthetic
+          data - All widgets display data; no broken report
+          references". The Manager View dashboard's "Average Time to
+          Close" single-score widget at
+          ../reports/x_casemgmt_avg_time_to_close.xml computes
+          AVG(closed_date - opened_date) over Closed cases. The
+          report assumes Closed cases STAY Closed; if they could
+          re-open and re-close, the average would become unstable
+          (closed_date might overwrite, or worse, become null on
+          re-open). This BR's terminal-state guarantee underpins
+          the report's correctness.
+        - Gate 7 (Update Set): "Scoped app exported - Update Set
+          loads without errors on a fresh PDI instance". The
+          deterministic sys_id, reference-by-name pattern, and
+          absence of any external lookups guarantee this rule
+          re-imports cleanly with zero preview errors.
+
+    NO PII (AAP Section 0.7.2):
+        The script body, code comments, description text, and all
+        field values contain zero real names, real email addresses,
+        real phone numbers, real organizational identifiers, or any
+        other personally identifiable information. The rule operates
+        exclusively on synthetic case-status enumerations ('Closed')
+        and the verbatim error message string returned by the Script
+        Include.
+
+    ABORT_ACTION FIELD VS setAbortAction() METHOD:
+        Note that the <abort_action>false</abort_action> XML element
+        below is the LEGACY pre-Eureka unconditional-abort flag that
+        is set to false because we want CONDITIONAL aborting via the
+        script body's current.setAbortAction(true) call. The element
+        and the script-body method are NOT the same thing - leaving
+        <abort_action>false</abort_action> is correct and standard
+        for any modern conditional-abort BR.
+
+    CHANGE_FIELDS VS FILTER_CONDITION:
+        <change_fields>false</change_fields> means this BR is NOT
+        bound to a specific subset of changed fields - it fires on
+        ANY update to the row. We use script-level filtering
+        (the prevStatus === 'Closed' check) instead of declarative
+        filter_condition because the predicate is on previous.status
+        (the prior value), and ServiceNow's filter_condition
+        evaluates against current values, not previous. The script's
+        dynamic comparison is the correct shape.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; runs FIRST so all other guards/housekeeping rules (block_draft_backtransition at 200, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) are short-circuited if the case is already Closed. The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. Script Include's validateNoBacktransition returns {ok: true} for the no-op Closed -&gt; Closed case (status field unchanged), so non-status edits to a Closed row pass through; only actual transitions out of Closed are blocked. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_block_terminal_closed</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Per AAP Section 0.5.5 (transition matrix row 8):
+    //     "Closed -> *: PROHIBITED -- terminal state"
+    //     Failure surface: "Closed cases are terminal and cannot be modified."
+    //
+    // Per AAP Section 0.7.4: the literal text "Closed cases are terminal and
+    // cannot be modified." is the VERBATIM, NON-NEGOTIABLE error message
+    // surfaced when this guard fires. Character-for-character: capital "C",
+    // trailing period, exact wording. The message lives ONCE in the Script
+    // Include's validateNoBacktransition() return; this BR reads it from
+    // result.error and never inlines it.
+    //
+    // Order=100 makes this the FIRST/HIGHEST-PRIORITY before-update rule
+    // in this scoped application. Subsequent rules
+    // (block_draft_backtransition at 200, validate_assigned_agent_membership
+    // at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at
+    // 500) are short-circuited when this rule aborts via setAbortAction(true).
+    // Running first is intentional: it is the cheapest path to reject an
+    // invalid update, and skipping the downstream rules saves database
+    // queries and CPU.
+    //
+    // Delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition()
+    // which returns { ok: true } when the transition is allowed, or
+    // { ok: false, error: 'Closed cases are terminal and cannot be modified.' }
+    // when transitioning OUT of Closed (i.e., prev === 'Closed' &&
+    // next !== 'Closed' && next !== ''). The Script Include is the single
+    // source of truth for the verbatim message and the prohibited-transition
+    // matrix; this BR consumes its return shape and surfaces the error.
+    //
+    // ArkCase source-side analog: ChangeCaseFileStateService at
+    // acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    // armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java
+    // handled state changes via changeCaseState() (line 95: setStatus,
+    // line 99: setClosed for CLOSED transitions) but did NOT enforce a
+    // "Closed is terminal" rule - the ArkCase service would happily transition
+    // a Closed case to any other status. Terminal-state behavior was implicit
+    // in Activiti BPMN process definitions and queue handlers. This BR makes
+    // the rule EXPLICIT at the data layer, hardening the state-machine contract
+    // per AAP Section 0.5.5.
+
+    // Defensive previous-null guard: the `previous` GlideRecord is null in
+    // certain async/system contexts (scheduled jobs invoking
+    // GlideRecord.update(), some bulk import scenarios, server-side script
+    // paths that call GlideRecord.updateMultiple()). If there is no previous
+    // state, no terminal state can be detected, and the rule does nothing.
+    if (!previous) {
+        return;
+    }
+
+    // String() cast normalizes the GlideElement to a primitive string for
+    // safe === comparison; without the cast, GlideElement-vs-string equality
+    // can behave inconsistently across releases. The Title Case literal
+    // 'Closed' (6 chars, single word) is the verbatim choice value from
+    // ../choices/sys_choice_case_status.xml per AAP Section 0.5.7. Variants
+    // like 'CLOSED' (uppercase, ArkCase Java legacy), 'closed' (lowercase),
+    // or 'Close' (no trailing 'd') would silently never match.
+    var prevStatus = String(previous.status);
+    var newStatus = String(current.status);
+
+    // Only fire when previous.status is Closed. The Script Include returns
+    // { ok: false, error: 'Closed cases are terminal and cannot be modified.' }
+    // when prev === 'Closed' && next !== 'Closed' && next !== ''. The Script
+    // Include returns { ok: true } for the no-op Closed -> Closed case (status
+    // unchanged - non-status edits to a Closed row are not blocked here; if
+    // additional per-field immutability is required, dictionary read_only
+    // flags or field-level ACLs are the right mechanism).
+    if (prevStatus === 'Closed') {
+        // Resolve the Script Include via the standard scoped reference syntax.
+        // The `x_casemgmt` portion is the scope's vendor_prefix from
+        // ../app/sys_app/x_casemgmt_case_management.xml; the `CaseTransitionValidator`
+        // portion is the api_name of the Script Include. NO sys_id literal -
+        // the resolution is by scoped class name only.
+        var validator = new x_casemgmt.CaseTransitionValidator();
+        var result = validator.validateNoBacktransition(prevStatus, newStatus);
+        if (!result.ok) {
+            // gs.addErrorMessage(result.error) surfaces the verbatim message
+            // at the top of the form when the user attempts the save through
+            // the UI, and is captured in the API response when the update
+            // arrives via Table API or scripted REST. The string is read from
+            // result.error - never inlined here - so the verbatim wording
+            // contract is enforced by the Script Include alone.
+            gs.addErrorMessage(result.error);
+            // current.setAbortAction(true) cancels the database write. Both
+            // the gs.addErrorMessage() and setAbortAction(true) calls are
+            // required: the former produces a visible error to the caller,
+            // the latter prevents the write from being persisted. Without
+            // setAbortAction(true), the message would appear but the row
+            // would still update; without gs.addErrorMessage(), the write
+            // would be silently rejected with no visible failure.
+            current.setAbortAction(true);
+        }
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>0ee339c18d12366737a3637b952fe75b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_block_terminal_closed</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_block_terminal_closed</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>

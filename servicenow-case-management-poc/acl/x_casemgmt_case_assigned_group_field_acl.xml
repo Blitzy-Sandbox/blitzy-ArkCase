@@ -1,0 +1,469 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the FIELD-LEVEL WRITE ACL that
+    governs who may update the `assigned_group` column on the `x_casemgmt_case`
+    custom table inside the scoped application `x_casemgmt`. Per AAP Section
+    0.5.1 (File-by-File Transformation Plan, row for
+    `acl/x_casemgmt_case_assigned_group_field_acl.xml`):
+        "Field-level ACL: write restricted to manager"
+    Per AAP Section 0.5.6 (ACL Matrix), this ACL grants write access to
+    EXACTLY ONE role and DENIES it to everyone else:
+        x_casemgmt_case_manager - the case-management tier's delegation
+        authority. The manager freely re-routes cases between operational
+        groups; this is by design a management-tier privilege.
+    All other role populations - x_casemgmt_case_agent, x_casemgmt_case_viewer,
+    anonymous portal traffic, and any future scoped roles - are denied
+    write access to the `assigned_group` column. ServiceNow's ACL evaluator
+    applies an implicit DENY when no matching role grant exists; the
+    absence of `x_casemgmt_case_agent` and `x_casemgmt_case_viewer` from the
+    <roles> field below is therefore a deliberate, sufficient denial. No
+    explicit "deny" record is required (and indeed cannot be expressed in
+    a single sys_security_acl row - ServiceNow ACLs grant; non-grants
+    deny).
+
+    AAP cross-references:
+      - Section 0.5.1 (File-by-File Transformation Plan, row for THIS
+        file): "Field-level ACL: write restricted to manager".
+        This file is the single artifact that materializes that single
+        line in the transformation plan. The whole-of-AAP wording
+        ("manager"), without the "agent-assigned" qualifier that appears
+        in the sibling `assigned_agent_field_acl.xml` row, is preserved
+        verbatim in the description below and reflected in the <roles>
+        field carrying ONLY `x_casemgmt_case_manager`.
+      - Section 0.5.6 (ACL Matrix, full table reproduced verbatim from
+        AAP):
+            | Role                    | Create | Read           | Write          | Delete |
+            | x_casemgmt_case_manager  | Yes    | All            | All            | Yes    |
+            | x_casemgmt_case_agent    | Yes    | Assigned only  | Assigned only  | No     |
+            | x_casemgmt_case_viewer   | No     | All            | No             | No     |
+        The matrix above is enforced at TWO layers:
+            (a) Table-level ACLs (sibling files
+                `../acl/x_casemgmt_case_create_*.xml`,
+                `../acl/x_casemgmt_case_read_*.xml`,
+                `../acl/x_casemgmt_case_write_*.xml`,
+                `../acl/x_casemgmt_case_delete_*.xml`) carry the row-level
+                "All" / "Assigned only" predicates per role.
+            (b) Field-level ACLs (THIS file plus
+                `../acl/x_casemgmt_case_assigned_agent_field_acl.xml`)
+                further narrow the WRITE scope on two specific columns
+                (`assigned_group` and `assigned_agent`) so that even an
+                agent who has passed the table-level write check still
+                cannot route cases between groups (THIS file) and so that
+                non-assigned agents still cannot poach assignments (the
+                sibling).
+        ServiceNow ACL evaluation requires BOTH the table-level write ACL
+        AND the field-level write ACL to permit the operation for write
+        to succeed; the most-restrictive ACL governs. Therefore an agent
+        who can write to a case row (because they ARE assigned, satisfying
+        the table-level `write_agent_assigned` ACL) still cannot change
+        `assigned_group` because this field-level ACL does not include
+        the `x_casemgmt_case_agent` role in <roles>. The agent's write
+        attempt to the column fails the field-level role filter; the
+        platform returns the standard "Access not permitted" form-level
+        error and the column value is unchanged.
+      - Section 0.5.6 (ACL Matrix, "Assigned only" definition):
+            "Assigned only = cases where assigned_agent = current user OR
+             assigned_group contains current user."
+        That definition motivates this field-level ACL's manager-only
+        restriction. The "Assigned only" predicate at the table level
+        depends on `assigned_group` membership as one of two grant paths.
+        If a `case_agent` could write `assigned_group` directly, they
+        could add their own group (or remove a peer's group) and
+        unilaterally manipulate which cases they have row-level access
+        to - the canonical privilege-escalation vector. Locking the
+        column to manager-only writes closes that vector at the column
+        level, regardless of whether the agent has row-level write access
+        through the table-level "Assigned only" grant.
+      - Section 0.7.3 (Validation Framework, Gate 3 - ACLs):
+            "Role-based access enforced - case_viewer cannot write;
+             case_agent cannot access unassigned cases; case_manager has
+             full access."
+        The middle clause ("case_agent cannot access unassigned cases")
+        is the central correctness criterion of THIS field-level ACL: a
+        case_agent MUST NOT be able to set `assigned_group` to a group
+        they belong to, because doing so would let them gain row-level
+        access to a case they had no assignment relationship with. The
+        denial here is structural - the agent role is simply not in
+        <roles> - so the platform's ACL evaluator returns false for the
+        column-write attempt without any conditional logic firing.
+      - Section 0.4.3 (Design Pattern Applications - Scoped role-based
+        access control): "Three named roles paired with table-level and
+        field-level ACLs whose conditions are encoded as scripted ACL
+        expressions, replacing ArkCase's ApplicationRolesToPrivilegesConfig
+        map." This file is the FIRST of the two field-level ACLs called
+        out in that pattern statement; the other is
+        `../acl/x_casemgmt_case_assigned_agent_field_acl.xml`. Together
+        the two field-level ACLs encode the layered defense described in
+        the AAP: table-level grants mediate ROW visibility, and
+        field-level grants further constrain WRITE on the assignment
+        columns.
+      - Section 0.1.2 (Technical Interpretation - Access-control
+        transformation): "ArkCase resolves privileges via
+        ApplicationRolesToPrivilegesConfig.getRolesToPrivileges() (a
+        Map<String, List<Object>> bound from application.rolesToPrivileges
+        configuration), enforced at URL/method level by
+        AcmPluginUrlPrivilege. The target replaces this with three scoped
+        roles ..., each governed by table-level ACLs (read, write, create,
+        delete) and field-level ACLs on assigned_group / assigned_agent."
+        This file is the FIRST of the two field-level ACLs referenced
+        in that statement.
+      - Section 0.5.5 (State-Machine Transition Map) - relationship to
+        the Draft -> Open transition:
+            | Draft | Open | assigned_group populated |
+                                  Surface form-level error |
+        The state-machine flows `../flows/general_inquiry_state_machine.xml`
+        and `../flows/complaint_state_machine.xml` (with subflow
+        `../flows/sub_flows/validate_open_transition.xml`) require
+        `assigned_group` to be populated before the Draft -> Open
+        transition can succeed. Per this field-level ACL, ONLY a manager
+        may make that population. Therefore the Draft -> Open transition
+        is operationally a manager-driven step: a draft case sits in
+        Draft until a manager triages it and routes it to a group. The
+        agent is then able to take over once the manager additionally
+        sets `assigned_agent` (governed by the sibling field-level ACL).
+        This is the workflow corollary of the privilege-escalation
+        prevention encoded in this ACL.
+      - Section 0.7.1 (Refactoring-Specific Rules and Requirements):
+            "Enforce the exact role x CRUD matrix. Three scoped roles ...
+             ACLs MUST be authored at table level AND field level for
+             assigned_group and assigned_agent."
+        This file is the field-level ACL for `assigned_group`; the
+        sibling file `../acl/x_casemgmt_case_assigned_agent_field_acl.xml`
+        is the field-level ACL for `assigned_agent`. Together with the
+        eight table-level ACLs in this folder, they materialize the
+        "table level AND field level" requirement.
+
+    Why this ACL is manager-only (no agent self-write branch):
+      The two field-level ACLs in this folder differ in exactly one
+      design choice: should the assigned agent be able to change the
+      field themselves?
+        - For `assigned_group` (THIS FILE): NO. Group changes cross team
+          boundaries, re-route cases between operational organizations,
+          and have downstream implications for SLA, routing rules, and
+          notification chains. These are fundamentally management
+          decisions, not operational ones. An agent who is reassigning
+          their own case to a different group is effectively making a
+          routing decision that should require manager review. Hence
+          this ACL restricts write to the manager role only - by listing
+          ONLY `x_casemgmt_case_manager` in the <roles> field.
+        - For `assigned_agent`
+          (../acl/x_casemgmt_case_assigned_agent_field_acl.xml): YES, but
+          ONLY when the agent is the currently-assigned agent. The
+          handoff use case is core to day-to-day operations: an agent on
+          PTO needs to hand off active cases; an agent reassigning a
+          misrouted case to a colleague who is the SME; an agent
+          declining an assignment that conflicts with prior commitments.
+          These are ALL operational decisions that should not require
+          manager involvement to execute.
+      This file's <roles> field carries ONE role; the sibling's <roles>
+      field carries TWO roles (manager + agent). This ACL's <advanced>
+      is false (no script body, simple role grant); the sibling's
+      <advanced> is true (script body narrows the agent grant to
+      self-assigned cases only).
+
+    Why <advanced>false</advanced> is the correct setting (CRITICAL):
+      ServiceNow ACL evaluation: when <advanced> is false, the platform
+      evaluates ONLY the <condition/> encoded query (which is empty in
+      THIS file) and the <roles> field. With an empty condition and a
+      single-role <roles> field, the evaluator's logic reduces to "user
+      holds x_casemgmt_case_manager => grant; otherwise => deny". This is
+      EXACTLY the semantics required by AAP Section 0.5.1's "write
+      restricted to manager" mandate. Setting <advanced>true</advanced>
+      would require a non-empty <script> body to express the grant; an
+      unnecessary script step here would (a) be more brittle (script
+      parsing/runtime errors could silently disable the ACL),
+      (b) introduce code surface that a future maintainer might
+      mistakenly modify to add an agent branch, and (c) be inconsistent
+      with the other manager-only table-level ACLs in this folder
+      (sibling files like `../acl/x_casemgmt_case_create_manager.xml`,
+      `../acl/x_casemgmt_case_delete_manager.xml`,
+      `../acl/x_casemgmt_case_write_manager.xml` all use
+      <advanced>false</advanced> with a manager-only <roles> and an
+      empty <script>). Following the same pattern keeps this ACL
+      auditable and stylistically uniform.
+
+    Why ONLY `x_casemgmt_case_manager` in <roles> (CRITICAL):
+      ServiceNow's ACL evaluator first filters candidate ACLs by role:
+      only ACLs whose <roles> field contains a role the current user
+      holds are considered for evaluation. Therefore listing ONLY
+      `x_casemgmt_case_manager` here means:
+        - case_manager users: the ACL is a candidate; the empty
+          condition + empty script + advanced=false default evaluates
+          to GRANT for any matching role. Manager writes succeed.
+        - case_agent users: the ACL is NOT a candidate (their role is
+          not in <roles>); the platform finds no matching field-level
+          write ACL on `assigned_group`; per ServiceNow's default-deny
+          behavior on field-level ACLs, the column write is denied.
+        - case_viewer users: same as case_agent - not a candidate -
+          denied.
+        - admin users: the admin_overrides=true setting on this ACL
+          allows the platform admin role to bypass all checks. Admin
+          retains the ability to override the column for troubleshooting
+          or repair purposes (and for the seed-script
+          `../scripts/seed_demo_data.js` which runs as admin to
+          populate demo cases per AAP Section 0.7.4).
+      Adding `x_casemgmt_case_agent` to <roles> would be incorrect: it
+      would cause the agent role to pass the role-filter step and the
+      empty-condition + empty-script + advanced=false logic would then
+      grant unconditionally, completely defeating the AAP-mandated
+      "manager-only" restriction. THE WHOLE POINT of this ACL is the
+      single-role <roles> list.
+      Adding `x_casemgmt_case_viewer` would be even more incorrect:
+      viewers are AAP Section 0.5.6-mandated read-only and must not
+      pass any write ACL anywhere.
+
+    Edge cases handled by this ACL's structure:
+      - current.assigned_group IS NULL (an unassigned case in Draft
+        state): the manager attempts to populate it for the Draft -> Open
+        transition. The role-filter passes (manager is in <roles>); the
+        empty condition passes; advanced=false short-circuits to grant.
+        The manager's write succeeds. THIS IS THE PRIMARY HAPPY-PATH the
+        ACL supports.
+      - current.assigned_group is a different group (manager
+        re-routes a case from group A to group B): same path -
+        manager-in-roles + empty-condition + advanced-false-grant - the
+        write succeeds. Agents who happen to be members of group A or
+        group B cannot make this re-routing change.
+      - User holds both case_manager and case_agent roles (unusual but
+        possible): the role-filter passes on case_manager; grant
+        succeeds. The user effectively operates at the higher-privilege
+        manager level when both roles are held - the desired outcome.
+      - User is admin (out-of-the-box ServiceNow admin role): the
+        admin_overrides=true setting allows admin to bypass ALL ACL
+        checks, including this one.
+      - Anonymous portal traffic: anonymous users hold no scoped roles;
+        the role-filter excludes them; column write is denied. The
+        portal's case-submission widget (`../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml`)
+        does NOT submit `assigned_group` (per AAP Section 0.5.1 row for
+        `portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml`
+        "Whitelisted fields only" - assigned_group is not in the
+        whitelist), so the portal flow never attempts the denied write.
+
+    Semantic source-side reference (read-only context per AAP Section
+    0.3.2; no code or configuration is byte-for-byte ported from these
+    files):
+      - acm-services/acm-service-users/src/main/java/com/armedia/acm/
+        services/users/model/ApplicationRolesToPrivilegesConfig.java
+        ArkCase mapped roles to privileges through a single configuration
+        map (`Map<String, List<Object>> rolesToPrivileges`) keyed by the
+        property `application.rolesToPrivileges`. The class declares the
+        constant `ROLES_TO_PRIVILEGES_PROP_KEY =
+        "application.rolesToPrivileges"` and exposes the map via
+        `@MapValue(value = "application.rolesToPrivileges")
+        getRolesToPrivileges()`. In that model, FIELD-level write
+        restrictions did not exist as a first-class concept; they had
+        to be re-implemented per-field as imperative checks inside Spring
+        service classes (e.g., a CaseFile.setQueue / setAssignedGroup
+        setter would bracket the assignment with role-aware logic, or a
+        Spring AOP aspect would intercept setter calls to enforce
+        manager-only writes on `acm_case_file.queue_id`). The ServiceNow
+        target replaces that scattered imperative model with a single
+        declarative, scoped, field-level ACL whose role grant carries
+        the "manager-only" restriction. This XML record is the direct
+        equivalent of the (case_manager, WRITE, assigned_group column)
+        cell in the conceptual ArkCase map - a cell that in ArkCase had
+        no specialized configuration support and had to be enforced
+        through application code.
+      - acm-plugins/acm-default-plugins/acm-admin-plugin/src/main/java/
+        com/armedia/acm/plugins/admin/service/RolesPrivilegesService.java
+        Encapsulated role-CRUD and privilege-paging behavior in ArkCase
+        (`retrieveRoles()`, `retrievePrivileges()`,
+        `retrievePrivilegesByAuthorization(...)`,
+        `retrievePrivilegesByRole(...)`, `updateRolePrivileges(...)`,
+        `addRolesPrivileges(...)`, `removeRolesPrivileges(...)`). The
+        service held injected dependencies on UserDao,
+        ApplicationRolesConfig, ApplicationPrivilegesConfig,
+        ApplicationRolesToPrivilegesConfig,
+        ConfigurationPropertyService,
+        CollectionPropertiesConfigurationService, and
+        FunctionalAccessService - a complex Spring/JPA stack that managed
+        the role <-> privilege relationship at runtime. All of this Java
+        service surface is replaced in the ServiceNow target by the
+        platform's built-in sys_security_acl evaluator; no scripted
+        privilege resolver is needed. Per-field write restrictions on
+        sensitive columns (like `assigned_group`/`queue_id`) that
+        ArkCase had to enforce through custom @PrePersist / @PreUpdate
+        JPA listeners or aspect-oriented interceptors are replaced in
+        the ServiceNow scoped equivalent by THIS field-level ACL XML
+        record - declarative, centrally managed by the platform's ACL
+        engine, and free of any custom interceptor code.
+
+    Constraints honored (AAP Sections 0.7.1 and 0.7.2):
+      - Scope-namespace exclusivity: every cross-reference resolves into
+        the x_casemgmt scope (sys_scope = x_casemgmt, sys_package source =
+        x_casemgmt). No global-scope ACLs are written. The <name> field
+        references the scoped table-and-column
+        `x_casemgmt_case.assigned_group` (not any OOB table or any global
+        column), and <roles> references the scoped role
+        `x_casemgmt_case_manager`. Zero global writes from this file.
+      - Zero hardcoded cross-reference sys_id literals: <name>, <roles>,
+        <sys_scope>, and <sys_package> all resolve their targets by name
+        / source-attribute lookup at Update Set apply time. Role names
+        inside <roles> are resolved by name lookup against the
+        sys_user_role table at runtime. The <sys_id> below is THIS
+        record's own deterministic primary key (32-char lowercase hex,
+        MD5 of the canonical identifier
+        "x_casemgmt_case.assigned_group.write.case_manager", a stable
+        canonical key for this exact ACL) and is not a cross-reference
+        to any other record. Computing the sys_id deterministically
+        guarantees the ACL is re-applyable / idempotent across fresh
+        PDIs and round-trip Update Set previews per AAP Section 0.7.3
+        Gate 7. The MD5 result is 04d4a9cdb62499be0a894d217c979202,
+        computed once at authoring time and committed verbatim below;
+        any reauthoring of this file must reproduce the same canonical
+        key string and the same MD5 output to preserve idempotency.
+      - Field-level (NOT table-level): <name> is
+        `x_casemgmt_case.assigned_group` WITH a literal dot separator
+        between table and column. This is the ServiceNow convention for
+        field-level ACLs and distinguishes this record from the eight
+        sibling table-level ACLs whose <name> is just `x_casemgmt_case`
+        (no dot, no column). The single-character dot difference is
+        what tells the platform's ACL evaluator that this rule governs
+        writes to a SPECIFIC COLUMN rather than to the entire row.
+      - Operation = write: corresponds exactly to the field-level write
+        restriction described in AAP Section 0.5.1's row for this file.
+        There are NO field-level read ACLs on x_casemgmt_case for any
+        role (per AAP Section 0.5.6 only assigned_group and
+        assigned_agent have any field-level ACLs at all, and those are
+        write-only restrictions). There are NO field-level create or
+        delete ACLs because those operations target rows, not fields.
+      - admin_overrides = true: standard ServiceNow pattern allowing
+        the platform `admin` role to bypass this ACL for
+        troubleshooting, repair, or seed-data operations. The seed
+        script `../scripts/seed_demo_data.js` runs as admin to populate
+        demo cases (per AAP Section 0.7.4); admin's ability to set
+        assigned_group during that seed pass depends on this override.
+        The admin override does NOT widen non-admin role privileges; it
+        only allows the platform-level admin role to bypass the
+        manager-role grant.
+      - active = true: ACL is in force the moment the Update Set commits.
+      - advanced = false: there is NO scripted predicate; the ACL grant
+        is purely role-based with an empty condition. See "Why
+        advanced=false is the correct setting" rationale above.
+      - condition (empty): no encoded-query condition is set; with
+        advanced=false, the empty condition + role membership is the
+        complete grant logic.
+      - script (empty): no scripted predicate. With advanced=false the
+        script field is ignored even if populated; leaving it empty
+        keeps the record minimal and unambiguous.
+      - type = record: this is a row-level (record-level) field ACL,
+        not a UI/REST/SOAP-flavored one. The platform's record evaluator
+        invokes this ACL during any GlideRecord update path that touches
+        the assigned_group column.
+
+    Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
+      MUST be loaded AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scoped app
+          record)
+        - ../app/sys_scope/x_casemgmt.xml (scope record - resolves
+          sys_scope and sys_package source="x_casemgmt")
+        - ../tables/x_casemgmt_case.xml (resolves the table half of
+          <name>x_casemgmt_case.assigned_group</name>)
+        - ../dictionary/x_casemgmt_case_assigned_group.xml (resolves the
+          column half of <name>x_casemgmt_case.assigned_group</name>;
+          the field-level ACL cannot be applied until the field exists
+          in sys_dictionary)
+        - ../roles/sys_user_role_x_casemgmt_case_manager.xml (resolves
+          the single entry in <roles> by role-name lookup at apply time)
+      MUST be loaded BEFORE:
+        - ../seed-data/role_assignments/sys_user_has_role_x_casemgmt_demo_*.xml
+          (the demo manager's write tests during round-trip verification
+          depend on this ACL being applied first)
+        - ../seed-data/cases/x_casemgmt_case_demo_*.xml (demo cases are
+          inserted by the seed pass; this ACL governs subsequent
+          demo-time writes to the assigned_group column)
+        - ../flows/general_inquiry_state_machine.xml,
+          ../flows/complaint_state_machine.xml,
+          ../flows/sub_flows/validate_open_transition.xml (Flow Designer
+          flows fire on update; their inline GlideRecord writes to
+          assigned_group during state transitions are filtered through
+          this ACL when run by a logged-in agent or manager - the flows
+          must not execute before the ACL is applied or unauthorized
+          assigned_group writes could leak through during update-set
+          apply)
+
+    Composition with the table-level WRITE ACLs:
+      A write to the assigned_group field requires BOTH:
+        (a) The table-level write ACL on x_casemgmt_case to permit the
+            row update (one of `../acl/x_casemgmt_case_write_manager.xml`,
+            `../acl/x_casemgmt_case_write_agent_assigned.xml`, or admin
+            override), AND
+        (b) THIS field-level ACL to permit the column update.
+      Concrete walk-throughs:
+        * Manager writes assigned_group on any case (initial group
+          routing during Draft -> Open transition, or re-routing
+          mid-lifecycle): (a) write_manager ACL grants unconditionally;
+          (b) this ACL grants because manager is in <roles> with
+          empty condition and advanced=false. PERMITTED.
+        * Currently-assigned agent attempts to change assigned_group to
+          a peer's group (effective re-routing): (a)
+          write_agent_assigned grants because assigned_agent ==
+          current user; (b) THIS ACL DENIES because case_agent is NOT
+          in <roles>. The platform returns "Access not permitted" on
+          the column. DENIED.
+          THIS IS THE PRIMARY DEFENSE the ACL provides over the
+          table-level ACL alone.
+        * Currently-assigned agent attempts to remove assigned_group
+          (set to null): same path - table-level grants, field-level
+          denies. DENIED.
+        * Non-assigned agent who IS in the assigned_group attempts to
+          change the group to remove themselves (or add themselves to
+          a different case's group via this case's record path): the
+          row-level write fails first because the agent isn't the
+          assignee; even if they were, THIS ACL would deny at the
+          field level. DENIED at multiple layers.
+        * Viewer attempts to write assigned_group: (a) NO write ACL
+          grants the viewer role; the row update fails at the table
+          level and never reaches this ACL. DENIED.
+      The above walk-throughs are reproduced step-by-step in the manual
+      `../scripts/round_trip_verify.md` procedure.
+
+    Difference from sibling field-level ACL (assigned_agent):
+      vs ../acl/x_casemgmt_case_assigned_agent_field_acl.xml:
+        - <name>          x_casemgmt_case.assigned_group
+                                            vs x_casemgmt_case.assigned_agent
+        - <roles>         x_casemgmt_case_manager
+                                            vs x_casemgmt_case_manager,x_casemgmt_case_agent
+        - <advanced>      false             vs true
+        - <script>        empty             vs manager-or-assigned-agent CDATA body
+        - <sys_id>        04d4a9cdb62499be0a894d217c979202
+                              (MD5 of "x_casemgmt_case.assigned_group.write.case_manager")
+                                            vs 3719a93101a32c5e06c9907fbcfa8d03
+                              (MD5 of "x_casemgmt_case.assigned_agent.write.manager_or_assigned")
+        - <sys_update_name> *_assigned_group_field_acl
+                                            vs *_assigned_agent_field_acl
+      The two field-level ACLs share their column-targeting structure
+      (<name> = table.column, <type>=record, <operation>=write,
+      admin_overrides=true) but diverge in roles/advanced/script per the
+      design choice described above ("Why this ACL is manager-only").
+
+    The concrete scope identifier `casemgmt` is used verbatim per AAP convention (Section 0.7.2 "Scoped-namespace-only constraint"); ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export. The same identifier is used consistently across every artifact - including the role-name string in <roles>. The
+    deterministic sys_id below is computed against the `casemgmt` literal
+    and remains stable across re-imports onto fresh PDIs.
+-->
+<record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <admin_overrides>true</admin_overrides>
+        <advanced>false</advanced>
+        <condition/>
+        <description>Field-level ACL: only x_casemgmt_case_manager can write the assigned_group field on x_casemgmt_case. case_agent and case_viewer are denied (privilege escalation prevention).</description>
+        <name>x_casemgmt_case.assigned_group</name>
+        <operation>write</operation>
+        <roles>x_casemgmt_case_manager</roles>
+        <script/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>04d4a9cdb62499be0a894d217c979202</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case.assigned_group</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_security_acl_x_casemgmt_case_assigned_group_field_acl</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>record</type>
+    </sys_security_acl>
+</record_update>

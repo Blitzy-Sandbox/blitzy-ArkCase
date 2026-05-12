@@ -1,0 +1,605 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_ui_action` row that
+    declares the `Set Pending` form button on the `x_casemgmt_case` custom
+    table inside the scoped application `x_casemgmt`.
+
+    The concrete scope identifier `x_casemgmt` is used consistently throughout
+    this repository per ../docs/state-machine.md: "ServiceNow Update Set imports
+    use a standard XML parser, so the scope id must be concrete in every record
+    before the Update Set is exported." All 116 sibling XML records in this
+    Update Set use `x_casemgmt` byte-for-byte; this UI Action follows the same
+    convention. The AAP Section 0.7.2 placeholder `x_[scope]_` is a TEMPLATE
+    that resolves to `x_casemgmt_` at materialization time.
+
+    PURPOSE (AAP Section 0.5.5 verbatim, row 3):
+        From          To           Required condition / behavior
+        In Progress   Pending      None; sets pending_reason
+                                   (Awaiting Info / Awaiting Third Party / Other)
+
+    This UI Action is the user-facing ENTRY POINT for the In Progress -> Pending
+    transition. It surfaces a "Set Pending" button on the case form whenever
+    the case is currently in `In Progress` status AND the current user is
+    authorized (case_manager OR assigned case_agent). Clicking the button
+    prompts the user for a `pending_reason` value (one of the three allowed
+    Choice labels from ../choices/sys_choice_case_pending_reason.xml), then
+    submits the form to perform the transition on the server.
+
+    HYBRID CLIENT + SERVER PATTERN (the standard ServiceNow UI-Action pattern):
+
+        Phase 1 - CLIENT side execution (browser, has `window`, has `g_form`):
+          1) The user clicks the "Set Pending" button.
+          2) The platform calls `onClickSetPending()` (the function named in
+             the <onclick> field).
+          3) `onClickSetPending` validates `g_form.getValue('status')` is
+             still 'In Progress' (defense-in-depth re-check after the
+             visibility <condition> has already gated the button).
+          4) `onClickSetPending` calls `prompt(...)` to collect the
+             pending_reason from the user. If the user clicks Cancel,
+             `prompt` returns null and the function returns false to
+             abort the action without firing any server-side work.
+          5) The reason is validated against the three Choice labels.
+             A mismatch surfaces a g_form.addErrorMessage and returns
+             false to abort.
+          6) The reason is stamped onto the form via
+             `g_form.setValue('pending_reason', reason)` so the server
+             script can read it as `current.pending_reason`.
+          7) `gsftSubmit(null, g_form.getFormElement(),
+                          'sysverb_x_casemgmt_case_set_pending')`
+             is called. This is the standard ServiceNow form-submit verb
+             pattern: the platform serializes the form state, posts it to
+             the server, and re-evaluates the UI Action script in a
+             server-side sandbox.
+          8) `onClickSetPending` returns false to suppress the default
+             form submit (since gsftSubmit already submitted).
+
+        Phase 2 - SERVER side execution (sandbox, no `window`, has `current`):
+          1) The platform re-evaluates the entire <script> body.
+          2) The conditional `if (typeof window == 'undefined')` evaluates
+             true (no `window` global on server), so `serverSetPending()`
+             is invoked.
+          3) `serverSetPending` re-checks the role (case_manager OR
+             case_agent), the status (must be 'In Progress'), and the
+             "Assigned only" rule for case_agents (per AAP Section 0.5.6).
+             Any failure surfaces a `gs.addErrorMessage(...)` and returns
+             without persisting.
+          4) `serverSetPending` re-validates the pending_reason against
+             the three Choice labels (defense-in-depth in case the form
+             was tampered with between client and server).
+          5) `current.status = 'Pending'` then `current.update()` persists
+             the transition to the database.
+          6) `action.setRedirectURL(current)` refreshes the form to show
+             the new status.
+
+        Note that the platform recompiles the script on both sides, but
+        the function definitions are inert until called via their
+        respective entry points (the `<onclick>` attribute on the client,
+        the `if (typeof window == 'undefined')` guard on the server).
+
+    SEMANTIC SOURCE-SIDE REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.2.1):
+
+        acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/service/ChangeCaseFileStateService.java
+        line 79-114 - the central ArkCase case state-machine service.
+        Its `changeCaseState(auth, caseId, newState, ipAddress)` method:
+
+            1) Loads the CaseFile by ID (line 85)
+            2) Returns early if status unchanged (lines 88-91)
+            3) Sets the new status (line 95: retval.setStatus(newState))
+            4) For "CLOSED" status, sets close timestamp (lines 97-100)
+               (irrelevant for this UI Action which targets Pending)
+            5) Saves the entity (line 102: getDao().save(retval))
+            6) Raises an event for downstream listeners (line 106)
+
+        That single method covered EVERY transition by string-matching
+        the `newState` parameter. The ServiceNow target instead splits
+        per-transition logic across:
+          - This UI Action (In Progress -> Pending)
+          - The validate_pending_transition.xml subflow (sub-step that
+            stamps pending_reason from the parent flow context)
+          - The clear_pending_reason_on_inprogress.xml business rule
+            (the reverse Pending -> In Progress edge)
+
+        ArkCase's String column had no Pending sub-state with a typed
+        reason. AcmTask.pendingStatus (a free-form String describing
+        the task's pending sub-state) is the closest semantic ancestor
+        of `pending_reason`. The ServiceNow target generalizes the
+        pattern (free-form -> closed Choice list of three values) and
+        applies it at the case level rather than the task level.
+
+        The event-raising side-effect on line 106 is INTENTIONALLY
+        OMITTED here per the email-disabled constraint (AAP Section
+        0.7.2). ArkCase's raiseEvent() call would have triggered
+        downstream notification listeners; the ServiceNow POC has no
+        equivalent gs.eventQueue() call because email is disabled on
+        the PDI and no other in-scope listeners need the event.
+
+    BUTTON VISIBILITY CONDITION (the <condition> field):
+
+        The button is shown when ALL of the following are true:
+          1) current.status == 'In Progress'   (the source state of the
+             In Progress -> Pending transition)
+          2) The current user holds at least one of:
+             - x_casemgmt_case_manager   (always permitted)
+             - x_casemgmt_case_agent AND (current.assigned_agent ==
+                gs.getUserID() OR current user is a member of
+                current.assigned_group)
+             (per AAP Section 0.5.6 "Assigned only" rule for case_agent)
+
+        The visibility check runs server-side (the <condition> field is
+        evaluated by the platform when rendering the form). The
+        defense-in-depth check inside the <script> body runs both
+        client-side and server-side, providing three layers of
+        validation that protect against:
+          - Form-tampering attacks where the user edits hidden form
+            fields to attempt the transition from a non-In Progress
+            state
+          - Race conditions where the user opens the form, the case
+            transitions out of In Progress in another browser tab,
+            then the user clicks Set Pending in the original tab
+          - Role escalation attempts where a viewer somehow gains
+            access to the form
+
+    CHOICE-VALUE BYTE-FOR-BYTE REQUIREMENTS (AAP Section 0.5.7 verbatim):
+
+        The three pending_reason Choice values declared in
+        ../choices/sys_choice_case_pending_reason.xml are:
+
+            'Awaiting Info'         (12 chars, two words, single space)
+            'Awaiting Third Party'  (20 chars, three words, single space)
+            'Other'                 (5 chars, single word)
+
+        These MUST appear byte-for-byte in:
+          - The prompt() default value and validation array on the
+            client side
+          - The validation array on the server side
+          - The user-facing g_form.addErrorMessage and gs.addErrorMessage
+            text
+
+        The status values used in this UI Action are:
+            'In Progress'           (11 chars, two words, literal SPACE)
+            'Pending'               (7 chars, single word, Title Case)
+
+        These MUST match the labels in ../choices/sys_choice_case_status.xml
+        byte-for-byte. ServiceNow Choice fields persist the LABEL string
+        by default (not an integer ID), so the comparison is against the
+        label text. Misspellings such as 'In_Progress' (underscore),
+        'InProgress' (no space), 'in progress' (lowercase), or
+        'IN PROGRESS' (uppercase) would silently never match and the
+        UI Action would never fire.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+
+        - <table>x_casemgmt_case</table>             scoped table
+        - <sys_scope>x_casemgmt</sys_scope>          scoped namespace
+        - <sys_package>x_casemgmt</sys_package>      scoped application
+        - <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
+                                                     scoped roles
+        - script body references current.status, current.pending_reason,
+          current.assigned_agent, current.assigned_group, all on the
+          scoped table x_casemgmt_case
+
+        Zero global-scope writes. Zero modifications to OOB tables.
+        Zero global ACL or role mutations.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+
+        - <table> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - <roles> resolves the two roles BY NAME (x_casemgmt_case_manager,
+          x_casemgmt_case_agent)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; it operates only on the platform-injected `current`
+          GlideRecord and `gs.getUser()`, `gs.getUserID()` calls.
+        - The script body uses NO gs.getReference() calls and NO
+          GlideRecord.get(sys_id) calls.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_case_set_pending"), which is
+          permitted because the AAP "no hardcoded sys_id" rule applies
+          to REFERENCE FIELDS pointing at OTHER records, not to a
+          record's own primary key.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This UI
+        Action contains zero gs.eventQueue() calls, zero gs.email()
+        calls, and zero gs.notificationEngine() calls. It performs only
+        the status update and an action.setRedirectURL refresh.
+
+    NO PII CONSTRAINT (AAP Section 0.7.2):
+
+        The script body, code comments, description text, hint text,
+        prompt text, and all error messages contain zero real names,
+        real email addresses, real phone numbers, real organizational
+        identifiers, or any other personally identifiable information.
+        The UI Action operates exclusively on synthetic case-status
+        enumerations (In Progress, Pending) and synthetic pending-reason
+        labels (Awaiting Info, Awaiting Third Party, Other).
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+
+        This sys_ui_action record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml
+              (the table this UI Action is bound to)
+            - ../dictionary/x_casemgmt_case_status.xml
+              (the field the visibility condition reads)
+            - ../dictionary/x_casemgmt_case_pending_reason.xml
+              (the field the script writes)
+            - ../dictionary/x_casemgmt_case_assigned_group.xml
+              (the field the visibility condition reads for the
+               "Assigned only" check)
+            - ../dictionary/x_casemgmt_case_assigned_agent.xml
+              (the field the visibility condition reads for the
+               "Assigned only" check)
+            - ../choices/sys_choice_case_status.xml
+              (the In Progress and Pending Choice values)
+            - ../choices/sys_choice_case_pending_reason.xml
+              (the three pending_reason Choice values)
+            - ../roles/sys_user_role_x_casemgmt_case_manager.xml
+              (the manager role referenced by <roles> and condition)
+            - ../roles/sys_user_role_x_casemgmt_case_agent.xml
+              (the agent role referenced by <roles> and condition)
+            - ../app/sys_app/x_casemgmt_case_management.xml
+              (the scoped application)
+            - ../app/sys_scope/x_casemgmt.xml
+              (the scope record)
+
+        And BEFORE:
+            - ../seed-data/cases/x_casemgmt_case_demo_03.xml
+              (an In Progress demo case that exercises this UI Action;
+               loading the demo case before this UI Action would still
+               work since UI Actions are not invoked at load time, but
+               the AAP-mandated load order keeps user-facing behavior
+               artifacts ahead of demo data)
+            - ../update-set/x_casemgmt_case_management_update_set.xml
+              (the final aggregated Update Set that includes this
+               record)
+
+    DETERMINISTIC SYS_ID:
+
+        sys_id = MD5("x_casemgmt_case_set_pending")
+               = af34b659d531b7a994da7d1f6a5e09f1
+        32-character lowercase hex. Recomputable via:
+            printf '%s' 'x_casemgmt_case_set_pending' | md5sum | cut -c1-32
+
+        Deriving from the record name guarantees idempotent re-import
+        on a fresh PDI: re-importing the same Update Set produces the
+        same sys_id, which collides on the existing record and updates
+        it in place rather than creating a duplicate. This is the same
+        convention used by the sibling Business Rules in
+        ../business_rules/x_casemgmt_*.xml.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 2 (Workflow): "All state transitions enforced for both
+          case types - Invalid transitions return blocking error". This
+          UI Action implements the In Progress -> Pending transition
+          (per AAP Section 0.5.5 row 3). Although the AAP marks this
+          transition as having "no required condition", the implementation
+          still validates that pending_reason is set to one of the three
+          allowed Choice labels, surfacing a blocking error message if
+          not. The defense-in-depth status re-check on both client and
+          server prevents stale-form submissions from corrupting the
+          state machine.
+
+        - Gate 3 (ACLs): "Role-based access enforced - case_viewer cannot
+          write; case_agent cannot access unassigned cases; case_manager
+          has full access". This UI Action's visibility <condition> and
+          server-side defense-in-depth check both encode the role rules
+          from AAP Section 0.5.6 verbatim. case_viewer is excluded by the
+          <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
+          field. case_agent on an unassigned case is excluded by the
+          "Assigned only" sub-condition.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance". The deterministic
+          sys_id, reference-by-name pattern, and absence of any external
+          lookups guarantee this UI Action re-imports cleanly with zero
+          preview errors.
+
+    COMPANION ARTIFACTS:
+
+        This UI Action SETS pending_reason on the In Progress -> Pending
+        transition. The mirror artifact that CLEARS pending_reason on
+        the reverse Pending -> In Progress transition is:
+            ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+
+        The Flow Designer subflow that handles the same transition at
+        the workflow layer (called from the parent flows on status
+        change) is:
+            ../flows/sub_flows/validate_pending_transition.xml
+
+        The UI Action provides the FORM-LEVEL entry point (button + dialog).
+        The subflow provides the FLOW-LEVEL entry point (called when status
+        changes via any path: form submit, Table API write, scripted REST
+        write, scheduled job). They are complementary, not redundant.
+
+    REGENERATION NOTE:
+
+        This XML file is generated as part of the Update Set authoring
+        process. To regenerate:
+          1. Re-run the source-of-truth template fill from the AAP.
+          2. Recompute the deterministic sys_id from MD5(sys_name).
+          3. Re-export the Update Set XML from the PDI.
+
+        Manual edits to this file are valid but should be reflected in
+        ../docs/state-machine.md if they alter the transition matrix or
+        error message text.
+-->
+<record_update table="sys_ui_action">
+    <sys_ui_action action="INSERT_OR_UPDATE">
+        <action_name>x_casemgmt_case_set_pending</action_name>
+        <active>true</active>
+        <client>true</client>
+        <comments>UI Action that transitions an In Progress case to Pending status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Prompts the user for pending_reason (Awaiting Info / Awaiting Third Party / Other) on the client via a hybrid client+server pattern, then performs the transition on the server with defense-in-depth re-validation of role, status, assignment, and pending_reason. Per AAP Section 0.5.5 row 3 verbatim: "In Progress -&gt; Pending: None; sets pending_reason (Awaiting Info / Awaiting Third Party / Other)". Companion to ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml which clears pending_reason on the reverse transition, and ../flows/sub_flows/validate_pending_transition.xml which handles the same transition at the Flow Designer workflow layer. Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
+        <condition><![CDATA[current.status == 'In Progress' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]></condition>
+        <form_action>true</form_action>
+        <form_button>true</form_button>
+        <form_button_v2>false</form_button_v2>
+        <form_context_menu>false</form_context_menu>
+        <form_link>false</form_link>
+        <form_menu_button_v2>false</form_menu_button_v2>
+        <form_style>secondary</form_style>
+        <format_for_configurable_workspace>false</format_for_configurable_workspace>
+        <hint>Pause this case (provide a pending reason).</hint>
+        <isolate_script>true</isolate_script>
+        <list_action>false</list_action>
+        <list_banner_button>false</list_banner_button>
+        <list_button>false</list_button>
+        <list_choice>false</list_choice>
+        <list_context_menu>false</list_context_menu>
+        <list_link>false</list_link>
+        <list_save_with_form_button>false</list_save_with_form_button>
+        <messages/>
+        <name>Set Pending</name>
+        <onclick>onClickSetPending()</onclick>
+        <order>300</order>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
+        <script><![CDATA[function onClickSetPending() {
+    // Per AAP Section 0.5.5 (In Progress -> Pending):
+    //   "None; sets pending_reason (Awaiting Info / Awaiting Third Party / Other)"
+    //
+    // This is the CLIENT-side entry point invoked via the <onclick> field
+    // when the user clicks the "Set Pending" form button. It runs in the
+    // browser (window is defined, g_form is available) and is responsible
+    // for:
+    //   1) Defense-in-depth re-check that status is still 'In Progress'
+    //      (the visibility <condition> already gated the button at form
+    //      render time, but the user could have edited a hidden form
+    //      field via DevTools or a separate browser tab could have
+    //      transitioned the case in the meantime).
+    //   2) Prompting the user for the pending_reason value.
+    //   3) Validating the input against the three allowed Choice labels.
+    //   4) Stamping the chosen reason onto the form so the server can
+    //      read it as current.pending_reason.
+    //   5) Submitting the form via gsftSubmit to invoke the server-side
+    //      branch of this UI Action.
+    //
+    // Returning false from this function aborts the form submit. We
+    // ALWAYS return false at the end of the success path because
+    // gsftSubmit performs the submission asynchronously - allowing the
+    // default form submit to also fire would cause a duplicate submit.
+    if (g_form.getValue('status') != 'In Progress') {
+        g_form.addErrorMessage('Only In Progress cases can be moved to Pending.');
+        return false;
+    }
+
+    // Prompt the user for the pending_reason. The choices match
+    // ../choices/sys_choice_case_pending_reason.xml byte-for-byte:
+    //   'Awaiting Info'
+    //   'Awaiting Third Party'
+    //   'Other'
+    // The default value 'Awaiting Info' is the most common reason in
+    // the POC seed data and is offered as a sensible starting point.
+    var reason = prompt('Enter pending reason (Awaiting Info, Awaiting Third Party, Other):', 'Awaiting Info');
+    if (reason === null) {
+        // User clicked Cancel on the prompt dialog. Abort the action
+        // gracefully without changing the case state or surfacing any
+        // error message. This is the standard ServiceNow client-action
+        // cancel pattern - returning false suppresses the form submit.
+        return false;
+    }
+
+    // Trim whitespace defensively. The prompt may return values with
+    // accidental leading/trailing whitespace from copy-paste or
+    // browser auto-fill. The empty-string fallback handles the case
+    // where the user clears the prompt input and clicks OK.
+    reason = reason ? reason.trim() : '';
+
+    // Validate against the three allowed Choice labels. The labels are
+    // hard-coded here rather than fetched dynamically because:
+    //   1) The labels are stable per AAP Section 0.5.7 verbatim and
+    //      change only via an AAP amendment.
+    //   2) Fetching dynamically would require a server round-trip,
+    //      which is unnecessary for a POC and would slow the prompt UX.
+    //   3) The server-side defense-in-depth check below also validates
+    //      against the same array, so a mismatch is caught even if
+    //      the client-side array is somehow out of sync.
+    var allowed = ['Awaiting Info', 'Awaiting Third Party', 'Other'];
+    if (allowed.indexOf(reason) < 0) {
+        g_form.addErrorMessage('Pending reason must be one of: Awaiting Info, Awaiting Third Party, Other.');
+        return false;
+    }
+
+    // Stash the chosen reason in the form so the server script can read
+    // it as current.pending_reason. The g_form.setValue call updates
+    // the in-memory form state; the value will be serialized into the
+    // form post body when gsftSubmit fires. The pending_reason field
+    // is declared in ../dictionary/x_casemgmt_case_pending_reason.xml
+    // as a non-mandatory Choice column, so writing to it from here is
+    // legal even if the field was previously empty.
+    g_form.setValue('pending_reason', reason);
+
+    // Submit the form via the standard ServiceNow UI-Action verb pattern.
+    // The verb name is derived from the UI Action's sys_name:
+    //   'sysverb_' + sys_name = 'sysverb_x_casemgmt_case_set_pending'
+    // The platform recognizes this verb, serializes the form state,
+    // posts it to the server, and re-evaluates this <script> body in
+    // a server-side sandbox where the `if (typeof window == 'undefined')`
+    // guard becomes true and serverSetPending() is invoked.
+    gsftSubmit(null, g_form.getFormElement(), 'sysverb_x_casemgmt_case_set_pending');
+
+    // Suppress the default form-submit handler. gsftSubmit already
+    // submitted the form; allowing the default to fire would cause a
+    // duplicate submit and a confusing user experience.
+    return false;
+}
+
+// SERVER-SIDE INVOCATION GUARD.
+// On the server (sandbox), the `window` global is undefined and
+// the `current` GlideRecord is bound by the platform. On the client
+// (browser), `window` is defined. This conditional is the canonical
+// ServiceNow hybrid UI-Action pattern that delegates server-side
+// execution to a named function while the client-side onclick handler
+// continues to invoke onClickSetPending() from the browser.
+if (typeof window == 'undefined') {
+    serverSetPending();
+}
+
+function serverSetPending() {
+    // SERVER-side entry point invoked when gsftSubmit posts the form
+    // back from the client. Runs in the server sandbox (no window, has
+    // current GlideRecord, has gs and action). Responsible for:
+    //   1) Defense-in-depth role re-check (case_manager OR case_agent).
+    //   2) Defense-in-depth status re-check (must be 'In Progress').
+    //   3) Defense-in-depth "Assigned only" re-check for case_agents.
+    //   4) Defense-in-depth pending_reason re-check (must be one of the
+    //      three Choice labels).
+    //   5) Status persistence (current.status = 'Pending'; current.update()).
+    //   6) Form refresh (action.setRedirectURL(current)).
+    //
+    // Each of the four guards above maps to a row in the AAP Section
+    // 0.5.6 ACL matrix or the AAP Section 0.5.7 data-model contract:
+    //   - Guard 1: Role check enforces "Only role X can perform action Y".
+    //   - Guard 2: Status check enforces "Only In Progress -> Pending".
+    //   - Guard 3: Assigned only check enforces case_agent's assigned-only
+    //     write privilege (case_manager bypasses this guard).
+    //   - Guard 4: Choice-value check enforces the typed pending_reason
+    //     vocabulary.
+    //
+    // All four guards must pass before current.update() is called.
+    // Any guard failure surfaces a blocking gs.addErrorMessage and
+    // returns without persisting.
+
+    // Guard 1: Role check. The user must hold case_manager OR case_agent.
+    // (case_viewer is excluded by the <roles> field already, but the
+    // server-side re-check protects against the rare case where a user
+    // gained the role between form load and form submit.)
+    if (!gs.getUser().hasRole('x_casemgmt_case_manager') && !gs.getUser().hasRole('x_casemgmt_case_agent')) {
+        gs.addErrorMessage('Only case managers and assigned case agents can set a case to Pending.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // Guard 2: Status check. The case must currently be In Progress.
+    // Re-checking on the server protects against a stale-form attack
+    // where the user opens the form when status is In Progress, the
+    // case transitions in another tab, then the user submits from the
+    // original tab. The check uses string comparison against the
+    // verbatim Title Case 'In Progress' label per AAP Section 0.5.7
+    // (note the literal SPACE between 'In' and 'Progress').
+    if (current.status != 'In Progress') {
+        gs.addErrorMessage('Only In Progress cases can be moved to Pending.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // Guard 3: Assigned only check for case_agents. case_managers
+    // bypass this guard (they can set Pending on any case). For
+    // case_agents, the case must be assigned to them directly OR
+    // they must be a member of the assigned_group, per AAP Section
+    // 0.5.6 verbatim: "Assigned only = cases where assigned_agent =
+    // current user OR assigned_group contains current user".
+    //
+    // The String() coercion via .toString() on assigned_group resolves
+    // the GlideElement reference to its sys_id string, which is what
+    // gs.getUser().isMemberOf() expects. Without the coercion, the
+    // GlideElement-vs-string comparison can behave inconsistently
+    // across releases.
+    if (gs.getUser().hasRole('x_casemgmt_case_agent') && !gs.getUser().hasRole('x_casemgmt_case_manager')) {
+        var groupIdForPending = current.assigned_group ? current.assigned_group.toString() : '';
+        var isAssigned = (current.assigned_agent == gs.getUserID()) ||
+                         (groupIdForPending && gs.getUser().isMemberOf(groupIdForPending));
+        if (!isAssigned) {
+            gs.addErrorMessage('Only case managers and assigned case agents can set a case to Pending.');
+            action.setRedirectURL(current);
+            return;
+        }
+    }
+
+    // Guard 4: pending_reason value check. The client-side onClickSetPending
+    // function should have populated this field with one of the three
+    // allowed labels via g_form.setValue('pending_reason', reason).
+    // We re-validate on the server because:
+    //   - Form data can be tampered with between client and server.
+    //   - The UI Action could be invoked via the Table API or scripted
+    //     REST in some unusual integration path that bypasses the
+    //     client-side prompt.
+    //   - Defense-in-depth is the AAP-mandated security posture.
+    var reason = current.pending_reason ? current.pending_reason.toString() : '';
+    var allowed = ['Awaiting Info', 'Awaiting Third Party', 'Other'];
+    if (allowed.indexOf(reason) < 0) {
+        gs.addErrorMessage('Pending reason must be one of: Awaiting Info, Awaiting Third Party, Other.');
+        action.setRedirectURL(current);
+        return;
+    }
+
+    // All four guards passed. Perform the In Progress -> Pending
+    // transition. The status assignment uses the verbatim Title Case
+    // 'Pending' label per AAP Section 0.5.7 and the sibling choice
+    // file ../choices/sys_choice_case_status.xml. The current.update()
+    // call persists the change and triggers the platform's Business
+    // Rule pipeline, including:
+    //   - ../business_rules/x_casemgmt_block_terminal_closed.xml
+    //     (skipped because previous.status was In Progress, not Closed)
+    //   - ../business_rules/x_casemgmt_block_draft_backtransition.xml
+    //     (skipped because current.status is Pending, not Draft)
+    //   - ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml
+    //     (re-validates assigned_agent membership; passes if current
+    //      state is consistent)
+    //   - ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml
+    //     (skipped because previous.status was In Progress and current.status
+    //      is Pending, not the reverse Pending -> In Progress transition)
+    //   - ../business_rules/x_casemgmt_set_closed_date.xml
+    //     (skipped because current.status is Pending, not Closed)
+    // The flows ../flows/general_inquiry_state_machine.xml and
+    // ../flows/complaint_state_machine.xml also fire on this update,
+    // calling the validate_pending_transition subflow which is a no-op
+    // for this transition (no required condition; the pending_reason
+    // is already set by this UI Action's prior g_form.setValue call).
+    current.status = 'Pending';
+    current.update();
+
+    // Refresh the form to show the new status. The standard ServiceNow
+    // UI-Action pattern is to call action.setRedirectURL(current) which
+    // navigates the browser to the same record's form view, picking
+    // up the new status and any side-effect field changes.
+    action.setRedirectURL(current);
+}]]></script>
+        <show_insert>false</show_insert>
+        <show_multiple_update>false</show_multiple_update>
+        <show_query>false</show_query>
+        <show_update>true</show_update>
+        <sys_class_name>sys_ui_action</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>af34b659d531b7a994da7d1f6a5e09f1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_set_pending</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_update_name>sys_ui_action_x_casemgmt_case_set_pending</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <ui11_compatible>true</ui11_compatible>
+        <ui16_compatible>true</ui16_compatible>
+    </sys_ui_action>
+</record_update>
