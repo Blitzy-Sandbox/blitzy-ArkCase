@@ -1,0 +1,19 @@
+site_name: ArkCase
+site_description: Case management and IT modernization platform
+repo_url: https://github.com/Blitzy-Sandbox/blitzy-ArkCase
+docs_dir: docs
+
+plugins:
+  - techdocs-core
+  - mermaid2
+
+nav:
+  - Home: index.md
+  - Developer Setup: setup.md
+  - Module Overview: overview.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - fenced_code
