@@ -3,7 +3,8 @@ kind: Component
 metadata:
   name: blitzy-ArkCase
   description: Case management and IT modernization platform.
-  tags: []
+  tags:
+  - proof-of-concept
   annotations:
     github.com/project-slug: Blitzy-Sandbox/blitzy-ArkCase
     backstage.io/source-location: url:https://github.com/Blitzy-Sandbox/blitzy-ArkCase/tree/main/
