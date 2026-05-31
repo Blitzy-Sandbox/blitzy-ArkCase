@@ -196,3 +196,34 @@ Every changed folder under `servicenow-case-management-poc/` is assigned to exac
 **Verdict: APPROVED** — 0 Critical findings; 1 Info note (SEC-INFO-1). The substantive ServiceNow security surface (ACL matrix fidelity, "Assigned only" enforcement with `advanced=true`, field-level ACLs, anonymous-endpoint whitelisting, no-secrets, no-injection, scope exclusivity) is sound.
 
 ---
+
+## Phase 3 — Backend Architecture  *(Verdict: APPROVED)*
+
+**Scope reviewed:** `tables/` (3), `dictionary/` (25), `choices/` (7), `script_includes/` (2), `business_rules/` (6), `flows/` + `flows/sub_flows/` (7). The architecture analog here is: declarative schema (tables/dictionary/choices) = data layer; Script Includes = reusable service layer; Business Rules = entity-level guards; Flow Designer flows = orchestration layer.
+
+### Positive findings
+
+- **Data-model fidelity to AAP §0.5.7 is exact and verbatim.** Reviewer-parsed every dictionary record: the 12 `x_casemgmt_case` fields, 6 `x_casemgmt_case_task` fields, and 5 `x_casemgmt_case_party` fields match the prompt's field names, types, max-lengths, and mandatory flags **character-for-character** — e.g., `subject` String(255) mandatory, `description` String(4000) mandatory, `requester_name` String(100) mandatory, `requester_email` String(100) optional, `opened_date`/`closed_date` `glide_date_time` read-only, `due_date` `glide_date` mandatory. The two extra fields (`pending_reason`, `duration_to_close`) are explicitly AAP-sanctioned supporting fields (§0.4.1 Pending-status reason; §0.4.4 "Average Time to Close" widget source).
+- **Reference + type fidelity is correct (the ServiceNow analog of the type-mapping check).** Reference fields target the right tables: `case_task.case` and `case_party.case` → `x_casemgmt_case`; `assigned_agent`/`assigned_to`/`party.person` → `sys_user`; `assigned_group` → `sys_user_group`; `party.organization` → `core_company`. Temporal fields use `glide_date_time`/`glide_date` (not a string) and the close-duration uses `glide_duration` — the platform-correct types.
+- **All 7 choice lists match the AAP verbatim.** `case.type` {General Inquiry, Complaint}; `case.status` {Draft, Open, In Progress, Pending, Resolved, Closed}; `case.priority` {Low, Medium, High, Critical}; `pending_reason` {Awaiting Info, Awaiting Third Party, Other}; `case_task.type` {Investigation, Review, Follow-up, Other}; `case_task.status` {Open, In Progress, Closed}; `case_party.party_type` {Person, Organization}.
+- **Clean, single-source state-machine layering.** `script_includes/x_casemgmt_CaseTransitionValidator.xml` is the one place transition guards live — `canTransitionToOpen/InProgress/Resolved/Closed`, `validateNoBacktransition`, `getOpenTaskCountForCase`, `isAgentInGroup` — and it carries the verbatim `"All tasks must be closed before resolving this case."` with a `status != Closed` open-task query. Both flows invoke it (11 call sites each), and the 6 `before` Business Rules (all `active`, on `x_casemgmt_case`, ordered 100→500: terminal-closed/opened-date guards first, agent-membership next, pending-clear and closed-date mutations last) provide entity-level enforcement independent of the UI path. This is the correct ServiceNow equivalent of ArkCase's `ChangeCaseFileStateService`.
+- **Flows are correctly structured and deployable-active.** Two type-filtered `sys_hub_flow` records (one per case type) + 5 subflows; **all 7 are `active=true` and `status=published`** (satisfies AAP §0.7.1 "both flows Active, not Draft"); `run_as=user_who_triggers` is the correct choice so the "caller has `case_manager` role" check at the Resolved→Closed transition evaluates against the real actor.
+
+### Issues
+
+- **BACK-INFO-1 (Info).** `dictionary/x_casemgmt_case_duration_to_close.xml` is not one of the 12 fields in the AAP §0.5.7 verbatim table; it is a supporting computed field for the Manager-View "Average Time to Close" widget (sanctioned by AAP §0.4.4 and the Project Guide). Same status as the prior cycle's BUS-OBS-1 — recorded for transparency, non-blocking.
+- JPA correctness (`@Entity`/`@Id`/`@EmbeddedId`/`FetchType.EAGER`/`@Transactional` placement): **not applicable** — no JPA. ServiceNow auto-provides the `sys_id` primary key and `sys_*` audit columns on every table.
+- Spring Batch jobs: **not applicable** — no batch processing in scope.
+- Ingres→PostgreSQL type fidelity (TIMESTAMP/BigDecimal/CHAR→boolean): **not applicable** — no relational schema migration; the analog (use `glide_date_time` for timestamps rather than a string, no boolean-as-char) is satisfied.
+- Module boundaries / cross-module class imports: **not applicable** in the Java sense — a single scoped application. The cross-script-reference analog is correct: flows and rules call `new x_casemgmt.CaseTransitionValidator()` via the scoped namespace, not by literal.
+- Pagination (`Pageable`, no unbounded `findAll()` > 1000): **not applicable** — no service list endpoints; data lists are platform-managed list views/reports with built-in pagination.
+- Gap-register fidelity / HTTP 501 endpoints: **not applicable** — no `gap-register.md`; there are no 501 stubs.
+- Dead-endpoint discovery: **adapted — PASS.** Both scripted-REST endpoints have a complete chain (REST operation → `CasePortalService` method → `GlideRecord` → `x_casemgmt_case`); no orphaned endpoints.
+- Exception-handling completeness: **adapted — PASS.** Scripts guard with existence checks + `gs.error`/`gs.warn` logging and graceful error returns; flows surface blocking conditions via Throw Error.
+- Concurrency bug hunting (non-final fields, static mutable collections, `@Async`, `@Cacheable`): **not applicable** — Script Includes are instantiated per request; no shared mutable state.
+- Observability gap analysis: **adapted — PASS** — failure paths emit `gs.warn`/`gs.error`.
+- Kafka lineage: **not applicable** — no messaging.
+
+**Verdict: APPROVED** — 0 Critical findings; 1 Info note (BACK-INFO-1). Data-model fidelity (§0.5.7), choice fidelity, reference/type correctness, and the layered state-machine implementation (Script Include + Business Rules + Flows/subflows, all published-active) are all sound.
+
+---
