@@ -318,3 +318,50 @@ Every changed folder under `servicenow-case-management-poc/` is assigned to exac
 **Verdict: APPROVED** — 0 findings. Documentation matches the AAP-mandated set verbatim where required; the no-hardcoded-sys_id, scope-exclusivity, email-disabled, and repository-confinement constraints are all satisfied with no exceptions.
 
 ---
+
+## Aggregation & Final Reviewer Verdict
+
+### Domain Verdict Summary
+
+| # | Domain | Verdict | Critical | Warning | Info |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Infrastructure / DevOps | **APPROVED** | 0 | 0 | 1 (INFRA-INFO-1) |
+| 2 | Security | **APPROVED** | 0 | 0 | 1 (SEC-INFO-1) |
+| 3 | Backend Architecture | **APPROVED** | 0 | 0 | 1 (BACK-INFO-1) |
+| 4 | Business / Domain | **APPROVED** | 0 | 0 | 1 (BUS-OBS-1) |
+| 5 | Frontend | **APPROVED** | 0 | 0 | 1 (FE-INFO-1) |
+| 6 | QA / Test Integrity | **APPROVED** | 0 | 0 | 1 (QA-INFO-1) |
+| 7 | Other SME (Docs & Cross-Cutting) | **APPROVED** | 0 | 0 | 0 |
+| | **TOTALS** | **7 / 7 APPROVED** | **0** | **0** | **6** |
+
+### Pre-flight Recap
+
+All six pre-flight gates passed (adapted to the ServiceNow XML+JS stack): deliverables present (full AAP §0.3.1 inventory), build/runtime documented (no local build — cloud PDI), build/test status documented (static analogs green; live-PDI gates documented), test coverage adapted, static analysis clean (no genuine TODO/FIXME), no production stubs (the few `return null;` are defensive guards with `gs.warn`).
+
+### Consolidated Info Findings (all non-blocking — recorded for transparency)
+
+- **INFRA-INFO-1** — Historical filename note retained as an explanatory comment in the Update Set header (the INFRA-1 remediation trace); no functional impact.
+- **SEC-INFO-1** — The two anonymous portal REST endpoints run at elevated privilege by design; mitigated by a double field-whitelist (REST operation + `CasePortalService`) and a server-forced `status='Draft'`.
+- **BACK-INFO-1** — The `duration_to_close` function field is not in the AAP §0.5.7 verbatim table but is sanctioned by §0.4.4 (it powers the Manager View "Average Time to Close" widget).
+- **BUS-OBS-1** — 8 demo parties (5 Person + 3 Organization) span 5 of 10 cases; both polymorphic branches are represented so the UI policy is exercisable; §0.7.4 thresholds do not enumerate parties.
+- **FE-INFO-1** — Donut widgets use ServiceNow report `type=pie` (semantically equivalent: same `group_by` + `COUNT`; donut is a pie display variant).
+- **QA-INFO-1** — XML seed rows pin parent references by case-number literal (presumes the fresh-PDI counter); AAP §0.5.2-sanctioned and the documented target is a fresh PDI; the companion `seed_demo_data.js` avoids the presumption via subject-indirection.
+
+### Final Reviewer Verdict
+
+**APPROVED.**
+
+All seven domain phases resolved to **APPROVED** with **zero Critical** and **zero Warning** findings. The six Info-level notes are transparency observations that do not block any domain. The ServiceNow scoped-application POC (`x_casemgmt`) faithfully re-platforms the in-scope ArkCase case/task/party/role/portal/dashboard slice and satisfies every inspected AAP contract:
+
+- **Data model (§0.5.7):** all 12 case + 6 task + 5 party fields match names/types/lengths/mandatory flags verbatim; reference targets correct; all 7 choice lists verbatim.
+- **State machine (§0.5.5):** all 8 transition rows enforced across the two type-filtered Flow Designer flows + 5 published subflows + 6 ordered before-rules + 6 status/role-gated UI actions; the four verbatim blocking-error strings are present in their enforcing artifacts.
+- **ACLs (§0.5.6):** 26 ACLs realize the role×CRUD matrix exactly (manager full; agent create + assigned-only RW + no delete; viewer read-only), with the "Assigned only" condition scripted and field-level ACLs on `assigned_group`/`assigned_agent`.
+- **Portal (§0.4.4 / §0.7.4):** two unauthenticated pages; submission enforces a 5-field whitelist and renders the verbatim acknowledgement; lookup enforces a strict 3-field whitelist at three layers and renders the verbatim not-found message.
+- **Dashboards/Reports (§0.4.4):** two dashboards bind all eight reports by name, matching the prescribed widget inventory.
+- **Cross-cutting (§0.7.2):** zero hardcoded foreign sys_ids, absolute scope exclusivity, email-disabled honored, and repository confinement intact (no ArkCase-reactor touches).
+
+Static validation is fully green (147/147 XML well-formed; all JS blocks pass `node --check`). The only items outstanding are the **live-PDI runtime validation gates**, which require a provisioned PDI (Access Level 1 limitation, not a defect) and are fully documented for the human deployer in `docs/validation-gates.md` and `scripts/round_trip_verify.md`.
+
+**Because the final verdict is APPROVED, Phase 2 (executive-summary.html) proceeds.**
+
+---
