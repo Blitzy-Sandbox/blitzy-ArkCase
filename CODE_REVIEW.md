@@ -144,3 +144,30 @@ Every changed folder under `servicenow-case-management-poc/` is assigned to exac
 **Per-primary-domain totals:** Infrastructure/DevOps = 6; Backend Architecture = 50; Security = 29; Frontend = 27; QA/Test Integrity = 37; Other SME = 8; Business/Domain = 0 owned (cross-cutting). **Sum = 157.** Read-only out-of-scope context (untouched): the ArkCase Maven reactor (`acm-*`, `arkcase-lib/`, `pom.xml`, `.gitlab-ci*.yml`, `acm-checkstyle-checks.xml`, `jacoco-summary.sh`, `LICENSE.txt`) — verified via `git log` to have **zero** agent commits.
 
 ---
+
+## Phase 1 — Infrastructure/DevOps  *(Verdict: APPROVED)*
+
+**Scope reviewed:** `app/` (sys_app, sys_scope), `update-set/` (consolidated deliverable + dependency ordering), `numbers/` (auto-numbering), with secondary review of `choices/` and the ServiceNow default-vs-custom build posture.
+
+### Positive findings
+
+- **Scoped-application namespace is established cleanly and exclusively.** `app/sys_scope/x_casemgmt.xml` and `app/sys_app/x_casemgmt_case_management.xml` declare `scope=x_casemgmt`, `vendor_prefix=x_casemgmt`, `version=1.0.0`, `active=true`, `enforce_license=false`, `private=false`. Every one of the 147 record-definitions resolves into this scope (`sys_scope=x_casemgmt`); there are **zero global-scope writes** (AAP §0.7.2).
+- **Update Set dependency ordering is correct and deterministic.** The consolidated `update-set/x_casemgmt_case_management_update_set.xml` is a single canonical unload with a `<sys_remote_update_set>` envelope wrapping 149 `<sys_update_xml>` records. Reviewer parsed the record order and confirmed it matches the AAP §0.5.2 contract: **scope → application → tables (`x_casemgmt_case`, `_case_task`, `_case_party`) → dictionary fields → choices → numbers → roles → ACLs → script includes → business rules → UI policy/actions → flows/subflows → portal → REST → reports → dashboards → seed data (last)**. This ordering is the single most important determinant of a zero-error PDI preview.
+- **Auto-numbering matches the AAP §0.7.4 spec exactly.** `numbers/sys_number_x_casemgmt_case.xml` carries `prefix=CASE`, `number_of_digits=7` → `CASE0000001`; sibling records use `TASK`/`PARTY` prefixes with 7-digit padding. All three are scoped (`sys_scope=x_casemgmt`).
+- **Sound ServiceNow low-code default-vs-custom posture.** The build creates custom scoped tables/fields/choices **only** where ArkCase domain semantics require them, and **reuses platform defaults** (`sys_user`, `sys_user_group`, `core_company`) as reference targets rather than re-creating them — exactly the App Engine Studio idiom expected for this migration project.
+- **INFRA-1 (prior cycle) remediation independently verified.** The rogue `_case_mgmt_` infix filename is gone from all live references; 17 references use the canonical `x_casemgmt_case_management_update_set.xml`. The sole remaining textual occurrence (`update-set/...update_set.xml:34`) is an explanatory comment that *documents* the correction ("An earlier draft… has been corrected to align with the AAP-canonical path") — not a stale reference.
+
+### Issues
+
+- **INFRA-INFO-1 (Info).** `update-set/x_casemgmt_case_management_update_set.xml:34` retains a historical note mentioning the previously-incorrect filename `x_case_mgmt_…`. This is transparent provenance documentation and harmless, but a future maintainer skimming for the string could be briefly misled. Non-blocking; no action required.
+- CI/CD pipeline correctness: **not applicable** — the scoped app ships no CI pipeline; the repo-root `.gitlab-ci*.yml` belong to the read-only ArkCase reactor and were not touched (0 agent commits).
+- Flyway migration scripts: **not applicable** — no Flyway; ServiceNow auto-provisions schema from `sys_dictionary` records at Update Set apply time.
+- Maven dependency management / BOM / snapshot pinning: **not applicable** — no Maven build for the POC (AAP §0.6.1: zero dependency manifests by design).
+- Property externalization (hardcoded IPs/ports/credentials): **adapted — PASS.** No IPs, ports, or credentials are embedded in any artifact; the only instance-specific value (PDI URL) is correctly a *deployment-time* placeholder documented in `docs/deployment.md`, never hardcoded.
+- Configuration-drift / multi-profile audit: **not applicable** — there are no `application-{profile}.properties`; ServiceNow configuration *is* the scoped record set, which has a single canonical representation.
+- SQL migration hazard analysis (NOT NULL adds, index drops, column renames): **not applicable** — there is no hand-authored DDL; mandatory-field semantics are declared on dictionary records and applied by the platform's managed column-add path.
+- JVM tuning (`.mvn/jvm.config`): **not applicable** — no JVM build.
+
+**Verdict: APPROVED** — 0 Critical findings; 1 Info note (INFRA-INFO-1). All Java/Maven/Flyway/JVM checks correctly N/A for a ServiceNow scoped app; the applicable analogs (scope exclusivity, Update Set dependency ordering, auto-numbering, default-vs-custom posture) all pass.
+
+---
