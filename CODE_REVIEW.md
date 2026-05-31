@@ -298,3 +298,23 @@ Every changed folder under `servicenow-case-management-poc/` is assigned to exac
 **Verdict: APPROVED** — 0 Critical findings; 1 Info note (QA-INFO-1). Seed-data fidelity, referential consistency, idempotency, gate-exercisability, and synthetic-PII compliance all pass; the live-PDI gates are fully documented for the human deployer and their unavailability here is a sanctioned Access-Level-1 limitation, not a defect.
 
 ---
+
+## Phase 7 — Other SME (Documentation & Cross-Cutting Constraints)  *(Verdict: APPROVED)*
+
+**Files in scope (8) + cross-cutting sweeps over all 147 XML / 37 JS blocks:** `README.md` and `docs/` (data-model, state-machine, acl-matrix, portal-pages, dashboards, validation-gates, deployment). Cross-cutting checks: global no-hardcoded-sys_id, scope-namespace exclusivity, email-disabled compliance, and repository confinement.
+
+### Positive findings
+
+- **Documentation set is complete and faithful to the AAP.** All seven AAP §0.3.1-mandated docs are present alongside a thorough `README.md` (objective, out-of-scope, read-only repo relationship, directory layout, Update-Set path, portal reference). `docs/data-model.md` reproduces the three field tables (12 + 6 + 5, with the supporting `pending_reason` choice and the `duration_to_close` function field explicitly annotated as the §0.4.4-sanctioned additions); `docs/state-machine.md` carries all three verbatim blocking-error strings; `docs/acl-matrix.md` reproduces the §0.5.6 role×CRUD matrix and the "Assigned only" definition character-for-character.
+- **No-hardcoded-sys_id (AAP §0.7.2) is globally honored.** Across the 146 individual record files there are **zero** 32-hex literals in reference text-nodes (excluding each record's own `<sys_id>`/`<sys_update_name>`). In the consolidated Update Set the only hex text-nodes are `sys_id` (184, own PK — deterministically `MD5(name)`), `remote_update_set` (149, the required FK to the parent `sys_remote_update_set`), and `update_guid` (149, each update record's own GUID) — all **required Update Set machinery**, not cross-references. Every functional reference resolves by `name`/`user_name`/`number`/`subject`.
+- **Scope-namespace exclusivity (AAP §0.7.2) is absolute.** All 399 `<sys_scope>`/`<sys_package>` values are `x_casemgmt`. The only writes to base/global tables are the AAP-sanctioned synthetic seed (3 `sys_user`, 1 `sys_user_group` + membership, 3 `sys_user_has_role`) plus the three in-scope scoped roles (`sys_user_role`) explicitly permitted by §0.3.2. No global ACLs, business rules, script includes, UI policies, or OOB-table (incident/task/etc.) modifications.
+- **Email-disabled (AAP §0.3.2 / §0.7.2) is verifiably honored.** Zero notification/SMTP record-definitions (`sysevent_email_action`/`sys_email`/`sys_notification`/template tables = 0). After stripping JS comments from all 37 script blocks (standalone + embedded CDATA), there are **0** executable `gs.eventQueue()`/`gs.email()`/`gs.notify()` calls — all 112 keyword occurrences are compliance-documenting comments (e.g., "Contains zero `gs.eventQueue()` calls per the email-disabled constraint").
+- **Repository confinement (AAP §0.7.2) is intact.** Work is on branch `blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2` with a clean working tree. Every `agent@blitzy.com` change across branch history lands under `servicenow-case-management-poc/` (367), `CODE_REVIEW.md` (27, the review file itself), and `blitzy/` docs (3) — **zero** touches to the read-only ArkCase Maven reactor (`acm-*`, `pom.xml`, `arkcase-lib`, `.gitlab-ci*.yml`, `LICENSE.txt`, etc.).
+
+### Issues
+
+- **None.** No Critical, Warning, or Info findings in this domain. The documentation surface is complete and accurate, and all four cross-cutting constraints (no-hardcoded-sys_id, scope exclusivity, email-disabled, repo confinement) are cleanly satisfied with objective evidence.
+
+**Verdict: APPROVED** — 0 findings. Documentation matches the AAP-mandated set verbatim where required; the no-hardcoded-sys_id, scope-exclusivity, email-disabled, and repository-confinement constraints are all satisfied with no exceptions.
+
+---
