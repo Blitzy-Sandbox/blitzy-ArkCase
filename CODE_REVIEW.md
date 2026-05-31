@@ -227,3 +227,25 @@ Every changed folder under `servicenow-case-management-poc/` is assigned to exac
 **Verdict: APPROVED** — 0 Critical findings; 1 Info note (BACK-INFO-1). Data-model fidelity (§0.5.7), choice fidelity, reference/type correctness, and the layered state-machine implementation (Script Include + Business Rules + Flows/subflows, all published-active) are all sound.
 
 ---
+
+## Phase 4 — Business / Domain  *(Verdict: APPROVED)*
+
+**Scope reviewed:** the AAP itself (`blitzy/documentation/Technical Specifications.md` §0.1–§0.8) cross-checked section-by-section against the implementation, with primary focus on the seed-data semantics and the verbatim contracts. This is the **AAP-mismatch domain**: every AAP decision/requirement/constraint was inspected against the corresponding artifact. **Zero mismatches were found** (no BLOCKED findings).
+
+### Positive findings
+
+- **State-machine transition matrix (AAP §0.5.5) is enforced in full.** All eight rows map to artifacts: Draft→Open requires `assigned_group` (`flows/sub_flows/validate_open_transition.xml`, dominant guard); Open→In Progress requires `assigned_agent` who is a member of `assigned_group` (`validate_inprogress_transition.xml` + `business_rules/...validate_assigned_agent_membership.xml`); In Progress↔Pending sets/clears `pending_reason` (`validate_pending_transition.xml` + `...clear_pending_reason_on_inprogress.xml`); In Progress→Resolved blocks on open child tasks via `getOpenTaskCountForCase` and throws the verbatim `"All tasks must be closed before resolving this case."` (`validate_resolved_transition.xml`); Resolved→Closed requires the `case_manager` role (`hasRole`) and auto-sets `closed_date` (`validate_closed_transition.xml` + `...set_closed_date.xml`); Any→Draft is blocked with verbatim `"Cases cannot be returned to Draft."` (`...block_draft_backtransition.xml`); Closed→* is blocked with verbatim `"Closed cases are terminal and cannot be modified."` (`...block_terminal_closed.xml`).
+- **Demo-data thresholds (AAP §0.7.4) are met exactly.** 10 demo cases span **all six** statuses (Draft 1, Open 2, In Progress 2, Pending 1, Resolved 2, Closed 2) and **both** case types (General Inquiry 6, Complaint 4). Three demo users exist, one per role (`x_casemgmt_demo_manager`/`_agent`/`_viewer`), plus a demo group and three role-to-user assignments.
+- **Verbatim contract fidelity (AAP §0.7.1 / §0.7.4).** All four user-facing strings are present character-for-character in their enforcing artifacts (not just in docs): the resolve-block string in the validator + resolve subflow; the no-Draft string in `block_draft_backtransition`; the terminal-closed string in `block_terminal_closed`; and `"No case found with that number."` in both the lookup REST operation and `CasePortalService`.
+- **Out-of-scope constraints (AAP §0.3.2) are honored.** Email-disabled: **zero** notification/SMTP records exist (`grep` for `sysevent_email_action`/`sys_email`/`sys_notification` `record_update` tables returns nothing); the only email-keyword hits are comments documenting the disablement (e.g., "No `gs.eventQueue()` calls — email notifications are disabled per AAP"). No ECM/FOIA/correspondence/time-tracking/integration artifacts. No data migration — all seed data is synthetic.
+- **ACL matrix (AAP §0.5.6) and data-model (AAP §0.5.7) re-confirmed** consistent with the deeper Security/Backend inspections (no business-level contradiction with the technical implementation).
+
+### Issues
+
+- **BUS-OBS-1 (Info).** The 8 demo parties (5 Person + 3 Organization) are distributed across 5 of the 10 demo cases. AAP §0.3.1 requires parties "to exercise the polymorphic UI policy" — satisfied, because **both** the Person and Organization conditional branches are represented. AAP §0.7.4's binding minimum-threshold list does **not** enumerate parties, and §0.5.1 says parties attach to "selected demo cases." This is therefore a fully compliant design choice, recorded for transparency only; **non-blocking**.
+- AAP-mismatch check (missing endpoints / omitted batch jobs / type-mapping / NNR / config-externalization violations): **no mismatches found.** Each Java/Spring-flavored mismatch category is either satisfied by the ServiceNow analog or not applicable (no batch jobs, no relational type mapping, no externalized properties).
+- API test collections (Postman/Newman): **not applicable** — none specified for this stack; the functional equivalent (the two scripted-REST endpoints) is covered structurally and by the documented manual portal-verification procedure.
+
+**Verdict: APPROVED** — 0 Critical findings; 1 Info note (BUS-OBS-1). The implementation matches every AAP decision/requirement/constraint inspected (§0.5.5 transitions, §0.5.6 ACLs, §0.5.7 data model, §0.7.4 thresholds, §0.7.1 verbatim strings, §0.3.2 exclusions) with no mismatch.
+
+---
