@@ -171,3 +171,28 @@ Every changed folder under `servicenow-case-management-poc/` is assigned to exac
 **Verdict: APPROVED** — 0 Critical findings; 1 Info note (INFRA-INFO-1). All Java/Maven/Flyway/JVM checks correctly N/A for a ServiceNow scoped app; the applicable analogs (scope exclusivity, Update Set dependency ordering, auto-numbering, default-vs-custom posture) all pass.
 
 ---
+
+## Phase 2 — Security  *(Verdict: APPROVED)*
+
+**Scope reviewed:** `acl/` (26 ACLs), `roles/` (3 roles), `portal/rest/` (2 anonymous scripted-REST definitions + 2 operations), `script_includes/x_casemgmt_CasePortalService.xml`, plus a cross-cutting secrets/injection sweep over all `*.xml`/`*.js`.
+
+### Positive findings
+
+- **The role × CRUD authorization matrix (AAP §0.5.6) is implemented exactly and completely.** 26 ACLs decompose to case (10), case_task (8), case_party (8). `case_manager` gets create/read/write/delete; `case_agent` gets create + "Assigned only" read/write and **no delete** (correctly expressed by the *absence* of a `*_delete_agent` ACL); `case_viewer` gets read only (no create/write/delete). No global ACLs — every record is `sys_scope=x_casemgmt`.
+- **The "Assigned only" predicate is correctly and safely enforced.** `acl/x_casemgmt_case_write_agent_assigned.xml` (and the read sibling) set `advanced=true` so the scripted condition actually executes — the record even documents *why* (`advanced=false` would grant write to any `case_agent` regardless of assignment, violating §0.5.6 / §0.7.3 Gate 3). The operative script is `current.assigned_agent == gs.getUserID() || gs.getUser().isMemberOf(current.assigned_group)` — no hardcoded `sys_id`, `admin_overrides=true` for legitimate platform-admin break-glass only.
+- **Layered field-level defense on sensitive columns.** `acl/x_casemgmt_case_assigned_agent_field_acl.xml` (`<name>x_casemgmt_case.assigned_agent</name>`, dotted = field-level, `operation=write`, `roles=manager,agent`) restricts write to `case_manager` always and `case_agent` only when `current.assigned_agent == gs.getUserID()`. Composes with the table-level ACL for defense-in-depth (matches AAP §0.5.6's "table AND field level" mandate).
+- **Anonymous portal endpoints are safe by construction (no internal-data exposure).** The lookup endpoint (`requires_authentication=false`) emits **only** `{status, subject, opened_date}` — enforced redundantly at *two* layers: the REST operation (`sys_ws_operation_..._case_status_lookup_get.xml` builds the body with exactly those 3 keys) **and** `CasePortalService.lookupCase()` (returns exactly those 3 fields). The submit endpoint reads only a 5-field input whitelist `['subject','type','description','requester_name','requester_email']`, uses prototype-safe `hasOwnProperty`, `String()`-coerces every value, and **forces `status='Draft'` server-side after the whitelist loop** (a client cannot inject `status=Closed` or any non-whitelisted field). Submit returns only `{number}`.
+- **No injection, no secrets, no global writes.** GlideRecord lookups use bound `addQuery('number', trimmed)` (the parameterized analog — no string-concatenated encoded queries anywhere). Reviewer sweep found **zero** hardcoded passwords/tokens/API keys and **zero** global-scope ACL/business-rule/script writes.
+
+### Issues
+
+- **SEC-INFO-1 (Info).** The anonymous REST endpoints necessarily execute at platform-default elevated privilege (this is how unauthenticated Service Portal data access works). The risk is fully mitigated by the strict, double-enforced input/output whitelists and the server-side `status='Draft'` lock described above; this matches the documented design (AAP §0.4.3). Recorded for transparency; non-blocking.
+- SQL injection (string-concatenated JPQL/native queries): **not applicable** — no JPA/JDBC; `GlideRecord.addQuery(field, value)` binds values as parameters.
+- Spring Security configuration (CSRF/CORS/session): **not applicable** — no Spring. Session/CSRF are managed by the Now Platform; anonymous access is an explicit, intentional platform capability gated by `requires_authentication=false` plus the field whitelists.
+- Dependency CVEs: **not applicable** — the scoped app declares no third-party dependencies (AAP §0.6.1); all APIs are bundled Glide platform APIs.
+- Actuator endpoints: **not applicable** — no Spring Boot Actuator.
+- `@Valid`/`@Validated` at controller boundaries: **not applicable** (no Java controllers); the functional analog — input whitelisting + type coercion at the scripted-REST boundary — is present and correct.
+
+**Verdict: APPROVED** — 0 Critical findings; 1 Info note (SEC-INFO-1). The substantive ServiceNow security surface (ACL matrix fidelity, "Assigned only" enforcement with `advanced=true`, field-level ACLs, anonymous-endpoint whitelisting, no-secrets, no-injection, scope exclusivity) is sound.
+
+---
