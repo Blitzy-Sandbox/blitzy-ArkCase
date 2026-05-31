@@ -85,3 +85,62 @@ Reviewer inspected every executable body. `scripts/seed_demo_data.js` (1,452 LOC
 **Pre-flight gate verdict (Cycle 1): PASS** (6/6 gates pass; 0 Critical findings). Proceeding to Access Level Assessment.
 
 ---
+
+## Access Level Assessment
+
+**Determined level: Level 1 — Source code only** (with a ServiceNow-specific nuance described below).
+
+| Level | Access provided | This project? |
+|---|---|---|
+| 1 | Source code only | **YES — this is the operative level** |
+| 2 | + compiler | N/A — ServiceNow XML record-definitions are not locally compiled |
+| 3 | + runtime | NO — runtime for this stack is a live ServiceNow PDI, which was not provisioned |
+| 4 | + database | NO — the "database" for this stack is the PDI's tables; no PDI access |
+| 5 | + API schema + 1P/3P API access | NO — PDI admin URL/credentials are AAP §0.7.2 placeholders, never provided |
+
+**Access confirmed available:**
+- Full read access to all 157 source artifacts under `servicenow-case-management-poc/`, the consolidated Update Set XML, the AAP (`blitzy/documentation/Technical Specifications.md`), and the `Project Guide.md`.
+- Host-level **static validators**: `xmllint` (libxml 2.14.5), `node --check` (Node v20.20.2), `python3` 3.13.7, `git` 2.51.0. For a ServiceNow stack these are the closest analog to a "compiler": they verify XML well-formedness and embedded-JavaScript syntax **without** executing anything on a platform.
+
+**Access NOT available (and therefore testing capabilities limited):**
+- **No live ServiceNow PDI.** For this technology stack the PDI *is* simultaneously the compiler, runtime, database, and API surface. Its absence (AAP §0.7.2 credentials are unresolved placeholders; `Project Guide.md` §1.5 records this as a Human-Operator access issue) means the following are **impossible to exercise locally and are NOT defects of the code**:
+  - AAP §0.7.3 Gate 7 — Update Set re-import **Preview** (zero-error) and **Commit** on a fresh PDI.
+  - Live workflow execution (Flow Designer state-machine transitions) across both case types.
+  - Live ACL enforcement (impersonating `case_manager` / `case_agent` / `case_viewer`).
+  - Live Experience Portal page rendering and anonymous submission/lookup round-trips.
+  - Live dashboard/report widget rendering against seeded data.
+
+**Effect on the QA/Test Integrity domain (Phase 6):** Per the Refine PR rule *"do not flag as a defect any testing gap that is a direct consequence of the access level provided,"* the reviewer will **not** treat the absence of live-PDI runtime test results as a defect. The build correctly substitutes (a) exhaustive static validation and (b) a documented manual PDI verification runbook (`scripts/round_trip_verify.md`, `docs/validation-gates.md`). Those are the maximum testing capabilities unlocked at Level 1 for this stack, and they were exercised.
+
+---
+
+## Domain Assignment Manifest
+
+Every changed folder under `servicenow-case-management-poc/` is assigned to exactly one **primary** domain; **secondary** domains are listed where a specialist surface is materially touched. The 157 production files are fully partitioned across primary domains (6 + 29 + 50 + 27 + 37 + 8 = 157). Business/Domain is a **cross-cutting** verification domain (AAP-fidelity) and therefore owns no folder exclusively; its secondary stakes are listed. Repo-root review/context files (`CODE_REVIEW.md`, `blitzy/documentation/*.md`) are review/context artifacts, not graded production code.
+
+| Folder | File Count | Primary Domain | Secondary |
+|---|---:|---|---|
+| `app/` (sys_app, sys_scope) | 2 | Infrastructure/DevOps | Backend Architecture |
+| `update-set/` | 1 | Infrastructure/DevOps | QA/Test Integrity |
+| `numbers/` | 3 | Infrastructure/DevOps | Backend Architecture |
+| `tables/` | 3 | Backend Architecture | Business/Domain |
+| `dictionary/` | 25 | Backend Architecture | Business/Domain |
+| `choices/` | 7 | Backend Architecture | Business/Domain |
+| `script_includes/` | 2 | Backend Architecture | Security |
+| `business_rules/` | 6 | Backend Architecture | Business/Domain |
+| `flows/` (+ `sub_flows/`) | 7 | Backend Architecture | Business/Domain |
+| `roles/` | 3 | Security | — |
+| `acl/` | 26 | Security | Backend Architecture |
+| `portal/` (portal+pages+widgets+rest) | 10 | Frontend | Security |
+| `ui_policy/` | 1 | Frontend | — |
+| `ui_action/` | 6 | Frontend | Backend Architecture |
+| `dashboards/` | 2 | Frontend | Business/Domain |
+| `reports/` | 8 | Frontend | Business/Domain |
+| `seed-data/` (users, groups, role_assignments, cases, tasks, parties) | 35 | QA/Test Integrity | Business/Domain |
+| `scripts/` (seed_demo_data.js, round_trip_verify.md) | 2 | QA/Test Integrity | Infrastructure/DevOps |
+| `docs/` | 7 | Other SME | Business/Domain |
+| `README.md` | 1 | Other SME | — |
+
+**Per-primary-domain totals:** Infrastructure/DevOps = 6; Backend Architecture = 50; Security = 29; Frontend = 27; QA/Test Integrity = 37; Other SME = 8; Business/Domain = 0 owned (cross-cutting). **Sum = 157.** Read-only out-of-scope context (untouched): the ArkCase Maven reactor (`acm-*`, `arkcase-lib/`, `pom.xml`, `.gitlab-ci*.yml`, `acm-checkstyle-checks.xml`, `jacoco-summary.sh`, `LICENSE.txt`) — verified via `git log` to have **zero** agent commits.
+
+---
