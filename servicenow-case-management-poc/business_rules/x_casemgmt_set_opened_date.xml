@@ -197,7 +197,7 @@
     // time so downstream reports and the portal status lookup never see a
     // null opened_date.
     if (current.opened_date.nil()) {
-        current.opened_date = gs.nowDateTime();
+        current.opened_date = new GlideDateTime();
     }
 })(current, previous);
 ]]></script>

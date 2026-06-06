@@ -377,7 +377,7 @@
         // millisecond-precision timestamp within a single transaction)
         // but unnecessary and slightly less clear in audit logs.
         if (current.closed_date.nil()) {
-            current.closed_date = gs.nowDateTime();
+            current.closed_date = new GlideDateTime();
         }
     }
 })(current, previous);

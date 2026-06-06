@@ -87,7 +87,7 @@
 -->
 <unload unload_date="2026-04-30 12:00:00">
     <sys_remote_update_set action="INSERT_OR_UPDATE">
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <application_name>Case Management</application_name>
         <application_scope>x_casemgmt</application_scope>
         <application_version>1.0.0</application_version>
@@ -115,42 +115,7 @@
     </sys_remote_update_set>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
-        <category>customer</category>
-        <comments/>
-        <name>x_casemgmt</name>
-        <payload><![CDATA[<record_update table="sys_scope">
-    <sys_scope action="INSERT_OR_UPDATE">
-        <licensable>false</licensable>
-        <logo />
-        <name>x_casemgmt</name>
-        <private>false</private>
-        <scope>x_casemgmt</scope>
-        <short_description>Application scope for Case Management POC</short_description>
-        <source>x_casemgmt</source>
-        <sys_id>0e77960b9cdc260c199f0d2c23f37603</sys_id>
-        <vendor>ServiceNow Case Management POC</vendor>
-        <vendor_prefix>x_casemgmt</vendor_prefix>
-        <version>1.0.0</version>
-    </sys_scope>
-</record_update>
-]]></payload>
-        <payload_hash/>
-        <record_name>x_casemgmt</record_name>
-        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
-        <replace_on_upgrade>false</replace_on_upgrade>
-        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
-        <table>sys_scope</table>
-        <target_name>x_casemgmt</target_name>
-        <type>Application</type>
-        <update_domain>global</update_domain>
-        <update_guid>5c77e2bb42935bf5b9014fd251ee3e41</update_guid>
-        <update_guid_history/>
-        <view></view>
-    </sys_update_xml>
-    <sys_update_xml action="INSERT_OR_UPDATE">
-        <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Management</name>
@@ -164,6 +129,7 @@
         <name>x_casemgmt Case Management</name>
         <private>false</private>
         <scope>x_casemgmt</scope>
+        <source>x_casemgmt</source>
         <short_description>Proof-of-concept ServiceNow re-platforming of ArkCase case-management capabilities.</short_description>
         <sys_id>82b99028936f74320d74d6f88357a5af</sys_id>
         <trackable>true</trackable>
@@ -188,7 +154,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case</name>
@@ -208,7 +174,7 @@
         <label>Case</label>
         <live_feed_enabled>false</live_feed_enabled>
         <name>x_casemgmt_case</name>
-        <number_ref display_value="CASE" source="x_casemgmt">x_casemgmt_case_number</number_ref>
+        <number_ref display_value="CASE" source="x_casemgmt">4fc55a26e01ab60d8ea5ce13ce35f6f3</number_ref>
         <plural>Cases</plural>
         <provider_class/>
         <read_access>public</read_access>
@@ -222,7 +188,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_db_object_x_casemgmt_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -247,7 +213,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task</name>
@@ -267,7 +233,7 @@
         <label>Case Task</label>
         <live_feed_enabled>false</live_feed_enabled>
         <name>x_casemgmt_case_task</name>
-        <number_ref display_value="TASK" source="x_casemgmt">x_casemgmt_case_task_number</number_ref>
+        <number_ref display_value="TASK" source="x_casemgmt">ee298f5e8c95d67c6fa9a97f5b390782</number_ref>
         <plural>Case Tasks</plural>
         <provider_class/>
         <read_access>public</read_access>
@@ -281,7 +247,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_db_object_x_casemgmt_case_task</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -306,7 +272,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party</name>
@@ -326,7 +292,7 @@
         <label>Case Party</label>
         <live_feed_enabled>false</live_feed_enabled>
         <name>x_casemgmt_case_party</name>
-        <number_ref display_value="PARTY" source="x_casemgmt">x_casemgmt_case_party_number</number_ref>
+        <number_ref display_value="PARTY" source="x_casemgmt">2358f94646aa1afdf84c10b836dce064</number_ref>
         <plural>Case Parties</plural>
         <provider_class/>
         <read_access>public</read_access>
@@ -340,7 +306,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_db_object_x_casemgmt_case_party</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -365,7 +331,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.number</name>
@@ -423,7 +389,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_number</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -456,7 +422,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.type</name>
@@ -514,7 +480,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_type</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -547,7 +513,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.status</name>
@@ -605,7 +571,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -638,7 +604,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.priority</name>
@@ -696,7 +662,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_priority</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -729,7 +695,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.subject</name>
@@ -787,7 +753,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_subject</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -820,7 +786,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.description</name>
@@ -878,7 +844,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_description</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -911,7 +877,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.opened_date</name>
@@ -969,7 +935,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_opened_date</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1002,7 +968,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.closed_date</name>
@@ -1060,7 +1026,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_closed_date</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1093,7 +1059,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.assigned_group</name>
@@ -1151,7 +1117,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_assigned_group</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1184,7 +1150,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.assigned_agent</name>
@@ -1242,7 +1208,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_assigned_agent</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1275,7 +1241,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.requester_name</name>
@@ -1333,7 +1299,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_requester_name</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1366,7 +1332,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.requester_email</name>
@@ -1424,7 +1390,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_requester_email</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1457,7 +1423,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.pending_reason</name>
@@ -1515,7 +1481,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_pending_reason</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1548,7 +1514,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.duration_to_close</name>
@@ -1606,7 +1572,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_duration_to_close</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1639,7 +1605,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.case</name>
@@ -1697,7 +1663,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_task_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1730,7 +1696,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.subject</name>
@@ -1788,7 +1754,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_task_subject</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1821,7 +1787,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.type</name>
@@ -1879,7 +1845,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_task_type</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -1912,7 +1878,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.status</name>
@@ -1970,7 +1936,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_task_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2003,7 +1969,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.assigned_to</name>
@@ -2061,7 +2027,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_task_assigned_to</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2094,7 +2060,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.due_date</name>
@@ -2152,7 +2118,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_task_due_date</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2185,7 +2151,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party.case</name>
@@ -2243,7 +2209,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2276,7 +2242,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party.party_type</name>
@@ -2334,7 +2300,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_party_type</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2367,7 +2333,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party.person</name>
@@ -2425,7 +2391,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_person</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2458,7 +2424,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party.organization</name>
@@ -2516,7 +2482,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_organization</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2549,7 +2515,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party.role_label</name>
@@ -2607,7 +2573,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_role_label</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -2640,7 +2606,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.type</name>
@@ -2662,7 +2628,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>General Inquiry</value>
@@ -2684,7 +2650,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Complaint</value>
@@ -2706,7 +2672,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.status</name>
@@ -2728,7 +2694,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Draft</value>
@@ -2750,7 +2716,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Open</value>
@@ -2772,7 +2738,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>In Progress</value>
@@ -2794,7 +2760,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Pending</value>
@@ -2816,7 +2782,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Resolved</value>
@@ -2838,7 +2804,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Closed</value>
@@ -2860,7 +2826,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.priority</name>
@@ -2882,7 +2848,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Low</value>
@@ -2904,7 +2870,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Medium</value>
@@ -2926,7 +2892,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>High</value>
@@ -2948,7 +2914,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Critical</value>
@@ -2970,7 +2936,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case.pending_reason</name>
@@ -2992,7 +2958,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Awaiting Info</value>
@@ -3014,7 +2980,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Awaiting Third Party</value>
@@ -3036,7 +3002,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Other</value>
@@ -3058,7 +3024,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.type</name>
@@ -3080,7 +3046,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Investigation</value>
@@ -3102,7 +3068,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Review</value>
@@ -3124,7 +3090,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Follow-up</value>
@@ -3146,7 +3112,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Other</value>
@@ -3168,7 +3134,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task.status</name>
@@ -3190,7 +3156,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Open</value>
@@ -3212,7 +3178,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>In Progress</value>
@@ -3234,7 +3200,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Closed</value>
@@ -3256,7 +3222,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party.party_type</name>
@@ -3278,7 +3244,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Person</value>
@@ -3300,7 +3266,7 @@
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <value>Organization</value>
@@ -3322,7 +3288,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>sys_number_x_casemgmt_case</name>
@@ -3340,7 +3306,7 @@
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_number_x_casemgmt_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3363,7 +3329,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>sys_number_x_casemgmt_case_task</name>
@@ -3381,7 +3347,7 @@
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_number_x_casemgmt_case_task</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3404,7 +3370,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>sys_number_x_casemgmt_case_party</name>
@@ -3422,7 +3388,7 @@
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_number_x_casemgmt_case_party</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3445,7 +3411,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_manager</name>
@@ -3467,7 +3433,7 @@
         <sys_name>x_casemgmt_case_manager</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_role_x_casemgmt_case_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3489,7 +3455,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_agent</name>
@@ -3511,7 +3477,7 @@
         <sys_name>x_casemgmt_case_agent</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_role_x_casemgmt_case_agent</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3533,7 +3499,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_viewer</name>
@@ -3555,7 +3521,7 @@
         <sys_name>x_casemgmt_case_viewer</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_role_x_casemgmt_case_viewer</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3577,7 +3543,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_create_manager</name>
@@ -3600,7 +3566,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_create_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3623,7 +3589,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_read_manager</name>
@@ -3646,7 +3612,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_read_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3669,7 +3635,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_write_manager</name>
@@ -3692,7 +3658,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_write_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3715,7 +3681,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_delete_manager</name>
@@ -3738,7 +3704,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_delete_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3761,7 +3727,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_create_agent</name>
@@ -3784,7 +3750,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_create_agent</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3807,7 +3773,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_read_agent_assigned</name>
@@ -3842,7 +3808,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_read_agent_assigned</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3865,7 +3831,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_write_agent_assigned</name>
@@ -3900,7 +3866,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_write_agent_assigned</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3923,7 +3889,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_read_viewer</name>
@@ -3946,7 +3912,7 @@
         <sys_name>x_casemgmt_case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_read_viewer</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -3969,7 +3935,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_assigned_group_field_acl</name>
@@ -3992,7 +3958,7 @@
         <sys_name>x_casemgmt_case.assigned_group</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_assigned_group_field_acl</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4015,7 +3981,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_assigned_agent_field_acl</name>
@@ -4080,7 +4046,7 @@
         <sys_name>x_casemgmt_case.assigned_agent</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_assigned_agent_field_acl</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4103,7 +4069,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_create_manager</name>
@@ -4126,7 +4092,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_create_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4149,7 +4115,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_read_manager</name>
@@ -4172,7 +4138,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_read_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4195,7 +4161,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_write_manager</name>
@@ -4218,7 +4184,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_write_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4241,7 +4207,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_delete_manager</name>
@@ -4264,7 +4230,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_delete_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4287,7 +4253,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_create_agent</name>
@@ -4310,7 +4276,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_create_agent</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4333,7 +4299,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_read_agent_assigned</name>
@@ -4365,7 +4331,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_read_agent_assigned</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4388,7 +4354,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_write_agent_assigned</name>
@@ -4420,7 +4386,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_write_agent_assigned</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4443,7 +4409,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_task_read_viewer</name>
@@ -4466,7 +4432,7 @@
         <sys_name>x_casemgmt_case_task</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_task_read_viewer</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4489,7 +4455,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_create_manager</name>
@@ -4512,7 +4478,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_create_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4535,7 +4501,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_read_manager</name>
@@ -4558,7 +4524,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_read_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4581,7 +4547,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_write_manager</name>
@@ -4604,7 +4570,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_write_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4627,7 +4593,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_delete_manager</name>
@@ -4650,7 +4616,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_delete_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4673,7 +4639,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_create_agent</name>
@@ -4696,7 +4662,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_create_agent</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4719,7 +4685,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_read_agent_assigned</name>
@@ -4751,7 +4717,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_read_agent_assigned</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4774,7 +4740,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_write_agent_assigned</name>
@@ -4806,7 +4772,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_write_agent_assigned</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4829,7 +4795,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_party_read_viewer</name>
@@ -4852,7 +4818,7 @@
         <sys_name>x_casemgmt_case_party</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_security_acl_x_casemgmt_case_party_read_viewer</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -4875,7 +4841,7 @@
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>CaseTransitionValidator</name>
@@ -5344,7 +5310,7 @@ CaseTransitionValidator.prototype = {
         <sys_name>CaseTransitionValidator</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_include_x_casemgmt_CaseTransitionValidator</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -5366,7 +5332,7 @@ CaseTransitionValidator.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>CasePortalService</name>
@@ -5644,7 +5610,7 @@ CasePortalService.prototype = {
         <sys_name>CasePortalService</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_include_x_casemgmt_CasePortalService</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -5666,7 +5632,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Validate Open Transition</name>
@@ -5677,7 +5643,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Subflow that validates the Draft -&gt; Open transition on x_casemgmt_case. Per AAP Section 0.5.5, requires assigned_group to be populated. Calls x_casemgmt.CaseTransitionValidator.canTransitionToOpen(case_record), which reads case_record.getValue('assigned_group') and returns { ok: true } when populated or { ok: false, error: 'Required field assigned_group is empty.' } when null/empty/whitespace. On failure, throws the validator's error message via Flow Designer's Throw Error action which surfaces the message on the form via gs.addErrorMessage + setAbortAction (per AAP Section 0.7.1 "Surface all blocking errors on the form"). ServiceNow-native equivalent of ArkCase CaseFileQueueHandler (acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/armedia/acm/plugins/casefile/pipeline/presave/CaseFileQueueHandler.java) which set the queue and forced status=ACTIVE; the ServiceNow target separates concerns so the queue (assigned_group) is set by the caller and the status transition is GATED on its presence rather than auto-coupled. Defense-in-depth complement to ../../business_rules/x_casemgmt_block_draft_backtransition.xml (which handles the prohibited reverse direction Any -&gt; Draft). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Open'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. No role check. No side effect on success - unlike validate_pending_transition (sets pending_reason) or validate_closed_transition (sets closed_date), the Open transition has no field to auto-set. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
@@ -5853,7 +5819,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_validate_open_transition</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -5877,7 +5843,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Validate In Progress Transition</name>
@@ -5888,7 +5854,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Subflow that validates the (Open|Pending) -&gt; In Progress transitions on x_casemgmt_case. Per AAP Section 0.5.5, both Open -&gt; In Progress AND Pending -&gt; In Progress reuse this single subflow because their precondition is identical: assigned_agent populated AND member of assigned_group. Calls x_casemgmt.CaseTransitionValidator.canTransitionToInProgress(case_record), which delegates to isAgentInGroup(userSysId, groupSysId) for the membership check via GlideRecord('sys_user_grmember'). On failure, throws the uniform validator error message "Assigned agent must be set and must be a member of the assigned group." (which the validator returns for all three failure modes: empty assigned_agent, empty assigned_group, agent not in group). Throw Error in Flow Designer surfaces the message on the form via gs.addErrorMessage + setAbortAction. Defense-in-depth complement to ../../business_rules/x_casemgmt_validate_assigned_agent_membership.xml (which fires on every save; this subflow fires only on transitions to In Progress). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'In Progress'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. No role check. No side effect on success - unlike validate_pending_transition (sets pending_reason) or validate_closed_transition (sets closed_date), the In Progress transition has no field to auto-set; the companion BR x_casemgmt_clear_pending_reason_on_inprogress.xml clears pending_reason on the Pending -&gt; In Progress edge. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
@@ -6066,7 +6032,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_validate_inprogress_transition</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -6090,7 +6056,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Validate Pending Transition</name>
@@ -6101,7 +6067,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Subflow that validates the In Progress -&gt; Pending transition on x_casemgmt_case. Per AAP Section 0.5.5, this transition has NO required condition; its only side effect is to stamp pending_reason on the case (Awaiting Info / Awaiting Third Party / Other). Defaults pending_reason to 'Other' when caller does not supply a value. Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Pending'. Replaces no specific code in ArkCase ChangeCaseFileStateService.changeCaseState() because ArkCase had no Pending sub-state with a typed reason; this subflow is target-side new behavior. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals. Inputs: case_record (Reference to x_casemgmt_case, mandatory) and pending_reason (Choice with values Awaiting Info / Awaiting Third Party / Other, optional, default 'Other'). No outputs, no Throw Error step, no Script Include call, no role check.</description>
@@ -6263,7 +6229,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_validate_pending_transition</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -6287,7 +6253,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Validate Resolved Transition</name>
@@ -6298,7 +6264,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Subflow that validates the In Progress -&gt; Resolved transition on x_casemgmt_case. Per AAP Section 0.5.5, requires all linked x_casemgmt_case_task records to have status=Closed; calls x_casemgmt.CaseTransitionValidator.canTransitionToResolved(case_record), which delegates to getOpenTaskCountForCase via GlideAggregate. On failure, throws the VERBATIM AAP Section 0.7.4 error message "All tasks must be closed before resolving this case." which surfaces on the form via Flow Designer Throw Error (gs.addErrorMessage + setAbortAction). ServiceNow-native replacement for ArkCase CaseFileTasksService (which used Solr search; the target uses GlideAggregate for SQL COUNT(*) - Solr is out of POC scope per AAP Section 0.3.2). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Resolved'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. No role check. No side effect on success - unlike validate_pending_transition (sets pending_reason) or validate_closed_transition (sets closed_date), the Resolved transition has no field to auto-set. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
@@ -6474,7 +6440,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_validate_resolved_transition</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -6498,7 +6464,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Validate Closed Transition</name>
@@ -6509,7 +6475,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Subflow that validates the Resolved -&gt; Closed transition on x_casemgmt_case. Per AAP Section 0.5.5, requires the caller to have the x_casemgmt_case_manager role; calls x_casemgmt.CaseTransitionValidator.canTransitionToClosed(case_record, gs.getUserID()) which delegates to gs.getUser().hasRole('x_casemgmt_case_manager'). On failure, throws the validator's error message "Only case managers can close cases." which surfaces on the form via Flow Designer Throw Error (gs.addErrorMessage + setAbortAction). On success, sets closed_date = gs.nowDateTime() on the case via an Update Record step (the AAP Section 0.5.5 mandated side effect of the Resolved -&gt; Closed transition; defense-in-depth with ../../business_rules/x_casemgmt_set_closed_date.xml). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Closed'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. ServiceNow-native replacement for ArkCase ChangeCaseFileStateService.changeCaseState's "if (CLOSED.equals(newState)) retval.setClosed(now)" branch (lines 97-100), strengthened with an explicit case_manager role gate that ArkCase did not have. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
@@ -6729,7 +6695,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_validate_closed_transition</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -6753,7 +6719,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>General Inquiry State Machine</name>
@@ -6764,7 +6730,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Parent Flow Designer flow that orchestrates every status transition for cases of type General Inquiry on x_casemgmt_case. OnUpdate trigger filtered on type=General Inquiry AND status change. Dispatches to validate_open_transition, validate_inprogress_transition, validate_pending_transition, validate_resolved_transition, or validate_closed_transition subflow under ./sub_flows/ based on the new status value via a 5-branch If/Else-If ladder. Replaces the ArkCase ChangeCaseFileStateService + ChangeCaseStatusWorkflowListener + CaseFileQueueHandler stack (the BPMN/Activiti engine is eliminated entirely per AAP Section 0.1.2). Runs as user_who_triggers so that the role-based gate in validate_closed_transition (gs.getUser().hasRole('x_casemgmt_case_manager')) evaluates against the saving user rather than the system user - non-negotiable per AAP Section 0.7.4. All transition rules and verbatim error messages are sourced from AAP Sections 0.5.5 and 0.7.4 and surfaced from the dispatched subflows or supporting business rules (../business_rules/x_casemgmt_block_draft_backtransition.xml and ../business_rules/x_casemgmt_block_terminal_closed.xml). NO hardcoded sys_ids in any reference field - the trigger's table reference, every subflow call, and every scope reference resolve by name (table=x_casemgmt_case, subflow_name=x_casemgmt_validate_*_transition, scope=x_casemgmt). Active=true and status=published per AAP Section 0.7.3 Gate 7 so Update Set commit immediately enables the state machine. Functionally identical to ./complaint_state_machine.xml except the trigger filter is type=General Inquiry rather than type=Complaint - the duplication is intentional per AAP Section 0.4.3 to keep per-type trigger filtering explicit and to allow future per-type customization. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
@@ -7100,7 +7066,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_general_inquiry_state_machine</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -7124,7 +7090,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Complaint State Machine</name>
@@ -7135,7 +7101,7 @@ CasePortalService.prototype = {
         <active>true</active>
         <annotation/>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
         <description>Parent Flow Designer flow that orchestrates every status transition for cases of type Complaint on x_casemgmt_case. OnUpdate trigger filtered on type=Complaint AND status change. Dispatches to validate_open_transition, validate_inprogress_transition, validate_pending_transition, validate_resolved_transition, or validate_closed_transition subflow under ./sub_flows/ based on the new status value via a 5-branch If/Else-If ladder. Replaces the ArkCase ChangeCaseFileStateService + ChangeCaseStatusWorkflowListener + CaseFileQueueHandler stack (the BPMN/Activiti engine is eliminated entirely per AAP Section 0.1.2). Runs as user_who_triggers so that the role-based gate in validate_closed_transition (gs.getUser().hasRole('x_casemgmt_case_manager')) evaluates against the saving user rather than the system user - non-negotiable per AAP Section 0.7.4. All transition rules and verbatim error messages are sourced from AAP Sections 0.5.5 and 0.7.4 and surfaced from the dispatched subflows or supporting business rules (../business_rules/x_casemgmt_block_draft_backtransition.xml and ../business_rules/x_casemgmt_block_terminal_closed.xml). NO hardcoded sys_ids in any reference field - the trigger's table reference, every subflow call, and every scope reference resolve by name (table=x_casemgmt_case, subflow_name=x_casemgmt_validate_*_transition, scope=x_casemgmt). Active=true and status=published per AAP Section 0.7.3 Gate 7 so Update Set commit immediately enables the state machine. Functionally identical to ./general_inquiry_state_machine.xml except the trigger filter is type=Complaint rather than type=General Inquiry - the duplication is intentional per AAP Section 0.4.3 to keep per-type trigger filtering explicit and to allow future per-type customization. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
@@ -7471,7 +7437,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_hub_flow_x_casemgmt_complaint_state_machine</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -7495,7 +7461,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_block_draft_backtransition</name>
@@ -7652,7 +7618,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_block_draft_backtransition</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -7676,7 +7642,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_block_terminal_closed</name>
@@ -7814,7 +7780,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_block_terminal_closed</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -7838,7 +7804,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_set_opened_date</name>
@@ -7894,7 +7860,7 @@ CasePortalService.prototype = {
     // time so downstream reports and the portal status lookup never see a
     // null opened_date.
     if (current.opened_date.nil()) {
-        current.opened_date = gs.nowDateTime();
+        current.opened_date = new GlideDateTime();
     }
 })(current, previous);
 ]]]]><![CDATA[></script>
@@ -7909,7 +7875,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_set_opened_date</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -7933,7 +7899,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_set_closed_date</name>
@@ -8015,7 +7981,7 @@ CasePortalService.prototype = {
         // millisecond-precision timestamp within a single transaction)
         // but unnecessary and slightly less clear in audit logs.
         if (current.closed_date.nil()) {
-            current.closed_date = gs.nowDateTime();
+            current.closed_date = new GlideDateTime();
         }
     }
 })(current, previous);
@@ -8031,7 +7997,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_set_closed_date</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -8055,7 +8021,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_validate_assigned_agent_membership</name>
@@ -8259,7 +8225,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_validate_assigned_agent_membership</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -8283,7 +8249,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_clear_pending_reason_on_inprogress</name>
@@ -8383,7 +8349,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_clear_pending_reason_on_inprogress</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -8407,7 +8373,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Party Conditional Fields</name>
@@ -8468,7 +8434,7 @@ CasePortalService.prototype = {
     <sys_mod_count>0</sys_mod_count>
     <sys_overrides/>
     <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
     <sys_updated_by>admin</sys_updated_by>
     <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     <table>x_casemgmt_case_party</table>
@@ -8492,7 +8458,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Open</name>
@@ -8646,7 +8612,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ui_action_x_casemgmt_case_open</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -8671,7 +8637,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Start Progress</name>
@@ -8877,7 +8843,7 @@ CasePortalService.prototype = {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ui_action_x_casemgmt_case_start_progress</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -8902,7 +8868,7 @@ CasePortalService.prototype = {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Set Pending</name>
@@ -9171,7 +9137,7 @@ function serverSetPending() {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ui_action_x_casemgmt_case_set_pending</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -9196,7 +9162,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Resume</name>
@@ -9356,7 +9322,7 @@ function serverSetPending() {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ui_action_x_casemgmt_case_resume</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -9381,7 +9347,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Resolve</name>
@@ -9594,7 +9560,7 @@ function serverSetPending() {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ui_action_x_casemgmt_case_resolve</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -9619,7 +9585,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Close</name>
@@ -9838,7 +9804,7 @@ function serverSetPending() {
         <sys_overrides/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ui_action_x_casemgmt_case_close</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -9863,7 +9829,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Management Portal</name>
@@ -9878,14 +9844,14 @@ function serverSetPending() {
         <description>Unauthenticated Experience Portal for the Case Management scoped application. Provides two pages: case_submit (anonymous case submission) and case_status (anonymous case status lookup). Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern (PortalRequestService.submitRequest and PortalRequestService.getRequestStatus). Per AAP Section 0.4.4 (UI Design - default theme), Section 0.7.2 (deployment step 3 - portal URL), and the seven validation gates (Gate 4 portal-submission, Gate 5 portal-lookup). Public access is enabled via the public flag plus a login_page redirect target that points to the submission page itself, so anonymous callers never see a login prompt. The portal uses the platform default Service Portal theme (no custom CSS, no custom branding) per AAP Section 0.4.4. Knowledge-base and service-catalog integrations are out of scope per AAP Section 0.3.2 and are intentionally empty.</description>
         <enable_legacy_recents>false</enable_legacy_recents>
         <hide_portal_name>false</hide_portal_name>
-        <homepage display_value="Case Submission">x_casemgmt_case_submit</homepage>
+        <homepage>6a1f3c2ffd653613304512a734aab83b</homepage>
         <homepage_dv display_value="Case Submission">x_casemgmt_case_submit</homepage_dv>
         <icon/>
         <icon_dv/>
         <kb_categories_visible>false</kb_categories_visible>
         <knowledge_base/>
         <knowledge_base_dv/>
-        <login_page display_value="Case Submission">x_casemgmt_case_submit</login_page>
+        <login_page/>
         <login_page_dv display_value="Case Submission">x_casemgmt_case_submit</login_page_dv>
         <logo/>
         <logo_dv/>
@@ -9901,7 +9867,7 @@ function serverSetPending() {
         <sys_name>x_casemgmt_case_portal</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_portal_x_casemgmt_case_portal</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -9928,7 +9894,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Submit a Case</name>
@@ -9983,7 +9949,7 @@ function serverSetPending() {
         <sys_name>Submit a Case</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_page_x_casemgmt_case_submit</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -10006,7 +9972,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Status Lookup</name>
@@ -10061,7 +10027,7 @@ function serverSetPending() {
         <sys_name>Case Status Lookup</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_page_x_casemgmt_case_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -10084,7 +10050,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Submission Widget</name>
@@ -10368,7 +10334,7 @@ function serverSetPending() {
         <sys_name>Case Submission Widget</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_widget_x_casemgmt_case_submission_widget</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -10505,7 +10471,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Lookup Widget</name>
@@ -10721,7 +10687,7 @@ function serverSetPending() {
         <sys_name>Case Lookup Widget</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_widget_x_casemgmt_case_lookup_widget</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -10807,7 +10773,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Confirmation Widget</name>
@@ -10894,7 +10860,7 @@ function serverSetPending() {
         <sys_name>Case Confirmation Widget</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_widget_x_casemgmt_case_confirmation_widget</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -10928,7 +10894,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Submit</name>
@@ -10955,7 +10921,7 @@ function serverSetPending() {
         <sys_name>Case Submit</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ws_definition_x_casemgmt_case_submit</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -10977,7 +10943,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Status Lookup</name>
@@ -11004,7 +10970,7 @@ function serverSetPending() {
         <sys_name>Case Status Lookup</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ws_definition_x_casemgmt_case_status_lookup</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11026,7 +10992,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Submit POST</name>
@@ -11070,11 +11036,11 @@ function serverSetPending() {
         <sys_name>Case Submit POST</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
-        <web_service_definition display_value="x_casemgmt_case_submit">x_casemgmt_case_submit</web_service_definition>
+        <web_service_definition display_value="x_casemgmt_case_submit">ef9090a5b03f1a36c248ce65065a1b74</web_service_definition>
         <web_service_version/>
     </sys_ws_operation>
 </record_update>
@@ -11094,7 +11060,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Case Status Lookup GET</name>
@@ -11144,11 +11110,11 @@ function serverSetPending() {
         <sys_name>Case Status Lookup GET</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ws_operation_x_casemgmt_case_status_lookup_get</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
-        <web_service_definition display_value="x_casemgmt_case_status_lookup">x_casemgmt_case_status_lookup</web_service_definition>
+        <web_service_definition display_value="x_casemgmt_case_status_lookup">b04176032af365e6b8770ba3e6089b58</web_service_definition>
         <web_service_version/>
     </sys_ws_operation>
 </record_update>
@@ -11168,7 +11134,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_my_open_cases</name>
@@ -11194,7 +11160,7 @@ function serverSetPending() {
         <sys_name>My Open Cases</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_my_open_cases</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11220,7 +11186,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_my_overdue_tasks</name>
@@ -11246,7 +11212,7 @@ function serverSetPending() {
         <sys_name>My Overdue Tasks</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_my_overdue_tasks</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11272,7 +11238,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_case_count_by_status</name>
@@ -11298,7 +11264,7 @@ function serverSetPending() {
         <sys_name>Case Count by Status</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_case_count_by_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11324,7 +11290,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_all_cases_by_status</name>
@@ -11350,7 +11316,7 @@ function serverSetPending() {
         <sys_name>All Cases by Status</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_all_cases_by_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11376,7 +11342,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_all_cases_by_type</name>
@@ -11402,7 +11368,7 @@ function serverSetPending() {
         <sys_name>All Cases by Type</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_all_cases_by_type</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11428,7 +11394,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_all_cases_by_priority</name>
@@ -11454,7 +11420,7 @@ function serverSetPending() {
         <sys_name>All Cases by Priority</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_all_cases_by_priority</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11480,7 +11446,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_avg_time_to_close</name>
@@ -11506,7 +11472,7 @@ function serverSetPending() {
         <sys_name>Average Time to Close</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_avg_time_to_close</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11532,7 +11498,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_cases_opened_30d</name>
@@ -11558,7 +11524,7 @@ function serverSetPending() {
         <sys_name>Cases Opened in Last 30 Days</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_cases_opened_30d</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11584,7 +11550,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Agent Workspace</name>
@@ -11616,7 +11582,7 @@ function serverSetPending() {
         <sys_name>x_casemgmt_agent_workspace_canvas</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_grid_canvas_pane_x_casemgmt_agent_workspace_canvas</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11673,7 +11639,7 @@ function serverSetPending() {
         <sys_name>Agent Workspace</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboards_x_casemgmt_agent_workspace</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11712,7 +11678,7 @@ function serverSetPending() {
         <sys_name>Overview</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_tab_x_casemgmt_agent_workspace_tab_main</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11748,7 +11714,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_m2m_dashboard_tabs_x_casemgmt_agent_workspace_tab_main</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11810,7 +11776,7 @@ function serverSetPending() {
         <sys_name>My Open Cases</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_agent_workspace_widget_my_open_cases</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11874,7 +11840,7 @@ function serverSetPending() {
         <sys_name>My Overdue Tasks</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_agent_workspace_widget_my_overdue_tasks</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -11945,7 +11911,7 @@ function serverSetPending() {
         <sys_name>Case Count by Status</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_agent_workspace_widget_case_count_by_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12009,7 +11975,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_role_x_casemgmt_agent_workspace_case_agent</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12060,7 +12026,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_role_x_casemgmt_agent_workspace_case_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12082,7 +12048,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Manager View</name>
@@ -12114,7 +12080,7 @@ function serverSetPending() {
         <sys_name>x_casemgmt_manager_view_canvas</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_grid_canvas_pane_x_casemgmt_manager_view_canvas</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12169,7 +12135,7 @@ function serverSetPending() {
         <sys_name>Manager View</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboards_x_casemgmt_manager_view</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12208,7 +12174,7 @@ function serverSetPending() {
         <sys_name>Operational KPIs</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_tab_x_casemgmt_manager_view_tab_main</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12244,7 +12210,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_m2m_dashboard_tabs_x_casemgmt_manager_view_tab_main</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12297,7 +12263,7 @@ function serverSetPending() {
         <sys_name>All Cases by Status</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_manager_view_widget_all_cases_by_status</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12359,7 +12325,7 @@ function serverSetPending() {
         <sys_name>All Cases by Type</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_manager_view_widget_all_cases_by_type</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12415,7 +12381,7 @@ function serverSetPending() {
         <sys_name>All Cases by Priority</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_manager_view_widget_all_cases_by_priority</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12488,7 +12454,7 @@ function serverSetPending() {
         <sys_name>Average Time to Close</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_manager_view_widget_avg_time_to_close</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12553,7 +12519,7 @@ function serverSetPending() {
         <sys_name>Cases Opened in Last 30 Days</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_widgets_x_casemgmt_manager_view_widget_cases_opened_30d</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12611,7 +12577,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>pa_dashboard_role_x_casemgmt_manager_view_case_manager</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
@@ -12633,7 +12599,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_demo_manager</name>
@@ -12647,7 +12613,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>ca171e30808ed474ab30ffb2d478a379</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_x_casemgmt_demo_manager</sys_update_name>
         <user_name>x_casemgmt_demo_manager</user_name>
         <user_password/>
@@ -12669,7 +12635,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_demo_agent</name>
@@ -12683,7 +12649,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>0ca8070bf940abded1aaa84ab389087f</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_x_casemgmt_demo_agent</sys_update_name>
         <user_name>x_casemgmt_demo_agent</user_name>
         <user_password/>
@@ -12705,7 +12671,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_demo_viewer</name>
@@ -12719,7 +12685,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>912ca3946a0f74c22d5b7c2e7e143771</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_x_casemgmt_demo_viewer</sys_update_name>
         <user_name>x_casemgmt_demo_viewer</user_name>
         <user_password/>
@@ -12741,7 +12707,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_demo_team</name>
@@ -12754,7 +12720,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>f5457651a57f6fadb32d3a09f963855b</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_group_x_casemgmt_demo_team</sys_update_name>
     </sys_user_group>
 </record_update>
@@ -12774,7 +12740,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>x_casemgmt_demo_agent in x_casemgmt_demo_team</name>
@@ -12787,7 +12753,7 @@ function serverSetPending() {
         <sys_id>c4958a798a06a18e578e1151183fb84c</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_grmember_x_casemgmt_demo_agent_in_demo_team</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
@@ -12810,7 +12776,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>sys_user_has_role_x_casemgmt_demo_manager</name>
@@ -12823,7 +12789,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>c6ed64934879ee3ea435a2276bb5bf79</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_has_role_x_casemgmt_demo_manager</sys_update_name>
         <user display_value="x_casemgmt_demo_manager">x_casemgmt_demo_manager</user>
     </sys_user_has_role>
@@ -12844,7 +12810,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>sys_user_has_role_x_casemgmt_demo_agent</name>
@@ -12857,7 +12823,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>0988a3e374b3a9fee4fd767265fba757</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_has_role_x_casemgmt_demo_agent</sys_update_name>
         <user display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</user>
     </sys_user_has_role>
@@ -12878,7 +12844,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>sys_user_has_role_x_casemgmt_demo_viewer</name>
@@ -12891,7 +12857,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>b095d91833fde26d96f511e6a60afd58</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_has_role_x_casemgmt_demo_viewer</sys_update_name>
         <user display_value="x_casemgmt_demo_viewer">x_casemgmt_demo_viewer</user>
     </sys_user_has_role>
@@ -12912,7 +12878,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Synthetic Org Alpha</name>
@@ -12934,7 +12900,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_name>Synthetic Org Alpha</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>core_company_x_casemgmt_synthetic_org_alpha</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
@@ -12957,7 +12923,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Synthetic Org Beta</name>
@@ -12979,7 +12945,7 @@ function serverSetPending() {
         <sys_mod_count>0</sys_mod_count>
         <sys_name>Synthetic Org Beta</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>core_company_x_casemgmt_synthetic_org_beta</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
@@ -13002,7 +12968,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 01</name>
@@ -13018,7 +12984,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>f4b0e89753f41d01ee1bd8dd3c5b41fc</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_01</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
@@ -13039,7 +13005,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 02</name>
@@ -13056,7 +13022,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>0e4cacc1c8db7157b8fb73f97786ebb5</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_02</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
@@ -13077,7 +13043,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 03</name>
@@ -13095,7 +13061,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>1cd94486d131cf0eb0d608a76dba815e</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_03</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
@@ -13116,7 +13082,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 04</name>
@@ -13135,7 +13101,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>b75276ffbd2d4b5536d3ab87d5fdeebd</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_04</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
@@ -13156,7 +13122,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 05</name>
@@ -13174,7 +13140,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>4444a0dd04a2c2b5d4a1473a416fb1af</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_05</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
@@ -13195,7 +13161,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 06</name>
@@ -13215,7 +13181,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>f953fffc4b1db9ce23ce47d96f869f8b</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_06</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
@@ -13236,7 +13202,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 07</name>
@@ -13253,7 +13219,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>d2a92d7d0645409519a05256350fc65e</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_07</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
@@ -13274,7 +13240,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 08</name>
@@ -13292,7 +13258,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>695bc82d928c05520c79c4214f4b44bc</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_08</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
@@ -13313,7 +13279,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 09</name>
@@ -13331,7 +13297,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>de01d9646c4aaf849d0aec60c6c32368</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_09</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
@@ -13352,7 +13318,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Case 10</name>
@@ -13372,7 +13338,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>3e950cc7aa88d253150b9b1b5edce3c5</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_demo_10</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
@@ -13393,7 +13359,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 01</name>
@@ -13408,7 +13374,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>52bf35d626cf81334c73e397f63522d8</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_01</sys_update_name>
         <type>Investigation</type>
     </x_casemgmt_case_task>
@@ -13429,7 +13395,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 02</name>
@@ -13444,7 +13410,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>949c29a044d9fd7468ddf410173ef684</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_02</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
@@ -13465,7 +13431,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 03</name>
@@ -13480,7 +13446,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>922ef8bd877c160b4468ddfe919d8a52</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_03</sys_update_name>
         <type>Follow-up</type>
     </x_casemgmt_case_task>
@@ -13501,7 +13467,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 04</name>
@@ -13516,7 +13482,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>5acb3c76d2c56715163a12cf0ee088ae</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_04</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
@@ -13537,7 +13503,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 05</name>
@@ -13552,7 +13518,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>84175bc622230897f9740fea2627fb76</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_05</sys_update_name>
         <type>Other</type>
     </x_casemgmt_case_task>
@@ -13573,7 +13539,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 06</name>
@@ -13588,7 +13554,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>1ced5ef8b4ac4565cda96fcdfda2d5bf</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_06</sys_update_name>
         <type>Investigation</type>
     </x_casemgmt_case_task>
@@ -13609,7 +13575,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 07</name>
@@ -13624,7 +13590,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>2389f169fb798f67b74c89bd0b78533c</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_07</sys_update_name>
         <type>Investigation</type>
     </x_casemgmt_case_task>
@@ -13645,7 +13611,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 08</name>
@@ -13660,7 +13626,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>d51bc249a0c7fb692f621f9983df978d</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_08</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
@@ -13681,7 +13647,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 09</name>
@@ -13696,7 +13662,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>29660c234fc925b7e37a57c0e0aa9406</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_09</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
@@ -13717,7 +13683,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Task 10</name>
@@ -13732,7 +13698,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>02f9016a4d3e21e110d84dd61ce3c566</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_task_demo_10</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
@@ -13753,7 +13719,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 01</name>
@@ -13768,7 +13734,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>7b889de5d7cf5f112bdb8fe7c304ff00</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_01</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13788,7 +13754,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 02</name>
@@ -13803,7 +13769,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>e10d12ff381ea09fce71688c1e5baf42</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_02</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13823,7 +13789,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 03</name>
@@ -13838,7 +13804,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>6f5223a926d0c088e8b0a2971a7d9c47</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_03</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13858,7 +13824,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 04</name>
@@ -13873,7 +13839,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>947634cfd3a1ef3dc9a59179ba9f515a</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_04</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13893,7 +13859,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 05</name>
@@ -13908,7 +13874,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>2781a357378ecd759315bd8bf4f3a1ab</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_05</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13928,7 +13894,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 06</name>
@@ -13943,7 +13909,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>0363ce9a22841161b5837af17f435f7f</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_06</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13963,7 +13929,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 07</name>
@@ -13978,7 +13944,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>cdd1425fcc9da46fb125242381f273d0</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_07</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
@@ -13998,7 +13964,7 @@ function serverSetPending() {
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">x_casemgmt_case_management</application>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
         <name>Demo Party 08</name>
@@ -14013,7 +13979,7 @@ function serverSetPending() {
         <sys_created_by>admin</sys_created_by>
         <sys_id>e3ca2e48846bfe93b385be5cb65b9e48</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_08</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>
