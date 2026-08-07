@@ -1,14 +1,14 @@
 # PDI Limitations and Known Issues — `x_casemgmt` Case Management POC
 
 > **Purpose:** an honest, complete record of (1) every code-generation/packaging **defect** found in the
-> deliverable Update Set and how it was remediated, (2) the **one defect that could not be remediated**
-> without authoring new application logic, (3) the ServiceNow **PDI platform limitations** encountered, and
-> (4) what was intentionally **not done** per scope/constraints. It also gives the precise code-generation
-> fixes recommended for the next generation pass.
+> deliverable Update Set and how it was remediated, (2) the **flow-serialization defect** that required the
+> seven Flow Designer flows to be re-authored natively, (3) the ServiceNow **PDI platform limitations**
+> encountered, and (4) what was intentionally **not done** per scope/constraints. It also gives the precise
+> code-generation fixes recommended for the next generation pass.
 >
-> This document deliberately does **not** overstate the result. The deployment is functional for the
-> majority of the specified behavior, but it has a material runtime gap (the Flow Designer flows), which is
-> documented in full below.
+> This document deliberately does **not** overstate the result. Every claim of runtime enforcement below was
+> observed on the live instance rather than inferred from the presence of records; where a result is partial
+> or depends on an operational step, that is stated explicitly.
 
 ---
 
@@ -23,11 +23,12 @@
 | `assigned_agent` must be a member of `assigned_group` (when an agent **is** set) | ✅ Working (Business Rule) |
 | Anonymous portal: case submit (Draft + number) and status lookup (whitelisted) | ✅ Working (scripted REST, after service_id + op-script remediation) |
 | Reports (8) + Dashboards (2) records + demo data | ✅ Present and backed by populated tables |
-| **Forward-transition precondition guards** (Draft→Open needs group; Open→In&nbsp;Progress needs agent-in-group; In&nbsp;Progress→Resolved needs all tasks closed; Resolved→Closed needs manager role) | ❌ **NOT enforced at runtime** — these live only in the Flow Designer flows, which deploy as non-functional dead shells (Defect F). The transition *logic* exists and is correct in the `CaseTransitionValidator` Script Include, but nothing invokes it at runtime. |
+| **Forward-transition precondition guards** (Draft→Open needs group; Open→In&nbsp;Progress needs agent-in-group; In&nbsp;Progress→Resolved needs all tasks closed; Resolved→Closed needs manager role) | ✅ **Enforced at runtime, blocking on the form** — all 7 Flow Designer flows were re-authored natively and now execute; the order-250 before-update Business Rule runs the matching validation subflow synchronously and aborts the save with the verbatim message. Verified on the live case form for **both** case types (Defect F, §3). |
 
-**Bottom line:** the data model, access control, prohibited-transition protection, side-effects, and the
-external portal all work. The *positive precondition* checks for forward state transitions do not run,
-because the flows that contain them were serialized incorrectly by the code generator.
+**Bottom line:** the data model, access control, prohibited-transition protection, side-effects, the forward
+precondition guards, and the external portal all work. The *positive precondition* checks for forward state
+transitions now run and block invalid transitions on the form: the seven flows that contain them were
+re-authored through Flow Designer itself and are invoked synchronously from a before-update Business Rule.
 
 ---
 
@@ -36,8 +37,8 @@ because the flows that contain them were serialized incorrectly by the code gene
 > Nine packaging/configuration defects were remediated to make the deliverable's **own documented intent**
 > deploy and run. None of these involved authoring new application logic — they restore the generator's
 > stated design (e.g., wiring existing roles to existing ACLs per each ACL's own description, building tables
-> from the deliverable's own field specs). The tenth issue (Defect F, flows) is **not** remediated here
-> because it *would* require authoring new logic.
+> from the deliverable's own field specs). The tenth issue (Defect F, flows) needed more than packaging
+> repair and is documented separately in §3.
 
 ### Defect A — Duplicate Application/scope record  *(fixed in deliverable XML)*
 - **Symptom:** preview produced ~123 name-resolution errors (109 on `sys_scope`); `case_task`/`case_party`
@@ -91,10 +92,11 @@ because the flows that contain them were serialized incorrectly by the code gene
   Business-Rule script lines matter, and ONLY those two are changed. They are corrected in BOTH the repo
   source XML (`business_rules/x_casemgmt_set_opened_date.xml` and `business_rules/x_casemgmt_set_closed_date.xml`)
   AND the corresponding records embedded in the deliverable update-set XML, for re-import faithfulness. The
-  occurrences inside the `validate_closed_transition` subflow are deliberately left untouched: they live in
-  the flow's serialized snapshot JSON, the flow never executes (Defect F), and `closed_date` stamping is
-  reliably handled by the corrected `set_closed_date` business rule instead. XML comments, `<description>`
-  text, dictionary defaults, and seed-data values are intentionally left as generated.)
+  occurrences that previously sat inside the `validate_closed_transition` subflow are **gone**: that subflow
+  was re-authored natively (Defect F, §3) and the re-authored flows contain no inline snapshot JSON at all, so
+  no flow artifact in the package now references `gs.nowDateTime()`. `closed_date` stamping remains the job of
+  the corrected `set_closed_date` business rule. XML comments, `<description>` text, dictionary defaults, and
+  seed-data values are intentionally left as generated.)
 
 ### Defect 7 — Scripted REST `service_id` missing  *(fixed live)*
 - **Symptom:** every call to the portal REST endpoints returned HTTP 400 "Requested URI does not represent
@@ -131,50 +133,186 @@ because the flows that contain them were serialized incorrectly by the code gene
 
 ---
 
-## 3. The defect that was NOT remediated — **Defect F: Flow serialization defect**
+## 3. Defect F — flow serialization defect *(root-caused, then remediated by native re-authoring)*
 
-> This is the single most important limitation and is reported here in full. It is **not** remediated
-> because doing so would require **authoring new application logic** (rebuilding/publishing a Flow Designer
-> flow graph), which the Refine-PR mandate explicitly forbids ("do not generate any new code"). It is also
-> not remediable at the deployment layer: there is no supported API to rehydrate a flow from a snapshot blob,
-> and the required runtime graph records simply do not exist in the deliverable.
+> This was the single most serious limitation in the delivered package: all seven Flow Designer flows shipped
+> as non-functional "dead shells". It has been root-caused and remediated. The seven flows were **re-authored
+> through Flow Designer itself** on the PDI, they execute at runtime, and the four forward-transition
+> precondition guards now block invalid transitions on the case form with the verbatim messages. The
+> subsections below give the confirmed root cause, the remediation strategies attempted **in order**, the
+> runtime evidence, and the one platform behavior that shaped the design.
 
-- **What shipped:** all 7 flows — 2 main (`x_casemgmt_general_inquiry_state_machine`,
-  `x_casemgmt_complaint_state_machine`) and 5 subflows (`validate_open`, `validate_inprogress`,
-  `validate_pending`, `validate_resolved`, `validate_closed`) — are **header-only `sys_hub_flow` records**.
-- **Evidence (multi-source, definitive):**
-  - 0 `sys_hub_trigger_instance`, 0 `sys_hub_action_instance`, 0 `sys_hub_flow_logic`, 0 `sys_hub_flow_snapshot`
-    records in scope.
-  - 0 `sys_flow_context` rows for any `x_casemgmt` flow → the flows have **never executed** (not on seed, not
-    on any update).
-  - The live `latest_snapshot` / `master_snapshot` values are 32-char **truncated JSON garbage**: the
-    generator placed the ~10,651-byte compiled flow-definition JSON into a **32-character reference field**,
-    which truncated on import.
-  - The deliverable XML and the per-flow repo XML contain only the 7 `sys_hub_flow` headers; the flow logic
-    exists *only* as inline JSON in the snapshot CDATA, not as the required graph records.
-- **Root cause:** the code generator serialized each flow as a header record with the compiled snapshot
-  inlined into a reference field, **without** emitting the runtime graph
-  (`sys_hub_trigger_instance` + `sys_hub_action_instance` + `sys_hub_flow_logic` + a real
-  `sys_hub_flow_snapshot` record). A flow cannot register its trigger or execute without that graph.
-- **Runtime impact:** the following **forward-transition precondition guards are not enforced**:
-  - Draft → Open requires `assigned_group` populated.
-  - Open → In&nbsp;Progress requires `assigned_agent` populated **and** a member of `assigned_group`.
-    *(Partial mitigation: the `validate_assigned_agent_membership` Business Rule blocks an **invalid** agent —
-    one not in the group — but does **not** block an **empty** agent on this transition.)*
-  - In&nbsp;Progress → Resolved requires all child `x_casemgmt_case_task` records to be `Closed`
-    (the "All tasks must be closed before resolving this case." gate).
-  - Resolved → Closed requires the caller to hold `x_casemgmt_case_manager`.
-- **What still works despite Defect F** (enforced by Business Rules / Script Include, confirmed):
-  Any→Draft is blocked ("Cases cannot be returned to Draft."); Closed→* is blocked ("Closed cases are
-  terminal and cannot be modified."); `opened_date`/`closed_date` side-effects fire; `pending_reason` is
-  cleared on In&nbsp;Progress; agent-membership is validated when an agent is set. The **logic** for all
-  forward guards is present and correct in the `CaseTransitionValidator` Script Include (13 logic assertions
-  pass, all verbatim error messages correct) — it is simply never invoked, because only the dead flows call it.
-- **Required code-generation fix (next pass):** export each flow **with** its complete runtime graph —
-  `sys_hub_trigger_instance`, `sys_hub_action_instance`, `sys_hub_flow_logic`, and a genuine
-  `sys_hub_flow_snapshot` record (the snapshot must be a real related record, **not** inline JSON crammed
-  into the 32-char `latest_snapshot`/`master_snapshot` reference field) — **or** rebuild and publish each
-  flow in Flow Designer on the PDI and then re-export.
+### 3.1 Confirmed root cause — four independent proofs
+
+The generator wrote each flow as a single `sys_hub_flow` header with the compiled flow definition inlined
+into a **reference-width field**, and emitted none of the relational graph a flow needs to run.
+
+1. **Schema proof.** In `sys_dictionary`, `sys_hub_flow.latest_snapshot` and `sys_hub_flow.master_snapshot`
+   are `string` with **`max_length = 32`** — they are meant to hold the sys_id of a `sys_hub_flow_snapshot`
+   row. The generator placed roughly 10.6 KB of compiled flow JSON into them, and the platform truncated it
+   at exactly 32 characters. The live value on every one of the seven flows was a JSON fragment such as
+   `{\n    "name": "x_casemgmt_genera` (length 32). Related: the repo XML also emitted
+   `master_snapshot_id`, which is **not a column on this release** — the real column is
+   `master_snapshot_digest`.
+2. **Server proof.** Flow Designer's own loader, `GET /api/now/processflow/flow/<sys_id>`, returned
+   **HTTP 500** for all seven with:
+   `java.lang.IllegalStateException: Expected BEGIN_ARRAY but was STRING at line 1 column 1 path $`
+   — the deserializer expecting the graph array and finding a truncated string.
+3. **Graph proof.** In scope `x_casemgmt` there were **0** rows in `sys_hub_trigger_instance`,
+   `sys_hub_action_instance`, `sys_hub_flow_logic`, `sys_hub_flow_snapshot`, `sys_hub_flow_input`,
+   `sys_hub_flow_output` **and 0 in `sys_hub_flow_component`**, and **0 `sys_flow_context` rows** for any of
+   the seven flows — they had never executed. (Release note: on this release the runtime graph lives in
+   `sys_hub_flow_component` / the `*_v2` instance tables; `sys_hub_action_instance` is legacy and nothing
+   writes it any more, so checking only the legacy table is the wrong probe. The conclusion held either way.)
+4. **UI proof.** Opening a flow in the builder rendered `Corrupted flow` with
+   `This flow can't be opened. Select another history entry to view or restore.`, status `Inactive`, and both
+   `Edit flow` and `Force save` **disabled**. `GET /api/now/processflow/versioning/<sys_id>` returned
+   `{"data":[]}` — zero history entries, so the on-screen "restore" instruction was unfollowable. The seven
+   records were **unrecoverable through the UI** and had to be re-authored.
+
+**Why hand-writing the XML cannot fix this.** A flow is a relational graph spread across the flow record, a
+published snapshot record, trigger/action/subflow/logic instances, input and output variable models, and
+compiled execution plans, all cross-linked by sys_id. Emitting a mutually consistent set of those rows by
+hand is not a realistic serialization strategy; re-injecting hand-authored graph XML was therefore ruled out
+as a repair, and no part of the current package's flow graph is hand-written (see §3.5).
+
+### 3.2 Remediation strategies attempted, in order
+
+**Strategy 1 — native authoring. ATTEMPTED AND SUCCEEDED.** No fallback was needed, so no fallback error is
+quoted here: the ladder stopped at the first strategy that produced verifiably executable flows.
+
+1. **Proof of concept.** A throwaway subflow was created and published in Flow Designer in a real browser.
+   The platform reported `Subflow published successfully` and produced a genuine `sys_hub_flow_snapshot`
+   **record** plus real `sys_hub_flow_component` rows — confirming the platform, not the package, was healthy.
+2. **The seven corrupt shells were deleted** (`DELETE /api/now/table/sys_hub_flow/<sys_id>` → HTTP 204 × 7),
+   justified by proof 4 above: there was no UI or API repair path.
+3. **A scoped Custom Action, `Case Transition Guard`, was authored in Action Designer** with declared inputs
+   `case_sys_id` and `target_status` and outputs `blocked` and `error_message`. Its script step delegates to
+   `new x_casemgmt.CaseTransitionValidator()`. The platform reported `Action is successfully published.`
+4. **The five validation subflows were authored/published** — each one input, the guard action with a literal
+   `target_status`, and an `Assign Subflow Outputs` step. The template subflow was verified in Flow Designer's
+   own Test runner (`Test Run - Completed`, outputs `Blocked = true`, `Error Message = Case record is
+   missing.`), proving the whole chain subflow input → action → Script Include → subflow outputs.
+5. **The two parent flows were authored/published/activated** with an `Updated` record trigger on
+   `x_casemgmt_case`, condition `type=General Inquiry^statusVALCHANGES` and `type=Complaint^statusVALCHANGES`,
+   each calling all five subflows. The platform reported `Flow activated successfully`.
+
+Everything above went through Flow Designer's own UI and its own authoring/publish APIs, so the **platform**
+compiled the graph. Strategies 2 (ship a Custom Action for a human to wire in manually) and 3 (delete the
+shells and rely on Business Rules alone) were therefore **not** required. The Custom Action still ships,
+because it is the reusable step inside all five subflows — not because a manual wiring step remains.
+
+### 3.3 The platform behavior that shaped the design
+
+**A Flow Designer record trigger fires *after* the database write commits.** A flow on its own therefore
+cannot refuse a transition or surface a form-level blocking error the way a `before` Business Rule can. This
+is a platform behavior, not a defect, and it is the reason a natively authored flow alone would not satisfy
+the requirement that invalid transitions produce a blocking error **on the form**.
+
+The design consequence: a new before-update Business Rule,
+`x_casemgmt_enforce_forward_transitions` (**order 250**), runs the matching validation subflow
+**synchronously, in the foreground**, via
+`sn_fd.FlowAPI.getRunner().subflow('x_casemgmt.<subflow>').inForeground().withInputs({case_sys_id: …}).run()`,
+then re-evaluates the same gate against the **in-flight** `current` record through
+`x_casemgmt.CaseTransitionValidator` and, on failure, calls `gs.addErrorMessage(<the validator's message>)`
+plus `current.setAbortAction(true)`. It re-evaluates rather than trusting the subflow alone because a subflow
+reads the **committed** row, which is stale when `assigned_group` or `assigned_agent` changes in the same
+save; any divergence between the two verdicts is logged. If the subflow call throws, the rule falls **closed**
+onto the validator's verdict rather than letting the save through.
+
+The Business Rule does **not** hardcode any message — it passes `verdict.error` through, so
+`CaseTransitionValidator` remains the single source of truth shared with the six UI Actions.
+
+Order 250 sits after the two prohibition guards (100 `block_terminal_closed`, 200
+`block_draft_backtransition`) and before the side-effect rules (300 agent-membership, 400 clear
+`pending_reason`, 500 stamp `closed_date`), so the existing chain is unchanged.
+
+### 3.4 Runtime verification — what was actually observed
+
+"Flow is Active" and "records exist" are not verification. Each of the four transition assertions was driven
+**on the live case form** — by editing the Status field and clicking the stock `Update` button, not a custom
+transition button — for **both** case types, giving 8 observations. Every message below was read from the
+rendered DOM node `#output_messages .outputmsg_text` and checked character by character.
+
+| # | Assertion | General Inquiry | Complaint | On-screen message |
+|---|---|---|---|---|
+| i | In&nbsp;Progress → Resolved with one **open** child task | BLOCKED | BLOCKED | `All tasks must be closed before resolving this case.` |
+| ii | close the task, retry In&nbsp;Progress → Resolved | SUCCEEDS, status reads `Resolved` | SUCCEEDS, status reads `Resolved` | none |
+| iii | Resolved → Closed as a **non-manager** (UI Impersonate) | BLOCKED | BLOCKED | `Only case managers can close cases.` |
+| iv | In&nbsp;Progress → Draft | BLOCKED | BLOCKED | `Cases cannot be returned to Draft.` |
+
+All 8 observations passed. Assertions i and ii form a controlled experiment: the same edit by the same user on
+the same record was blocked while the child task was `Open` and allowed once it was `Closed`, so the
+task-closure gate is the only variable.
+
+**Flow execution evidence.** `sys_flow_context` rows in state `COMPLETE` exist for all seven flows: the five
+subflows from the synchronous Business-Rule invocations, and **both parent flows** triggered from their
+`Updated` record triggers with `source_table = x_casemgmt_case` (a parent context appears for each transition
+that actually committed — blocked saves never commit, so they correctly produce none). Flow Designer's own
+loader now returns **HTTP 200 with `errorCode 0`** for all seven, the exact endpoint that returned HTTP 500
+for the dead shells.
+
+**Three honest caveats about how the block appears on the form:**
+
+1. **Every blocked save renders two banners** — the specific rule message *and* ServiceNow's stock
+   `Invalid update`. This is normal `setAbortAction(true)` behavior and is what a user sees.
+2. **The redisplayed form echoes the rejected value.** After an aborted save the classic form shows the value
+   the user submitted, and in assertion iii it also showed a populated `Closed Date`, because the order-500
+   rule still ran against the in-memory record. Both are phantom: a reload and a database read show the case
+   unchanged. Only a reload or a REST read proves persistence — reading status from the post-save frame
+   produces a false "allowed" result.
+3. **An aborted save returns HTTP 302, exactly like a successful one**, so HTTP status cannot be used to
+   detect a block. The reliable in-page signal is `#output_messages` losing its `outputmsg_hide` class.
+
+Saves take roughly 8–10 seconds to settle, because order 250 executes a Flow Designer subflow synchronously.
+
+### 3.5 What is in the package now
+
+The seven flow artifacts under `../flows/` were replaced with the platform's **own** serialization of the
+re-authored records — taken from `sys_update_xml.payload` on the instance, with only whitespace indentation
+applied (verified element-for-element: every tag, attribute and field value byte-identical, CDATA preserved).
+No graph element is hand-written. Two records were added:
+
+- `../flows/custom_actions/x_casemgmt_transition_guard_action.xml` — the `Case Transition Guard` action.
+- `../flows/sub_flows/shared_flow_logic_block.xml` — the one `sys_hub_flow_block` shared by all five
+  subflows' flow-logic instances. Flow Designer's per-flow capture omits a block shared across flows, so it is
+  packaged explicitly; without it the subflows would import carrying a reference that resolves to nothing.
+
+Plus the new Business Rule `../business_rules/x_casemgmt_enforce_forward_transitions.xml`. All three are
+folded into the Update Set in dependency order: Script Includes → **Action Type** → **Flow Block** → the five
+subflows → the two parent flows → Business Rules (record count 148 → 151).
+
+**No non-functional flow record remains** in `servicenow-case-management-poc/` or in the Update Set: every
+Flow and Action Type record in the package carries a real snapshot and its graph elements.
+
+Because the flows were re-authored, their internal names changed — they no longer carry an `x_casemgmt_`
+prefix. The current names are `general_inquiry_state_machine`, `complaint_state_machine`,
+`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`,
+`validate_resolved_transition`, `validate_closed_transition`. These are the names the order-250 Business Rule
+dispatches on.
+
+### 3.6 Code-generation fix for the next pass
+
+Do not serialize a flow by hand. Author it in Flow Designer (or drive Flow Designer's own authoring and
+publish APIs) and then capture the result, so the platform emits the snapshot record, the trigger / action /
+subflow / logic instances, the input and output variable models, and the compiled execution plans as a
+mutually consistent set. In particular, never write compiled flow JSON into `latest_snapshot` or
+`master_snapshot`: those fields are 32 characters wide and hold the sys_id of a real
+`sys_hub_flow_snapshot` row. When capturing a flow that shares a `sys_hub_flow_block` with sibling flows,
+include that block record explicitly.
+
+**Which fields are durable, and which the platform owns.** When checking a flow's health, assert on
+`active`, `status = published`, a `master_snapshot` that resolves to a real `sys_hub_flow_snapshot` row, and a
+non-empty graph from `GET /api/now/processflow/flow/<sys_id>`. Do **not** assert that
+`latest_snapshot == master_snapshot`, and do not treat a `latest_snapshot` that resolves to nothing as
+corruption: the platform rewrites that field with transient working-snapshot ids and garbage-collects the
+rows, so it drifts on its own within minutes and is not a reliable indicator. The same applies to
+`version_record` and to the `snapshot` field on `sys_flow_trigger_plan` / `sys_flow_subflow_plan` /
+`sys_hub_action_plan` — all four are platform-managed bookkeeping, all four are plain strings rather than
+reference fields, and the platform recompiles the plan records itself. Execution uses `master_snapshot`.
+Note that the platform's own Update Set export normalises `latest_snapshot` to the published master, which is
+the correct portable form; a captured payload will therefore differ from the live row on that one field, and
+that difference is expected rather than drift to be chased.
 
 ---
 
@@ -226,7 +364,10 @@ so future operators don't mistake them for bugs.
   they are the records the deliverable itself defines.
 - **No data migrated** from ArkCase — all demo data is synthetic.
 - **No ServiceNow Store apps** installed; only the platform's standard low-code tooling was used.
-- **Flow graph not reconstructed** (Defect F) — explicitly out of bounds (would be authoring new logic).
+- **Flow graph reconstruction is done, not deferred** (Defect F, §3) — the seven flows were re-authored
+  natively in Flow Designer, they execute at runtime, and no dead flow record remains in the package. What
+  is deliberately **not** done is repairing a flow by hand-writing its graph XML into the Update Set: that
+  is the strategy that produced the dead shells, and it is not used anywhere in the current package.
 
 ---
 
@@ -235,17 +376,18 @@ so future operators don't mistake them for bugs.
 | Gate | Criterion | Status | Notes |
 |---|---|---|---|
 | 1. Data model | 3 tables, correct fields/types | ✅ PASS | After direct-build (Defect C). All mandatory fields present. |
-| 2. Workflow | All transitions enforced for both case types | ⚠️ **PARTIAL** | Prohibited transitions (Any→Draft, Closed→*), side-effects, and agent-membership-when-set are enforced (Business Rules). **Forward precondition guards and the task-closure-blocks-Resolve gate are NOT enforced at runtime** (Defect F). Logic is present/correct in `CaseTransitionValidator`. |
+| 2. Workflow | All transitions enforced for both case types | ✅ **PASS** | Prohibited transitions (Any→Draft, Closed→*), side-effects and agent-membership are enforced by Business Rules; the **four forward precondition guards, including the task-closure-blocks-Resolve gate, are now enforced at runtime and block on the form** after the seven flows were re-authored natively and wired into the order-250 before-update Business Rule (Defect F, §3). Verified by 8 live form observations — 4 assertions × 2 case types — with the verbatim messages read from the rendered DOM, and `sys_flow_context` rows in state `COMPLETE` for all 7 flows. |
 | 3. ACLs | Role-based access enforced | ✅ PASS | After Defect 9 remediation; empirically validated (manager full / agent assigned-only / viewer read-only). |
 | 4. Portal — submission | Unauthenticated submit creates a Draft case with a number | ✅ PASS | Anonymous POST → 201 `{number, "Your case has been submitted"}`; case appears with `Draft` status. |
 | 5. Portal — lookup | Status lookup returns correct data / not-found | ✅ PASS | GET valid → `{status, subject, opened_date}` (no internal-field leak); GET invalid → 404 "No case found with that number." |
 | 6. Dashboards | Both dashboards render with synthetic data | ✅ Records present | `x_casemgmt_agent_workspace` + `x_casemgmt_manager_view` exist; all 8 backing reports exist over populated tables (10 cases / 10 tasks). Visual render should be confirmed in the UI per the tryout guide. |
 | 7. Update Set | Loads/previews with zero errors | ✅ PASS | Zero-error preview achieved (111 → 5 → 0); committed. |
 
-> **Net:** 5 gates fully pass, 1 (dashboards) verified at the data/record layer, and 1 (workflow) is
-> **partial** due to Defect F. The honest headline is that the deployment is usable end-to-end for case
-> intake, access control, prohibited-transition protection, side-effects, and the portal — but it does **not**
-> enforce forward-transition preconditions at runtime until the flows are regenerated correctly.
+> **Net:** 6 gates fully pass and 1 (dashboards) is verified at the data/record layer, with its visual render
+> to be confirmed in the UI per the tryout guide. The deployment is usable end-to-end for case intake, access
+> control, the full state machine — prohibited transitions, forward-transition preconditions and side-effects
+> alike — and the external portal. Gate 2 moved from PARTIAL to PASS once the seven flows were re-authored
+> natively and the order-250 Business Rule turned their verdicts into blocking form errors (§3).
 
 ---
 
@@ -262,7 +404,7 @@ so future operators don't mistake them for bugs.
 | 7 REST `service_id` | — | ✅ | ❌ (documented post-import step) | ✅ |
 | 8 stale REST op-scripts | already correct in XML | ✅ | n/a | — |
 | 9 ACL role-links | — | ✅ | ❌ (documented post-import step) | ✅ |
-| F flow serialization | ❌ not fixable without new code | ❌ | ❌ | ❌ |
+| F flow serialization | ✅ (7 flows replaced with the platform's own graph serialization; +Action Type, +Flow Block, +order-250 Business Rule; 148 → 151 records) | ✅ (7 flows re-authored natively in Flow Designer and published/active; Custom Action published; Business Rule installed) | ✅ | — (no post-import step required) |
 
 > **Repo-source propagation policy (commit-phase decision).** The repository's in-scope artifacts are patched
 > for exactly two classes of defect: (1) **import-blocking** packaging / reference-resolution defects (A, B),

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the case lifecycle state-machine for the ServiceNow scoped application POC. Cases progress through six statuses (Draft → Open → In Progress → Pending → Resolved → Closed) with three blocking-error rules that prevent invalid transitions. The state-machine is implemented as two Flow Designer flows (one per case type: General Inquiry and Complaint), with reusable subflows for shared transition validations. The implementation strictly mirrors the transition matrix from AAP Section 0.5.5; verbatim error messages MUST appear on the form when invalid transitions are attempted.
+This document captures the case lifecycle state-machine for the ServiceNow scoped application POC. Cases progress through six statuses (Draft → Open → In Progress → Pending → Resolved → Closed) with three blocking-error rules that prevent invalid transitions. The state-machine is implemented as two Flow Designer flows (one per case type: General Inquiry and Complaint), with reusable subflows for shared transition validations. Because a Flow Designer record trigger fires only *after* the database write commits, a flow cannot by itself refuse a save; the subflows are therefore also invoked synchronously by the before-update business rule `enforce_forward_transitions` (order 250), which is what aborts the update and puts the blocking message on the form. The implementation strictly mirrors the transition matrix from AAP Section 0.5.5; verbatim error messages MUST appear on the form when invalid transitions are attempted.
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -90,20 +90,20 @@ Terminal state. Entering Closed requires the caller to have the `x_casemgmt_case
 
 ## Per-Transition Implementation Map
 
-This section maps each transition row in the matrix to the specific subflow and/or business rule that enforces it. Each transition is enforced in two places: the OnUpdate trigger of the parent flow (`general_inquiry_state_machine` or `complaint_state_machine`), and supporting business rules where appropriate.
+This section maps each transition row in the matrix to the specific subflow and/or business rule that enforces it. Each transition is evaluated in two places: the record trigger of the parent flow (`general_inquiry_state_machine` or `complaint_state_machine`), which runs after the write commits, and the before-update business rule `enforce_forward_transitions` (order 250), which runs the same subflow synchronously *before* the write and is therefore the component that actually blocks the transition and surfaces the message. Supporting business rules handle the prohibitions and side-effects.
 
 | Transition | Validation Subflow | Supporting Business Rule(s) | Verbatim Error Message |
 | --- | --- | --- | --- |
-| Draft → Open | `validate_open_transition.xml` | (none) | `"Form-level error: assigned_group is required to open this case."` (form error, not verbatim) |
-| Open → In Progress | `validate_inprogress_transition.xml` | `validate_assigned_agent_membership.xml` | `"Form-level error: assigned_agent must be a member of assigned_group."` (form error, not verbatim) |
-| In Progress → Pending | `validate_pending_transition.xml` | (none — pending_reason prompted) | n/a |
+| Draft → Open | `validate_open_transition.xml` | `enforce_forward_transitions.xml` (order 250) | `"Required field assigned_group is empty."` (from `CaseTransitionValidator`) |
+| Open → In Progress | `validate_inprogress_transition.xml` | `enforce_forward_transitions.xml` (order 250), `validate_assigned_agent_membership.xml` | `"Assigned agent must be set and must be a member of the assigned group."` (from `CaseTransitionValidator`) |
+| In Progress → Pending | `validate_pending_transition.xml` | `enforce_forward_transitions.xml` (order 250) | n/a — no blocking precondition |
 | Pending → In Progress | (handled by parent flow conditions) | `clear_pending_reason_on_inprogress.xml` | n/a |
-| In Progress → Resolved | `validate_resolved_transition.xml` | (none) | `"All tasks must be closed before resolving this case."` (VERBATIM) |
-| Resolved → Closed | `validate_closed_transition.xml` | `set_closed_date.xml` | `"Form-level error: Resolved → Closed requires case_manager role."` (form error, not verbatim) |
+| In Progress → Resolved | `validate_resolved_transition.xml` | `enforce_forward_transitions.xml` (order 250) | `"All tasks must be closed before resolving this case."` (VERBATIM) |
+| Resolved → Closed | `validate_closed_transition.xml` | `enforce_forward_transitions.xml` (order 250), `set_closed_date.xml` | `"Only case managers can close cases."` (from `CaseTransitionValidator`) |
 | Any → Draft | (none) | `block_draft_backtransition.xml` | `"Cases cannot be returned to Draft."` (VERBATIM) |
 | Closed → * | (none) | `block_terminal_closed.xml` | `"Closed cases are terminal and cannot be modified."` (VERBATIM) |
 
-The three "VERBATIM" rows in the table above MUST surface the EXACT error text on the form — character-for-character match with AAP Sections 0.5.5 and 0.7.4.
+The three "VERBATIM" rows in the table above MUST surface the EXACT error text on the form — character-for-character match with AAP Sections 0.5.5 and 0.7.4. The remaining messages come from `CaseTransitionValidator` and reach the form unaltered, because `enforce_forward_transitions` passes the validator's `error` string straight to `gs.addErrorMessage()` rather than restating it. A blocked save also renders ServiceNow's stock `Invalid update` banner alongside the specific message; that is normal `setAbortAction(true)` behavior.
 
 ## UI Action Visibility Per Transition
 
@@ -135,46 +135,52 @@ The departure is intentional and is preserved here as the canonical design ratio
 
 Each transition is encapsulated as a reusable subflow under [`../flows/sub_flows/`](../flows/sub_flows/). Subflows are called from both case-type flows (`general_inquiry_state_machine` and `complaint_state_machine`) so that the validation logic exists in exactly one place per transition.
 
+All five subflows share one shape: a single mandatory String input `case_sys_id`; one step invoking the scoped Custom Action [`Case Transition Guard`](../flows/custom_actions/x_casemgmt_transition_guard_action.xml) with a literal `target_status`; and an `Assign Subflow Outputs` step. Each returns two String outputs — `blocked` (`'true'`/`'false'`) and `error_message`. A subflow therefore *reports* a verdict rather than throwing: the caller decides what to do with it. The order-250 business rule is the caller that turns `blocked = 'true'` into `gs.addErrorMessage(error_message)` plus `current.setAbortAction(true)`, which is what the user sees on the form. All guard logic itself lives in `x_casemgmt.CaseTransitionValidator`, reached through the Custom Action, so there is exactly one implementation of each rule.
+
 ### validate_open_transition
 
-- **Trigger:** called from parent flow when `previous.status == Draft AND current.status == Open`
-- **Validation:** `current.assigned_group` is non-null
-- **Pass:** continue OnUpdate
-- **Fail:** Throw Error → form-level message indicating `assigned_group` is required
+- **Invoked when:** the target status is `Open` — from the parent flow after commit, and from `enforce_forward_transitions` before the write (`target_status = Open`)
+- **Validation:** `CaseTransitionValidator.canTransitionToOpen()` — `assigned_group` is non-null
+- **Pass:** `blocked = 'false'`, `error_message = ''`
+- **Fail:** `blocked = 'true'`, `error_message = "Required field assigned_group is empty."`
 
 ### validate_inprogress_transition
 
-- **Trigger:** called from parent flow when `previous.status == Open AND current.status == In Progress`
+- **Invoked when:** the target status is `In Progress` (`target_status = In Progress`)
 - **Validation 1:** `current.assigned_agent` is non-null
 - **Validation 2:** `current.assigned_agent` is a member of `current.assigned_group` (verified via `sys_user_grmember` query)
-- **Pass:** continue OnUpdate
-- **Fail:** Throw Error → form-level message indicating `assigned_agent` membership requirement
+- **Pass:** `blocked = 'false'`, `error_message = ''`
+- **Fail:** `blocked = 'true'`, `error_message = "Assigned agent must be set and must be a member of the assigned group."`
+- **Implementation note:** both checks live in `CaseTransitionValidator.canTransitionToInProgress()`, which uses `isAgentInGroup()`
 
 ### validate_pending_transition
 
-- **Trigger:** called from parent flow when `previous.status == In Progress AND current.status == Pending`
-- **Validation:** `current.pending_reason` is non-null (prompt user to set if missing)
-- **Pass:** continue OnUpdate
-- **Fail:** Throw Error → form-level message indicating `pending_reason` is required
+- **Invoked when:** the target status is `Pending` (`target_status = Pending`)
+- **Validation:** none that can block — `pending_reason` is captured on the form, and AAP Section 0.5.5 defines no blocking precondition for this transition
+- **Pass:** `blocked = 'false'`, `error_message = ''` for every well-formed case
+- **Why it exists:** so that all six statuses are routed through one uniform mechanism rather than some being silently unguarded
 
 ### validate_resolved_transition
 
-- **Trigger:** called from parent flow when `previous.status == In Progress AND current.status == Resolved`
+- **Invoked when:** the target status is `Resolved` (`target_status = Resolved`)
 - **Validation:** GlideRecord query against `x_casemgmt_case_task` where `case == current.sys_id AND status != Closed` returns ZERO rows
-- **Pass:** continue OnUpdate
-- **Fail:** Throw Error with VERBATIM message `"All tasks must be closed before resolving this case."`
-- **Implementation note:** Use `new x_casemgmt.CaseTransitionValidator().canTransitionToResolved(current.sys_id)` from the Script Include to centralize the logic
+- **Pass:** `blocked = 'false'`, `error_message = ''`
+- **Fail:** `blocked = 'true'`, `error_message = "All tasks must be closed before resolving this case."` (VERBATIM)
+- **Implementation note:** the query lives in `CaseTransitionValidator.getOpenTaskCountForCase()`, consumed by `canTransitionToResolved()`, so the logic is centralized in the Script Include
 
 ### validate_closed_transition
 
-- **Trigger:** called from parent flow when `previous.status == Resolved AND current.status == Closed`
-- **Validation 1:** caller (`gs.getUser()`) has the role `x_casemgmt_case_manager` via `gs.hasRole('x_casemgmt_case_manager')`
-- **Pass:** continue OnUpdate; the `set_closed_date` business rule will populate `closed_date = gs.nowDateTime()`
-- **Fail:** Throw Error → form-level message indicating manager role required
+- **Invoked when:** the target status is `Closed` (`target_status = Closed`)
+- **Validation:** the acting user holds the role `x_casemgmt_case_manager`
+- **Pass:** `blocked = 'false'`, `error_message = ''`; the `set_closed_date` business rule then populates `closed_date`
+- **Fail:** `blocked = 'true'`, `error_message = "Only case managers can close cases."`
+- **Implementation note:** `CaseTransitionValidator.canTransitionToClosed(caseGr, userId)` is called with `gs.getUserID()`. In a scoped context `gs.getUser(<name>)` ignores its argument and returns the session user, so the acting user must be passed explicitly — this is what makes the check correct under UI **Impersonate**.
 
 ## Business Rule Specifications
 
-Business rules complement the Flow Designer flows by providing pre-save guards that fire on EVERY update (not just on status change). They enforce the absolute prohibitions (Any → Draft, Closed → *) and the auto-population rules (`opened_date`, `closed_date`). Business rules are essential as a dual-layer defense — flows guard only the OnUpdate trigger context, while business rules guard direct Table API writes, scripted REST calls, background scripts, and any other code path that writes to `x_casemgmt_case`.
+Business rules complement the Flow Designer flows by providing pre-save guards that fire on EVERY update (not just on status change). They enforce the absolute prohibitions (Any → Draft, Closed → *), the forward-transition preconditions (via `enforce_forward_transitions`, which runs the validation subflows synchronously), and the auto-population rules (`opened_date`, `closed_date`). Business rules are essential because they are the only layer that can *refuse* a write: a flow's record trigger fires after the commit, whereas a `before` business rule can call `setAbortAction(true)`. They also guard direct Table API writes, scripted REST calls, background scripts, and any other code path that writes to `x_casemgmt_case`.
+
+The execution chain on `x_casemgmt_case` is: **100** `block_terminal_closed` → **200** `block_draft_backtransition` → **250** `enforce_forward_transitions` → **300** `validate_assigned_agent_membership` → **400** `clear_pending_reason_on_inprogress` → **500** `set_closed_date`; plus `set_opened_date` on insert. The prohibitions are evaluated before the forward preconditions, so a Closed-case edit or an Any→Draft attempt is refused with its own verbatim message rather than being re-diagnosed as a precondition failure.
 
 ### set_opened_date
 

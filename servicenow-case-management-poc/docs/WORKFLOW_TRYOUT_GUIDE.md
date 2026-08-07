@@ -5,9 +5,12 @@
 > the dashboards in action.
 >
 > **Honesty note:** wherever a behavior depends on the Flow Designer flows, this guide says so explicitly.
-> The flows are currently **non-functional** (see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`, Defect F), so some
-> *forward* transition preconditions are **not blocked** at runtime. Everything else (access control,
-> prohibited-transition protection, date side-effects, the portal) works.
+> The seven flows were re-authored natively and now execute, and the four *forward* transition preconditions
+> are enforced and blocking on the form (see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`, §3). Two things to expect
+> when a transition is refused: a blocked save renders **two** banners — the specific rule message plus
+> ServiceNow's stock `Invalid update` — and the redisplayed form briefly echoes the value you submitted.
+> **Reload the record** to see the true, unchanged state; the echoed value was never written. Saves also take
+> roughly 8–10 seconds, because the guard runs a Flow Designer subflow synchronously.
 
 ---
 
@@ -15,8 +18,8 @@
 
 | # | Scenario | Works as specified? |
 |---|---|---|
-| 1 | Drive a case through all six states in the internal UI | Partly — see per-transition notes |
-| 2 | Tasks linked to a case; "resolve blocked until tasks closed" | Logic correct, **not enforced at runtime** (flow defect) |
+| 1 | Drive a case through all six states in the internal UI | ✅ Yes — every transition guard is enforced; see per-transition notes |
+| 2 | Tasks linked to a case; "resolve blocked until tasks closed" | ✅ Yes — enforced and blocking on the form |
 | 3 | Associate Person / Organization parties (polymorphic) | ✅ Yes (UI policy) |
 | 4 | Role-based access: manager / agent / viewer | ✅ Yes (validated) |
 | 5 | External portal: submit a case and look up its status | ✅ Yes |
@@ -79,12 +82,12 @@ priority. Save — it gets a `CASE…` number and `opened_date` is set automatic
 
 | Transition | Intended precondition | **Enforced at runtime?** | How to satisfy / what to expect |
 |---|---|---|---|
-| Draft → Open | `assigned_group` populated | ❌ **Not blocked** (flow defect) — set the group anyway for a realistic demo | Set `assigned_group = x_casemgmt_demo_team` |
-| Open → In Progress | `assigned_agent` set **and** member of group | ⚠️ Partial — an **invalid** agent (not in the group) **is** blocked by a Business Rule ("Assigned agent must be a member of the assigned group."); an **empty** agent is not blocked | Set `assigned_agent = Demo Agent` (a member of `x_casemgmt_demo_team`) |
+| Draft → Open | `assigned_group` populated | ✅ **Blocked** with "Required field assigned_group is empty." | Set `assigned_group = x_casemgmt_demo_team` |
+| Open → In Progress | `assigned_agent` set **and** member of group | ✅ **Blocked** in both cases — an **empty** agent gives "Assigned agent must be set and must be a member of the assigned group." (order-250 guard), and an agent **not** in the group is also blocked by `validate_assigned_agent_membership` | Set `assigned_agent = Demo Agent` (a member of `x_casemgmt_demo_team`) |
 | In Progress → Pending | sets `pending_reason` (Awaiting Info / Awaiting Third Party / Other) | The set-on-Pending is a flow action (not running) — **set `pending_reason` manually** | Choose a `pending_reason` value yourself |
 | Pending → In Progress | clears `pending_reason` | ✅ **Yes** (Business Rule clears it) | Just change status back to In Progress; watch `pending_reason` clear |
-| In Progress → Resolved | **all** linked tasks `Closed` | ❌ **Not blocked** (flow defect) — see Scenario 2 | (Intended message: "All tasks must be closed before resolving this case.") |
-| Resolved → Closed | caller has `x_casemgmt_case_manager`; auto-set `closed_date` | `closed_date` ✅ **is** auto-set (Business Rule); the manager-role requirement is **not** enforced at runtime (flow defect) | Move to Closed; confirm `closed_date` populated |
+| In Progress → Resolved | **all** linked tasks `Closed` | ✅ **Blocked** — see Scenario 2 | Message on the form: "All tasks must be closed before resolving this case." |
+| Resolved → Closed | caller has `x_casemgmt_case_manager`; auto-set `closed_date` | ✅ Both enforced — a non-manager is **blocked** with "Only case managers can close cases.", and for a manager `closed_date` is auto-set (Business Rule) | As a manager, move to Closed and confirm `closed_date`; then Impersonate **Demo Agent** on a `Resolved` case and confirm the block |
 | **Any → Draft** | PROHIBITED | ✅ **Blocked** | Try setting a non-Draft case back to Draft → blocked with **"Cases cannot be returned to Draft."** |
 | **Closed → anything** | PROHIBITED (terminal) | ✅ **Blocked** | Open `CASE0000018` (Closed) and try to change status → blocked with **"Closed cases are terminal and cannot be modified."** |
 
@@ -101,19 +104,30 @@ priority. Save — it gets a `CASE…` number and `opened_date` is set automatic
 
 1. Open `CASE0000015` (In Progress). In the **Tasks** related list you'll see at least one task with status
    `Open` or `In Progress`.
-2. **Intended behavior:** changing the case to **Resolved** while a task is still open should be blocked with
-   **"All tasks must be closed before resolving this case."**
-3. **Actual behavior on this deployment:** the case **can** be set to Resolved even with an open task,
-   because this gate lives only in the (non-functional) flow (Defect F).
-4. The *logic* is present and correct in the `x_casemgmt.CaseTransitionValidator` Script Include
-   (`canTransitionToResolved` counts open child tasks and returns the verbatim message). You can confirm the
-   logic by running, as admin in a background script (scope `82b99028…`):
+2. **Expected behavior:** changing the case **Status** to `Resolved` while a task is still open is blocked
+   with **"All tasks must be closed before resolving this case."**
+3. **Try it.** Set Status to `Resolved` and click **Update**. Allow 8–10 seconds. You should see two red
+   banners: the message above, and ServiceNow's stock `Invalid update`.
+4. **Confirm nothing was written.** The redisplayed form will show `Resolved` — that is the value you
+   submitted being echoed back, not a saved value. **Reload the record**: Status reads `In Progress` again.
+   (This echo is why the form itself is not proof of persistence; a reload or a REST read is.)
+5. Now close the open task (set each task `status = Closed`) and set the case to `Resolved` again. This time it
+   saves, no banner appears, and after a reload Status reads `Resolved`. The two attempts differ only in the
+   task's status, which is the gate under test.
+6. The logic lives in the `x_casemgmt.CaseTransitionValidator` Script Include
+   (`canTransitionToResolved` counts open child tasks via `getOpenTaskCountForCase` and returns the verbatim
+   message). The order-250 business rule `enforce_forward_transitions` runs the
+   `validate_resolved_transition` subflow synchronously and passes that message to
+   `gs.addErrorMessage()`, so the string on your screen comes from the Script Include unaltered. To see the
+   verdict directly, run as admin in a background script (scope `82b99028…`):
    ```javascript
    var v = new x_casemgmt.CaseTransitionValidator();
-   // pass a case sys_id that has an open task (e.g., CASE0000015) -> returns {ok:false, message:"All tasks must be closed before resolving this case."}
+   // a case sys_id with an open task -> {ok:false, error:"All tasks must be closed before resolving this case."}
    ```
-5. To see a *successful* resolve, close all tasks on a case first (set each task `status = Closed`), then move
-   the case to Resolved — e.g., `CASE0000017` already has no open tasks.
+7. To confirm the flow itself ran, open **Flow Designer → Flow Executions** (`sys_flow_context`) and look for
+   a `Validate Resolved Transition` row in state `COMPLETE` timestamped at your attempt. A successful case
+   transition additionally produces a parent-flow context (`General Inquiry State Machine` or
+   `Complaint State Machine`); a *blocked* attempt produces none, because the write never committed.
 
 ---
 

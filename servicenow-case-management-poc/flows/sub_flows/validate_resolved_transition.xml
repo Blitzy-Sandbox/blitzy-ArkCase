@@ -1,664 +1,994 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    ServiceNow Update Set record-definition for the `sys_hub_flow` row that
-    declares the `x_casemgmt_validate_resolved_transition` Flow Designer
-    SUBFLOW (type=subflow) inside the scoped application `x_casemgmt`
-    (Case Management).
+    ServiceNow Update Set record-definition for the Flow Designer SUBFLOW
+    `Validate Resolved Transition` (type=subflow) in the scoped application
+    `x_casemgmt` (Case Management).
 
-    PURPOSE (AAP Section 0.5.5 verbatim transition row):
-        From          To         Required condition / blocking-error behavior
-        In Progress   Resolved   All linked x_casemgmt_case_task records have
-                                 status = Closed.
-                                 Failure: Surface form-level error
-                                 "All tasks must be closed before resolving
-                                  this case." (AAP Section 0.7.4 verbatim)
+    TRANSITION GUARDED (AAP section 0.5.5, row 5) - the task-closure gate
+        From         To         Required condition
+        In Progress  Resolved   every linked x_casemgmt_case_task has status = Closed
+        Failure surfaces the AAP section 0.7.4 verbatim error produced by
+        CaseTransitionValidator.canTransitionToResolved():
+            All tasks must be closed before resolving this case.
 
-    This subflow is the MOST CRITICAL of the FIVE shared transition-
-    validation subflows under `servicenow-case-management-poc/flows/
-    sub_flows/` because it enforces the AAP Section 0.7.4 verbatim error
-    message that is explicitly tested in Validation Gate 2
-    ("task-closure check blocks Resolved transition" - AAP Section 0.7.3).
-    It is called by both parent state-machine flows whenever a case's
-    `status` field changes to `Resolved`:
+        target_status literal passed to the guard action: Resolved
 
-      - ../general_inquiry_state_machine.xml
-            (when a General Inquiry case enters the Resolved status)
-      - ../complaint_state_machine.xml
-            (when a Complaint case enters the Resolved status)
+    STRUCTURE
+        Input   case_sys_id    (String, mandatory) - sys_id of the x_casemgmt_case row
+        Step 1  Case Transition Guard  - the scoped Custom Action defined in
+                ../custom_actions/x_casemgmt_transition_guard_action.xml, invoked with
+                case_sys_id = the subflow input and target_status = the literal below.
+        Step 2  Assign Subflow Outputs - copies the action's results to the outputs.
+        Output  blocked        (String) - 'true' when the transition must be refused
+        Output  error_message  (String) - the verbatim message to surface on the form
 
-    UNLIKE the simpler validate_pending_transition.xml peer subflow
-    (which has no validation gate), this subflow has:
+        All transition logic is delegated to the x_casemgmt.CaseTransitionValidator Script
+        Include so that the flows, the six UI Actions and the Business Rules share a single
+        source of truth and a single {ok, error} contract.
 
-      - A REQUIRED-CONDITION GATE: All child x_casemgmt_case_task rows
-        must have status = 'Closed' before the case can transition to
-        Resolved. The gate is enforced by calling
-        x_casemgmt.CaseTransitionValidator.canTransitionToResolved(case_record)
-        which delegates to its getOpenTaskCountForCase(caseSysId) helper.
-        That helper uses GlideAggregate('x_casemgmt_case_task') with
-        addQuery('case', caseSysId) and addQuery('status', '!=', 'Closed')
-        to count open tasks. If the count is greater than zero, the
-        validator returns { ok: false, error: '...verbatim message...' }.
+    CALLED BY
+        ../general_inquiry_state_machine.xml   (cases of type General Inquiry)
+        ../complaint_state_machine.xml         (cases of type Complaint)
+        Both parents call this subflow by its published master snapshot, so the two
+        parent flows plus these five subflows form one seven-record graph.
 
-      - A THROW ERROR STEP: When the validator returns ok=false, the
-        subflow's If/Then step branches to a Throw Error action that
-        surfaces the verbatim AAP Section 0.7.4 error message
-        "All tasks must be closed before resolving this case." on the
-        form. Per ServiceNow Flow Designer semantics, Throw Error in a
-        synchronously-invoked subflow propagates upward to the parent
-        flow's triggering update operation, causing setAbortAction(true)
-        on the underlying GlideRecord update and producing
-        gs.addErrorMessage(<verbatim message>) on the form.
+        The subflow is also invoked synchronously, in the foreground, by the
+        before-update Business Rule ../../business_rules/
+        x_casemgmt_enforce_forward_transitions.xml (order 250). A Flow Designer record
+        trigger fires only after the database write has committed, so a flow alone
+        cannot refuse a save; the Business Rule is what turns this subflow's verdict
+        into an aborted update and a blocking message on the form.
 
-      - NO ROLE CHECK. Unlike validate_closed_transition.xml (which
-        verifies the caller has the x_casemgmt_case_manager role), this
-        subflow imposes no role gate. Per AAP Section 0.5.5 the
-        In Progress -> Resolved transition's only required condition
-        is the all-tasks-closed gate; the caller's role is governed
-        entirely by the table-level ACLs in
-        ../../acl/x_casemgmt_case_*.xml (case_agent and case_manager
-        both have write access to assigned cases per AAP Section 0.5.6).
+    PROVENANCE - THIS RECORD BODY IS PLATFORM-GENERATED, NOT HAND-AUTHORED
+        The <record_update> document below is ServiceNow's own serialization of the
+        record, captured from sys_update_xml.payload on the instance where the flow was
+        authored through Flow Designer itself. Only whitespace indentation has been
+        applied; every element, attribute and field value is byte-identical to the
+        platform's output and all CDATA sections are preserved verbatim.
 
-      - NO SIDE EFFECT ON SUCCESS. Unlike validate_pending_transition
-        (which sets pending_reason) and validate_closed_transition
-        (which sets closed_date), the Resolved transition has no field
-        to auto-set. The subflow validates and returns. The case row's
-        status field is set by the parent flow's normal status-update
-        path (the form save that triggered the parent flow), so this
-        subflow performs no GlideRecord update of its own.
+        Flow Designer stores a flow as a relational graph spread over sys_hub_flow,
+        sys_hub_flow_snapshot, sys_hub_flow_component (trigger / action / subflow / logic
+        instances), sys_hub_flow_input, sys_hub_flow_output and the compiled execution
+        plans. Only the platform can emit a mutually consistent set of those rows.
+        Hand-writing the graph produces a record that loads as a header with no graph and
+        fails Flow Designer's own loader; this file therefore MUST be regenerated by
+        re-exporting from an instance rather than edited by hand.
 
-    SEMANTIC SOURCE-SIDE REFERENCE (read-only, NOT byte-for-byte ported):
-
-      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
-        java/com/armedia/acm/plugins/casefile/service/
-        CaseFileTasksService.java (interface) and
-        CaseFileTasksServiceImpl.java (implementation)
-            ArkCase aggregated tasks for a case via Solr search through
-            the ChildDocumentsSearchService.searchForChildrenAndGrand
-            childrenTasks call. The Java interface declared
-            getCaseFileTasks(Long caseId, String parentType, Long
-            parentId, List childTypes, String sort, Integer startRow,
-            Integer maxRows, Authentication authentication) which
-            returned a Solr response string. The ServiceNow target
-            replaces this entirely with the Script Include's
-            getOpenTaskCountForCase(caseSysId) which uses
-            GlideAggregate for an efficient SQL COUNT(*) query - no
-            Solr engine needed, no separate index to maintain. Solr
-            is out of POC scope per AAP Section 0.3.2.
-
-      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
-        java/com/armedia/acm/plugins/casefile/service/
-        ChangeCaseFileStateService.java
-            * line 79-114 changeCaseState(auth, caseId, newState,
-              ipAddress) - the central case state-machine service in
-              ArkCase. The single method covered every transition by
-              string-matching the newState parameter. The ServiceNow
-              target splits this into FIVE per-transition subflows;
-              this subflow is the In Progress -> Resolved slice. The
-              ArkCase method does NOT enforce the all-tasks-closed
-              gate (that gate did not exist in ArkCase as a hard rule
-              because Solr-backed task aggregation was used only for
-              UI display, not enforcement). The ServiceNow target
-              ADDS the gate per AAP Section 0.5.5 explicit requirement.
-
-      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
-        com/armedia/acm/plugins/task/model/AcmTask.java
-            The task entity. Its status field has multiple states
-            in ArkCase; the AAP simplifies to three values for the
-            POC (Open, In Progress, Closed). The "all tasks closed"
-            check in this subflow counts tasks where status is NOT
-            exactly the literal string 'Closed'. Tasks with status
-            'Open' or 'In Progress' (the only other legal Choice
-            values per AAP Section 0.5.7 and
-            ../../choices/sys_choice_case_task_status.xml) are
-            counted as open and block the Resolved transition.
-
-    SUBFLOW INPUTS (Flow Designer declarative parameters):
-
-      1. case_record  (Reference to x_casemgmt_case, MANDATORY)
-            Passed in by the parent flow as $trigger.current. This is
-            the case row whose status is transitioning to Resolved.
-            The parent flow's OnUpdate trigger fires when status
-            changes to 'Resolved', and the trigger's $trigger.current
-            is the just-updated case GlideRecord. The Script Include's
-            canTransitionToResolved method uses
-            caseGr.getUniqueValue() to obtain the case's sys_id, then
-            passes that sys_id to the GlideAggregate query against
-            x_casemgmt_case_task. The sys_id is a RUNTIME value
-            (computed by the platform when the case row was inserted),
-            NOT a hardcoded literal - this is the sole reason
-            "no hardcoded sys_ids" rule does not preclude the use of
-            sys_id values inside this subflow's logic.
-
-    SUBFLOW STEPS (ordered):
-
-      Step 1: Validate Resolved Transition (all tasks closed check)
-            A Script Step that:
-                a) Instantiates the Script Include:
-                       var validator = new x_casemgmt.CaseTransitionValidator();
-                b) Invokes the per-transition guard with the supplied
-                   case_record GlideRecord:
-                       var result = validator.canTransitionToResolved(
-                           fd_data.subflow_inputs.case_record);
-                c) Exposes two outputs to the subflow execution context:
-                       outputs.ok            = result.ok            (Boolean)
-                       outputs.error_message = result.error || ''   (String)
-            The Script Include's canTransitionToResolved returns:
-                { ok: true }  - when zero open child tasks remain
-                { ok: false, error: 'All tasks must be closed before
-                                    resolving this case.' }
-                              - when at least one child task has
-                                status != 'Closed' (the verbatim AAP
-                                Section 0.7.4 message)
-                { ok: false, error: 'Case record is missing.' }
-                              - when caseGr is null/undefined (defensive
-                                guard inside the Script Include)
-            The verbatim AAP message comes from the Script Include
-            unmodified; this subflow does not compose its own message.
-
-      Step 2: If validator returned not-ok
-            An If/Then condition that branches when:
-                fd_data._step_outputs.ok == false
-            The branch contains a single Throw Error action.
-
-      Step 2a: Throw Error (surfaces verbatim message on form)
-            The Throw Error action's message is bound to the Script
-            Step's error_message output. At runtime, when the
-            condition is true and the action fires, the platform:
-                a) Calls gs.addErrorMessage(error_message) on the
-                   current update transaction's session.
-                b) Aborts the parent flow's triggering update
-                   (the implicit setAbortAction(true) on Throw Error).
-                c) Returns control to the form, which displays the
-                   error message at the top of the form.
-            The error message text is EXACTLY:
-                "All tasks must be closed before resolving this case."
-            (the verbatim AAP Section 0.7.4 string, character-for-
-            character including the trailing period and lowercase
-            'case'). The message is propagated through the Script
-            Include's return value; both the snapshot and the
-            description above also embed the literal verbatim
-            message for documentation/audit purposes.
-
-      Step 3: End (implicit success path)
-            When the If condition evaluates to false (validator
-            returned ok=true), no Throw Error fires and the subflow
-            returns successfully to the parent flow. No outputs are
-            exposed to the parent because the parent flow does not
-            need a return value - the absence of a thrown error is
-            the success signal.
-
-    OUTPUTS:
-        None at the subflow level. The internal Script Step exposes
-        ok and error_message outputs but those are scoped to the
-        subflow and consumed only by the subsequent If/Throw Error
-        step. The subflow itself returns no value to the parent.
-
-    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
-        - <name>x_casemgmt_validate_resolved_transition</name> uses
-          the x_casemgmt scope prefix per the auto-assigned scoped-
-          app namespace.
-        - <sys_scope>x_casemgmt</sys_scope> binds THIS subflow record
-          to the x_casemgmt scope.
-        - <sys_package source="x_casemgmt">x_casemgmt</sys_package>
-          binds THIS subflow record to the x_casemgmt application
-          package.
-        - The Flow Designer snapshot below references:
-            * x_casemgmt_case table BY NAME
-              (input parameter reference_table)
-            * x_casemgmt.CaseTransitionValidator Script Include BY
-              API NAME (the canonical scope-qualified accessor for
-              scoped Script Includes; see
-              ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
-              <api_name>x_casemgmt.CaseTransitionValidator</api_name>)
-            * x_casemgmt_case_task table indirectly (via the Script
-              Include's getOpenTaskCountForCase which constructs
-              new GlideAggregate('x_casemgmt_case_task'))
-        Zero global-scope writes. Zero modifications to OOB tables
-        (sys_user, sys_user_group, sys_user_role, core_company,
-         task, incident, etc.).
-
-    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
-        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
-        - <sys_package> resolves the application record BY NAME
-          (x_casemgmt) via its `source` attribute
-        - The subflow snapshot references the x_casemgmt_case table
-          BY NAME ("reference_table": "x_casemgmt_case") and invokes
-          the Script Include BY API NAME
-          ("x_casemgmt.CaseTransitionValidator"). Zero `sys_id`
-          literal references appear anywhere in the snapshot or
-          audit-field XML.
-        - The <sys_id> element below is THIS record's own deterministic
-          primary key (MD5 of "x_casemgmt_validate_resolved_transition"),
-          which is permitted because the AAP "no hardcoded sys_id" rule
-          applies to REFERENCE FIELDS pointing at OTHER records, not to
-          a record's own primary key. The deterministic derivation
-          ensures idempotent re-import on a fresh PDI - re-importing
-          the same Update Set produces the same sys_id, which collides
-          on the existing record and updates it in place rather than
-          creating a duplicate.
-        - The Script Include's getOpenTaskCountForCase uses
-          caseGr.getUniqueValue() to obtain the case sys_id at runtime
-          - this is a runtime value, not a hardcoded literal.
-
-    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
-        The subflow MUST NOT call gs.eventQueue('...') for any email
-        notification event since email is disabled on the PDI. This
-        subflow contains zero gs.eventQueue() calls, zero Send Email
-        actions, and zero notification trigger steps. It performs
-        only the validation-and-throw side effect on failure.
-        Intentionally diverges from ArkCase ChangeCaseFileStateService
-        line 106 raiseEvent() which would have triggered downstream
-        notification listeners on every state change; the ServiceNow
-        POC omits the equivalent call per the AAP minimal-change
-        clause and the email-disabled constraint.
-
-    NO PII (AAP Section 0.7.2):
-        The description text, code comments, and snapshot inline
-        labels contain zero real names, real email addresses, real
-        phone numbers, real organizational identifiers, or any
-        other personally identifiable information. The subflow
-        operates exclusively on a case-row reference and emits a
-        generic, AAP-mandated error string.
-
-    ACTIVE-PUBLISHED STATE (CRITICAL per agent prompt Phase 2.3):
-        - <active>true</active>      - subflow is enabled, NOT Draft
-        - <status>published</status> - subflow is published, NOT draft
-        Both are required for the parent flows to be able to call
-        this subflow at runtime. A Draft-state subflow is callable
-        only from the Flow Designer canvas during testing; published
-        is the production-ready state.
-
-    TYPE=SUBFLOW (CRITICAL per agent prompt Phase 2.4):
-        - <type>subflow</type>
-        Subflows are reusable building blocks called by parent flows
-        via the "Call a Subflow" action. A type=flow record cannot
-        be called by another flow; the platform looks for type=subflow
-        records when resolving a "Call a Subflow" reference. The
-        parent flows in ../general_inquiry_state_machine.xml and
-        ../complaint_state_machine.xml reference this subflow BY
-        NAME (x_casemgmt_validate_resolved_transition), and the
-        platform's lookup at activation time resolves to THIS record
-        because of the type=subflow setting.
-
-    RUN_AS=CALLER (CRITICAL per agent prompt Phase 2.4):
-        - <run_as>caller</run_as>
-        The subflow inherits the run-as context of the calling parent
-        flow. The parent flows use run_as=user_who_triggers, so when
-        the parent calls this subflow, the subflow ALSO runs as the
-        triggering user. This ensures:
-            * The Script Include's gs.getUser().hasRole() calls (if
-              any future enhancement adds them) evaluate against the
-              correct user identity.
-            * Any future audit logging tracks the actual user who
-              attempted the Resolved transition, not the system
-              account.
-            * The GlideAggregate query in getOpenTaskCountForCase
-              respects the caller's read ACLs on x_casemgmt_case_task.
-              In the ACL matrix from AAP Section 0.5.6, all three
-              roles (case_manager, case_agent, case_viewer) have
-              read access on case_task rows whose parent case is
-              within their visibility - so this is generally a
-              no-op constraint, but the run_as=caller setting
-              guarantees correctness if ACLs are tightened later.
-
-    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
-
-        This sys_hub_flow record MUST be loaded AFTER:
-
-          - ../../app/sys_app/x_casemgmt_case_management.xml
-              (scoped application; <sys_package> reference resolution)
-          - ../../app/sys_scope/x_casemgmt.xml
-              (scope record; <sys_scope> reference resolution)
-          - ../../tables/x_casemgmt_case.xml
-              (parent table; the case_record input parameter is a
-               Reference to this table)
-          - ../../tables/x_casemgmt_case_task.xml
-              (child table queried by the Script Include's
-               getOpenTaskCountForCase via GlideAggregate)
-          - ../../dictionary/x_casemgmt_case_status.xml
-              (the field whose change to 'Resolved' triggers the
-               parent flow's OnUpdate filter; must exist before the
-               parent flow's trigger filter can resolve)
-          - ../../dictionary/x_casemgmt_case_task_case.xml
-              (the reference field used by the GlideAggregate
-               addQuery('case', caseSysId) filter; must exist
-               before the Script Include's query can resolve)
-          - ../../dictionary/x_casemgmt_case_task_status.xml
-              (the field used in the addQuery('status', '!=', 'Closed')
-               filter; must exist with the 'Closed' choice value)
-          - ../../choices/sys_choice_case_task_status.xml
-              (the choice list that defines the 'Closed' literal;
-               the GlideAggregate filter literal 'Closed' must
-               match this choice value's `value` attribute)
-          - ../../script_includes/x_casemgmt_CaseTransitionValidator.xml
-              (the Script Include this subflow invokes; must exist
-               and be activated before the subflow's Script Step can
-               resolve the API name x_casemgmt.CaseTransitionValidator)
-
-        And BEFORE:
-
-          - ../general_inquiry_state_machine.xml
-              (parent flow that calls this subflow on the General
-               Inquiry case-type's In Progress -> Resolved edge)
-          - ../complaint_state_machine.xml
-              (parent flow that calls this subflow on the Complaint
-               case-type's In Progress -> Resolved edge)
-
-    DETERMINISTIC SYS_ID:
-        sys_id = MD5("x_casemgmt_validate_resolved_transition")
-               = c8fde9d4675c53e1c14e40c0503835f0
-        32-character lowercase hex. The PDI accepts any valid 32-char
-        hex sys_id; deriving from the record name guarantees idempotent
-        re-import on a fresh PDI: re-importing the same Update Set
-        produces the same sys_id, which collides on the existing
-        record and updates it in place rather than creating a
-        duplicate. This is the same convention used by every other
-        deterministically-keyed record in this Update Set (e.g., the
-        peer subflow validate_pending_transition.xml whose sys_id is
-        94063d7d535c4e841ad7deb0b45e8ba5 = MD5 of
-        "x_casemgmt_validate_pending_transition").
-
-    VALIDATION GATE MAPPING (AAP Section 0.7.3):
-
-        - Gate 2 (Workflow): "All state transitions enforced for both
-          case types - Invalid transitions return blocking error;
-          task-closure check blocks Resolved transition." THIS subflow
-          is the CORE IMPLEMENTATION of the "task-closure check
-          blocks Resolved transition" requirement. The gate is
-          verified by:
-
-              1) Create a case in 'In Progress' status with
-                 assigned_agent populated (and assigned_group set
-                 to a group of which the agent is a member).
-              2) Create a child x_casemgmt_case_task linked to the
-                 case via the `case` reference field, with
-                 status = 'Open' (or 'In Progress'; anything not
-                 'Closed').
-              3) Attempt to set the case's status to 'Resolved'
-                 (e.g., via the form's Save button).
-              4) The parent flow (general_inquiry or complaint
-                 state_machine, depending on case.type) fires on
-                 the OnUpdate trigger filtered to status -> Resolved.
-              5) The parent flow calls this subflow with
-                 case_record = $trigger.current.
-              6) This subflow's Script Step runs the validator,
-                 which detects openCount > 0 via GlideAggregate.
-              7) The validator returns
-                 { ok: false, error: 'All tasks must be closed
-                                       before resolving this case.' }
-              8) This subflow's If condition (ok == false) is true.
-              9) The Throw Error action fires with the verbatim
-                 message.
-             10) The parent flow's transaction aborts; the form
-                 displays the verbatim error.
-             11) The case row remains at status='In Progress' (the
-                 update was rolled back; the new value 'Resolved'
-                 was never persisted).
-
-          The character-for-character verbatim message check is
-          NON-NEGOTIABLE. Any deviation FAILS Gate 2. Examples of
-          INCORRECT messages that would FAIL the gate:
-              - "All Tasks Must Be Closed Before Resolving This Case."
-                (Title Case)
-              - "All tasks must be closed before resolving this case"
-                (missing trailing period)
-              - "All tasks must be closed before resolving the case."
-                (the -> this)
-              - "All tasks must be closed before resolving this Case."
-                (Case capitalized)
-              - "All tasks must be closed before resolving the case"
-                (missing period AND wrong article)
-          The CORRECT message that passes Gate 2 is exactly:
-              All tasks must be closed before resolving this case.
-          (lowercase 'case', trailing period, ASCII straight quotes
-          when quoted, no leading/trailing whitespace.)
-
-        - Gate 7 (Update Set): "Scoped app exported - Update Set
-          loads without errors on a fresh PDI instance." The
-          deterministic sys_id, reference-by-name pattern, and well-
-          formed XML structure ensure this record re-imports cleanly
-          with zero preview errors. The CDATA-wrapped JSON snapshot
-          contains characters requiring CDATA escaping (curly braces,
-          quotes within JSON, the != comparison operator), and the
-          CDATA section is properly opened and closed around both
-          <latest_snapshot> and <master_snapshot> elements.
-
-    PERFORMANCE NOTE:
-        getOpenTaskCountForCase uses GlideAggregate which executes
-        SQL COUNT(*) rather than fetching all task rows. For cases
-        with many child tasks (a hundred or more), this is far more
-        efficient than the equivalent
-            new GlideRecord('x_casemgmt_case_task').addQuery(...)
-            .query(); var count = gr.getRowCount();
-        pattern. The validator returns as soon as the aggregate
-        cursor advances by one row, so even thousands of open tasks
-        on a single case incur near-constant evaluation cost on the
-        gate path.
-
-    DEFENSE-IN-DEPTH NOTE:
-        A before-update Business Rule could ALSO enforce the all-
-        tasks-closed gate (and the AAP allows this pattern), but
-        the subflow is the primary surface in the current AAP
-        scope. If a future enhancement adds a Business Rule
-        equivalent (for catching direct DB updates that bypass the
-        flow path - e.g., Table API updates from external
-        integrations), it would live at
-        ../../business_rules/x_casemgmt_block_resolved_with_open_tasks.xml
-        and would call the same Script Include method
-        canTransitionToResolved for code reuse. Adding the Business
-        Rule is NOT currently in the AAP scope.
-
-    FUTURE EXTENSIBILITY:
-        - If a future AAP enhancement adds a 'Reopened' status that
-          allows transitions from Closed back to In Progress, this
-          subflow would still apply to subsequent Resolved
-          transitions and would still enforce the all-tasks-closed
-          gate. The gate is on the DESTINATION status (Resolved),
-          not the source, so it transparently handles re-entry.
-        - If task statuses expand beyond Open/In Progress/Closed
-          (e.g., adding 'Cancelled' or 'On Hold'), the
-          addQuery('status', '!=', 'Closed') filter still treats
-          all non-Closed values as "open" for gate purposes, which
-          is the AAP-aligned behavior (a non-Closed task should
-          not be deemed sufficient to allow Resolved). Cancelled
-          tasks would need to be explicitly Closed before the case
-          can be Resolved, OR the Choice list could replace the
-          'Cancelled' value with a final-state 'Closed' equivalent.
-        - If email is later re-enabled on the PDI and a
-          "Case has been Resolved - all tasks closed" notification
-          is desired, add a Send Email step to the parent flows
-          (after the subflow returns successfully), NOT to this
-          subflow. This subflow's responsibility is gating only;
-          notification is a separate concern.
+    RUNTIME VERIFICATION
+        Flow Designer's own loader (GET /api/now/processflow/flow/<sys_id>) returns HTTP 200
+        with errorCode 0 for this record, and the graph counts it reports match the
+        structure below. The state-machine gates these flows enforce were exercised on the
+        live case form for both case types; see ../../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md
+        section 3 for the recorded results.
 -->
-<record_update table="sys_hub_flow">
+<record_update sys_domain="global" table="sys_hub_flow">
     <sys_hub_flow action="INSERT_OR_UPDATE">
         <access>public</access>
         <acls/>
         <active>true</active>
+        <allow_high_security_roles>false</allow_high_security_roles>
         <annotation/>
+        <attributes>browserActivatedIn=chrome,integrationActivatedIn=standalone,labelCacheCleanUpExecuted=true,timeFromCreateToActivate=829000,viewActivatedIn=naturalLanguage</attributes>
+        <authored_on_release_version>29000</authored_on_release_version>
         <callable_by_client_api>false</callable_by_client_api>
-        <category display_value="Custom">custom</category>
+        <category/>
         <copied_from/>
         <copied_from_name/>
-        <description>Subflow that validates the In Progress -&gt; Resolved transition on x_casemgmt_case. Per AAP Section 0.5.5, requires all linked x_casemgmt_case_task records to have status=Closed; calls x_casemgmt.CaseTransitionValidator.canTransitionToResolved(case_record), which delegates to getOpenTaskCountForCase via GlideAggregate. On failure, throws the VERBATIM AAP Section 0.7.4 error message "All tasks must be closed before resolving this case." which surfaces on the form via Flow Designer Throw Error (gs.addErrorMessage + setAbortAction). ServiceNow-native replacement for ArkCase CaseFileTasksService (which used Solr search; the target uses GlideAggregate for SQL COUNT(*) - Solr is out of POC scope per AAP Section 0.3.2). Called by parent flows ../general_inquiry_state_machine.xml and ../complaint_state_machine.xml whenever a case status changes to 'Resolved'. Inputs: case_record (Reference to x_casemgmt_case, mandatory, $trigger.current). No outputs at subflow level. No role check. No side effect on success - unlike validate_pending_transition (sets pending_reason) or validate_closed_transition (sets closed_date), the Resolved transition has no field to auto-set. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
-        <internal_name>x_casemgmt_validate_resolved_transition</internal_name>
-        <label_cache>Validate Resolved Transition</label_cache>
-        <latest_snapshot><![CDATA[{
-    "name": "x_casemgmt_validate_resolved_transition",
-    "label": "Validate Resolved Transition",
-    "type": "subflow",
-    "description": "Validates the In Progress -> Resolved transition. Requires all linked x_casemgmt_case_task records to have status=Closed; throws verbatim AAP Section 0.7.4 error 'All tasks must be closed before resolving this case.' on failure (AAP Section 0.5.5).",
-    "scope": "x_casemgmt",
-    "run_as": "caller",
-    "category": "subflow",
-    "inputs": [
-        {
-            "id": "input_case_record",
-            "name": "case_record",
-            "label": "Case Record",
-            "field_type": "reference",
-            "reference_table": "x_casemgmt_case",
-            "is_mandatory": true,
-            "default_value": null,
-            "description": "The x_casemgmt_case row whose Resolved-transition is being validated. Passed from the parent flow as $trigger.current. The Script Include uses caseGr.getUniqueValue() to obtain the case sys_id and queries x_casemgmt_case_task children via GlideAggregate."
-        }
-    ],
-    "outputs": [],
-    "stages": [],
-    "actions": [
-        {
-            "id": "step_run_validator",
-            "order": 100,
-            "name": "Validate Resolved Transition (all tasks closed check)",
-            "type": "script_step",
-            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToResolved(case_record). The Script Include returns { ok: true } when zero open tasks remain, or { ok: false, error: 'All tasks must be closed before resolving this case.' } when at least one child task has status != 'Closed' (the verbatim AAP Section 0.7.4 message). Internally the Script Include uses GlideAggregate('x_casemgmt_case_task') with addQuery('case', caseSysId) and addQuery('status', '!=', 'Closed') for an efficient SQL COUNT(*) check.",
-            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToResolved(inputs.case_record); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
-            "script_includes_used": [
-                "x_casemgmt.CaseTransitionValidator"
-            ],
-            "tables_referenced": [
-                "x_casemgmt_case_task"
-            ],
-            "outputs": [
-                {
-                    "name": "ok",
-                    "label": "OK",
-                    "field_type": "boolean",
-                    "description": "True when the validator reports the transition is permitted (zero open tasks remain). False when at least one child task has status != 'Closed' or when the case_record input is null/undefined."
-                },
-                {
-                    "name": "error_message",
-                    "label": "Error Message",
-                    "field_type": "string",
-                    "description": "Empty string when ok=true. The verbatim AAP Section 0.7.4 message 'All tasks must be closed before resolving this case.' when ok=false because of open tasks. The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation)."
-                }
-            ]
-        },
-        {
-            "id": "step_if_validator_failed",
-            "order": 200,
-            "name": "If validator returned not-ok",
-            "type": "if",
-            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the verbatim AAP Section 0.7.4 message on the form and aborts the parent flow's triggering update transaction.",
-            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
-            "actions": [
-                {
-                    "id": "step_throw_error",
-                    "order": 100,
-                    "name": "Throw Error (surface verbatim AAP message)",
-                    "type": "throw_error",
-                    "description": "Throws the verbatim AAP Section 0.7.4 error message 'All tasks must be closed before resolving this case.' to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to the verbatim AAP string when openCount > 0. The literal verbatim string 'All tasks must be closed before resolving this case.' is preserved character-for-character including trailing period and lowercase 'case' per AAP Section 0.7.4 and assigned-folder Rule 9.",
-                    "inputs": {
-                        "message": "${step_run_validator.error_message}",
-                        "verbatim_aap_0_7_4_message": "All tasks must be closed before resolving this case."
-                    }
-                }
-            ]
-        }
-    ]
-}]]></latest_snapshot>
-        <latest_snapshot_user display_value="System Administrator">admin</latest_snapshot_user>
-        <master_snapshot><![CDATA[{
-    "name": "x_casemgmt_validate_resolved_transition",
-    "label": "Validate Resolved Transition",
-    "type": "subflow",
-    "description": "Validates the In Progress -> Resolved transition. Requires all linked x_casemgmt_case_task records to have status=Closed; throws verbatim AAP Section 0.7.4 error 'All tasks must be closed before resolving this case.' on failure (AAP Section 0.5.5).",
-    "scope": "x_casemgmt",
-    "run_as": "caller",
-    "category": "subflow",
-    "inputs": [
-        {
-            "id": "input_case_record",
-            "name": "case_record",
-            "label": "Case Record",
-            "field_type": "reference",
-            "reference_table": "x_casemgmt_case",
-            "is_mandatory": true,
-            "default_value": null,
-            "description": "The x_casemgmt_case row whose Resolved-transition is being validated. Passed from the parent flow as $trigger.current. The Script Include uses caseGr.getUniqueValue() to obtain the case sys_id and queries x_casemgmt_case_task children via GlideAggregate."
-        }
-    ],
-    "outputs": [],
-    "stages": [],
-    "actions": [
-        {
-            "id": "step_run_validator",
-            "order": 100,
-            "name": "Validate Resolved Transition (all tasks closed check)",
-            "type": "script_step",
-            "description": "Calls x_casemgmt.CaseTransitionValidator.canTransitionToResolved(case_record). The Script Include returns { ok: true } when zero open tasks remain, or { ok: false, error: 'All tasks must be closed before resolving this case.' } when at least one child task has status != 'Closed' (the verbatim AAP Section 0.7.4 message). Internally the Script Include uses GlideAggregate('x_casemgmt_case_task') with addQuery('case', caseSysId) and addQuery('status', '!=', 'Closed') for an efficient SQL COUNT(*) check.",
-            "script": "(function execute(inputs, outputs) { var validator = new x_casemgmt.CaseTransitionValidator(); var result = validator.canTransitionToResolved(inputs.case_record); outputs.ok = !!(result && result.ok); outputs.error_message = (result && result.error) ? String(result.error) : ''; })(fd_data.subflow_inputs, fd_data._step_outputs);",
-            "script_includes_used": [
-                "x_casemgmt.CaseTransitionValidator"
-            ],
-            "tables_referenced": [
-                "x_casemgmt_case_task"
-            ],
-            "outputs": [
-                {
-                    "name": "ok",
-                    "label": "OK",
-                    "field_type": "boolean",
-                    "description": "True when the validator reports the transition is permitted (zero open tasks remain). False when at least one child task has status != 'Closed' or when the case_record input is null/undefined."
-                },
-                {
-                    "name": "error_message",
-                    "label": "Error Message",
-                    "field_type": "string",
-                    "description": "Empty string when ok=true. The verbatim AAP Section 0.7.4 message 'All tasks must be closed before resolving this case.' when ok=false because of open tasks. The defensive message 'Case record is missing.' when ok=false because of a null case_record (should not occur in normal parent-flow invocation)."
-                }
-            ]
-        },
-        {
-            "id": "step_if_validator_failed",
-            "order": 200,
-            "name": "If validator returned not-ok",
-            "type": "if",
-            "description": "Branches when the validator's ok output is false. The branch executes the Throw Error action that surfaces the verbatim AAP Section 0.7.4 message on the form and aborts the parent flow's triggering update transaction.",
-            "condition": "fd_data._step_outputs.step_run_validator.ok == false",
-            "actions": [
-                {
-                    "id": "step_throw_error",
-                    "order": 100,
-                    "name": "Throw Error (surface verbatim AAP message)",
-                    "type": "throw_error",
-                    "description": "Throws the verbatim AAP Section 0.7.4 error message 'All tasks must be closed before resolving this case.' to abort the parent flow's update and surface the message on the form. Flow Designer Throw Error implicitly invokes gs.addErrorMessage(message) and setAbortAction(true) on the triggering GlideRecord transaction. The message is bound to the Script Step's error_message output, which the Script Include sets to the verbatim AAP string when openCount > 0. The literal verbatim string 'All tasks must be closed before resolving this case.' is preserved character-for-character including trailing period and lowercase 'case' per AAP Section 0.7.4 and assigned-folder Rule 9.",
-                    "inputs": {
-                        "message": "${step_run_validator.error_message}",
-                        "verbatim_aap_0_7_4_message": "All tasks must be closed before resolving this case."
-                    }
-                }
-            ]
-        }
-    ]
-}]]></master_snapshot>
-        <master_snapshot_id/>
-        <name>x_casemgmt_validate_resolved_transition</name>
+        <description>Validates the In Progress to Resolved transition on x_casemgmt_case by delegating to the Case Transition Guard action, which calls x_casemgmt.CaseTransitionValidator. Returns blocked plus the verbatim blocking message.</description>
+        <display_name_after_preview/>
+        <flow_priority>MEDIUM</flow_priority>
+        <generation_source/>
+        <internal_name>validate_resolved_transition</internal_name>
+        <label_cache>[{"name":"subflow.case_sys_id","label":"Input➛Case Sys Id","type":"string","base_type":"string","usedInstances":{"8af30351-590b-480e-851e-995609ca9a69":["case_sys_id"]},"attributes":{"sourceUiUniqueId":"","sourceType":"","sourceId":"","uiUniqueId":"5b9152a2-d039-41f2-833d-153b80613d6b"}},{"name":"8af30351-590b-480e-851e-995609ca9a69.blocked","label":"1 - Case Transition Guard➛Blocked","type":"string","base_type":"string","usedInstances":{"df4662ac-0a6e-4035-a745-728973791fea":["blocked-0"]},"attributes":{"uiTypeLabel":"String","element_mapping_provider":"com.glide.flow_design.action.data.FlowDesignVariableMapper","pwd2droppable":"true","uiType":"string","uiUniqueId":"39333c74-0196-4bf6-ae0b-3252de17ccf1"}},{"name":"8af30351-590b-480e-851e-995609ca9a69.error_message","label":"1 - Case Transition Guard➛Error Message","type":"string","base_type":"string","usedInstances":{"df4662ac-0a6e-4035-a745-728973791fea":["error_message-1"]},"attributes":{"uiTypeLabel":"String","element_mapping_provider":"com.glide.flow_design.action.data.FlowDesignVariableMapper","pwd2droppable":"true","uiType":"string","uiUniqueId":"a344044a-8ae4-4d97-98b3-5506da80dc11"}}]</label_cache>
+        <master_snapshot>36b49329932e0710830ef82bdd03d648</master_snapshot>
+        <master_snapshot_digest/>
+        <name>Validate Resolved Transition</name>
         <natlang/>
-        <nlu_model_version/>
         <outputs/>
-        <protection_policy/>
-        <remote_published_version/>
-        <run_as>caller</run_as>
+        <pre_compiled>false</pre_compiled>
+        <remote_trigger_id/>
+        <run_as>user</run_as>
+        <run_with_roles/>
         <sc_callable>false</sc_callable>
         <show_draft_actions>false</show_draft_actions>
         <show_triggered_flows>false</show_triggered_flows>
         <status>published</status>
+        <substatus/>
         <sys_class_name>sys_hub_flow</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>c8fde9d4675c53e1c14e40c0503835f0</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>x_casemgmt_validate_resolved_transition</sys_name>
+        <sys_created_on>2026-08-07 02:55:46</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>a4911f2993ea0710830ef82bdd03d600</sys_id>
+        <sys_mod_count>10</sys_mod_count>
+        <sys_name>Validate Resolved Transition</sys_name>
         <sys_overrides/>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
-        <sys_update_name>sys_hub_flow_x_casemgmt_validate_resolved_transition</sys_update_name>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_hub_flow_a4911f2993ea0710830ef82bdd03d600</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <sys_updated_on>2026-08-07 06:27:28</sys_updated_on>
         <type>subflow</type>
-        <validation_status>complete</validation_status>
+        <updation_source/>
+        <version>2</version>
+        <version_record>a7b4d329932e0710830ef82bdd03d612</version_record>
     </sys_hub_flow>
+    <sys_translated_text action="delete_multiple" query="documentkey=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_variable_value action="delete_multiple" query="document_key=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_element_mapping action="delete_multiple" query="table=var__m_sys_hub_flow_output_a4911f2993ea0710830ef82bdd03d600^id=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_hub_flow_stage action="delete_multiple" query="flow=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_flow_cat_variable_model action="delete_multiple" query="id=a4911f2993ea0710830ef82bdd03d600^sys_idNOT IN60911f2993ea0710830ef82bdd03d601"/>
+    <sys_flow_cat_variable_model action="INSERT_OR_UPDATE">
+        <id>a4911f2993ea0710830ef82bdd03d600</id>
+        <name>Validate Resolved Transition</name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:55:46</sys_created_on>
+        <sys_id>60911f2993ea0710830ef82bdd03d601</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_scope/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 02:55:46</sys_updated_on>
+    </sys_flow_cat_variable_model>
+    <sys_flow_cat_variable action="delete_multiple" query="flow_catalog_model=60911f2993ea0710830ef82bdd03d601"/>
+    <sys_hub_flow_input action="delete_multiple" query="model=a4911f2993ea0710830ef82bdd03d600^sys_idNOT IN2072d7e1932e0710830ef82bdd03d686"/>
+    <sys_hub_flow_input action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <array_denormalized>false</array_denormalized>
+        <attributes>element_mapping_provider=com.glide.flow_design.action.data.FlowDesignVariableMapper,uiType=string,uiTypeLabel=String,uiUniqueId=5b9152a2-d039-41f2-833d-153b80613d6b</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label/>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>case_sys_id</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <help/>
+        <hint/>
+        <internal_type display_value="String">string</internal_type>
+        <label>Case Sys Id</label>
+        <mandatory>true</mandatory>
+        <max_length>8000</max_length>
+        <model display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</model>
+        <model_id>a4911f2993ea0710830ef82bdd03d600</model_id>
+        <model_table>sys_hub_flow</model_table>
+        <name>var__m_sys_hub_flow_input_a4911f2993ea0710830ef82bdd03d600</name>
+        <next_element/>
+        <order>1</order>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_hub_flow_input</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:59:37</sys_created_on>
+        <sys_id>2072d7e1932e0710830ef82bdd03d686</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:33</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_hub_flow_input>
+    <sys_hub_action_input_action_instance action="delete_multiple" query="action_input=2072d7e1932e0710830ef82bdd03d686"/>
+    <sys_hub_flow_output action="delete_multiple" query="model=a4911f2993ea0710830ef82bdd03d600^sys_idNOT IN7c72d7e1932e0710830ef82bdd03d6c6,b472d7e1932e0710830ef82bdd03d6ce"/>
+    <sys_hub_flow_output action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <array_denormalized>false</array_denormalized>
+        <attributes>element_mapping_provider=com.glide.flow_design.action.data.FlowDesignVariableMapper,uiType=string,uiTypeLabel=String,uiUniqueId=ed864b58-206f-40a0-a0e2-63d995a21185</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label/>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>error_message</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <help/>
+        <hint/>
+        <internal_link/>
+        <internal_type display_value="String">string</internal_type>
+        <label>Error Message</label>
+        <mandatory>false</mandatory>
+        <max_length>8000</max_length>
+        <model display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</model>
+        <model_id>a4911f2993ea0710830ef82bdd03d600</model_id>
+        <model_table>sys_hub_flow</model_table>
+        <name>var__m_sys_hub_flow_output_a4911f2993ea0710830ef82bdd03d600</name>
+        <next_element/>
+        <order>2</order>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_hub_flow_output</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:59:37</sys_created_on>
+        <sys_id>7c72d7e1932e0710830ef82bdd03d6c6</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:34</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_hub_flow_output>
+    <sys_hub_action_input_action_instance action="delete_multiple" query="action_input=7c72d7e1932e0710830ef82bdd03d6c6"/>
+    <sys_hub_flow_output action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <array_denormalized>false</array_denormalized>
+        <attributes>element_mapping_provider=com.glide.flow_design.action.data.FlowDesignVariableMapper,uiType=string,uiTypeLabel=String,uiUniqueId=afda690e-9f8c-48d4-95db-04ff4ab7216e</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label/>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>blocked</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <help/>
+        <hint/>
+        <internal_link/>
+        <internal_type display_value="String">string</internal_type>
+        <label>Blocked</label>
+        <mandatory>false</mandatory>
+        <max_length>8000</max_length>
+        <model display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</model>
+        <model_id>a4911f2993ea0710830ef82bdd03d600</model_id>
+        <model_table>sys_hub_flow</model_table>
+        <name>var__m_sys_hub_flow_output_a4911f2993ea0710830ef82bdd03d600</name>
+        <next_element/>
+        <order>1</order>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_hub_flow_output</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:59:37</sys_created_on>
+        <sys_id>b472d7e1932e0710830ef82bdd03d6ce</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:34</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_hub_flow_output>
+    <sys_hub_action_input_action_instance action="delete_multiple" query="action_input=b472d7e1932e0710830ef82bdd03d6ce"/>
+    <sys_hub_alias_mapping action="delete_multiple" query="source_id=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_hub_trigger_instance_v2 action="delete_multiple" query="flow=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_hub_action_instance_v2 action="delete_multiple" query="flow=a4911f2993ea0710830ef82bdd03d600^sys_idNOT IN55e2df6193ea0710830ef82bdd03d618"/>
+    <sys_hub_action_instance_v2 action="INSERT_OR_UPDATE">
+        <action_type display_value="Case Transition Guard">3a8ccfe593ea0710830ef82bdd03d680</action_type>
+        <action_type_parent display_value="Case Transition Guard">5168476d93aa0710830ef82bdd03d607</action_type_parent>
+        <attributes/>
+        <comment/>
+        <compiled_snapshot>3a8ccfe593ea0710830ef82bdd03d680</compiled_snapshot>
+        <display_text/>
+        <flow display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</flow>
+        <generation_source/>
+        <order>1</order>
+        <parent_ui_id/>
+        <sys_class_name>sys_hub_action_instance_v2</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:01:34</sys_created_on>
+        <sys_id>55e2df6193ea0710830ef82bdd03d618</sys_id>
+        <sys_mod_count>3</sys_mod_count>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 05:16:45</sys_updated_on>
+        <ui_id>8af30351-590b-480e-851e-995609ca9a69</ui_id>
+        <updation_source/>
+        <values>H4sIAAAAAAAA/+1TTWvbQBD9K2HPkpFsxZZ9Kw6BQNtAnOYSghjtztoLa0nZDyeu8X/vrCU5JiFtAj2VHufNm503b2fud0wJNmMjyDmXeD4dISSTNMlHCcp8WAqRjMQ4H7OIVbBGYnKwWNitLaguYhvQPqC7nfWl1PXT4CS/3xNDKNto2N79kchXSguDFZvdP0SsAUP9HBo2271KfVSwhhI1UefU6GyxtWdX4r0x3LYJoHVGVcsu/tqVL3qwNiLISSOGzw4rgaRDgrYYsTVUAlxttmzmjCfAIIjrSm+PjJWqHD3GAvfZqp/ULk+SJDAl0mgc2+wxLDrjWlhegANS4rnzpqPyVa042tYUgRK8dvNTrCVcN07VVVvioNR9da39uvreusGOD/T/RIgnhwQ2YdKgvRtELlb1002v8lJVB1O6pK456GMEjqwrvQt6dsyr21cut8gbn1HjmjoWa2gaQorG1Bt16EKi14OlpmAQVojUWbWsBsDDhAP6ARhcEn5xgO/AqDDuN3qGikO7H5V69HgV9kdMQEyRJ3GWi3GcpekoLkuRxjjJ81RimkEi2T5itCJzDda+GEU/VDz6MGZrW2dQ0XocSrhRjftCojbYebGPujuTw9+t7bR8WVAHZomusA6ctyeXdoO21hsUb0/rJPO5W/qAqP6Wbg+qzha9qnfEfuaehv/v6R+4p5zGnYrzNB4OJ1mcwUjEZZbkcZZISKBMJ5KP/+I9PfwC4SRwJrkGAAA=</values>
+    </sys_hub_action_instance_v2>
+    <sys_hub_alias_mapping action="delete_multiple" query="source_id=55e2df6193ea0710830ef82bdd03d618"/>
+    <sys_hub_sub_flow_instance_v2 action="delete_multiple" query="flow=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_hub_flow_logic_instance_v2 action="delete_multiple" query="flow=a4911f2993ea0710830ef82bdd03d600^sys_idNOT IN64c31765932e0710830ef82bdd03d6e8"/>
+    <sys_hub_flow_logic_instance_v2 action="INSERT_OR_UPDATE">
+        <attributes/>
+        <block display_value="">62b45329932e0710830ef82bdd03d6ff</block>
+        <comment/>
+        <connected_to/>
+        <decision_table/>
+        <display_text/>
+        <flow display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</flow>
+        <flow_variables_assigned/>
+        <generation_source/>
+        <logic_definition display_value="Assign Subflow Outputs">df4e1945c3e232002841b63b12d3ae3e</logic_definition>
+        <order>2</order>
+        <outputs_assigned>blocked,error_message</outputs_assigned>
+        <parent_ui_id/>
+        <sys_class_name>sys_hub_flow_logic_instance_v2</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:05:20</sys_created_on>
+        <sys_id>64c31765932e0710830ef82bdd03d6e8</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:34</sys_updated_on>
+        <ui_id>df4662ac-0a6e-4035-a745-728973791fea</ui_id>
+        <updation_source/>
+        <values>H4sIAAAAAAAA/6WRTwuCQBDFv8ueNRQz3G4du0eXiBh3RxtcXdlRI8TvnlL0hw5RHefHe4/3mF7Ytqnbhjd2xUx5JZa7XlRQoliK1FhVoBae6MC0E+n7BLIoiOLQj2WQ+vMkQD+JQ/SljBeBVCBhIWc34zCMVk1cGzhvf09QRzLa4VRt7wlWjupmpRrqxrwMDOPg3Sujc9YdSmSGHL8v/mL/o/57zucRI6ZqesVV0oEjSA3eTo2KmGy1mdj6SafP43RSz+hkXZEZe3qw4QLSGVWv6AEAAA==</values>
+        <workflow_reference/>
+    </sys_hub_flow_logic_instance_v2>
+    <sys_hub_pill_compound action="delete_multiple" query="attached_to=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_hub_flow_variable action="delete_multiple" query="model=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_documentation action="INSERT_OR_UPDATE">
+        <element>case_sys_id</element>
+        <help/>
+        <hint/>
+        <label>Case Sys Id</label>
+        <language>en</language>
+        <name>var__m_sys_hub_flow_input_a4911f2993ea0710830ef82bdd03d600</name>
+        <plural/>
+        <sys_class_name>sys_documentation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:59:37</sys_created_on>
+        <sys_id>3872d7e1932e0710830ef82bdd03d68b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 02:59:37</sys_updated_on>
+        <url/>
+        <url_target/>
+    </sys_documentation>
+    <sys_choice action="delete_multiple" query="name=var__m_sys_hub_flow_input_a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_documentation action="INSERT_OR_UPDATE">
+        <element>error_message</element>
+        <help/>
+        <hint/>
+        <label>Error Message</label>
+        <language>en</language>
+        <name>var__m_sys_hub_flow_output_a4911f2993ea0710830ef82bdd03d600</name>
+        <plural/>
+        <sys_class_name>sys_documentation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:59:37</sys_created_on>
+        <sys_id>b472d7e1932e0710830ef82bdd03d6cc</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 02:59:37</sys_updated_on>
+        <url/>
+        <url_target/>
+    </sys_documentation>
+    <sys_documentation action="INSERT_OR_UPDATE">
+        <element>blocked</element>
+        <help/>
+        <hint/>
+        <label>Blocked</label>
+        <language>en</language>
+        <name>var__m_sys_hub_flow_output_a4911f2993ea0710830ef82bdd03d600</name>
+        <plural/>
+        <sys_class_name>sys_documentation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 02:59:37</sys_created_on>
+        <sys_id>f472d7e1932e0710830ef82bdd03d6de</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 02:59:37</sys_updated_on>
+        <url/>
+        <url_target/>
+    </sys_documentation>
+    <sys_choice action="delete_multiple" query="name=var__m_sys_hub_flow_output_a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_hub_flow_snapshot action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <acls/>
+        <active>true</active>
+        <allow_high_security_roles>false</allow_high_security_roles>
+        <annotation/>
+        <attributes>browserActivatedIn=chrome,integrationActivatedIn=standalone,labelCacheCleanUpExecuted=true,viewActivatedIn=naturalLanguage</attributes>
+        <authored_on_release_version>29000</authored_on_release_version>
+        <callable_by_client_api>false</callable_by_client_api>
+        <category/>
+        <copied_from/>
+        <copied_from_name/>
+        <description>Validates the In Progress to Resolved transition on x_casemgmt_case by delegating to the Case Transition Guard action, which calls x_casemgmt.CaseTransitionValidator. Returns blocked plus the verbatim blocking message.</description>
+        <flow_priority>MEDIUM</flow_priority>
+        <internal_name>validate_resolved_transition</internal_name>
+        <label_cache>[{"name":"subflow.case_sys_id","label":"Input➛Case Sys Id","type":"string","base_type":"string","usedInstances":{"8af30351-590b-480e-851e-995609ca9a69":["case_sys_id"]},"attributes":{"sourceUiUniqueId":"","sourceType":"","sourceId":"","uiUniqueId":"5b9152a2-d039-41f2-833d-153b80613d6b"}},{"name":"8af30351-590b-480e-851e-995609ca9a69.blocked","label":"1 - Case Transition Guard➛Blocked","type":"string","base_type":"string","usedInstances":{"df4662ac-0a6e-4035-a745-728973791fea":["blocked-0"]},"attributes":{"uiTypeLabel":"String","element_mapping_provider":"com.glide.flow_design.action.data.FlowDesignVariableMapper","pwd2droppable":"true","uiType":"string","uiUniqueId":"39333c74-0196-4bf6-ae0b-3252de17ccf1"}},{"name":"8af30351-590b-480e-851e-995609ca9a69.error_message","label":"1 - Case Transition Guard➛Error Message","type":"string","base_type":"string","usedInstances":{"df4662ac-0a6e-4035-a745-728973791fea":["error_message-1"]},"attributes":{"uiTypeLabel":"String","element_mapping_provider":"com.glide.flow_design.action.data.FlowDesignVariableMapper","pwd2droppable":"true","uiType":"string","uiUniqueId":"a344044a-8ae4-4d97-98b3-5506da80dc11"}}]</label_cache>
+        <master>true</master>
+        <name>Validate Resolved Transition</name>
+        <natlang/>
+        <outputs/>
+        <parent_flow display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</parent_flow>
+        <remote_trigger_id/>
+        <run_as>user</run_as>
+        <run_with_roles/>
+        <sc_callable>false</sc_callable>
+        <status>published</status>
+        <sys_class_name>sys_hub_flow_snapshot</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>36b49329932e0710830ef82bdd03d648</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_overrides/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+        <type>subflow</type>
+        <version>2</version>
+    </sys_hub_flow_snapshot>
+    <sys_translated_text action="delete_multiple" query="documentkey=36b49329932e0710830ef82bdd03d648"/>
+    <sys_variable_value action="delete_multiple" query="document_key=36b49329932e0710830ef82bdd03d648"/>
+    <sys_element_mapping action="delete_multiple" query="table=var__m_sys_hub_flow_output_36b49329932e0710830ef82bdd03d648^id=36b49329932e0710830ef82bdd03d648"/>
+    <sys_hub_flow_stage action="delete_multiple" query="flow=36b49329932e0710830ef82bdd03d648"/>
+    <sys_flow_cat_variable_model action="delete_multiple" query="id=36b49329932e0710830ef82bdd03d648^sys_idNOT IN4bb49329932e0710830ef82bdd03d649"/>
+    <sys_flow_cat_variable_model action="INSERT_OR_UPDATE">
+        <id>36b49329932e0710830ef82bdd03d648</id>
+        <name>Validate Resolved Transition</name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_id>4bb49329932e0710830ef82bdd03d649</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_scope/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+    </sys_flow_cat_variable_model>
+    <sys_flow_cat_variable action="delete_multiple" query="flow_catalog_model=4bb49329932e0710830ef82bdd03d649"/>
+    <sys_hub_flow_input action="delete_multiple" query="model=36b49329932e0710830ef82bdd03d648^sys_idNOT INc3b49329932e0710830ef82bdd03d64b"/>
+    <sys_hub_flow_input action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <array_denormalized>false</array_denormalized>
+        <attributes>element_mapping_provider=com.glide.flow_design.action.data.FlowDesignVariableMapper,uiType=string,uiTypeLabel=String,uiUniqueId=5b9152a2-d039-41f2-833d-153b80613d6b</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label/>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>case_sys_id</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <help/>
+        <hint/>
+        <internal_type display_value="String">string</internal_type>
+        <label>Case Sys Id</label>
+        <mandatory>true</mandatory>
+        <max_length>8000</max_length>
+        <model display_value="Validate Resolved Transition">36b49329932e0710830ef82bdd03d648</model>
+        <model_id>36b49329932e0710830ef82bdd03d648</model_id>
+        <model_table>sys_hub_flow_snapshot</model_table>
+        <name>var__m_sys_hub_flow_input_36b49329932e0710830ef82bdd03d648</name>
+        <next_element/>
+        <order>1</order>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_hub_flow_input</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_id>c3b49329932e0710830ef82bdd03d64b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_hub_flow_input>
+    <sys_hub_action_input_action_instance action="delete_multiple" query="action_input=c3b49329932e0710830ef82bdd03d64b"/>
+    <sys_hub_flow_output action="delete_multiple" query="model=36b49329932e0710830ef82bdd03d648^sys_idNOT IN4fb49329932e0710830ef82bdd03d676,cfb49329932e0710830ef82bdd03d66a"/>
+    <sys_hub_flow_output action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <array_denormalized>false</array_denormalized>
+        <attributes>element_mapping_provider=com.glide.flow_design.action.data.FlowDesignVariableMapper,uiType=string,uiTypeLabel=String,uiUniqueId=ed864b58-206f-40a0-a0e2-63d995a21185</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label/>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>error_message</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <help/>
+        <hint/>
+        <internal_link/>
+        <internal_type display_value="String">string</internal_type>
+        <label>Error Message</label>
+        <mandatory>false</mandatory>
+        <max_length>8000</max_length>
+        <model display_value="Validate Resolved Transition">36b49329932e0710830ef82bdd03d648</model>
+        <model_id>36b49329932e0710830ef82bdd03d648</model_id>
+        <model_table>sys_hub_flow_snapshot</model_table>
+        <name>var__m_sys_hub_flow_output_36b49329932e0710830ef82bdd03d648</name>
+        <next_element/>
+        <order>2</order>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_hub_flow_output</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_id>4fb49329932e0710830ef82bdd03d676</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_hub_flow_output>
+    <sys_hub_action_input_action_instance action="delete_multiple" query="action_input=4fb49329932e0710830ef82bdd03d676"/>
+    <sys_hub_flow_output action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <array>false</array>
+        <array_denormalized>false</array_denormalized>
+        <attributes>element_mapping_provider=com.glide.flow_design.action.data.FlowDesignVariableMapper,uiType=string,uiTypeLabel=String,uiUniqueId=afda690e-9f8c-48d4-95db-04ff4ab7216e</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label/>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>blocked</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <help/>
+        <hint/>
+        <internal_link/>
+        <internal_type display_value="String">string</internal_type>
+        <label>Blocked</label>
+        <mandatory>false</mandatory>
+        <max_length>8000</max_length>
+        <model display_value="Validate Resolved Transition">36b49329932e0710830ef82bdd03d648</model>
+        <model_id>36b49329932e0710830ef82bdd03d648</model_id>
+        <model_table>sys_hub_flow_snapshot</model_table>
+        <name>var__m_sys_hub_flow_output_36b49329932e0710830ef82bdd03d648</name>
+        <next_element/>
+        <order>1</order>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <sizeclass/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_hub_flow_output</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_id>cfb49329932e0710830ef82bdd03d66a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_hub_flow_output>
+    <sys_hub_action_input_action_instance action="delete_multiple" query="action_input=cfb49329932e0710830ef82bdd03d66a"/>
+    <sys_hub_alias_mapping action="delete_multiple" query="source_id=36b49329932e0710830ef82bdd03d648"/>
+    <sys_hub_trigger_instance_v2 action="delete_multiple" query="flow=36b49329932e0710830ef82bdd03d648"/>
+    <sys_hub_action_instance_v2 action="delete_multiple" query="flow=36b49329932e0710830ef82bdd03d648^sys_idNOT INdbb49329932e0710830ef82bdd03d688"/>
+    <sys_hub_action_instance_v2 action="INSERT_OR_UPDATE">
+        <action_type display_value="Case Transition Guard">3a8ccfe593ea0710830ef82bdd03d680</action_type>
+        <action_type_parent display_value="Case Transition Guard">5168476d93aa0710830ef82bdd03d607</action_type_parent>
+        <attributes/>
+        <comment/>
+        <compiled_snapshot>3a8ccfe593ea0710830ef82bdd03d680</compiled_snapshot>
+        <display_text/>
+        <flow display_value="Validate Resolved Transition">36b49329932e0710830ef82bdd03d648</flow>
+        <generation_source/>
+        <order>1</order>
+        <parent_ui_id/>
+        <sys_class_name>sys_hub_action_instance_v2</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:37</sys_created_on>
+        <sys_id>dbb49329932e0710830ef82bdd03d688</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:37</sys_updated_on>
+        <ui_id>8af30351-590b-480e-851e-995609ca9a69</ui_id>
+        <updation_source/>
+        <values>H4sIAAAAAAAA/+1TTWvbQBD9K2HPkpFsxZZ9Kw6BQNtAnOYSghjtztoLa0nZDyeu8X/vrCU5JiFtAj2VHufNm503b2fud0wJNmMjyDmXeD4dISSTNMlHCcp8WAqRjMQ4H7OIVbBGYnKwWNitLaguYhvQPqC7nfWl1PXT4CS/3xNDKNto2N79kchXSguDFZvdP0SsAUP9HBo2271KfVSwhhI1UefU6GyxtWdX4r0x3LYJoHVGVcsu/tqVL3qwNiLISSOGzw4rgaRDgrYYsTVUAlxttmzmjCfAIIjrSm+PjJWqHD3GAvfZqp/ULk+SJDAl0mgc2+wxLDrjWlhegANS4rnzpqPyVa042tYUgRK8dvNTrCVcN07VVVvioNR9da39uvreusGOD/T/RIgnhwQ2YdKgvRtELlb1002v8lJVB1O6pK456GMEjqwrvQt6dsyr21cut8gbn1HjmjoWa2gaQorG1Bt16EKi14OlpmAQVojUWbWsBsDDhAP6ARhcEn5xgO/AqDDuN3qGikO7H5V69HgV9kdMQEyRJ3GWi3GcpekoLkuRxjjJ81RimkEi2T5itCJzDda+GEU/VDz6MGZrW2dQ0XocSrhRjftCojbYebGPujuTw9+t7bR8WVAHZomusA6ctyeXdoO21hsUb0/rJPO5W/qAqP6Wbg+qzha9qnfEfuaehv/v6R+4p5zGnYrzNB4OJ1mcwUjEZZbkcZZISKBMJ5KP/+I9PfwC4SRwJrkGAAA=</values>
+    </sys_hub_action_instance_v2>
+    <sys_hub_alias_mapping action="delete_multiple" query="source_id=dbb49329932e0710830ef82bdd03d688"/>
+    <sys_hub_sub_flow_instance_v2 action="delete_multiple" query="flow=36b49329932e0710830ef82bdd03d648"/>
+    <sys_hub_flow_logic_instance_v2 action="delete_multiple" query="flow=36b49329932e0710830ef82bdd03d648^sys_idNOT INdfb49329932e0710830ef82bdd03d686"/>
+    <sys_hub_flow_logic_instance_v2 action="INSERT_OR_UPDATE">
+        <attributes/>
+        <block display_value="">62b45329932e0710830ef82bdd03d6ff</block>
+        <comment/>
+        <connected_to/>
+        <decision_table/>
+        <display_text/>
+        <flow display_value="Validate Resolved Transition">36b49329932e0710830ef82bdd03d648</flow>
+        <flow_variables_assigned/>
+        <generation_source/>
+        <logic_definition display_value="Assign Subflow Outputs">df4e1945c3e232002841b63b12d3ae3e</logic_definition>
+        <order>2</order>
+        <outputs_assigned>blocked,error_message</outputs_assigned>
+        <parent_ui_id/>
+        <sys_class_name>sys_hub_flow_logic_instance_v2</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:37</sys_created_on>
+        <sys_id>dfb49329932e0710830ef82bdd03d686</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_scope/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:37</sys_updated_on>
+        <ui_id>df4662ac-0a6e-4035-a745-728973791fea</ui_id>
+        <updation_source/>
+        <values>H4sIAAAAAAAA/+1VTU/bQBD9K9We42jtOI6dG4UiIUGRCuVSVdHYOw4r1muzuw6kUf57Z2PHpI1aidJT1Vv2eT7eezOjbFjduqZ19rY+sVYuNZt/2TANFbI5y1VdPKBgI7YC1Xpks0mhnPDJNAymGc+DOOUYpNMQgyybJjwrIIMkG/eJ2y2lCmkbBeu7P69Q3EslDHpqX0esAUPsHBo23zCp6YcGdSn1AxU/CpbCy4hnkZhhmE0i5LOQpxOOZRrlQvCJSAqkLAU5Kgp9Pyg+ssCtGw9YZ6Re9u/LPu1mD9ZGeGLhiOGzQy0oc16CsjhiFWgBrjbrATEI4lqrF+Ce5HQqKni28hv1SznnPrJE0lRg93V4LnpzO7g8AwdEpS1ca3BvRy0LtJ0bAktolTs9xLqA68bJWncpDnK1z65VW+mPnRVsKLCfJSGtJRLYeKmeey+kvLmvnz7tWZ5LvXOl/0iOghpe4Mi7vHWez4a18vYnmzvkyGhUWFHHRQVNQ8iiMfVK7roQ6Wq8VPQYl6p+InZ+rcdQeIVjGgGMzwk/28F3YKSXe0VlKNm3+6zlY4sXfnGgFLSLtJ9ZmRa0qSIOsqnIAx6XZQz5LAoTZNsRs2t7qsDaF6NoQovH1svsbOsNWnQe+5TCyMadEKkV9l5sR8PhoTG1WVRoLSzx9ef3Q/objvC4zltPcVb89hSTg1P84Ju/uxo8+IU1rznL6P9Z/gtniSJN4nyaBhFPyiDmwAPgGAXJRND6QhSG6fQvnqXfXe3/IrvJrHpuw/AKaUnCrccuDuLEmjZWFofQU20evPgXbPsd3A3bQYAHAAA=</values>
+        <workflow_reference/>
+    </sys_hub_flow_logic_instance_v2>
+    <sys_hub_pill_compound action="delete_multiple" query="attached_to=36b49329932e0710830ef82bdd03d648"/>
+    <sys_hub_flow_variable action="delete_multiple" query="model=36b49329932e0710830ef82bdd03d648"/>
+    <sys_documentation action="INSERT_OR_UPDATE">
+        <element>case_sys_id</element>
+        <help/>
+        <hint/>
+        <label>Case Sys Id</label>
+        <language>en</language>
+        <name>var__m_sys_hub_flow_input_36b49329932e0710830ef82bdd03d648</name>
+        <plural/>
+        <sys_class_name>sys_documentation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_id>c7b49329932e0710830ef82bdd03d657</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+        <url/>
+        <url_target/>
+    </sys_documentation>
+    <sys_choice action="delete_multiple" query="name=var__m_sys_hub_flow_input_36b49329932e0710830ef82bdd03d648"/>
+    <sys_documentation action="INSERT_OR_UPDATE">
+        <element>error_message</element>
+        <help/>
+        <hint/>
+        <label>Error Message</label>
+        <language>en</language>
+        <name>var__m_sys_hub_flow_output_36b49329932e0710830ef82bdd03d648</name>
+        <plural/>
+        <sys_class_name>sys_documentation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:37</sys_created_on>
+        <sys_id>4fb49329932e0710830ef82bdd03d67d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:37</sys_updated_on>
+        <url/>
+        <url_target/>
+    </sys_documentation>
+    <sys_documentation action="INSERT_OR_UPDATE">
+        <element>blocked</element>
+        <help/>
+        <hint/>
+        <label>Blocked</label>
+        <language>en</language>
+        <name>var__m_sys_hub_flow_output_36b49329932e0710830ef82bdd03d648</name>
+        <plural/>
+        <sys_class_name>sys_documentation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:36</sys_created_on>
+        <sys_id>c7b49329932e0710830ef82bdd03d672</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:36</sys_updated_on>
+        <url/>
+        <url_target/>
+    </sys_documentation>
+    <sys_choice action="delete_multiple" query="name=var__m_sys_hub_flow_output_36b49329932e0710830ef82bdd03d648"/>
+    <sys_hub_flow action="UPDATE">
+        <sys_id>a4911f2993ea0710830ef82bdd03d600</sys_id>
+        <latest_snapshot>36b49329932e0710830ef82bdd03d648</latest_snapshot>
+        <compiler_build>glide-australia-02-11-2026__patch3-05-25-2026_06-12-2026_1106.zip</compiler_build>
+        <version_record/>
+    </sys_hub_flow>
+    <sys_flow_trigger_plan action="delete_multiple" query="plan_id=a4911f2993ea0710830ef82bdd03d600"/>
+    <sys_flow_subflow_plan action="delete_multiple" query="plan_id=a4911f2993ea0710830ef82bdd03d600^sys_idNOT IN93b49329932e0710830ef82bdd03d6b5"/>
+    <sys_flow_subflow_plan action="INSERT_OR_UPDATE">
+        <plan>{"@class":"com.snc.process_flow.engine.serialization.plan_data.ChunkingPlanData","chunk_data":{"table":"sys_flow_subflow_plan","id":"93b49329932e0710830ef82bdd03d6b5","name":"plan","plan_signature":null},"plan_data":"CHUNKING_PLAN"}</plan>
+        <plan_id display_value="Validate Resolved Transition">a4911f2993ea0710830ef82bdd03d600</plan_id>
+        <snapshot>59d1ff6193224710830ef82bdd03d6f9</snapshot>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:37</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>93b49329932e0710830ef82bdd03d6b5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_overrides/>
+        <sys_scope/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:09:37</sys_updated_on>
+    </sys_flow_subflow_plan>
 </record_update>

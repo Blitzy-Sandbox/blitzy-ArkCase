@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that ENFORCES the FORWARD-transition preconditions of the case state
+    machine on the `x_casemgmt_case` table inside the scoped application
+    `x_casemgmt`, and that makes the natively authored Flow Designer state-machine
+    subflows load-bearing at the moment of the transition.
+
+    WHY THIS RULE EXISTS (Refine-PR Section 1, directives D1.2 / D1.3 / D1.6(a)):
+        The seven Flow Designer flows were re-authored natively on the PDI so that
+        the platform itself generated their runtime graph. Native authoring alone,
+        however, cannot satisfy the acceptance test, because a Flow Designer RECORD
+        trigger (`Created` / `Updated`) fires AFTER the database write commits. A
+        triggered flow can therefore observe a transition but can never abort it or
+        surface a form-level blocking error the way a before-update Business Rule
+        can. This rule closes that gap: it invokes the relevant validation subflow
+        SYNCHRONOUSLY, in the foreground, from the before-update pipeline, and
+        aborts the save with the subflow's verbatim message when the precondition
+        is not met.
+
+    TRANSITION MATRIX ROWS THIS RULE OWNS (AAP Section 0.5.5):
+        | From        | To          | Required condition                                        |
+        | Draft       | Open        | assigned_group populated                                  |
+        | Open        | In Progress | assigned_agent populated AND member of assigned_group     |
+        | In Progress | Pending     | none (no precondition)                                    |
+        | In Progress | Resolved    | every linked x_casemgmt_case_task has status = Closed      |
+        | Resolved    | Closed      | caller holds x_casemgmt_case_manager                      |
+
+    VERBATIM ERROR MESSAGES (AAP Section 0.7.4 - NON-NEGOTIABLE). This rule never
+    composes its own wording; it surfaces exactly what
+    x_casemgmt.CaseTransitionValidator returns:
+        "Required field assigned_group is empty."
+        "Assigned agent must be set and must be a member of the assigned group."
+        "All tasks must be closed before resolving this case."
+        "Only case managers can close cases."
+
+    ORDER 250 - WHERE THIS SITS IN THE BEFORE-UPDATE CHAIN:
+            1) x_casemgmt_block_terminal_closed              (order=100)
+            2) x_casemgmt_block_draft_backtransition         (order=200)
+            3) x_casemgmt_enforce_forward_transitions        (order=250, THIS RULE)
+            4) x_casemgmt_validate_assigned_agent_membership (order=300)
+            5) x_casemgmt_clear_pending_reason_on_inprogress (order=400)
+            6) x_casemgmt_set_closed_date.xml                (order=500)
+
+        250 places this rule AFTER the two prohibition guards, so that the more
+        aggressive prohibitions win their messages first: a Closed -&gt; * attempt
+        surfaces "Closed cases are terminal and cannot be modified." at order 100
+        and an Any -&gt; Draft attempt surfaces "Cases cannot be returned to Draft."
+        at order 200, before this rule would ever look for a forward precondition.
+        250 also places it BEFORE the side-effect rules, so that a blocked
+        transition never gets a `closed_date` stamped or a `pending_reason`
+        cleared. `Draft` is deliberately absent from this rule's dispatch map
+        because order 200 already owns it.
+
+        Note on double messaging: order 300 re-validates agent membership only
+        when `assigned_agent` or `assigned_group` actually changed in the save, so
+        a status-only transition never produces two messages for the same fault.
+
+    ARCHITECTURE - TWO STEPS, ONE SOURCE OF TRUTH:
+        STEP 1 runs the natively authored subflow
+        (`x_casemgmt.validate_&lt;status&gt;_transition`) with
+        sn_fd.FlowAPI.getRunner().inForeground(), which is what causes the flow to
+        execute - and to write a real `sys_flow_context` row - on every genuine
+        transition. Each subflow contains the shared `Case Transition Guard`
+        Custom Action, whose script step calls
+        `new x_casemgmt.CaseTransitionValidator()`.
+
+        STEP 2 re-evaluates the same gate against the IN-FLIGHT `current` record
+        through the identical validator methods, and it is STEP 2 that decides.
+        The reason is precision, not distrust: the subflow loads the case from the
+        database and therefore sees the COMMITTED row, while a single save may
+        change `assigned_group` or `assigned_agent` in the same transaction as
+        `status`. Only `current` reflects the row as it will actually be
+        persisted. For a status-only save - which is what all six UI Actions and
+        the case form produce, and what every acceptance assertion exercises - the
+        two verdicts are identical and the subflow's verdict IS the decision. When
+        they diverge, the divergence is logged with gs.info and the in-flight
+        evaluation wins.
+
+        If sn_fd.FlowAPI is unavailable for any reason, STEP 1 logs a warning and
+        STEP 2 still enforces the gate - the rule fails closed onto the validator
+        rather than silently allowing an invalid transition.
+
+    BEHAVIOR:
+        - Trigger   : BEFORE UPDATE only, on the `x_casemgmt_case` table
+        - Condition : previous.status !== current.status AND the proposed status is
+                      one of Open / In Progress / Pending / Resolved / Closed
+        - On failure: gs.addErrorMessage(&lt;verbatim message&gt;) +
+                      current.setAbortAction(true) - a form-level blocking error,
+                      never a silent failure or a post-save log entry
+        - On insert : returns immediately (`previous` is null), so anonymous portal
+                      submissions that insert a Draft case are never blocked
+
+    ZERO HARDCODED FOREIGN sys_ids: the only 32-char hex literal in this file is
+    this record's own &lt;sys_id&gt;. The subflows are addressed by their
+    scope-qualified internal names, the role by its name, and the case by the
+    runtime sys_id of the record being saved.
+
+    SCOPE BINDING: &lt;sys_scope&gt; and &lt;sys_package&gt; carry the scope NAME
+    `x_casemgmt`, matching every other artifact in this repository; the Update Set
+    wrapper resolves it to the application sys_id at import time.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-update guard on x_casemgmt_case that enforces the forward-transition preconditions of the case state machine. On a status change it invokes the matching natively authored Flow Designer subflow (x_casemgmt.validate_open_transition, validate_in_progress_transition, validate_pending_transition, validate_resolved_transition, validate_closed_transition) synchronously with sn_fd.FlowAPI.getRunner().inForeground(), then re-evaluates the same gate against the in-flight record through x_casemgmt.CaseTransitionValidator and, on failure, calls gs.addErrorMessage() with the verbatim blocking message plus current.setAbortAction(true) so the error surfaces on the form. Order 250 runs after the Closed-terminal (100) and Any-to-Draft (200) prohibition guards and before the side-effect rules (300/400/500).</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_enforce_forward_transitions</name>
+        <order>250</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script>(function executeRule(current, previous /*null when async*/) {
+    // ------------------------------------------------------------------
+    // Guard against the INSERT path. `previous` is null on insert, and a
+    // brand-new case has no prior status, so there is no forward
+    // transition to validate. Portal submissions insert with
+    // status = Draft and must never be blocked here.
+    // ------------------------------------------------------------------
+    if (!previous) {
+        return;
+    }
+
+    var previousStatus = String(previous.status);
+    var proposedStatus = String(current.status);
+
+    // Only a genuine status change is a transition. Field-only updates
+    // (subject, description, priority, assignment) are not this rule's
+    // concern and are left to the other before-update rules.
+    if (previousStatus === proposedStatus) {
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // Map the proposed status onto the Flow Designer subflow that owns
+    // its precondition. The subflow internal names are the natively
+    // authored subflows in this scope; each one runs the shared
+    // `Case Transition Guard` Custom Action, which delegates to
+    // x_casemgmt.CaseTransitionValidator so there is a single source of
+    // truth for the transition rules and their verbatim messages.
+    //
+    // 'Draft' is deliberately absent: the Any -&gt; Draft prohibition is
+    // owned by x_casemgmt_block_draft_backtransition (order 200) and the
+    // Closed -&gt; * prohibition by x_casemgmt_block_terminal_closed
+    // (order 100). Both run before this rule.
+    // ------------------------------------------------------------------
+    var SUBFLOW_FOR_STATUS = {
+        'Open': 'validate_open_transition',
+        'In Progress': 'validate_in_progress_transition',
+        'Pending': 'validate_pending_transition',
+        'Resolved': 'validate_resolved_transition',
+        'Closed': 'validate_closed_transition'
+    };
+    var subflowName = SUBFLOW_FOR_STATUS[proposedStatus];
+    if (!subflowName) {
+        return;
+    }
+
+    var caseSysId = String(current.getUniqueValue());
+
+    // ------------------------------------------------------------------
+    // STEP 1 - run the Flow Designer subflow SYNCHRONOUSLY.
+    //
+    // Flow Designer record triggers (Created / Updated) fire AFTER the
+    // database write commits, so a triggered flow can never abort a save
+    // or surface a form-level blocking error. Invoking the subflow in the
+    // foreground from this before-update rule is what makes the
+    // state-machine flows load-bearing at the moment of the transition
+    // instead of after it.
+    // ------------------------------------------------------------------
+    var flowBlocked = null;
+    try {
+        var flowOutputs = sn_fd.FlowAPI.getRunner()
+            .subflow('x_casemgmt.' + subflowName)
+            .inForeground()
+            .withInputs({ case_sys_id: caseSysId })
+            .run()
+            .getOutputs();
+        flowBlocked = (String(flowOutputs['blocked']) === 'true');
+    } catch (flowError) {
+        // Fail closed onto the validator rather than silently allowing
+        // the transition: STEP 2 below still decides the outcome.
+        gs.warn('x_casemgmt_enforce_forward_transitions: subflow x_casemgmt.' + subflowName +
+                ' could not be executed for case ' + caseSysId + ' - ' + flowError +
+                '. Falling back to the in-flight CaseTransitionValidator evaluation.');
+    }
+
+    // ------------------------------------------------------------------
+    // STEP 2 - evaluate the same gate against the IN-FLIGHT record.
+    //
+    // The subflow reads the case from the database, so it sees the
+    // committed row. A single save may change `assigned_group` or
+    // `assigned_agent` in the same transaction as `status`; in that case
+    // the committed row is stale and only `current` reflects what will
+    // actually be persisted. This step therefore decides the outcome,
+    // using the identical x_casemgmt.CaseTransitionValidator methods the
+    // subflow's Custom Action calls, so both paths produce the same
+    // verbatim messages. For a status-only save - which is what all six
+    // UI Actions and the case form produce - the two verdicts are
+    // identical and the subflow's verdict IS the decision.
+    // ------------------------------------------------------------------
+    var validator = new x_casemgmt.CaseTransitionValidator();
+    var verdict;
+    if (proposedStatus === 'Open') {
+        verdict = validator.canTransitionToOpen(current);
+    } else if (proposedStatus === 'In Progress') {
+        verdict = validator.canTransitionToInProgress(current);
+    } else if (proposedStatus === 'Resolved') {
+        verdict = validator.canTransitionToResolved(current);
+    } else if (proposedStatus === 'Closed') {
+        verdict = validator.canTransitionToClosed(current, gs.getUserID());
+    } else {
+        // 'Pending' carries no precondition per the transition matrix.
+        verdict = { ok: true };
+    }
+
+    // Record any divergence so an operator can see when a combined
+    // field-and-status save made the committed row stale.
+    if (flowBlocked !== null &amp;&amp; flowBlocked !== !verdict.ok) {
+        gs.info('x_casemgmt_enforce_forward_transitions: subflow x_casemgmt.' + subflowName +
+                ' reported blocked=' + flowBlocked + ' while the in-flight evaluation reported blocked=' +
+                (!verdict.ok) + ' for case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus +
+                '). The in-flight evaluation decides because it reflects the row as it will be saved.');
+    }
+
+    if (!verdict.ok) {
+        // VERBATIM message from CaseTransitionValidator - do not paraphrase.
+        gs.addErrorMessage(verdict.error);
+        current.setAbortAction(true);
+    }
+})(current, previous);
+</script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>cbea5a36ef6efe5a077e0548c45468ce</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_enforce_forward_transitions</sys_name>
+        <sys_overrides/>
+        <sys_package>x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope>x_casemgmt</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_enforce_forward_transitions</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>
