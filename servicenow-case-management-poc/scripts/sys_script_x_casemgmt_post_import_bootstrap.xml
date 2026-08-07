@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that AUTO-EXECUTES the post-import remediation for `x_casemgmt`.
+
+    WHY THIS RECORD EXISTS
+    ......................
+    Fix Scripts do not auto-run when an Update Set is committed; the platform only
+    runs them on application install from a repository or the Store. Without a
+    trigger, "run the Fix Script" would be a manual step and the deliverable's
+    "no steps beyond upload -> preview -> commit" acceptance would not hold. This
+    rule is that trigger.
+
+    HOW IT FIRES
+    ............
+    The commit engine applies every `sys_update_xml` payload in the retrieved
+    Update Set - including this record - and then sets
+    `sys_remote_update_set.state = 'committed'`. That write fires this
+    after/async rule, i.e. immediately after the last payload of the very commit
+    that installed it.
+
+    Each of the following was verified on the target PDI before shipping:
+      - a `sys_script` payload with `sys_scope = global` IS applied by the update
+        engine's own apply path with `collection`, `when`, `condition`, `order`,
+        `active` and `script` intact;
+      - a rule inserted the way the engine inserts records (business rules
+        suppressed) DOES fire on the next `state` write - the rule cache picks it
+        up without a node restart;
+      - the body executes in `rhino.global`, where `GlideTableDescriptor.isValid()`
+        works and `sys_dictionary.update()` succeeds, and the whole chain -
+        payload applied by the engine, rule fired by the state write, Fix Script
+        dispatched, remediation run to its `SUMMARY|verified=true` line - was
+        observed end to end before shipping.
+
+    WHY GLOBAL SCOPE
+    ................
+    An app-scoped copy of this rule on the same table also fires, but it executes
+    in the `x_casemgmt` scope, where `GlideTableDescriptor` raises
+    "GlideTableDescriptor is not allowed in scoped applications" and
+    `sys_dictionary.update()` returns null - so it can perform none of the four
+    remediations. Global is the narrowest scope that works. This is the single
+    global-scope record the package ships beyond the platform-owned rows the
+    application already defines, and it is disclosed with its table and rationale
+    in `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`.
+
+    WHY SYNCHRONOUS (when = after) RATHER THAN ASYNC
+    ...............................................
+    An async variant was built and measured first, because giving the physical DDL
+    its own transaction is attractive. It was rejected on evidence: for a single
+    qualifying transition into `committed` the platform dispatched the async rule
+    TWICE, milliseconds apart. The remediation is idempotent, so both passes
+    reported `verified=true` on an already-healthy instance - but on a genuinely
+    unremediated instance two concurrent passes would both observe "table not
+    physical" and race on the destructive half of the rebuild, one deleting the
+    metadata the other had just created. `when = after` fires exactly once, which
+    was confirmed for the same single transition.
+
+    The remediation therefore runs inside the commit transaction. Two things make
+    that safe: the Update Set commit is itself a long-running scheduled job with
+    no interactive time limit, and the dispatch is wrapped in try/catch so an
+    exception inside the remediation is logged rather than allowed to abort the
+    commit. Expect the commit to take roughly a minute longer on a clean install,
+    which is the cost of the physical DDL.
+
+    ONE-SHOT BY DESIGN
+    ..................
+    The condition is `current.state.changesTo('committed')` - a state TRANSITION
+    into committed, not merely the current value. Any later write to an
+    already-committed retrieved Update Set (the platform performs several) would
+    otherwise re-fire the rule and duplicate the whole remediation pass; that was
+    observed during validation and is what `changesTo` prevents. It is
+    deliberately not narrowed to a particular Update Set name, so the bootstrap
+    still works if the package is committed under any name. Two things keep it narrow: the remediation body
+    early-returns when `x_casemgmt` is not installed, and it deactivates THIS
+    rule (looked up by name) as soon as the application verifies as fully wired.
+    A failed or partial run leaves the rule active on purpose, so the next commit
+    retries.
+
+    NAME LENGTH
+    ...........
+    `sys_script.name` and `sys_script_fix.name` are both max_length 40 on this
+    release and the platform truncates silently. Both this rule's name
+    ("x_casemgmt Post-Import Bootstrap", 32 chars) and the Fix Script's name
+    ("x_casemgmt Post-Import Remediation", 34 chars) are inside that limit on
+    purpose: every lookup between the two records, and the rule's own
+    self-deactivation, is by name, so a truncated name would break the chain
+    silently. Do not lengthen either name.
+
+    NO HARDCODED SYS_IDS
+    ....................
+    The rule resolves the Fix Script by name. The only `sys_id` in this file is
+    THIS record's own primary key, the deterministic MD5 of its
+    `<sys_update_name>`.
+
+    DEPENDENCY ORDER (AAP Section 0.5.2)
+    ....................................
+    Must load AFTER `sys_script_fix_x_casemgmt_post_import_remediation.xml`, the
+    Fix Script it dispatches, and after every record that Fix Script repairs.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <collection>sys_remote_update_set</collection>
+        <condition>current.state.changesTo('committed')</condition>
+        <description>Verified auto-execute trigger for the Fix Script 'x_casemgmt Post-Import Remediation'. Fix Scripts do not auto-run on Update Set commit - the platform only runs them on application install from a repository or the Store - so without this rule the remediation would be a manual step. The commit engine applies every payload in the retrieved Update Set and then sets sys_remote_update_set.state='committed', which fires this rule; it resolves the Fix Script by name and executes it with GlideScopedEvaluator. The condition is current.state.changesTo('committed') - the state transition rather than the current value - so later writes to an already-committed retrieved Update Set cannot re-run the remediation. Global scope is required: an app-scoped copy fires but runs in the x_casemgmt scope where GlideTableDescriptor is refused and sys_dictionary.update() returns null, so it can remediate nothing. when=after (synchronous, exactly once): the async variant was measured dispatching twice for a single transition, and two concurrent passes would race on the destructive half of the table rebuild. The dispatch is wrapped in try/catch so it can never abort the commit. The remediation deactivates this rule once the application verifies as fully wired, making it a one-shot bootstrap. Verification signal: syslog messages starting X_CASEMGMT_REMEDIATION|, ending with a SUMMARY| line.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt Post-Import Bootstrap</name>
+        <order>1000</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous) {
+    // Auto-execute bootstrap for the x_casemgmt post-import remediation.
+    //
+    // Fix Scripts do not auto-run when an Update Set is committed - the platform
+    // only runs them on application install from a repository or the Store. This
+    // rule is the verified auto-execute trigger that closes that gap: the Update
+    // Set commit engine applies every captured payload and then flips the
+    // retrieved Update Set's state to 'committed', which fires this rule.
+    //
+    // Design notes (each verified on the target PDI before shipping):
+    //   - The rule is GLOBAL scope on purpose. An app-scoped copy does fire, but
+    //     it executes in the x_casemgmt scope where GlideTableDescriptor raises
+    //     "GlideTableDescriptor is not allowed in scoped applications" and
+    //     sys_dictionary.update() is refused, so it cannot perform any of the
+    //     four remediations. Global is the narrowest scope that works.
+    //   - when = after, i.e. synchronous and exactly once. An async variant was
+    //     built and tested first, because giving the physical DDL its own
+    //     transaction is attractive; it was rejected on evidence. For a single
+    //     qualifying state transition the platform dispatched the async rule
+    //     TWICE, milliseconds apart, and two concurrent passes would race on the
+    //     destructive half of the table rebuild (one pass deleting the metadata
+    //     the other had just created). The synchronous rule fires exactly once.
+    //     The dispatch below is wrapped in try/catch so a failure inside the
+    //     remediation can never abort the commit transaction.
+    //   - The condition is current.state.changesTo('committed') - the state
+    //     TRANSITION, not merely the current value, because the platform writes
+    //     to an already-committed retrieved Update Set more than once and each
+    //     write would otherwise re-run the whole remediation. The remediation
+    //     body additionally early-returns when x_casemgmt is not installed, and
+    //     deactivates this rule once the application verifies as fully wired, so
+    //     it is a one-shot bootstrap rather than a permanent hook.
+    //   - The remediation body itself lives in exactly one place - the Fix Script
+    //     named below, whose script field is
+    //     servicenow-case-management-poc/scripts/post_import_remediation.js
+    //     verbatim. It is resolved by name; no sys_id is hard-coded.
+    //
+    // Verification signal: every line the remediation emits is a gs.info()
+    // prefixed 'X_CASEMGMT_REMEDIATION|'. The last one starts with
+    // 'X_CASEMGMT_REMEDIATION|SUMMARY|' and carries verified=true|false.
+
+    // sys_script_fix.name is max_length 40 on this release and the platform
+    // truncates silently, so this literal must stay at 40 characters or fewer or
+    // the lookup below will never match.
+    var MARKER = 'X_CASEMGMT_REMEDIATION';
+    var FIX_SCRIPT_NAME = 'x_casemgmt Post-Import Remediation';
+
+    try {
+        var fix = new GlideRecord('sys_script_fix');
+        fix.addQuery('name', FIX_SCRIPT_NAME);
+        fix.setLimit(1);
+        fix.query();
+        if (!fix.next()) {
+            gs.warn(MARKER + '|BOOTSTRAP|Fix Script "' + FIX_SCRIPT_NAME +
+                '" is not present on this instance. Run the remediation manually: ' +
+                'System Definition > Fix Scripts > "' + FIX_SCRIPT_NAME + '" > Run Fix Script.');
+            return;
+        }
+
+        gs.info(MARKER + '|BOOTSTRAP|fired|remote_update_set=' + current.getValue('name') +
+            '|state=' + current.getValue('state') + '|scope=' + gs.getCurrentScopeName() +
+            '|dispatching Fix Script "' + FIX_SCRIPT_NAME + '"');
+
+        new GlideScopedEvaluator().evaluateScript(fix, 'script', null);
+
+        gs.info(MARKER + '|BOOTSTRAP|dispatch complete for "' + FIX_SCRIPT_NAME + '"');
+    } catch (e) {
+        gs.warn(MARKER + '|BOOTSTRAP|dispatch failed: ' + e +
+            ' - run the remediation manually: System Definition > Fix Scripts > "' +
+            FIX_SCRIPT_NAME + '" > Run Fix Script (scope Global).');
+    }
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>5c6cce13d9187f0be47566b6f33ed143</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt Post-Import Bootstrap</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Global" source="global">global</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Global">global</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_post_import_bootstrap</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>after</when>
+    </sys_script>
+</record_update>

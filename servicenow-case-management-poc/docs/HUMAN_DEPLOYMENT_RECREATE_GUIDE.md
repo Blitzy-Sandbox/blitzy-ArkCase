@@ -191,54 +191,150 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 
 ---
 
-## 5. REQUIRED post-import remediations
+## 5. Post-import remediations
 
-Run each of the following server-side scripts via `bg.sh`. Read results back from the response
+> **Read this first — most of this section is now automatic.** Defects **C** (physical tables, fields, choice
+> lists), **E** (auto-numbering), **7** (REST `service_id`) and **9** (ACL role links + security-cache flush)
+> no longer require a human step. E and 7 are carried by the package artifacts themselves; C and 9 are
+> performed by `scripts/post_import_remediation.js`, which the package auto-executes on commit through the
+> global after-update Business Rule `x_casemgmt Post-Import Bootstrap` on `sys_remote_update_set`
+> (condition `current.state.changesTo('committed')`). §5a, §5b, §5d and §5f below are kept as **verification**
+> steps and as a manual fallback, not as required actions. §5c, §5e and §5g are unchanged.
+>
+> **Confirm the automation ran** instead of performing §5a/§5b/§5d/§5f by hand:
+>
+> ```bash
+> # expect: one BOOTSTRAP|fired line, one SUMMARY|verified=true ... errors=0 line,
+> #         and one TRIGGER|... deactivated after successful remediation line
+> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+>   "$SERVICENOW_INSTANCE_URL/api/now/table/syslog?sysparm_query=messageSTARTSWITHX_CASEMGMT_REMEDIATION%5EORDERBYDESCsys_created_on&sysparm_fields=sys_created_on,message&sysparm_limit=100"
+>
+> # corroborating, no log reading needed:
+> #   bootstrap rule has self-deactivated  -> active=false
+> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+>   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_script?sysparm_query=name=x_casemgmt%20Post-Import%20Bootstrap&sysparm_fields=name,active"
+> #   27 ACL role links exist
+> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+>   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
+> ```
+>
+> On a genuinely clean instance the summary line should read `tables_built=3` and `acl_links_created=27` —
+> those counters increment only when the script actually creates something; on a repeat it reads
+> `tables_already=3` and `acl_links_already=27`. Either way `verified=true|…|errors=0` is the proof it
+> converged.
+>
+> **If the summary line is absent** (the bootstrap rule was removed from the instance, or the commit was done
+> in a way that did not transition `sys_remote_update_set.state` to `committed`), run the whole remediation as
+> a single action instead of following §5a–§5f individually:
+>
+> *System Definition → Fix Scripts → **"x_casemgmt Post-Import Remediation"** → Run Fix Script*
+>
+> — or, equivalently, paste `servicenow-case-management-poc/scripts/post_import_remediation.js` into
+> *System Definition → Scripts - Background* with **"In scope" = Global** and run it:
+>
+> ```bash
+> /tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+> ```
+>
+> **It must run in `global`, not in scope.** `sys_db_object`, `sys_dictionary`, `sys_choice`, `sys_number`,
+> `sys_ws_definition`, `sys_security_acl` and `sys_security_acl_role` are all global tables with cross-scope
+> create/update denied, `GlideTableDescriptor` raises
+> *"GlideTableDescriptor is not allowed in scoped applications"* for a scoped caller, and
+> `GlideSecurityManager` is likewise unavailable in scope. The script writes no `x_casemgmt_*` data rows at
+> all — seeding stays the job of §5g, which does run in scope. It is idempotent, so running it when nothing is
+> wrong is harmless and reports only "already correct" lines.
+
+Where a step below still needs a script, run it via `bg.sh`. Read results back from the response
 (`/tmp/bg_out.html`) — extract `*** Script:` lines for `global` scripts, or query `syslog` for `gs.info`
 markers from in-scope scripts. **All cross-references are resolved by name/number lookup — never by
 hard-coded `sys_id`.**
 
 ### 5a. Materialize `x_casemgmt_case_task` & `x_casemgmt_case_party` tables + all choices  *(Defect C)*
 
-The Update Set commit applies *metadata* but does not trigger the physical DDL for **new** tables. A fresh
-`GlideRecord` INSERT of `sys_db_object` / `sys_dictionary` / `sys_choice` (with workflow ON) **does** trigger
-the DDL. Build the two missing tables and the choice lists from the deliverable's own field specs
-(`docs/data-model.md`), forcing the deliverable `sys_id`s and the `x_casemgmt` scope. Run **in scope**:
+**AUTOMATIC — no action required.** Performed by `scripts/post_import_remediation.js` under the auto-execute
+trigger described above. Only verify.
+
+Why it cannot be fixed in the XML: the physical DDL for a brand-new table is emitted by the platform's
+after-insert Business Rule **`Synch Dictionary and Table` (order 500) on `sys_db_object`**, and the Update Set
+apply engine applies every payload with business rules **suppressed**. Pushing the package's own
+`sys_db_object` payload through the engine's own `GlideUpdateManager2.loadXML` creates the metadata row and
+leaves `physical=false`; adding a `sys_dictionary` collection row does not help either. A `GlideRecord` INSERT
+with workflow **ON** does trigger it — which is what the remediation does, from **global** scope.
+
+Verify (as admin):
 
 ```bash
-/tmp/bg.sh /tmp/build_tables.js 82b99028936f74320d74d6f88357a5af
+source /tmp/snow/env.sh
+for T in x_casemgmt_case x_casemgmt_case_task x_casemgmt_case_party; do
+  printf '%s -> ' "$T"
+  curl -s -o /dev/null -w '%{http_code}\n' -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" \
+    -H "Accept: application/json" "$SN/api/now/table/$T?sysparm_limit=1"
+done      # expect 200 for all three
 ```
 
-`build_tables.js` must, for each of `x_casemgmt_case_task` (fields: `case`→ref `x_casemgmt_case`, `subject`
-String 255, `type` Choice, `status` Choice, `assigned_to`→ref `sys_user`, `due_date` Date) and
-`x_casemgmt_case_party` (fields: `case`→ref `x_casemgmt_case`, `party_type` Choice, `person`→ref `sys_user`,
-`organization`→ref `core_company`, `role_label` String 100):
+The remediation's own `VERIFY|` log line reports the same thing in one place, e.g.
+`x_casemgmt_case{physical=true,columns=21,missing_fields=none,choices=15}
+x_casemgmt_case_task{physical=true,columns=14,missing_fields=none,choices=7}
+x_casemgmt_case_party{physical=true,columns=13,missing_fields=none,choices=2}` — 25 fields and 24 choice
+values across the three tables, matching `docs/data-model.md`: `case.type` (General Inquiry, Complaint);
+`case.status` (Draft, Open, In Progress, Pending, Resolved, Closed); `case.priority` (Low, Medium, High,
+Critical); `case.pending_reason` (Awaiting Info, Awaiting Third Party, Other); `case_task.type`
+(Investigation, Review, Follow-up, Other); `case_task.status` (Open, In Progress, Closed);
+`case_party.party_type` (Person, Organization).
 
-1. INSERT the `sys_db_object` (label, name, scope, super_class empty) — this triggers table creation.
-2. INSERT each `sys_dictionary` field per `data-model.md`.
-3. INSERT each `sys_choice` (table, element, value/label/sequence) for every choice list:
-   `case.type` (General Inquiry, Complaint); `case.status` (Draft, Open, In Progress, Pending, Resolved,
-   Closed); `case.priority` (Low, Medium, High, Critical); `case.pending_reason` (Awaiting Info, Awaiting
-   Third Party, Other); `case_task.type` (Investigation, Review, Follow-up, Other); `case_task.status`
-   (Open, In Progress, Closed); `case_party.party_type` (Person, Organization).
+> **Expected on a genuinely clean import:** because the DDL cannot happen until the commit finishes, the
+> Update Set's 28 seed-data records (10 Case, 10 Case Task, 8 Case Party) have no physical table to land in and
+> contribute nothing — a data payload applied to a table with metadata but no storage inserts nothing and
+> raises no error. Restore the demo data with **§5g** afterwards; that is the intended path, and the demo rows
+> are not part of what makes the package self-sufficient.
 
-Verify: `x_casemgmt_case_task` exists (13 columns), `x_casemgmt_case_party` exists (12 columns), choices
-`case=15, case_task=7, case_party=2`.
+**Manual fallback** (only if the summary line is missing — see the note at the top of §5):
+
+```bash
+/tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+```
+
+Note this must run in **`global`**, not in scope. An earlier revision of this guide said "Run **in scope**";
+that was wrong — `GlideTableDescriptor` raises a `SecurityException` for a scoped caller and no dictionary
+write succeeds.
 
 ### 5b. Auto-numbering for `x_casemgmt_case`  *(Defect E)*
 
-On a direct-built scoped table the OOB number generation does not fire. Set the `number` field's default
-value **with the `global.` qualifier** and ensure the counter padding:
+**AUTOMATIC — no action required.** Both halves of the wiring are now carried by the package artifacts, and
+the remediation re-asserts them (needed because §5a's table rebuild re-creates the `number` dictionary entry
+and the platform rule that would normally wire it, `Create Default Number Maintenance Field` (order 1000), is
+suppressed on commit for the same reason as §5a).
+
+What the package now carries:
+
+- `dictionary/x_casemgmt_case_number.xml` → `<default_value>javascript:global.getNextObjNumberPadded();</default_value>`.
+  **The `global.` qualifier is mandatory**: `getNextObjNumberPadded()` lives in the global scope and a scoped
+  table's default-value evaluation will not resolve the bare call.
+- `numbers/sys_number_x_casemgmt_case{,_task,_party}.xml` → `<maximum_digits>7</maximum_digits>`.
+  Previously these carried `number_of_digits`, which is **not a column** on `sys_number` (its writable columns
+  are exactly `category`, `prefix`, `number`, `maximum_digits`) and was therefore **silently discarded on
+  import** — the reason the padding never arrived.
+
+Both are mirrored into the deliverable's `Dictionary` and `Number Maintenance` payload blocks.
+
+Verify — insert one synthetic case **in scope** and check the format, then delete it:
 
 ```javascript
-// run IN SCOPE (82b99028...)
-var d = new GlideRecord('sys_dictionary');
-d.addQuery('name','x_casemgmt_case'); d.addQuery('element','number'); d.query();
-if (d.next()) { d.setValue('default_value','javascript:global.getNextObjNumberPadded();'); d.update(); }
-// ensure the number counter exists with maximum_digits=7 and prefix CASE (look up by table name)
+// run IN SCOPE (82b99028936f74320d74d6f88357a5af)
+var c = new GlideRecord('x_casemgmt_case');
+c.initialize();
+c.setValue('subject','numbering check - delete me');
+c.setValue('description','Synthetic probe.');
+c.setValue('status','Draft'); c.setValue('type','General Inquiry');
+c.setValue('requester_name','Probe');
+var id = c.insert();
+var chk = new GlideRecord('x_casemgmt_case'); chk.get(id);
+gs.info('NUMCHECK|' + chk.getValue('number') + '|ok=' + /^CASE[0-9]{7}$/.test(chk.getValue('number')));
+chk.deleteRecord();
 ```
 
-Verify a new insert yields `CASE0000023`-style numbering. (A cache flush may be required.)
+Expect `NUMCHECK|CASE0000058|ok=true` (the digits will differ). A dictionary-cache flush is not a separate
+step: the remediation's dictionary write queues the platform's own cache-flush events.
 
 ### 5c. `gs.nowDateTime()` → `new GlideDateTime()` in date business rules  *(Defect 6)*
 
@@ -249,18 +345,23 @@ rules must use `current.opened_date = new GlideDateTime();` / `current.closed_da
 
 ### 5d. Scripted REST `service_id`  *(Defect 7)*
 
-The two `sys_ws_definition` records ship with an empty `service_id`, which collapses routing to
-`/api/x_casemgmt` and returns HTTP 400. Set them (look up the definitions by name):
+**AUTOMATIC — no action required.** The values are now in the package: `portal/rest/…_case_submit.xml` carries
+`<service_id>case_submit</service_id>` and `…_case_status_lookup.xml` carries
+`<service_id>case_status_lookup</service_id>`, both mirrored into the two `Scripted REST Service` payload
+blocks of the Update Set. `requires_authentication=false` and `active=true` are unchanged. `service_id` is the
+URL path segment; the platform derives the read-only `base_uri` as `/api/<namespace>/<service_id>` from it, so
+the resulting paths are `POST /api/x_casemgmt/case_submit` and `GET /api/x_casemgmt/case_status_lookup`.
 
-```javascript
-// run global
-[['Case Submit','case_submit'], ['Case Status Lookup','case_status_lookup']].forEach(function(p){
-  var w = new GlideRecord('sys_ws_definition'); w.addQuery('name', p[0]); w.query();
-  if (w.next()) { w.setValue('service_id', p[1]); w.update(); }
-});
+Verify anonymously — this is the real test, so send **no** credentials (§6.2 exercises the same three calls):
+
+```bash
+source /tmp/snow/env.sh
+curl -s -o /dev/null -w 'lookup unknown -> %{http_code}\n' \
+  "$SN/api/x_casemgmt/case_status_lookup?number=CASE9999999"     # expect 404
 ```
 
-Resulting paths: `POST /api/x_casemgmt/case_submit`, `GET /api/x_casemgmt/case_status_lookup`.
+The remediation's `REST|` log lines report the live state directly, e.g.
+`REST|Case Submit|already correct|service_id=case_submit|base_uri=/api/x_casemgmt/case_submit`.
 
 ### 5e. Scripted REST operation scripts  *(Defect 8)*
 
@@ -272,40 +373,46 @@ returns HTTP 404 `{"error":"No case found with that number."}` for an unknown nu
 
 ### 5f. ACL → role link records (27)  *(Defect 9)*
 
-The deliverable ships 26 correct `sys_security_acl` records but **zero** `sys_security_acl_role` link
-records, so on a high-security PDI ("Deny access for empty term") no role can use the app. Recreate the
-links from each ACL's own description (roles looked up **by name**), scoped to the app:
+**AUTOMATIC — no action required**, including the security-cache flush. Performed by
+`scripts/post_import_remediation.js` under the auto-execute trigger described at the top of §5. Only verify.
 
-```javascript
-// run global
-var SCOPE='82b99028936f74320d74d6f88357a5af';
-function roleId(nm){ var r=new GlideRecord('sys_user_role'); r.addQuery('name',nm); r.query(); return r.next()?r.getUniqueValue():null; }
-var RM={'x_casemgmt_case_manager':roleId('x_casemgmt_case_manager'),
-        'x_casemgmt_case_agent':roleId('x_casemgmt_case_agent'),
-        'x_casemgmt_case_viewer':roleId('x_casemgmt_case_viewer')};
-function addLink(aclId,rid){
-  var g=new GlideRecord('sys_security_acl_role'); g.addQuery('sys_security_acl',aclId); g.addQuery('sys_user_role',rid); g.query();
-  if (g.hasNext()) return;
-  var x=new GlideRecord('sys_security_acl_role'); x.initialize();
-  x.setValue('sys_security_acl',aclId); x.setValue('sys_user_role',rid); x.setValue('sys_scope',SCOPE); x.insert();
-}
-function rolesFor(name,script,desc){
-  if (name.indexOf('.assigned_agent')>=0) return ['x_casemgmt_case_manager','x_casemgmt_case_agent'];
-  if (name.indexOf('.assigned_group')>=0) return ['x_casemgmt_case_manager'];
-  if (script && script.length>0)          return ['x_casemgmt_case_agent'];
-  var m=desc.match(/x_casemgmt_case_(manager|agent|viewer)\s+(?:can|role to)/);
-  return m ? ['x_casemgmt_case_'+m[1]] : [];
-}
-var a=new GlideRecord('sys_security_acl'); a.addQuery('name','STARTSWITH','x_casemgmt'); a.query();
-while(a.next()){
-  var roles=rolesFor(a.getValue('name'), a.getValue('script')||'', a.getValue('description')||'');
-  for (var i=0;i<roles.length;i++){ if (RM[roles[i]]) addLink(a.getUniqueValue(), RM[roles[i]]); }
-}
-GlideSecurityManager.get().reset();   // flush the security cache so enforcement is live
+Why the 27 links cannot simply be shipped as records — both reasons were measured on this release, not assumed:
+
+1. `sys_security_acl` has **no `roles` column** (checked against `sys_dictionary` for the table *and* its
+   `sys_metadata` super-class), so the links exist only as rows in the `sys_security_acl_role` m2m table.
+2. `sys_security_acl_role` **payloads are silently skipped by the update engine.** Five payload shapes were
+   pushed through `GlideUpdateManager2.loadXML` — standalone, with a prolog, nested in the parent ACL's
+   `record_update`, wrapped in `<unload>`, and the platform's own captured serialization — and every one
+   produced **0 rows with no error**. A `GlideRecord` insert from a global script produces the row.
+
+Without the links, a high-security PDI evaluates an ACL with no role, no condition and no script as **deny**
+("Deny access for empty term"), so no role can use the app.
+
+The remediation derives each ACL's role from the package's own `<roles>` element — role **names**, never
+sys_ids — read back out of the ACL's committed `sys_update_version` payload, falling back to the
+`.assigned_agent`/`.assigned_group` naming convention and then to the ACL's description. 26 ACLs yield 27 links
+because the `assigned_agent` field ACL needs both manager and agent, and the script treats 27 as an invariant:
+a shortfall reports `verified=false` rather than silently leaving an ACL that denies everyone.
+
+> **Do not delete `sys_security_acl_role` rows by hand to "reset" the links.** Deleting them fires the platform
+> business rule `Update ACL Description on Role Change` (class `ACLDescriber`), which rewrites the parent ACL's
+> description to role-less text such as `Allow read for records in x_casemgmt_case, never (all ACL conditions
+> are empty).` and destroys the prose copy of the mapping. The remediation recovers from this on its own via
+> the committed-payload source above, but there is no reason to provoke it.
+
+Verify:
+
+```bash
+source /tmp/snow/env.sh
+curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+  "$SN/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_name&sysparm_limit=100" \
+  | python3 -c "import sys,json;print(len(json.load(sys.stdin)['result']),'links (expect 27)')"
 ```
 
-Result: 27 role-link records (the `.assigned_agent` field ACL gets both manager + agent). Verify the role
-matrix with an impersonation `canX` probe (see Section 6.3).
+Then confirm enforcement, not just the record count, with the impersonation `canX` probe in **Section 6.3**
+(run **global** — `GlideImpersonate` is blocked in scope). Expected: manager full CRUD on all three tables;
+viewer read-only; agent create-only at table level with delete false, and at record level readable/writable on
+its assigned case while an unassigned case is filtered out of the query entirely.
 
 ### 5g. Seed the demo data  *(idempotent)*
 

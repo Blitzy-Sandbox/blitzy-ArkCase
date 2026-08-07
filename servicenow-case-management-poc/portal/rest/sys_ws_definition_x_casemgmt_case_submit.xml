@@ -202,6 +202,31 @@
       on the Update Set preview page; the actual reference resolution uses
       the text-node values.
 
+    SERVICE_ID - THE URL PATH SEGMENT (Defect 7):
+      `<service_id>case_submit</service_id>` is what makes the route resolve.
+      The platform composes the endpoint path from the definition record as
+        /api/<namespace>/<service_id>
+      and stores the result in the read-only `base_uri` column. With
+      `service_id` empty the path collapses to `/api/x_casemgmt` and EVERY
+      call - including a correctly formed one - is answered by the routing
+      layer with HTTP 400 "Requested URI does not represent any resource",
+      before the operation script is ever reached. Earlier revisions of this
+      artifact omitted the element entirely, which is exactly the failure
+      that was observed.
+      With it present the live route is
+        POST /api/x_casemgmt/case_submit
+      and `base_uri` reads `/api/x_casemgmt/case_submit`.
+      Note that `api_id` and `service_id` are DIFFERENT columns: on this
+      release `sys_ws_definition` exposes `service_id`, `base_uri`,
+      `default_version`, `is_versioned`, `doc_link` and `short_description`
+      alongside the inherited authentication flags, and it is `service_id`
+      - not `api_id` - that the routing layer reads. Both are carried here
+      with the same value so the record is correct however it is read.
+      `requires_authentication=false`, `requires_acl_authorization=false`,
+      `requires_snc_internal_role=false` and `active=true` are unchanged by
+      this fix: anonymous access and the field-whitelist privacy perimeter
+      are exactly as before.
+
     NO HARDCODED SYS_IDS (AAP Section 0.7.2):
 
       The ONLY sys_id literal in this file is `<sys_id>` itself (THIS
@@ -370,6 +395,7 @@
         <requires_acl_authorization>false</requires_acl_authorization>
         <requires_authentication>false</requires_authentication>
         <requires_snc_internal_role>false</requires_snc_internal_role>
+        <service_id>case_submit</service_id>
         <sys_class_name>sys_ws_definition</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>

@@ -53,10 +53,33 @@
       - The concrete scope identifier `casemgmt` is used per AAP convention;
         ServiceNow Update Set imports use a standard XML parser, so the
         scope id must be concrete in the XML before export.
+      - THE AUTO-NUMBER GENERATOR IS WIRED HERE, WITH THE `global.`
+        QUALIFIER (Defect E). `<default_value>` carries
+            javascript:global.getNextObjNumberPadded();
+        The `global.` prefix is NOT optional. `getNextObjNumberPadded()`
+        is a global-scope function; when the default is evaluated for a
+        row on a SCOPED table the expression is resolved in that scope, so
+        the unqualified form does not resolve and the field is left empty.
+        Root cause of the defect this fixes: on a normal, UI-driven table
+        creation the platform's after-insert business rule `Create Default
+        Number Maintenance Field` (order 1000, on `sys_db_object`) writes
+        this default for you. An Update Set commit applies every payload
+        with business rules suppressed, so that rule never runs and the
+        default has to be part of the payload - which it now is. Without
+        it, `x_casemgmt_case` rows insert with an empty `number`, which
+        breaks the portal submit contract (it returns the new case number)
+        and the status-lookup contract (it queries by number).
+        The default alone is not sufficient: the counter must also declare
+        its zero-padding. See `../numbers/sys_number_x_casemgmt_case.xml`,
+        which carries `<maximum_digits>7</maximum_digits>`. Together they
+        yield the mandated `CASE0000001` format; the default without the
+        padding yields `CASE1`.
       - Read-only at the dictionary level (`<read_only>true</read_only>`)
-        per AAP Section 0.7.4 verbatim. No internal user, agent, or
-        manager may directly edit this field; only the platform's
-        auto-number generator may populate it on insert.
+        per AAP Section 0.7.4 verbatim, and preserved by the Defect E fix.
+        No internal user, agent, or manager may directly edit this field;
+        only the platform's auto-number generator may populate it on
+        insert. `internal_type` (string) and `max_length` (40) are likewise
+        unchanged by the fix.
       - Mandatory at the dictionary level is FALSE because the auto-number
         generator populates the field server-side on insert; setting
         mandatory to true would block any GlideRecord.insert() that does
@@ -120,7 +143,7 @@
         <column_label>Number</column_label>
         <comments>Auto-generated case number with format CASE0000001 (4-char prefix CASE + 7-digit zero-padded sequence). Read-only. Auto-population is configured by the parent table's number_ref pointing at ../numbers/sys_number_x_casemgmt_case.xml. Primary user-facing identifier of the case (referenced by portal submission and lookup, seed scripts, dashboards). Replaces ArkCase CaseFile.caseNumber (@AcmSequence + @TableGenerator).</comments>
         <create_roles/>
-        <default_value/>
+        <default_value>javascript:global.getNextObjNumberPadded();</default_value>
         <defaultsort>true</defaultsort>
         <delete_roles/>
         <dependent/>
