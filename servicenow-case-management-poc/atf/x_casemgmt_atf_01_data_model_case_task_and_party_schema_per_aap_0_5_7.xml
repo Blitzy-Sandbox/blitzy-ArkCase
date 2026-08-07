@@ -1,0 +1,676 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the ATF test
+    `ATF 01 - Data model: case, task and party schema per AAP 0.5.7`
+    its 5 ordered `sys_atf_step` children and the 13 `sys_variable_value`
+    rows that carry those steps' input values, inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (Refine-PR Section 3, directives D3.1a / D3.2 / D3.4):
+        Section 3 asks for an ATF suite covering the data model and ACL RBAC
+        matrix, the state-machine transition matrix and the anonymous portal
+        contracts, and insists the tests be proven to RUN - "not just that the
+        sys_atf_test header records exist". Every record below was authored
+        natively on the instance and then serialized by the platform's OWN
+        serializer (GlideRecordXMLSerializer), never composed by hand. The
+        ATF's step configuration is genuinely multi-table - a step's input
+        VALUES live in `sys_variable_value`, not on the step row - which is the
+        Defect-F-shaped risk Section 3 warns about. It was measured rather than
+        assumed: the platform's payload loader IGNORES `sys_variable_value`
+        children embedded inside a `sys_atf_step` document (a step re-applied
+        that way came back with ZERO inputs and its test then failed), but the
+        same rows applied as their OWN records restore every input and the
+        re-imported test passes. Each input therefore ships here as a separate
+        `<record_update table="sys_variable_value">` document ordered directly
+        after its parent step, and the step keeps its `delete_multiple`
+        directive so a re-import clears stale inputs first. That makes the set
+        idempotent and self-sufficient.
+
+    RUNTIME EVIDENCE: see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`
+    (ATF section) for this test's captured verdict, its result-row id and the
+    negative-control evidence proving the suite can fail as well as pass.
+
+    PREREQUISITE FOR RUNNING: the instance property `sn_atf.runner.enabled`
+    must be `true`. It is an instance test-harness setting and is deliberately
+    NOT captured into the Update Set.
+
+    XML ROOT. This file uses `<unload>` as its root, the same convention as
+    `../dashboards/*.xml`, because it carries more than one record. Every record
+    element keeps its own `action="INSERT_OR_UPDATE"`, so the document is a
+    drop-in payload for the platform's own loader as well as being valid XML for
+    `xmllint` in no-output mode.
+
+    IDENTIFIERS. Every `<sys_id>` here is deterministic - derived from
+    md5('x_casemgmt.atf.' + <stable key>) - so a rebuild converges rather than
+    duplicating. Scope is bound by name: `<sys_package>` carries the literal
+    `x_casemgmt`. The only foreign sys_id literals are the ones a step's own
+    configuration genuinely requires and cannot express by name:
+      - `<step_config>`   the platform's own out-of-box `sys_atf_step_config`
+                          row (stable across instances), carrying a
+                          `display_value` so the intent stays readable;
+      - `<variable>`      the platform's own `atf_input_variable` definition
+                          for each step input, likewise with a `display_value`;
+      - `<user>` inputs   the ATF `Impersonate` step declares `user` as a
+                          `sys_user` REFERENCE, so the demo identity must be a
+                          sys_id. Those three ids belong to this package's own
+                          seed data (`../seed-data/users/*.xml`), which pins
+                          them deterministically, so they remain valid after a
+                          clean import.
+    No other sys_id literal appears. Users, groups, roles, tables and cases are
+    resolved by user_name / name / number everywhere else.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <sys_atf_test action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <copied_from />
+        <description>Asserts the three tables carry exactly the AAP-mandated fields, types, lengths, reference targets, mandatory flags and choice sets; that number is read-only and auto-numbered in the CASE0000001 format; and that a new case defaults to Draft.</description>
+        <enable_parameterized_testing>false</enable_parameterized_testing>
+        <fail_on_server_error>false</fail_on_server_error>
+        <name>ATF 01 - Data model: case, task and party schema per AAP 0.5.7</name>
+        <parameters />
+        <sys_variable_value action="delete_multiple" query="document_key=4779cf2ff32768ffd2afaee103133709" />
+        <remember />
+        <sn_atf_tg_generated>false</sn_atf_tg_generated>
+        <sys_class_name>sys_atf_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>4779cf2ff32768ffd2afaee103133709</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>ATF 01 - Data model: case, task and party schema per AAP 0.5.7</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_4779cf2ff32768ffd2afaee103133709</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test_origin>manual</test_origin>
+    </sys_atf_test>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=ad11bc7a90d98cdc599f396b8e200c49" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Create one synthetic case so the generated number can be asserted</notes>
+        <order>1</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ad11bc7a90d98cdc599f396b8e200c49</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_ad11bc7a90d98cdc599f396b8e200c49</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 01 - Data model: case, task and party schema per AAP 0.5.7">4779cf2ff32768ffd2afaee103133709</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ad11bc7a90d98cdc599f396b8e200c49</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>deca2d36e5b6170e0a9f681cc2e4b91e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    // Identities are resolved by user_name / name - never by sys_id literal.
+    function userId(userName) {
+        var u = new GlideRecord('sys_user');
+        u.addQuery('user_name', userName); u.setLimit(1); u.query();
+        return u.next() ? u.getUniqueValue() : '';
+    }
+    function groupId(groupName) {
+        var g = new GlideRecord('sys_user_group');
+        g.addQuery('name', groupName); g.setLimit(1); g.query();
+        return g.next() ? g.getUniqueValue() : '';
+    }
+    var MGR_ID = userId('x_casemgmt_demo_manager');
+    var AGT_ID = userId('x_casemgmt_demo_agent');
+    var VWR_ID = userId('x_casemgmt_demo_viewer');
+    var GRP_ID = groupId('x_casemgmt_demo_team');
+    var FIX = [
+        {
+            "label": "probe",
+            "table": "x_casemgmt_case",
+            "sys_id": "cfdc67741a52236340f593d0229635a8",
+            "prefix": "ATF-DM-01",
+            "fields": {
+                "subject": "ATF-DM-01 data model probe",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium"
+            }
+        }
+    ];
+
+    // A field value written as "@user:&lt;user_name&gt;" or "@group:&lt;name&gt;" is resolved
+    // here, at run time, so no identity sys_id is baked into the test definition.
+    function resolveToken(v) {
+        if (typeof v !== 'string' || v.charAt(0) !== '@') { return v; }
+        var sep = v.indexOf(':');
+        var kind = v.substring(1, sep), key = v.substring(sep + 1);
+        return kind === 'user' ? userId(key) : groupId(key);
+    }
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); }
+    }
+    for (var f = 0; f &lt; FIX.length; f++) {
+        var gr = new GlideRecord(FIX[f].table);
+        gr.initialize();
+        gr.setNewGuidValue(FIX[f].sys_id);
+        for (var fld in FIX[f].fields) gr.setValue(fld, resolveToken(FIX[f].fields[fld]));
+        var newId = gr.insert();
+        chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
+    }
+    stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ad11bc7a90d98cdc599f396b8e200c49</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>33f24452249c3667989568e07a8b8cf6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=e4aefa0049fb125b71cca116c3a67a56" />
+        <copied_from />
+        <description>Validate record from table '' matches the following condition:
+</description>
+        <display_name>Record Validation</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_1f39a288df60220062fe6c7a4df2639d^id=e4aefa0049fb125b71cca116c3a67a56" />
+        <mugshots_cache_json />
+        <notes>A new case defaults to Draft and receives a CASE-prefixed number</notes>
+        <order>2</order>
+        <snapshot />
+        <step_config display_value="Record Validation">1f39a288df60220062fe6c7a4df2639d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e4aefa0049fb125b71cca116c3a67a56</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Validation</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_e4aefa0049fb125b71cca116c3a67a56</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 01 - Data model: case, task and party schema per AAP 0.5.7">4779cf2ff32768ffd2afaee103133709</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4aefa0049fb125b71cca116c3a67a56</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>44ce7087264c35758b1e4dd19a8f26af</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>0</value>
+        <variable display_value="Enforce security">cbddfa135320220002c6435723dc3415</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4aefa0049fb125b71cca116c3a67a56</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>828f00d842d6a37d1fc31374995058d8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>status=Draft^numberSTARTSWITHCASE^EQ</value>
+        <variable display_value="Field values">ff6e125353a0220002c6435723dc3442</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4aefa0049fb125b71cca116c3a67a56</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>1b19711cebfb5de260cb3e5bec3f6c3d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>cfdc67741a52236340f593d0229635a8</value>
+        <variable display_value="Record">52ed1e5b5360220002c6435723dc3421</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4aefa0049fb125b71cca116c3a67a56</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8f7d278d8982099cf483be647d5fecc3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">6aad5a575360220002c6435723dc34b0</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4aefa0049fb125b71cca116c3a67a56</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7d1d8b68a6e954ca969cb6fd78df447b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>record_validated</value>
+        <variable display_value="Assert type">67400008676003007ba405225685efa4</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=7a030ede995b70701f1fb9cc49e9e8be" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Assert every AAP 0.5.7 case field, its choice sets and the CASE0000001 numbering</notes>
+        <order>3</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7a030ede995b70701f1fb9cc49e9e8be</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_7a030ede995b70701f1fb9cc49e9e8be</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 01 - Data model: case, task and party schema per AAP 0.5.7">4779cf2ff32768ffd2afaee103133709</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>7a030ede995b70701f1fb9cc49e9e8be</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>942f2de648aec9cb7645f3bf9d5666ab</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>7a030ede995b70701f1fb9cc49e9e8be</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>4361dd709950d6d31dd07ccd373459ed</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+
+    var CASE_SPEC = [
+        ['number','string',40,false,true], ['type','string',40,false,false],
+        ['status','string',40,true,false], ['priority','string',40,false,false],
+        ['subject','string',255,true,false], ['description','string',4000,true,false],
+        ['opened_date','glide_date_time',40,false,true], ['closed_date','glide_date_time',40,false,true],
+        ['assigned_group','reference',32,false,false], ['assigned_agent','reference',32,false,false],
+        ['requester_name','string',100,true,false], ['requester_email','string',100,false,false],
+        ['pending_reason','string',40,false,false]
+    ];
+    for (var i = 0; i &lt; CASE_SPEC.length; i++) {
+        var sp = CASE_SPEC[i], d = dict('x_casemgmt_case', sp[0]);
+        chkTrue('x_casemgmt_case.' + sp[0] + ' exists', !!d);
+        if (!d) continue;
+        chk('x_casemgmt_case.' + sp[0] + ' type', sp[1], d.getValue('internal_type'));
+        chk('x_casemgmt_case.' + sp[0] + ' max_length', sp[2], d.getValue('max_length'));
+        chk('x_casemgmt_case.' + sp[0] + ' mandatory', sp[3], d.getValue('mandatory') == '1');
+        chk('x_casemgmt_case.' + sp[0] + ' read_only', sp[4], d.getValue('read_only') == '1');
+    }
+    chk('assigned_group reference target', 'sys_user_group', dict('x_casemgmt_case','assigned_group').getValue('reference'));
+    chk('assigned_agent reference target', 'sys_user', dict('x_casemgmt_case','assigned_agent').getValue('reference'));
+    chk('case.type choices', 'General Inquiry,Complaint', choices('x_casemgmt_case','type').join(','));
+    chk('case.status choices', 'Draft,Open,In Progress,Pending,Resolved,Closed', choices('x_casemgmt_case','status').join(','));
+    chk('case.priority choices', 'Low,Medium,High,Critical', choices('x_casemgmt_case','priority').join(','));
+    chk('case.pending_reason choices', 'Awaiting Info,Awaiting Third Party,Other', choices('x_casemgmt_case','pending_reason').join(','));
+    var num = new GlideRecord('x_casemgmt_case');
+    chkTrue('fixture case is readable', num.get('cfdc67741a52236340f593d0229635a8'));
+    chkTrue('generated number matches the CASE0000001 format', /^CASE[0-9]{7}$/.test(num.getValue('number')));
+    var counter = new GlideRecord('sys_number');
+    counter.addQuery('category', 'x_casemgmt_case'); counter.setLimit(1); counter.query();
+    chkTrue('sys_number counter exists for x_casemgmt_case', counter.next());
+    chk('number prefix', 'CASE', counter.getValue('prefix'));
+    chk('number maximum_digits', '7', counter.getValue('maximum_digits'));
+    stepResult.setOutputMessage('x_casemgmt_case schema (AAP 0.5.7): checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'x_casemgmt_case schema (AAP 0.5.7)', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=11783fb443472625566085bb0d4278b0" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Assert every AAP 0.5.7 task and party field, reference target and choice set</notes>
+        <order>4</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>11783fb443472625566085bb0d4278b0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_11783fb443472625566085bb0d4278b0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 01 - Data model: case, task and party schema per AAP 0.5.7">4779cf2ff32768ffd2afaee103133709</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>11783fb443472625566085bb0d4278b0</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c2036548579794244529f1595c952725</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>11783fb443472625566085bb0d4278b0</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bd35aebc7ba4846525fca0697b5339a5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+
+    var TASK_SPEC = [
+        ['case','reference',32,true,'x_casemgmt_case'], ['subject','string',255,true,''],
+        ['type','string',40,false,''], ['status','string',40,false,''],
+        ['assigned_to','reference',32,true,'sys_user'], ['due_date','glide_date',40,true,'']
+    ];
+    for (var i = 0; i &lt; TASK_SPEC.length; i++) {
+        var sp = TASK_SPEC[i], d = dict('x_casemgmt_case_task', sp[0]);
+        chkTrue('x_casemgmt_case_task.' + sp[0] + ' exists', !!d);
+        if (!d) continue;
+        chk('x_casemgmt_case_task.' + sp[0] + ' type', sp[1], d.getValue('internal_type'));
+        chk('x_casemgmt_case_task.' + sp[0] + ' max_length', sp[2], d.getValue('max_length'));
+        chk('x_casemgmt_case_task.' + sp[0] + ' mandatory', sp[3], d.getValue('mandatory') == '1');
+        if (sp[4]) chk('x_casemgmt_case_task.' + sp[0] + ' reference', sp[4], d.getValue('reference'));
+    }
+    var PARTY_SPEC = [
+        ['case','reference',32,true,'x_casemgmt_case'], ['party_type','string',40,true,''],
+        ['person','reference',32,false,'sys_user'], ['organization','reference',32,false,'core_company'],
+        ['role_label','string',100,true,'']
+    ];
+    for (var j = 0; j &lt; PARTY_SPEC.length; j++) {
+        var ps = PARTY_SPEC[j], pd = dict('x_casemgmt_case_party', ps[0]);
+        chkTrue('x_casemgmt_case_party.' + ps[0] + ' exists', !!pd);
+        if (!pd) continue;
+        chk('x_casemgmt_case_party.' + ps[0] + ' type', ps[1], pd.getValue('internal_type'));
+        chk('x_casemgmt_case_party.' + ps[0] + ' max_length', ps[2], pd.getValue('max_length'));
+        chk('x_casemgmt_case_party.' + ps[0] + ' mandatory', ps[3], pd.getValue('mandatory') == '1');
+        if (ps[4]) chk('x_casemgmt_case_party.' + ps[0] + ' reference', ps[4], pd.getValue('reference'));
+    }
+    chk('task.type choices', 'Investigation,Review,Follow-up,Other', choices('x_casemgmt_case_task','type').join(','));
+    chk('task.status choices', 'Open,In Progress,Closed', choices('x_casemgmt_case_task','status').join(','));
+    chk('party.party_type choices', 'Person,Organization', choices('x_casemgmt_case_party','party_type').join(','));
+    stepResult.setOutputMessage('task and party schema (AAP 0.5.7): checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'task and party schema (AAP 0.5.7)', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=3c7766de1af36e9562517f2a8dd622a7" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Remove this test's synthetic fixtures</notes>
+        <order>5</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3c7766de1af36e9562517f2a8dd622a7</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_3c7766de1af36e9562517f2a8dd622a7</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 01 - Data model: case, task and party schema per AAP 0.5.7">4779cf2ff32768ffd2afaee103133709</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3c7766de1af36e9562517f2a8dd622a7</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f241aa3d56aeb2725ec210e1577f683f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3c7766de1af36e9562517f2a8dd622a7</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2ec39e9bda5977ed74b1bcc616d46389</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    var FIX = [
+        {
+            "label": "probe",
+            "table": "x_casemgmt_case",
+            "sys_id": "cfdc67741a52236340f593d0229635a8",
+            "prefix": "ATF-DM-01",
+            "fields": {
+                "subject": "ATF-DM-01 data model probe",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium"
+            }
+        }
+    ];
+
+    var removed = 0;
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); removed++; }
+    }
+    for (var p = 0; p &lt; FIX.length; p++) {
+        if (!FIX[p].prefix) continue;
+        var extra = new GlideRecord(FIX[p].table);
+        extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
+        extra.query();
+        while (extra.next()) { extra.setWorkflow(false); extra.deleteRecord(); removed++; }
+    }
+    stepResult.setOutputMessage('fixtures removed=' + removed);
+    chk('cleanup ran', 'true', 'true');
+    stepResult.setOutputMessage('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+</unload>

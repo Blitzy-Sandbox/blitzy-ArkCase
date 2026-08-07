@@ -1,0 +1,701 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the ATF test
+    `ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form`
+    its 7 ordered `sys_atf_step` children and the 18 `sys_variable_value`
+    rows that carry those steps' input values, inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (Refine-PR Section 3, directives D3.1b / D3.2 / D3.4):
+        Section 3 asks for an ATF suite covering the data model and ACL RBAC
+        matrix, the state-machine transition matrix and the anonymous portal
+        contracts, and insists the tests be proven to RUN - "not just that the
+        sys_atf_test header records exist". Every record below was authored
+        natively on the instance and then serialized by the platform's OWN
+        serializer (GlideRecordXMLSerializer), never composed by hand. The
+        ATF's step configuration is genuinely multi-table - a step's input
+        VALUES live in `sys_variable_value`, not on the step row - which is the
+        Defect-F-shaped risk Section 3 warns about. It was measured rather than
+        assumed: the platform's payload loader IGNORES `sys_variable_value`
+        children embedded inside a `sys_atf_step` document (a step re-applied
+        that way came back with ZERO inputs and its test then failed), but the
+        same rows applied as their OWN records restore every input and the
+        re-imported test passes. Each input therefore ships here as a separate
+        `<record_update table="sys_variable_value">` document ordered directly
+        after its parent step, and the step keeps its `delete_multiple`
+        directive so a re-import clears stale inputs first. That makes the set
+        idempotent and self-sufficient.
+
+    RUNTIME EVIDENCE: see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`
+    (ATF section) for this test's captured verdict, its result-row id and the
+    negative-control evidence proving the suite can fail as well as pass.
+
+    PREREQUISITE FOR RUNNING: the instance property `sn_atf.runner.enabled`
+    must be `true`. It is an instance test-harness setting and is deliberately
+    NOT captured into the Update Set.
+
+    CLIENT STEPS: this test drives the case form, so it additionally needs a
+    browser client test runner open at `/atf_test_runner.do`. The three
+    form-level tests (ATF 15-17) are the only ones with that requirement.
+
+    XML ROOT. This file uses `<unload>` as its root, the same convention as
+    `../dashboards/*.xml`, because it carries more than one record. Every record
+    element keeps its own `action="INSERT_OR_UPDATE"`, so the document is a
+    drop-in payload for the platform's own loader as well as being valid XML for
+    `xmllint` in no-output mode.
+
+    IDENTIFIERS. Every `<sys_id>` here is deterministic - derived from
+    md5('x_casemgmt.atf.' + <stable key>) - so a rebuild converges rather than
+    duplicating. Scope is bound by name: `<sys_package>` carries the literal
+    `x_casemgmt`. The only foreign sys_id literals are the ones a step's own
+    configuration genuinely requires and cannot express by name:
+      - `<step_config>`   the platform's own out-of-box `sys_atf_step_config`
+                          row (stable across instances), carrying a
+                          `display_value` so the intent stays readable;
+      - `<variable>`      the platform's own `atf_input_variable` definition
+                          for each step input, likewise with a `display_value`;
+      - `<user>` inputs   the ATF `Impersonate` step declares `user` as a
+                          `sys_user` REFERENCE, so the demo identity must be a
+                          sys_id. Those three ids belong to this package's own
+                          seed data (`../seed-data/users/*.xml`), which pins
+                          them deterministically, so they remain valid after a
+                          clean import.
+    No other sys_id literal appears. Users, groups, roles, tables and cases are
+    resolved by user_name / name / number everywhere else.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <sys_atf_test action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <copied_from />
+        <description>Form-level companion to ATF 14 for the verbatim message "Closed cases are terminal and cannot be modified.". Runs in the ATF client test runner: the case form is opened, the status field is set and the form is submitted, so the block is exercised through the same UI path a user takes. ATF ships no step type that reads the form error banner, so the on-screen wording is captured separately as a browser screenshot while this test asserts, server-side, that the aborted save changed nothing.</description>
+        <enable_parameterized_testing>false</enable_parameterized_testing>
+        <fail_on_server_error>false</fail_on_server_error>
+        <name>ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form</name>
+        <parameters />
+        <sys_variable_value action="delete_multiple" query="document_key=07f1427f80169c8644b47ead9d5c1b78" />
+        <remember />
+        <sn_atf_tg_generated>false</sn_atf_tg_generated>
+        <sys_class_name>sys_atf_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>07f1427f80169c8644b47ead9d5c1b78</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_07f1427f80169c8644b47ead9d5c1b78</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test_origin>manual</test_origin>
+    </sys_atf_test>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=ea1bdb7303143101915f653a2c06302f" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>A Closed case</notes>
+        <order>1</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ea1bdb7303143101915f653a2c06302f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_ea1bdb7303143101915f653a2c06302f</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ea1bdb7303143101915f653a2c06302f</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0a78cf09c3bee2b4ad54d48cc8e3cdff</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ea1bdb7303143101915f653a2c06302f</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>870d4792506d2a04d015d41fbe99b980</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    // Identities are resolved by user_name / name - never by sys_id literal.
+    function userId(userName) {
+        var u = new GlideRecord('sys_user');
+        u.addQuery('user_name', userName); u.setLimit(1); u.query();
+        return u.next() ? u.getUniqueValue() : '';
+    }
+    function groupId(groupName) {
+        var g = new GlideRecord('sys_user_group');
+        g.addQuery('name', groupName); g.setLimit(1); g.query();
+        return g.next() ? g.getUniqueValue() : '';
+    }
+    var MGR_ID = userId('x_casemgmt_demo_manager');
+    var AGT_ID = userId('x_casemgmt_demo_agent');
+    var VWR_ID = userId('x_casemgmt_demo_viewer');
+    var GRP_ID = groupId('x_casemgmt_demo_team');
+    var FIX = [
+        {
+            "label": "closed",
+            "table": "x_casemgmt_case",
+            "sys_id": "518799bb2fe107d3647146a08b3af61d",
+            "prefix": "ATF-UI-17",
+            "fields": {
+                "subject": "ATF-UI-17 closed case",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Closed",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        }
+    ];
+
+    // A field value written as "@user:&lt;user_name&gt;" or "@group:&lt;name&gt;" is resolved
+    // here, at run time, so no identity sys_id is baked into the test definition.
+    function resolveToken(v) {
+        if (typeof v !== 'string' || v.charAt(0) !== '@') { return v; }
+        var sep = v.indexOf(':');
+        var kind = v.substring(1, sep), key = v.substring(sep + 1);
+        return kind === 'user' ? userId(key) : groupId(key);
+    }
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); }
+    }
+    for (var f = 0; f &lt; FIX.length; f++) {
+        var gr = new GlideRecord(FIX[f].table);
+        gr.initialize();
+        gr.setNewGuidValue(FIX[f].sys_id);
+        for (var fld in FIX[f].fields) gr.setValue(fld, resolveToken(FIX[f].fields[fld]));
+        var newId = gr.insert();
+        chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
+    }
+    stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=dfd42c82845695c9af7d5076165a0e26" />
+        <copied_from />
+        <description>Impersonate the user:  with user Id: null</description>
+        <display_name>Impersonate</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_071ee5b253331200040729cac2dc348d^id=dfd42c82845695c9af7d5076165a0e26" />
+        <mugshots_cache_json />
+        <notes>Become x_casemgmt_demo_manager</notes>
+        <order>2</order>
+        <snapshot />
+        <step_config display_value="Impersonate">071ee5b253331200040729cac2dc348d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>dfd42c82845695c9af7d5076165a0e26</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Impersonate</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_dfd42c82845695c9af7d5076165a0e26</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>dfd42c82845695c9af7d5076165a0e26</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e39cfb05e7502ab1da6972ee88682bbb</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>ca171e30808ed474ab30ffb2d478a379</value>
+        <variable display_value="User">586e2c4253e0220002c6435723dc3415</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=69d1c601584f2ae5b11973502f86336e" />
+        <copied_from />
+        <description>Open a new 'undefined' form</description>
+        <display_name>Open an Existing Record</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_5f2e0e535332120028bc29cac2dc34d3^id=69d1c601584f2ae5b11973502f86336e" />
+        <mugshots_cache_json />
+        <notes>Open the case form</notes>
+        <order>3</order>
+        <snapshot />
+        <step_config display_value="Open an Existing Record">5f2e0e535332120028bc29cac2dc34d3</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>69d1c601584f2ae5b11973502f86336e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Open an Existing Record</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_69d1c601584f2ae5b11973502f86336e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>69d1c601584f2ae5b11973502f86336e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5b72fd7cb07d3918d473b79e56dbc00d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">b124164e53a0220002c6435723dc34c5</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>69d1c601584f2ae5b11973502f86336e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>69dcd2aa2e0f30bcd1cb52c21699cb7c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>518799bb2fe107d3647146a08b3af61d</value>
+        <variable display_value="Record">ad351a4e53a0220002c6435723dc34f0</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>69d1c601584f2ae5b11973502f86336e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>05274a876c9d7615a8ad98c3c6954712</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>standard_ui</value>
+        <variable display_value="Form UI">17d732a9c7a333005e5c45b881c26007</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=d229614eacaecf1d275c8dfb2e0140ce" />
+        <copied_from />
+        <description>Set the following values on the form:
+</description>
+        <display_name>Set Field Values</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_fcae4a935332120028bc29cac2dc340e^id=d229614eacaecf1d275c8dfb2e0140ce" />
+        <mugshots_cache_json />
+        <notes>Set status to In Progress on the form</notes>
+        <order>4</order>
+        <snapshot />
+        <step_config display_value="Set Field Values">fcae4a935332120028bc29cac2dc340e</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d229614eacaecf1d275c8dfb2e0140ce</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Set Field Values</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_d229614eacaecf1d275c8dfb2e0140ce</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d229614eacaecf1d275c8dfb2e0140ce</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9fa3621543ae8270a2e1130be09d0713</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>status=In Progress^EQ</value>
+        <variable display_value="Field values">b3dba2465320220002c6435723dc34f0</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d229614eacaecf1d275c8dfb2e0140ce</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e5a787c16f911248ea4b8b04767c968f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>standard_ui</value>
+        <variable display_value="Form UI">946f3c1a0f23330072e6452bc4767eda</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d229614eacaecf1d275c8dfb2e0140ce</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bd19397d995175a55a20bc2c7fdcec1b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">424ca6465320220002c6435723dc34b5</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=037bc357d30f101fc399d6e80e39b790" />
+        <copied_from />
+        <description>Submit the current form</description>
+        <display_name>Submit a Form</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Submit the form - the server rejects the transition out of Closed</notes>
+        <order>5</order>
+        <snapshot />
+        <step_config display_value="Submit a Form">be8e0a935332120028bc29cac2dc34e4</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>037bc357d30f101fc399d6e80e39b790</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Submit a Form</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_037bc357d30f101fc399d6e80e39b790</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>037bc357d30f101fc399d6e80e39b790</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>50fd331a2ae26ae24cdbafc51a8853e5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>standard_ui</value>
+        <variable display_value="Form UI">ae8b91c9ffa333008d3f5d9ad53bf1ba</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>037bc357d30f101fc399d6e80e39b790</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>02e1016bcdc5744283f6bd9d68f193de</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>form_submitted_to_server</value>
+        <variable display_value="Assert type">c796d40497302200abe4bb7503ac4ad8</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=3a8ad407ba6d51a7e0e317d834adc241" />
+        <copied_from />
+        <description>Validate record from table '' matches the following condition:
+</description>
+        <display_name>Record Validation</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_1f39a288df60220062fe6c7a4df2639d^id=3a8ad407ba6d51a7e0e317d834adc241" />
+        <mugshots_cache_json />
+        <notes>The stored record is still Closed, so the form submission was aborted</notes>
+        <order>6</order>
+        <snapshot />
+        <step_config display_value="Record Validation">1f39a288df60220062fe6c7a4df2639d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3a8ad407ba6d51a7e0e317d834adc241</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Validation</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_3a8ad407ba6d51a7e0e317d834adc241</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3a8ad407ba6d51a7e0e317d834adc241</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>071a54bbf064811baf5bfd00c433610d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>record_validated</value>
+        <variable display_value="Assert type">67400008676003007ba405225685efa4</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3a8ad407ba6d51a7e0e317d834adc241</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5e90032ff1f89c76de5fadea9c26973d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">6aad5a575360220002c6435723dc34b0</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3a8ad407ba6d51a7e0e317d834adc241</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>cffa73d1f0d3904fc158136869185fa9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>518799bb2fe107d3647146a08b3af61d</value>
+        <variable display_value="Record">52ed1e5b5360220002c6435723dc3421</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3a8ad407ba6d51a7e0e317d834adc241</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2f49aacb1ae1030ca7f5a5220269bb0d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>status=Closed^EQ</value>
+        <variable display_value="Field values">ff6e125353a0220002c6435723dc3442</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3a8ad407ba6d51a7e0e317d834adc241</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bfc470fd37860f1c8cc2c74088e4199b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>0</value>
+        <variable display_value="Enforce security">cbddfa135320220002c6435723dc3415</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=d44ab6bfcb45f0426e1af9aec862f745" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Remove this test's synthetic fixtures</notes>
+        <order>7</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d44ab6bfcb45f0426e1af9aec862f745</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_d44ab6bfcb45f0426e1af9aec862f745</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d44ab6bfcb45f0426e1af9aec862f745</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>009919dd8b9185573ae84a5ee4c3098f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d44ab6bfcb45f0426e1af9aec862f745</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9d6e324ec40bdd9f4c0d3f17eb2a4938</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    var FIX = [
+        {
+            "label": "closed",
+            "table": "x_casemgmt_case",
+            "sys_id": "518799bb2fe107d3647146a08b3af61d",
+            "prefix": "ATF-UI-17",
+            "fields": {
+                "subject": "ATF-UI-17 closed case",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Closed",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        }
+    ];
+
+    var removed = 0;
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); removed++; }
+    }
+    for (var p = 0; p &lt; FIX.length; p++) {
+        if (!FIX[p].prefix) continue;
+        var extra = new GlideRecord(FIX[p].table);
+        extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
+        extra.query();
+        while (extra.next()) { extra.setWorkflow(false); extra.deleteRecord(); removed++; }
+    }
+    stepResult.setOutputMessage('fixtures removed=' + removed);
+    chk('cleanup ran', 'true', 'true');
+    stepResult.setOutputMessage('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+</unload>

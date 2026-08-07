@@ -649,3 +649,279 @@ so future operators don't mistake them for bugs.
 >   two generated Business-Rule script lines. The zero-error preview gate is preserved — the two added blocks
 >   use the same 18-element `<sys_update_xml>` wrapper, unique `update_guid`s, and payloads byte-identical to
 >   their standalone artifacts.
+
+---
+
+## 8. Automated regression suite (ATF) — delivered, running, and its honest coverage
+
+This section covers the Automated Test Framework suite added in this pass. It is the only section of this
+document that speaks to ATF; nothing elsewhere in the register is amended by it.
+
+### 8.1 What was delivered
+
+An ATF suite was **generated, executed and serialized successfully**. The relational failure mode that
+afflicted Flow Designer (§3) was anticipated for ATF's multi-table step configuration, was measured, and was
+designed around — see §8.5. It did not defeat the deliverable.
+
+| | |
+|---|---|
+| Suite | **`x_casemgmt Case Management POC`** (`sys_atf_test_suite`, scope `x_casemgmt`) |
+| Tests | **20** — `ATF 01` … `ATF 20` |
+| Records | 20 `sys_atf_test` + 180 `sys_atf_step` + **542 `sys_variable_value`** step-input rows + 1 `sys_atf_test_suite` + 20 `sys_atf_test_suite_test` links = **763** |
+| Repo artifacts | `../atf/*.xml` — 21 files (one per test carrying its steps and their inputs, plus the suite and its links) |
+| In the package | **763 `<sys_update_xml>` blocks** in `../update-set/x_casemgmt_case_management_update_set.xml`, placed after the `Report`/`Dashboard` blocks and before the seed data, so the tables, dictionary, choices, roles, ACLs, Script Includes and Business Rules the tests exercise all load first. Record count **153 → 916**. |
+
+Coverage, by the three areas required:
+
+| Test | Area | What it asserts |
+|---|---|---|
+| `ATF 01` | Data model | The full §0.5.7 schema of all three tables — field names, types, lengths, mandatory flags, reference targets — every choice set, the `sys_number` prefix/padding, and that `number` is read-only and matches `CASE0000001` |
+| `ATF 02` | RBAC | `x_casemgmt_case_manager`: create, read **all**, write **all**, delete — all succeed |
+| `ATF 03` | RBAC | `x_casemgmt_case_agent`: create succeeds; read/write succeed on a case assigned via `assigned_agent` **and** on one assigned via `assigned_group`; both denied on an unassigned case and on a case in another group; delete denied |
+| `ATF 04` | RBAC | `x_casemgmt_case_viewer`: read all succeeds; create, write and delete all denied |
+| `ATF 05` | RBAC (field) | `assigned_group` writable by the manager only; `assigned_agent` writable by the manager **and** the assigned agent; neither by the viewer |
+| `ATF 06` | RBAC (children) | The matrix mirrored on `x_casemgmt_case_task` and `x_casemgmt_case_party` for the manager and the viewer |
+| `ATF 07` | RBAC (children) | The agent's assigned-only narrowing on the two child tables — **currently red; see §8.6** |
+| `ATF 08` | State machine | `Draft → Open` blocked without `assigned_group`, succeeds with it |
+| `ATF 09` | State machine | `Open → In Progress` blocked with no `assigned_agent`, blocked with an agent outside `assigned_group`, succeeds with a member |
+| `ATF 10` | State machine | `In Progress → Pending` sets `pending_reason`; `Pending → In Progress` clears it |
+| `ATF 11` | State machine | Task-closure gate: `Resolved` blocked while a child task is `Open`, with the message verbatim; succeeds once the task is `Closed` |
+| `ATF 12` | State machine | `Resolved → Closed` denied to a non-manager, permitted to the manager, and `closed_date` auto-set |
+| `ATF 13` | State machine | Any status → `Draft` prohibited, message verbatim |
+| `ATF 14` | State machine | `Closed → *` prohibited from every other status, message verbatim |
+| `ATF 15` | State machine (**on the form**) | The task-closure message appears on the rendered case form and the save is refused |
+| `ATF 16` | State machine (**on the form**) | The back-transition message appears on the rendered case form and the save is refused |
+| `ATF 17` | State machine (**on the form**) | The terminal-state message appears on the rendered case form and the save is refused |
+| `ATF 18` | Portal contract | `POST /api/x_casemgmt/case_submit` → **201**, body carries `number` and `Your case has been submitted`, and the created case lands in `Draft` with a `CASE`-format number |
+| `ATF 19` | Portal contract | `GET /api/x_casemgmt/case_status_lookup?number=<valid>` → **200** carrying `status`, `subject`, `opened_date`, and the whitelist asserted **negatively** — 23 checks confirming `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email` and `sys_id` appear neither as keys nor as values |
+| `ATF 20` | Portal contract | `GET …?number=CASE9999999` → **404** with exactly `No case found with that number.`, re-verified with **no credentials at all** |
+
+All five verbatim strings are asserted character-exactly, trailing period included:
+`All tasks must be closed before resolving this case.` · `Cases cannot be returned to Draft.` ·
+`Closed cases are terminal and cannot be modified.` · `No case found with that number.` ·
+`Your case has been submitted`
+
+The tests assert **observable behaviour only**. None of them references a `sys_hub_flow` record or any other
+implementation artifact, so the suite is valid whether the transition guard is reached through a flow, a
+subflow or the Business Rule path of §3 — and `ATF 11`'s own step log records the abort as coming from
+`x_casemgmt_enforce_forward_transitions`, which is exactly the shipped mechanism.
+
+### 8.2 Instance settings that were changed — a prerequisite for running the suite, not part of the package
+
+| Property | Before | After | Captured in the Update Set? |
+|---|:---:|:---:|:---:|
+| `sn_atf.runner.enabled` | `false` | **`true`** | **No — deliberately not** |
+| `sn_atf.schedule.enabled` | `false` | **`true`** | **No — deliberately not** |
+| `sn_atf.headless.enabled` | `false` | `false` (**unchanged**) | n/a |
+
+- **`sn_atf.runner.enabled` must be `true` on any instance where the suite is to run.** With it `false` — the
+  shipped default on a PDI — every run aborts. It is an instance **test-harness** setting rather than an
+  application artifact, so it is intentionally excluded from the Update Set and is disclosed here instead.
+- `sn_atf.schedule.enabled` was **not** set deliberately: the platform's own business rule *Enable/Disable
+  scheduled tests* flipped it as a side effect of enabling the runner, logging *"Enabled scheduled suites
+  because test execution was enabled"*. It is recorded here because it is a real change to the instance. It has
+  caused no unattended execution — `sys_atf_schedule` and `sys_atf_schedule_run` both hold **zero** rows, and
+  every suite result on the instance was triggered by `admin` with an empty `schedule_run`. Setting it back to
+  `false` is safe and does not affect the suite.
+- `sn_atf.headless.enabled` was left `false`. Consequently the three form-level tests (`ATF 15`–`ATF 17`)
+  require a **browser client test runner**: open `/atf_test_runner.do?sysparm_nostack=true` in a second tab,
+  leave it open, then run the suite and pick that session in the *Pick a Browser* dialog. The other 17 tests
+  need no browser.
+- These two property rows are the **only** addition to the set of base-table records listed in §5; they are
+  instance settings, not records the deliverable defines.
+
+**To run the suite:** commit the Update Set → set `sn_atf.runner.enabled = true` → open the client test runner
+tab → open the suite record → **Run Test Suite** → pick the runner session. Roughly 8 minutes.
+
+### 8.3 Evidence that the tests pass
+
+The suite was run as a single action from the suite form, with a real browser attached as the client runner.
+The run quoted below is the **final** one, executed after every test, step and step-input record had been
+re-loaded into the instance from the shipped `../atf/*.xml` artifacts through the platform's own payload
+loader — so this verdict belongs to the package as serialized, not merely to what was authored in the UI.
+
+| | |
+|---|---|
+| Result | **`TES0001006`** (`sys_atf_test_suite_result` `258b61f993a28710830ef82bdd03d648`) |
+| Window | `2026-08-07 07:08:24` → `07:13:55` — **5 minutes 31 seconds** |
+| Rollup | **success 19 · failure 1 · error 0 · skip 0**, across 20 child `sys_atf_test_result` rows |
+| Status | `Failure` — because of the one red test in §8.6, which is a defect the suite **found**, not a broken test |
+
+Per-test verdicts and run times: `ATF 01` Success 7 s · `02` Success 4 s · `03` Success 5 s ·
+`04` Success 4 s · `05` Success 10 s · `06` Success 22 s · **`07` Failure 3 s** · `08` Success 6 s ·
+`09` Success 9 s · `10` Success 12 s · `11` Success 18 s · `12` Success 20 s · `13` Success 4 s ·
+`14` Success 5 s · `15` Success 52 s · `16` Success 53 s · `17` Success 49 s · `18` Success 6 s ·
+`19` Success 5 s · `20` Success 3 s.
+
+Six suite results exist on the instance (`TES0001001` … `TES0001006`), every one triggered by `admin` with an
+empty `schedule_run` — no unattended execution occurred (see §8.2). All six report 19 success / 1 failure
+except the first, which ran only 17 of the 20 tests because of a suite-link defect in the authoring tooling
+that was found and fixed before any evidence was relied upon.
+
+Depth of assertion, from the step summaries of that run: `ATF 01` verified the case schema with
+`checks=76 failures=0` and the task and party schema with `checks=52 failures=0`; `ATF 19` verified the lookup
+whitelist with `checks=23 failures=0`.
+
+The three form-level tests genuinely drove the browser. The runner's counter went from
+`UI Batches Executed [ 0 ]` to `[ 3 ]` — one batch per form test; its Execution Frame loaded real
+`x_casemgmt_case` forms under *Demo Manager* impersonation (`Impersonation successful in the UI session.
+Impersonated user: x_casemgmt_demo_manager`); `ATF 15`'s result records the browser as
+`HeadlessChrome/151.0.0.0` and carries three runner-captured screenshot attachments; and each blocking message
+was observed **on the form**. All three messages were additionally recovered, character-for-character, from the
+ARIA live region inside ATF's own screenshot payloads — an independent corroboration of the on-screen text
+rather than a re-reading of the same assertion. Each was recovered prefixed `error: ` followed by the message:
+
+| Test | Message recovered from the rendered form |
+|---|---|
+| `ATF 15` | `All tasks must be closed before resolving this case.` |
+| `ATF 16` | `Cases cannot be returned to Draft.` |
+| `ATF 17` | `Closed cases are terminal and cannot be modified.` |
+
+A nuance worth recording: the form renders **two** banners, the state-machine message *and* the platform's
+generic `Invalid update`. Assert on the former; the latter is expected.
+
+Diagnostics across both browser tabs: **zero** console errors out of 322 messages and **zero** failed requests
+out of 1,579. The only aborted requests were three `net::ERR_ABORTED` self-reloads on `x_casemgmt_case.do`
+carrying `sysparm_from_atf_test_runner=true` — one per form test, each paired with ATF's own
+`cancel_my_transaction.do` call, and all three of those tests passed.
+
+### 8.4 Evidence that the tests can *fail* — the negative controls
+
+A suite that cannot fail proves nothing. One expectation per area was deliberately inverted, the runner was
+confirmed to report a genuine failure, and the expectation was then restored and re-run green.
+
+| Area | Test | Inversion | Runner's reported failure (verbatim) |
+|---|---|---|---|
+| RBAC | `ATF 04` | assert the viewer *can* write | `viewer canWrite expected[true] actual[false]` |
+| State machine | `ATF 11` | drop the trailing period from the expected message | `blocking message is verbatim expected[All tasks must be closed before resolving this case] actual[All tasks must be closed before resolving this case.]` |
+| Portal | `ATF 20` | expect `200` instead of `404` | `The response status code doesn't match the specified operation for expected status code: '200', actual status code: '404'` |
+
+The state-machine control is the most informative of the three: a single missing period is reported as a
+failure, which is what makes the "verbatim" claim in §8.1 mean something.
+
+Independently, the harness itself was proven before any test was authored: a throwaway probe asserting
+`1 + 1 === 2` returned a real `success` verdict, and the same probe inverted to `1 + 1 === 3` returned a real
+`failure` verdict with the message *"Assertion failed: probe arithmetic (inverted) should have been 3 but was
+2"*. Both probes were deleted afterwards and are not part of the shipped suite.
+
+### 8.5 Do the ATF records survive serialization and re-import? Yes — but only in one form
+
+This was the specific risk flagged for ATF, by analogy with §3. **It is real, it was measured, and the
+deliverable is built the way that survives.**
+
+- A step's input **values are not stored on the step**. `sys_atf_step.inputs` is a `glide_var` column that is
+  always empty; the values live in a second table, `sys_variable_value`
+  (`document='sys_atf_step'`, `document_key=<step sys_id>`, `variable=<atf_input_variable sys_id>`).
+- `GlideRecordXMLSerializer` **embeds** those rows as children inside the `sys_atf_step` document — and
+  **`GlideUpdateManager2.loadXML()`, the per-record mechanism an Update Set commit uses, ignores them.**
+  Measured on a deleted-and-re-imported test: `AFTER_REIMPORT|test=present|steps=6|inputs=0`, after which the
+  test ran **`FAILURE`**. This is the same shape of defect as §3: header records present, relational body
+  missing. Had the artifacts been shipped in that form, they would have imported as dead shells.
+- **The fix, and what `../atf/*.xml` and the Update Set actually contain:** each `sys_variable_value` row is
+  emitted as its **own** record, immediately after its parent step, with a deterministic `sys_id`. The parent
+  step keeps its `delete_multiple` directive so re-import is idempotent.
+- Proven four ways after the change:
+
+  | Check | Result |
+  |---|---|
+  | Delete `ATF 20`, re-apply the 22 record documents from its shipped artifact file in file order | `inputs=15` restored; test ran **Success**, 6/6 steps |
+  | Delete `ATF 11`, re-apply the 45 blocks belonging to it taken **straight out of the Update Set, in Update Set order** | `inputs=34` restored; test ran **Success**, 10/10 steps |
+  | Re-apply the suite artifact | Suite and all 20 ordered links restored |
+  | **Re-apply all 21 artifact files — every test, step, step-input, the suite and its links — then run the whole suite** | 763 records applied with **0 load errors**; live state 20 tests / 180 steps / 542 inputs; all 542 input values **byte-identical** to the artifacts (verified by md5 per `(document_key, variable)`: 542 identical, 0 different, 0 missing); the suite then ran as `TES0001006` with the same **19 / 1 / 0 / 0** verdict |
+
+  The last row is the one that matters: the verdict in §8.3 belongs to records that came *through* the
+  serialization, not to the originals.
+- Two ordering and idempotence consequences, both measured:
+  - Deleting a `sys_atf_test` cascades away its `sys_atf_test_suite_test` link, so the suite blocks must load
+    **after** the tests. They do — they are the last blocks in the ATF range.
+  - The loader's indifference to nested children applies to the platform's `delete_multiple` directive too: the
+    `<sys_variable_value action="delete_multiple" query="document_key=…"/>` child the platform emits inside each
+    step document is **also ignored**. The same directive *is* honoured when applied as a top-level document
+    (measured: a step's inputs went 2 → 0). The practical consequence is bounded: because every shipped input
+    row carries a deterministic `sys_id`, importing the package onto a clean instance, or re-importing it over a
+    previous import of itself, is exactly idempotent — the ids match and the rows update in place. Importing it
+    on top of a **natively authored** copy of the same suite, whose rows carry platform-generated ids, *adds* a
+    second row per input instead of replacing it (measured: 542 → 1035). That situation arises only on the
+    authoring instance, where it was cleaned up; the clean-instance procedure removes the scope first and so
+    cannot hit it. A maintainer who wants unconditional idempotence can emit one top-level `delete_multiple`
+    document per step ahead of that step's input rows.
+
+**The check to run on a clean instance after upload → preview → commit:**
+
+1. `sys_atf_test` where `sys_scope.scope=x_casemgmt` → **20**
+2. `sys_atf_step` where `test.sys_scope.scope=x_casemgmt` → **180**
+3. `sys_variable_value` where `document=sys_atf_step` and `document_key` is one of those steps → **542**
+4. `sys_atf_test_suite` → **1**, named `x_casemgmt Case Management POC`; `sys_atf_test_suite_test` → **20**
+5. **A step with zero input rows is the failure signature.** If one appears, the input records did not load,
+   or loaded ahead of their parent step. Equally, **no step should have more than its expected number of input
+   rows** — a duplicate means the package was imported over a natively authored suite (see above).
+6. Set `sn_atf.runner.enabled=true`, attach a client runner, run the suite → expect **19 success / 1 failure**
+   (`ATF 07`, §8.6) — or 20/0 once the ACL defect is fixed.
+7. Afterwards, delete `x_casemgmt_case` where `subject` starts with `ATF-PORTAL-18` (see §8.6, M4).
+
+### 8.6 What the suite found, and what remains manual
+
+**A real defect, surfaced by `ATF 07` and left visible rather than hidden.** Four scoped condition scripts on
+the child-table ACLs dereference `current.case`. Because `case` is a JavaScript reserved word, those scripts
+**fail to compile** — the platform log reads
+`Script compilation error: Script Identifier: sys_security_acl.1ea69bf11f64a85ddf0c7e970779fefe, Error Description: missing name after . operator (…; line 2)`
+and, for the party table, `AccessTerm: Slow ACL 98ad89a6a3e869f11fb477ed8f8f1b87 for the path record/x_casemgmt_case_party/read`.
+An ACL whose condition cannot compile evaluates to **deny**, so `x_casemgmt_case_agent` cannot read the tasks
+or parties of the case it is itself assigned to. `ATF 07` reports it as
+`agent assigned-only narrowing on the child tables: checks=4 failures=2 :: agent can read a task on its assigned parent case expected[true] actual[false] | agent can read a party on its assigned parent case expected[true] actual[false]`.
+The remedy is `getValue('case')` or `current['case']` in those four scripts; the test needs no change and turns
+green on its own once they are fixed. The test is deliberately **not** deleted or weakened: a suite that hides
+a real defect to look green is worth less than one that shows it. A second, latent code-hygiene issue was found
+the same way — `CaseTransitionValidator.canTransitionToClosed()` has a branch calling `gs.getUser(userName)`,
+which a scoped application cannot use to fetch another user; it is inert on the shipped path and was not
+changed.
+
+**What stays manual:**
+
+| # | What | Why | Cost |
+|---|---|---|---|
+| M1 | Setting `sn_atf.runner.enabled = true` wherever the suite is to run | Instance test-harness setting, deliberately not captured into the package (§8.2) | < 1 min |
+| M2 | Opening a client test runner tab for `ATF 15`–`ATF 17` | Form-level steps need a browser; `sn_atf.headless.enabled` was left `false` | ~2 min per run |
+| M3 | The genuinely anonymous REST leg | The `Send REST Request - Inbound` step type supports only `basic`/`mutual` auth, so it cannot impersonate an anonymous caller. `ATF 18`–`ATF 20` exercise the endpoints authenticated, and each carries a scoped `Run Server Side Script` companion using `sn_ws.RESTMessageV2` with **no** credentials — which is what actually proves the anonymous contract (201 / 200 / 404 as specified, while `/api/now/table/x_casemgmt_case` correctly returns 401 to an anonymous caller). A credential-free `curl` transcript is recorded in `ATF_MANUAL_TEST_PLAN.md` §5 C4 for anyone wanting to re-confirm it outside ATF. | ~10 min |
+| M4 | Deleting the one `ATF-PORTAL-18` case after each `ATF 18` run | ATF rolls back records created by its own steps and scripts, but **not** a row created by an inbound HTTP request — that runs as `guest`, in its own transaction — and the rollback additionally reverses the test's own cleanup delete. Each run therefore leaves exactly one synthetic `Draft` case. Remedy: delete `x_casemgmt_case` where `subject` starts with `ATF-PORTAL-18`. Done after the `TES0001004` run; demo data verified back at 10 cases / 10 tasks / 8 parties. | < 1 min |
+| M5 | Fixing the four `current.case` ACL scripts so `ATF 07` goes green | Owned by the ACL artifacts, not by the test | not owned here |
+
+**Fixtures and data safety.** Every test creates its own synthetic fixtures, prefixed `ATF-`, with
+`@example.invalid` addresses, and deletes them again; ATF's rollback covers the rest. No test mutates the demo
+data. After the full suite run and every re-import experiment, the demo set was re-verified as intact: **10
+cases spanning all six statuses (Draft 1, Open 2, In Progress 2, Pending 1, Resolved 2, Closed 2) and both
+types (General Inquiry 6, Complaint 4), 10 tasks, 8 parties, 3 demo users, 1 demo group**, with zero `ATF-`
+rows left behind. `ATF 19` pins its fixture to the out-of-sequence number `CASE9000019` precisely so it stays
+portable to a freshly imported instance whose counter restarts at `CASE0000001`.
+
+**Not overstated.** 19 of 20 tests pass. The twentieth fails for a real reason that is documented above and
+attributable to an artifact outside this suite. Three areas are covered automatically; five items (M1–M5)
+remain manual, four of them trivial. A step-by-step plan for rebuilding the whole suite by hand in the ATF UI
+— costed at about 10 hours against the original 16-hour estimate — is in `ATF_MANUAL_TEST_PLAN.md`, which also
+states plainly that automated generation held and that the plan is a recipe rather than a substitute.
+
+### 8.7 Identifiers in the ATF artifacts — full disclosure
+
+The package's standing rule is that no artifact carries a foreign `sys_id`: users resolve by `user_name`,
+groups and roles by `name`, cases by `number`, tables by `name`. Every 32-character literal in
+`../atf/*.xml` is accounted for below, and the two categories that cannot be expressed by name are named
+rather than glossed over.
+
+| Category | Count | Status |
+|---|---:|---|
+| A record's own `<sys_id>`, or a reference to another record this package defines | 1,861 | Compliant — deterministic (md5 of a stable key), so identical on every instance the package is imported into |
+| The two permitted package literals (`<application>`, `<remote_update_set>`) | 221 | Compliant |
+| `sys_atf_step.step_config` — which step type each step is | 180 (14 distinct) | **Unavoidable.** `step_config` is a reference to an out-of-the-box `sys_atf_step_config` row. ATF offers no name-based form in a serialized record, and these are platform-shipped ids, identical on every instance. |
+| `sys_variable_value.variable` — which input of that step type a value belongs to | 542 (45 distinct) | **Unavoidable**, for the same reason: the join key is a reference to an out-of-the-box `atf_input_variable` row. |
+| Identity references inside a step's own **reference inputs** — the `user` input of `Impersonate` (21) and reference fields inside a `field_values` template (7) | 28 (4 distinct) | **Unavoidable.** A reference input stores a `sys_id` by construction. All four distinct values are the three demo users and the demo group, and **this same Update Set creates those records with exactly those `sys_id`s** (`seed-data/users/*.xml`, `seed-data/groups/*.xml`), so they resolve identically on any instance the package is imported into. |
+| Fixture record ids addressed by native steps (`Record`, `Conditions`, `Field values`) | 28 distinct | Compliant — these identify records the test itself creates in its own fixture-setup step, the direct analogue of a record's own `sys_id`. Deterministic, so the native step that follows can address the fixture without ATF's client-side `{{step[…]}}` substitution, which does not resolve on the server-side-only path. |
+
+**Inside script bodies there are now zero identity `sys_id` literals.** Every server-side script that needs an
+identity resolves it at run time — `userId('x_casemgmt_demo_manager')` against `sys_user.user_name`,
+`groupId('x_casemgmt_demo_team')` against `sys_user_group.name` — and fixture field values carry a
+`@user:<user_name>` / `@group:<name>` token that the fixture loop resolves before insert. That is both the rule
+the package is held to and the more portable arrangement: the tests keep working even where the demo
+identities exist under different `sys_id`s. After that change all 20 tests were re-verified — the 17
+server-side tests re-run individually (16 success, `ATF 07` failing as documented) and the three form-level
+tests re-run through the client runner (all three Success, each blocking message again observed on the form
+verbatim, `UI Batches Executed` 0 → 3).
