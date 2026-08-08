@@ -138,7 +138,7 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 
 ## Build Constraints (Non-Negotiable)
 
-1. **Scoped-namespace exclusivity** — every artifact lives in the auto-assigned `x_casemgmt` namespace; zero global-scope writes are permitted.
+1. **Scoped-namespace exclusivity** — every artifact lives in the auto-assigned `x_casemgmt` namespace; zero global-scope writes are permitted, with **two disclosed exceptions** that are approved app-installer wiring rather than application configuration: the Fix Script `x_casemgmt Post-Import Remediation` and the Business Rule `x_casemgmt Post-Import Bootstrap`. Both are authored global because they call `GlideTableDescriptor` and `GlideSecurityManager`, which the platform refuses in scoped execution — and both are rewritten into `x_casemgmt` by the commit engine anyway, which is exactly why the remediation cannot run automatically. See [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §9.4. No other record in the package is global-scoped, and no out-of-the-box table receives a schema change; the global tables `sys_user`, `sys_user_group`, `sys_user_role` and `core_company` receive **data** inserts only.
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
@@ -225,10 +225,13 @@ measured status of each of the seven validation gates is in
 > instance.** A commit alone leaves the three tables without physical storage and the 26 ACLs without their 27
 > role links, and step 3's dashboard check cannot pass because the dashboards' tab child names `pa_tab` instead of `pa_tabs`. Follow
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the procedure that
-> works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**,
-> commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to confirm
-> `verified=true` with 27 role links, reduce each table to a single display field, then delete the packaged
-> number-less seed rows and run `scripts/seed_demo_data.js` in scope.
+> works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**
+> (*Scripts - Background*, "In scope" = Global — **not** the Fix Script UI, which runs in the application scope
+> and fails), commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to
+> confirm `verified=true` with exactly 27 role links, then delete the packaged number-less seed rows and run
+> `scripts/seed_demo_data.js` in scope. The single-display-field repair that this outline previously listed is
+> **no longer a manual step** — the package now ships one display field per table and the remediation verifies
+> it.
 
 Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification procedure in `scripts/round_trip_verify.md`.
 

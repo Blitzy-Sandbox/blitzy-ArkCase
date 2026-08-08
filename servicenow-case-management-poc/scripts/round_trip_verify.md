@@ -210,11 +210,18 @@ future verifier can tell a regression from a known state. The measured detail is
 
 - [ ] Search `syslog` for the marker `X_CASEMGMT_REMEDIATION|` in the commit window and locate the single
       `…|SUMMARY|verified=` line.
-- [ ] **Result: the trigger FIRED but did NOT succeed** — `verified=false`, `tables_built=0`,
-      `acl_links_total=0` of an expected 27, `errors=121`, all of them
+- [ ] **Result, when the trigger was shipped `active=true`: it FIRED but did NOT succeed** — `verified=false`,
+      `tables_built=0`, `acl_links_total=0` of an expected 27, `errors=121`, all of them
       `GlideTableDescriptor is not allowed in scoped applications` or
       `GlideSecurityManager is not allowed in scoped applications`. Cause: the commit engine forces the
       dispatched record's `sys_scope` to the application. Packaging the script as global does not avoid this.
+- [ ] **Expected result for the CURRENT package: no `X_CASEMGMT_REMEDIATION|` marker rows at all.** The trigger
+      is now shipped **`active=false`** precisely because a rule that fires, logs `verified=false` and changes
+      nothing invites an operator to believe the remediation ran. So on a round trip of the current bytes the
+      correct observation is **silence** — zero `BOOTSTRAP|fired` lines and zero `SUMMARY` lines until a human
+      runs the script from *Scripts - Background* with **"In scope" = Global**. Finding no marker rows here is a
+      **pass**, not a regression; finding a `SUMMARY|verified=false|…|errors=121` line would mean the rule was
+      activated on the instance, contrary to what the package ships.
 
 ### 5.3 The four named functional criteria, measured from the package alone
 

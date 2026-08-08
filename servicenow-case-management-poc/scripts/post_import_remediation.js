@@ -2,9 +2,20 @@
  * x_casemgmt_case_management - Post-Import Remediation Script
  *
  * Idempotent server-side script that completes the four remediations a
- * ServiceNow Update Set commit cannot perform for itself, so that a fresh
- * import of update-set/x_casemgmt_case_management_update_set.xml yields a fully
- * functional application with no human step beyond upload -> preview -> commit.
+ * ServiceNow Update Set commit cannot perform for itself.
+ *
+ * THIS IS A REQUIRED POST-IMPORT STEP, NOT AN AUTOMATIC ONE. Importing
+ * update-set/x_casemgmt_case_management_update_set.xml previews and commits
+ * cleanly, but the commit alone does NOT yield a functional application:
+ * Defect C (physical tables/fields/choices) and Defect 9 (the 27 ACL -> role
+ * links) still need this script, and it must be executed BY HAND in the
+ * **Global** scope. The packaged auto-execute trigger was measured firing and
+ * then failing - see "HOW IT IS INVOKED" below and
+ * ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 - so the acceptance
+ * path for this deliverable is the disclosed manual path (b), and
+ * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 is the procedure that
+ * actually works. Defects E and 7 need no script at all: they are carried by
+ * the package artifacts, and this script only re-asserts them.
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS SCRIPT FIXES, AND WHY THE UPDATE SET CANNOT DO IT ALONE
@@ -82,29 +93,38 @@
  *     post_import_remediation.js  ->  global
  *     seed_demo_data.js           ->  x_casemgmt (scope sys_id)
  *
- * HOW IT IS INVOKED
- *   This file is the single source of the remediation body. It ships twice, and
- *   the second copy is generated from the first so the two can never drift:
+ * HOW IT IS INVOKED - THE ONE ROUTE THAT WAS MEASURED TO WORK
+ *   Paste this file into **System Definition -> Scripts - Background** with
+ *   **"In scope" = Global** and run it. That is the only invocation route proven
+ *   on the target PDI, and it is step 4 (and again step 6) of
+ *   ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5.
  *
- *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml - a
- *      global-scope Fix Script named "x_casemgmt Post-Import Remediation" whose
- *      `script` field is this file verbatim, byte for byte.
- *   b. scripts/sys_script_x_casemgmt_post_import_bootstrap.xml - a global-scope,
- *      after-update Business Rule on `sys_remote_update_set`, condition
- *      `current.state.changesTo('committed')`. It holds no remediation logic of
- *      its own: it resolves the Fix Script above BY NAME and dispatches it with
- *      `new GlideScopedEvaluator().evaluateScript(fix, 'script', null)`.
+ *   Two other copies of this body ship inside the package. Neither can perform
+ *   Defect C or Defect 9, and both are shipped for disclosure and for reuse on
+ *   an instance where the scope rewrite below does not apply - not as a working
+ *   fallback:
  *
- *   Both records survive the update engine's apply path, and the Business Rule
- *   fires when the engine flips the retrieved Update Set to `committed` - i.e.
- *   immediately after the last payload of the very commit that installed it.
- *   That is what makes upload -> preview -> commit sufficient with no human step.
+ *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml - a Fix
+ *      Script named "x_casemgmt Post-Import Remediation" whose `script` field is
+ *      this file verbatim, byte for byte. The package declares it
+ *      `sys_scope = global`, but **the Update Set commit engine rewrites every
+ *      committed record's `sys_scope` to the Update Set's application**: read
+ *      back after commit, the installed Fix Script is app-scoped. Running it
+ *      from the Fix Script UI therefore executes in `x_casemgmt`, where
+ *      `GlideTableDescriptor` and `GlideSecurityManager` are refused. Measured
+ *      outcome: `verified=false`, `tables_built=0`, `acl_links_created=0`,
+ *      `errors=121`, all 121 being those two SecurityExceptions.
+ *   b. scripts/sys_script_x_casemgmt_post_import_bootstrap.xml - an after-update
+ *      Business Rule on `sys_remote_update_set`, condition
+ *      `current.state.changesTo('committed')`, which resolves the Fix Script by
+ *      name and dispatches it with `GlideScopedEvaluator`. It was measured
+ *      FIRING correctly on commit and then failing for exactly the reason in
+ *      (a) - the scope rewrite happens at commit time regardless of the packaged
+ *      scope, so no packaging change can fix it. It is therefore shipped
+ *      **inactive** and labelled as such.
  *
- *   If the trigger is ever removed the remediation is still one action:
- *   System Definition -> Fix Scripts -> "x_casemgmt Post-Import Remediation"
- *   -> Run Fix Script. Or paste this file into System Definition -> Scripts -
- *   Background with "In scope" = Global. All three routes are the same code and
- *   produce the same output.
+ *   The full evidence, including the verbatim syslog lines, is in
+ *   ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4.
  *
  * VERIFICATION SIGNAL (what to look for to prove it ran)
  *   Every line this script emits is a `gs.info()` prefixed with the grep-able
@@ -119,17 +139,38 @@
  *   ran to completion; its `verified=` token is the proof the remediation
  *   converged.
  *
- * IDEMPOTENCY GUARANTEES
- *   - Every insert is preceded by a lookup: a table is rebuilt only when it is
- *     not physically valid, a field only when the physical column is absent, a
- *     choice/link only when no equivalent row exists, and a scalar value only
- *     when it differs from the target value.
+ * IDEMPOTENCY AND CONVERGENCE GUARANTEES
+ *   - Every insert is preceded by a lookup, and every write is preceded by a
+ *     comparison against the authoritative specification below.
+ *   - Convergence is SEMANTIC, not merely existential. The physical column
+ *     existing is not treated as proof the field is correct: every attribute the
+ *     package declares (type, length, choice, mandatory, read-only, display,
+ *     unique, default sort, reference target, default value, active) is compared
+ *     against the stored `sys_dictionary` row and repaired where it differs, and
+ *     every choice row's label, sequence, inactive flag and language are
+ *     compared and repaired the same way. Verification then re-reads all of it
+ *     from the database, plus the exact choice-value set and the exact
+ *     ACL -> role pair set, so a malformed schema cannot report `verified=true`.
  *   - A second run therefore creates nothing, changes nothing, and emits only
  *     "already correct" traces plus the summary line. Both runs report the same
  *     `verified=true`.
- *   - The clean-slate rebuild inside ensureTable() only ever deletes
- *     metadata-only rows for a table that has NO physical storage, so it can
- *     never destroy data. A table that already exists is left strictly alone.
+ *
+ * DESTRUCTIVE-SAFETY GUARANTEES (the rebuild in ensureTable)
+ *   - The rebuild deletes metadata rows, so it is fail-CLOSED on uncertainty.
+ *     probePhysicalState() is tri-state: it interrogates three independent
+ *     platform signals (`GlideTableDescriptor.isValid`, `GlideRecord.isValid`,
+ *     `TableUtils.tableExists`) and returns
+ *       'yes'     when ANY signal reports storage - the table is left untouched;
+ *       'no'      only when ALL THREE agree there is none - proven metadata-only;
+ *       'unknown' when any signal throws or the signals disagree.
+ *     A transient failure, a permission refusal or an API change therefore
+ *     produces 'unknown', and 'unknown' ABORTS the table with an error. It never
+ *     reaches the delete. The pre-refine version converted any exception to
+ *     "not physical" and deleted on that basis; that fail-open path is gone.
+ *   - Every deletion is verified: `deleteRecord()`'s return value is checked, the
+ *     collection is re-read afterwards, and any residue or any refused delete
+ *     aborts the rebuild before the fresh insert. Counters record only verified
+ *     removals.
  *
  * CONSTRAINTS HONORED
  *   - Zero hard-coded foreign sys_ids. The application scope is resolved by
@@ -139,8 +180,9 @@
  *     `sys_number.category`, REST definitions by `sys_ws_definition.name`, and
  *     ACLs by their own `name` + `description`. When a table has to be rebuilt,
  *     its existing sys_id is read from the database and re-used so every
- *     reference in the package stays valid. There is not one 32-character hex
- *     literal in this file.
+ *     reference in the package stays valid. The ACL -> role pair set is keyed on
+ *     sys_ids too, but both sides are read out of the database in the same run.
+ *     There is not one 32-character hex literal in this file.
  *   - Zero PII and zero synthetic data creation: this script only repairs
  *     metadata and security wiring. It creates no users, groups or cases.
  *   - No email: no gs.eventQueue(), no notification dispatch.
@@ -168,16 +210,16 @@
  *   acm-plugins/acm-default-plugins/acm-admin-plugin/.../RolesPrivilegesService.java
  */
 
-/* global GlideRecord, GlideAggregate, GlideDateTime, GlideTableDescriptor, GlideSecurityManager, gs */
+/* global GlideRecord, GlideAggregate, GlideDateTime, GlideTableDescriptor, GlideSecurityManager, TableUtils, gs */
 /* eslint-env es5 */
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-// Grep-able marker prefixed to every log line this script emits. U4's
-// clean-instance round trip looks for `LOG_MARKER + '|SUMMARY|'` in syslog to
-// confirm the bootstrap trigger fired.
+// Grep-able marker prefixed to every log line this script emits. Searching
+// syslog for `LOG_MARKER + '|SUMMARY|'` is how an operator confirms the
+// remediation ran, and its `verified=` token is how they confirm it converged.
 var LOG_MARKER = 'X_CASEMGMT_REMEDIATION';
 
 // The scoped application's namespace. Used to resolve the scope record by name
@@ -204,9 +246,25 @@ var ROLE_VIEWER = 'x_casemgmt_case_viewer';
 var EXPECTED_ACL_ROLE_LINKS = 27;
 var EXPECTED_ACL_COUNT = 26;
 
-// Name of the bootstrap Business Rule that auto-executes this script, and of the
-// Fix Script that carries this body. Both are looked up by name so this file
-// carries no sys_id for either.
+// How those 27 links distribute across the three roles. Derived by reading the
+// `<roles>` element of all 26 ../acl/*.xml artifacts: the manager appears on
+// every table-level operation of all three tables (12) plus both field ACLs (2);
+// the agent on create/read/write of all three tables (9) plus the assigned_agent
+// field ACL (1); the viewer on read of all three tables (3).
+//
+// This is a fail-closed cross-check on the DERIVATION, not just on the total: if
+// rolesForAcl() ever mapped an ACL to the wrong role the total could still be 27
+// while the distribution moved, so both are asserted.
+var EXPECTED_ROLE_LINK_COUNTS = {
+    'x_casemgmt_case_manager': 14,
+    'x_casemgmt_case_agent': 10,
+    'x_casemgmt_case_viewer': 3
+};
+
+// Name of the bootstrap Business Rule that was built to auto-execute this script
+// - it fires but cannot succeed, so the package ships it INACTIVE (see the header)
+// - and of the Fix Script that carries this body. Both are looked up by name so
+// this file carries no sys_id for either.
 //
 // IMPORTANT: `sys_script.name` and `sys_script_fix.name` are both max_length 40
 // on this release and the platform truncates silently. A longer name would still
@@ -224,31 +282,60 @@ var NUMBER_DEFAULT_VALUE = 'javascript:global.getNextObjNumberPadded();';
 // Zero-padding width that yields the mandated CASE0000001 format.
 var NUMBER_MAXIMUM_DIGITS = '7';
 
+// The default-sort rank for x_casemgmt_case.number, i.e. the column a case list
+// sorts by when no other sort is chosen.
+//
+// `sys_dictionary.defaultsort` is an INTEGER column on this release, not a
+// boolean - measured directly against its own dictionary entry
+// (internal_type=integer) and confirmed behaviourally: writing the string 'true'
+// leaves the stored value untouched and does not even increment sys_mod_count,
+// while writing '1' persists. The package originally declared
+// `<defaultsort>true</defaultsort>`, which import therefore discarded silently,
+// so the case list had no default sort at all. Rank 1 is the correct
+// representation and is what both this script and the packaged Dictionary
+// artifact now carry.
+var DEFAULT_SORT_RANK = '1';
+
 // ----------------------------------------------------------------------------
 // TABLE_SPECS - transcribed from ../tables/*.xml + ../dictionary/*.xml, which
 // mirror ../docs/data-model.md verbatim. `label`/`plural` are only used when a
 // table has to be created from nothing; when the committed sys_db_object row is
 // present its own label/plural/access flags and sys_id are re-used instead.
+//
+// `displayField` names the ONE column ServiceNow may mark `display=true`, and
+// exactly one field per table carries `display: true` to match. This is not a
+// stylistic detail: the platform permits a single display field per table, and
+// when several are flagged every reference TO that table renders blank - the
+// `Case` column in the task and party lists, and the mandatory `Case` field on
+// their forms, all showed "(empty)" while 13 of 14 case columns were flagged.
+// verifyRemediation() re-reads the dictionary and fails the run if any table has
+// other than exactly one display field.
+//
+// `defaultValue` carries every authoritative default the package declares, so a
+// table rebuilt by ensureTable() comes back with the same defaults the Update
+// Set ships rather than with empty ones: case.status=Draft, case.priority=Medium
+// and case_task.status=Open, alongside the auto-number default on case.number.
 // ----------------------------------------------------------------------------
 var TABLE_SPECS = [
     {
         name: TABLE_CASE,
         label: 'Case',
         plural: 'Cases',
+        displayField: 'number',
         fields: [
-            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, defaultSort: true, display: true, defaultValue: NUMBER_DEFAULT_VALUE },
-            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: true },
-            { element: 'priority', label: 'Priority', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'description', label: 'Description', type: 'string', maxLength: '4000', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'opened_date', label: 'Opened Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: true },
-            { element: 'closed_date', label: 'Closed Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: true },
-            { element: 'assigned_group', label: 'Assigned Group', type: 'reference', maxLength: '32', reference: 'sys_user_group', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'assigned_agent', label: 'Assigned Agent', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'requester_name', label: 'Requester Name', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'requester_email', label: 'Requester Email', type: 'string', maxLength: '100', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'pending_reason', label: 'Pending Reason', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, defaultSort: DEFAULT_SORT_RANK, display: true, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
+            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false, defaultValue: 'Draft' },
+            { element: 'priority', label: 'Priority', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false, defaultValue: 'Medium' },
+            { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'description', label: 'Description', type: 'string', maxLength: '4000', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'opened_date', label: 'Opened Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false },
+            { element: 'closed_date', label: 'Closed Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false },
+            { element: 'assigned_group', label: 'Assigned Group', type: 'reference', maxLength: '32', reference: 'sys_user_group', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'assigned_agent', label: 'Assigned Agent', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'requester_name', label: 'Requester Name', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'requester_email', label: 'Requester Email', type: 'string', maxLength: '100', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'pending_reason', label: 'Pending Reason', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
             { element: 'duration_to_close', label: 'Duration to Close', type: 'glide_duration', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false }
         ]
     },
@@ -256,24 +343,26 @@ var TABLE_SPECS = [
         name: TABLE_CASE_TASK,
         label: 'Case Task',
         plural: 'Case Tasks',
+        displayField: 'subject',
         fields: [
-            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: true },
+            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false },
             { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'assigned_to', label: 'Assigned To', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'due_date', label: 'Due Date', type: 'glide_date', maxLength: '40', mandatory: true, choice: '0', readOnly: false, display: true }
+            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
+            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false, defaultValue: 'Open' },
+            { element: 'assigned_to', label: 'Assigned To', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'due_date', label: 'Due Date', type: 'glide_date', maxLength: '40', mandatory: true, choice: '0', readOnly: false, display: false }
         ]
     },
     {
         name: TABLE_CASE_PARTY,
         label: 'Case Party',
         plural: 'Case Parties',
+        displayField: 'role_label',
         fields: [
-            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: true },
-            { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'organization', label: 'Organization', type: 'reference', maxLength: '32', reference: 'core_company', mandatory: false, choice: '0', readOnly: false, display: true },
+            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false },
+            { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'organization', label: 'Organization', type: 'reference', maxLength: '32', reference: 'core_company', mandatory: false, choice: '0', readOnly: false, display: false },
             { element: 'role_label', label: 'Role Label', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: true }
         ]
     }
@@ -316,6 +405,47 @@ var CHOICE_SPECS = [
     { table: TABLE_CASE_PARTY, element: 'party_type', value: 'Organization', label: 'Organization', sequence: '200' }
 ];
 
+// The choice inventory CHOICE_SPECS must describe, asserted as an invariant:
+// seven lists and twenty-four values, matching ../choices/*.xml and
+// ../docs/data-model.md. Verification counts the live rows per (table, element)
+// and fails on a shortfall AND on a surplus, so a stray extra value - a
+// mis-keyed insert, or a value left behind by an earlier partial run - is
+// reported rather than silently tolerated.
+var EXPECTED_CHOICE_LISTS = 7;
+var EXPECTED_CHOICE_VALUES = 24;
+
+// Every attribute of a `sys_dictionary` row this script owns and therefore
+// compares and repairs. The physical column existing is NOT proof the field is
+// correct: an Update Set commit can leave a row whose type, length, mandatory
+// flag, reference target, default or display flag disagrees with the package.
+// Each entry maps the dictionary column to the TABLE_SPECS property that governs
+// it and to how the two are compared.
+//   'bool'   - Glide boolean, compared through isTrue()
+//   'string' - compared as text, with '' treated as equal to absent
+var DICTIONARY_ATTRIBUTES = [
+    { column: 'column_label', spec: 'label', kind: 'string' },
+    { column: 'internal_type', spec: 'type', kind: 'string' },
+    { column: 'max_length', spec: 'maxLength', kind: 'string' },
+    { column: 'choice', spec: 'choice', kind: 'string' },
+    { column: 'reference', spec: 'reference', kind: 'string' },
+    { column: 'default_value', spec: 'defaultValue', kind: 'string' },
+    { column: 'mandatory', spec: 'mandatory', kind: 'bool' },
+    { column: 'read_only', spec: 'readOnly', kind: 'bool' },
+    { column: 'display', spec: 'display', kind: 'bool' },
+    { column: 'unique', spec: 'unique', kind: 'bool' },
+    { column: 'defaultsort', spec: 'defaultSort', kind: 'string' },
+    { column: 'active', spec: 'active', kind: 'bool' }
+];
+
+// Every attribute of a `sys_choice` row this script owns and therefore compares
+// and repairs.
+var CHOICE_ATTRIBUTES = [
+    { column: 'label', spec: 'label', kind: 'string' },
+    { column: 'sequence', spec: 'sequence', kind: 'string' },
+    { column: 'language', spec: 'language', kind: 'string' },
+    { column: 'inactive', spec: 'inactive', kind: 'bool' }
+];
+
 // ----------------------------------------------------------------------------
 // COUNTER_SPECS - the three sys_number counters. `category` is a reference to
 // sys_db_object and stores the table name, so it is resolvable by name.
@@ -343,10 +473,15 @@ var REST_SPECS = [
 var STATS = {
     tablesBuilt: 0,
     tablesAlready: 0,
+    tablesUncertain: 0,
     fieldsCreated: 0,
     fieldsAlready: 0,
+    fieldsRepaired: 0,
+    displayFieldsFixed: 0,
     choicesCreated: 0,
     choicesAlready: 0,
+    choicesRepaired: 0,
+    aclLinksRemoved: 0,
     countersUpdated: 0,
     countersAlready: 0,
     numberDefaultsSet: 0,
@@ -423,16 +558,103 @@ function lookupRoleSysId(roleName) {
 }
 
 /**
- * True when `tableName` has physical storage. GlideTableDescriptor is only
- * reachable from the global scope, which is why this whole script runs there.
+ * Interrogate one physical-storage signal and reduce it to a tri-state.
+ *
+ * @param {string} label signal name, for the trace
+ * @param {Function} fn returns a truthy/falsy verdict, may throw
+ * @return {Object} { state: 'yes'|'no'|'unknown', label: string, note: string }
+ */
+function physicalSignal(label, fn) {
+    try {
+        var verdict = fn();
+        if (verdict === true || verdict === 'true' || verdict === 1 || verdict === '1') {
+            return { state: 'yes', label: label, note: '' };
+        }
+        if (verdict === false || verdict === 'false' || verdict === 0 || verdict === '0') {
+            return { state: 'no', label: label, note: '' };
+        }
+        // Anything that is neither a clean true nor a clean false (null,
+        // undefined, an object, a changed return type on a future release) is
+        // NOT evidence of absence.
+        return { state: 'unknown', label: label, note: 'non-boolean verdict "' + verdict + '"' };
+    } catch (e) {
+        return { state: 'unknown', label: label, note: '' + e };
+    }
+}
+
+/**
+ * Determine whether `tableName` has physical storage, as a TRI-STATE.
+ *
+ * This function guards a destructive branch (ensureTable() deletes a table's
+ * metadata rows before rebuilding it), so it must never answer "no storage"
+ * because a probe failed. Three independent platform signals are interrogated;
+ * each was measured on the target PDI against a physical scoped table, a
+ * metadata-only table produced by a workflow-suppressed `sys_db_object` insert,
+ * and a table name that does not exist at all:
+ *
+ *   signal                         physical | metadata-only | absent
+ *   GlideTableDescriptor.isValid   true     | false         | false
+ *   new GlideRecord(t).isValid()   true     | false         | false
+ *   new TableUtils(t).tableExists()true     | false         | false
+ *
+ * (`GlideRecord.isValidField('sys_id')` and `GlideTableDescriptor.get().getName()`
+ * were also measured and answer identically in all three cases, so they carry no
+ * information and are not used.)
+ *
+ * Reduction rules, in order:
+ *   - ANY signal reporting 'yes'  -> 'yes'. One positive is enough: destroying
+ *     the metadata of a table that does have storage would drop live data, so
+ *     the benign outcome (do nothing) wins every disagreement.
+ *   - ALL THREE reporting 'no'    -> 'no'. Only unanimous agreement is accepted
+ *     as positive proof that there is nothing to destroy.
+ *   - anything else               -> 'unknown', and the caller must abort.
+ *
+ * @param {string} tableName table to probe
+ * @return {Object} { state: 'yes'|'no'|'unknown', detail: string }
+ */
+function probePhysicalState(tableName) {
+    var signals = [
+        physicalSignal('GlideTableDescriptor.isValid', function () {
+            return GlideTableDescriptor.isValid(tableName);
+        }),
+        physicalSignal('GlideRecord.isValid', function () {
+            return new GlideRecord(tableName).isValid();
+        }),
+        physicalSignal('TableUtils.tableExists', function () {
+            return new TableUtils(tableName).tableExists();
+        })
+    ];
+
+    var yes = 0;
+    var no = 0;
+    var parts = [];
+    for (var i = 0; i < signals.length; i++) {
+        parts.push(signals[i].label + '=' + signals[i].state + (signals[i].note ? '(' + signals[i].note + ')' : ''));
+        if (signals[i].state === 'yes') {
+            yes++;
+        } else if (signals[i].state === 'no') {
+            no++;
+        }
+    }
+
+    var state;
+    if (yes > 0) {
+        state = 'yes';
+    } else if (no === signals.length) {
+        state = 'no';
+    } else {
+        state = 'unknown';
+    }
+    return { state: state, detail: parts.join(',') };
+}
+
+/**
+ * Convenience read for the non-destructive callers: true only when storage is
+ * positively confirmed. An 'unknown' answers false here, which is safe because
+ * every caller of this helper only READS.
  */
 function tableIsPhysical(tableName) {
-    try {
-        return GlideTableDescriptor.isValid(tableName);
-    } catch (e) {
-        logError('tableIsPhysical(' + tableName + ') failed: ' + e);
-        return false;
-    }
+    return probePhysicalState(tableName).state === 'yes';
 }
 
 /**
@@ -476,24 +698,94 @@ function columnExists(tableName, element) {
 // ============================================================================
 
 /**
+ * Delete every row of `table` matching (`field` = `value`), verifying each
+ * deletion individually and then re-reading the collection.
+ *
+ * This exists because `GlideRecord.deleteRecord()` returns false when a delete is
+ * refused - by an ACL, by a cross-scope policy, by a data policy or by a delete
+ * business rule - and the pre-refine code ignored that return value while
+ * incrementing a "removed" counter regardless. A rebuild that believes it
+ * cleared the metadata when it did not goes on to insert a colliding row.
+ *
+ * @param {string} table table to purge
+ * @param {string} field column to match
+ * @param {string} value value to match
+ * @return {Object} { ok: boolean, deleted: number, refused: number, residue: number }
+ */
+function deleteAllVerified(table, field, value) {
+    var deleted = 0;
+    var refused = 0;
+    var gr = new GlideRecord(table);
+    gr.addQuery(field, value);
+    gr.query();
+    while (gr.next()) {
+        var id = gr.getUniqueValue();
+        var ok = false;
+        try {
+            ok = gr.deleteRecord();
+        } catch (e) {
+            logError('DELETE|' + table + '.' + field + '=' + value + '|sys_id=' + id + '|threw ' + e);
+            ok = false;
+        }
+        if (ok) {
+            deleted++;
+        } else {
+            refused++;
+            logError('DELETE|' + table + '|refused for sys_id=' + id + ' (' + field + '=' + value + ')');
+        }
+    }
+
+    // Read back: the authoritative check is what remains, not what the calls
+    // claimed to do.
+    var after = new GlideRecord(table);
+    after.addQuery(field, value);
+    after.query();
+    var residue = after.getRowCount();
+    return { ok: refused === 0 && residue === 0, deleted: deleted, refused: refused, residue: residue };
+}
+
+/**
  * Ensure `spec.name` has physical storage.
  *
- * Idempotency and safety: when the table is already physical this function
- * touches nothing at all and returns false. Only a table with NO physical
- * storage is rebuilt, so the clean-slate delete can never destroy data - there
- * is no data to destroy. The committed sys_db_object row's own sys_id, label,
- * plural and access flags are captured first and replayed onto the fresh
- * insert, so every ACL, business rule, report and reference field in the
- * package continues to resolve to the same record.
+ * Safety contract - this function contains the only destructive step in the
+ * script, so it is fail-CLOSED:
+ *
+ *   - probePhysicalState() is consulted, not a boolean. 'yes' means the table is
+ *     left strictly alone. 'unknown' - any probe throwing, or the three signals
+ *     disagreeing - ABORTS this table with an error and touches nothing; the run
+ *     then reports verified=false so the operator investigates rather than
+ *     discovering a dropped table afterwards.
+ *   - Only a unanimous 'no' is accepted as proof there is nothing to destroy,
+ *     and that proof is re-taken immediately before the delete.
+ *   - Every delete is verified and read back (deleteAllVerified). Any refused
+ *     delete or any residue aborts the rebuild BEFORE the fresh insert, so the
+ *     table is never left half-dismantled by a silent failure.
+ *
+ * The committed sys_db_object row's own sys_id, label, plural and access flags
+ * are captured first and replayed onto the fresh insert, so every ACL, business
+ * rule, report and reference field in the package continues to resolve to the
+ * same record.
  *
  * @param {Object} spec one entry of TABLE_SPECS
  * @param {string} scopeSysId the application scope, resolved by name
  * @return {boolean} true when this call created the physical table
  */
 function ensureTable(spec, scopeSysId) {
-    if (tableIsPhysical(spec.name)) {
+    var probe = probePhysicalState(spec.name);
+    if (probe.state === 'yes') {
         STATS.tablesAlready++;
-        log('TABLE|' + spec.name + '|already physical|columns=' + physicalColumnCount(spec.name));
+        log('TABLE|' + spec.name + '|already physical|columns=' + physicalColumnCount(spec.name) +
+            '|signals=' + probe.detail);
+        return false;
+    }
+    if (probe.state === 'unknown') {
+        STATS.tablesUncertain++;
+        logError('TABLE|' + spec.name + '|physical state could NOT be established (' + probe.detail +
+            ') - refusing to rebuild. The rebuild deletes this table\'s sys_dictionary and' +
+            ' sys_db_object rows, which would drop live data if the table does in fact exist, so an' +
+            ' uncertain probe aborts instead of guessing. Recovery: re-run this script from' +
+            ' System Definition > Scripts - Background with "In scope" = Global once the platform' +
+            ' answers the probe cleanly.');
         return false;
     }
 
@@ -518,38 +810,45 @@ function ensureTable(spec, scopeSysId) {
         }
     }
 
-    // Re-check immediately before the destructive step. The window between the
-    // decision above and the delete below is tiny, but if anything else has
-    // materialized the table in the meantime, deleting its metadata would drop a
-    // live table. Bail out instead.
-    if (tableIsPhysical(spec.name)) {
-        STATS.tablesAlready++;
-        log('TABLE|' + spec.name + '|became physical before the rebuild started|left untouched|columns=' +
-            physicalColumnCount(spec.name));
+    // Re-take the proof immediately before the destructive step. The window
+    // between the decision above and the delete below is tiny, but if anything
+    // else has materialized the table in the meantime, deleting its metadata
+    // would drop a live table. Anything other than a unanimous 'no' bails out.
+    var reprobe = probePhysicalState(spec.name);
+    if (reprobe.state !== 'no') {
+        if (reprobe.state === 'yes') {
+            STATS.tablesAlready++;
+            log('TABLE|' + spec.name + '|became physical before the rebuild started|left untouched|columns=' +
+                physicalColumnCount(spec.name) + '|signals=' + reprobe.detail);
+        } else {
+            STATS.tablesUncertain++;
+            logError('TABLE|' + spec.name + '|physical state became uncertain immediately before the' +
+                ' destructive step (' + reprobe.detail + ') - aborted without deleting anything.');
+        }
         return false;
     }
 
     // Remove the metadata-only rows. Without this the fresh insert would
     // collide with the committed row and the after-insert business rule that
-    // performs the DDL would never be reached.
-    var deletedDict = 0;
-    var dict = new GlideRecord('sys_dictionary');
-    dict.addQuery('name', spec.name);
-    dict.query();
-    while (dict.next()) {
-        dict.deleteRecord();
-        deletedDict++;
+    // performs the DDL would never be reached. Both purges are verified, and a
+    // failure stops the rebuild here rather than proceeding to the insert.
+    var dictPurge = deleteAllVerified('sys_dictionary', 'name', spec.name);
+    if (!dictPurge.ok) {
+        logError('TABLE|' + spec.name + '|aborting rebuild: sys_dictionary purge incomplete' +
+            ' (deleted=' + dictPurge.deleted + ',refused=' + dictPurge.refused +
+            ',rows_remaining=' + dictPurge.residue + '). No sys_db_object row was touched.');
+        return false;
     }
-    var deletedObj = 0;
-    var obj = new GlideRecord('sys_db_object');
-    obj.addQuery('name', spec.name);
-    obj.query();
-    while (obj.next()) {
-        obj.deleteRecord();
-        deletedObj++;
+    var objPurge = deleteAllVerified('sys_db_object', 'name', spec.name);
+    if (!objPurge.ok) {
+        logError('TABLE|' + spec.name + '|aborting rebuild: sys_db_object purge incomplete' +
+            ' (deleted=' + objPurge.deleted + ',refused=' + objPurge.refused +
+            ',rows_remaining=' + objPurge.residue + ').');
+        return false;
     }
-    log('TABLE|' + spec.name + '|clean slate|dictionary_rows_removed=' + deletedDict +
-        '|db_object_rows_removed=' + deletedObj + '|reusing_sys_id=' + (carried.sysId ? 'yes' : 'no'));
+    log('TABLE|' + spec.name + '|clean slate|dictionary_rows_removed=' + dictPurge.deleted +
+        '|db_object_rows_removed=' + objPurge.deleted + '|residue=0|reusing_sys_id=' +
+        (carried.sysId ? 'yes' : 'no'));
 
     // Fresh insert with workflow ON. This is the whole point of the script:
     // the after-insert business rule `Synch Dictionary and Table` runs and
@@ -575,24 +874,82 @@ function ensureTable(spec, scopeSysId) {
     }
     var newId = gr.insert();
 
-    if (!newId || !tableIsPhysical(spec.name)) {
-        logError('TABLE|' + spec.name + '|rebuild did not produce physical storage (insert=' + newId + ')');
+    var after = probePhysicalState(spec.name);
+    if (!newId || after.state !== 'yes') {
+        logError('TABLE|' + spec.name + '|rebuild did not produce physical storage (insert=' + newId +
+            ', signals=' + after.detail + ')');
         return false;
     }
     STATS.tablesBuilt++;
-    log('TABLE|' + spec.name + '|built|sys_id=' + newId + '|columns=' + physicalColumnCount(spec.name));
+    log('TABLE|' + spec.name + '|built|sys_id=' + newId + '|columns=' + physicalColumnCount(spec.name) +
+        '|signals=' + after.detail);
     return true;
 }
 
 /**
- * Ensure one field exists as a physical column, creating the dictionary entry
- * with workflow ON so the platform performs the column DDL.
+ * The value TABLE_SPECS/CHOICE_SPECS mandates for one attribute, normalized to
+ * the representation `GlideRecord.getValue()` returns.
  *
- * Idempotency: returns immediately when the physical column is present. When a
- * `sys_dictionary` row exists but the column does not (the exact state an
- * Update Set commit leaves behind) the stale row's sys_id is captured, the row
- * is removed, and it is re-inserted so the DDL fires while the record keeps its
- * identity.
+ * @param {Object} spec the field or choice spec
+ * @param {Object} attr one entry of DICTIONARY_ATTRIBUTES / CHOICE_ATTRIBUTES
+ * @return {Object} { text: string, bool: boolean }
+ */
+function expectedAttribute(spec, attr) {
+    var raw = spec[attr.spec];
+    if (attr.kind === 'bool') {
+        // `active` is not carried per-field: every field this script owns is
+        // active. Anything else absent from the spec means false.
+        var want = attr.spec === 'active' ? true : raw === true;
+        return { text: want ? 'true' : 'false', bool: want };
+    }
+    return { text: (raw === undefined || raw === null) ? '' : '' + raw, bool: false };
+}
+
+/**
+ * Compare one `sys_dictionary` row against its authoritative spec.
+ *
+ * Every attribute in DICTIONARY_ATTRIBUTES is checked, because an Update Set
+ * commit can leave a row whose column exists but whose type, length, mandatory
+ * flag, reference target, default value or display flag disagrees with the
+ * package - and the pre-refine code treated "the physical column exists" as
+ * proof the field was correct, so such a row passed verification untouched.
+ *
+ * @param {GlideRecord} gr a positioned `sys_dictionary` record
+ * @param {Object} field one entry of TABLE_SPECS[].fields
+ * @return {Array} list of { column, stored, wanted } for each mismatch
+ */
+function dictionaryMismatches(gr, field) {
+    var out = [];
+    for (var i = 0; i < DICTIONARY_ATTRIBUTES.length; i++) {
+        var attr = DICTIONARY_ATTRIBUTES[i];
+        var want = expectedAttribute(field, attr);
+        var stored = gr.getValue(attr.column);
+        if (attr.kind === 'bool') {
+            if (isTrue(stored) !== want.bool) {
+                out.push({ column: attr.column, stored: isTrue(stored) ? 'true' : 'false', wanted: want.text });
+            }
+        } else if (('' + (stored === null || stored === undefined ? '' : stored)) !== want.text) {
+            out.push({ column: attr.column, stored: '' + (stored === null ? '' : stored), wanted: want.text });
+        }
+    }
+    return out;
+}
+
+/**
+ * Ensure one field exists as a physical column AND that its dictionary row
+ * matches the package's declaration in every attribute.
+ *
+ * Two distinct states are handled:
+ *
+ *   1. the physical column is MISSING - the dictionary row (if any) is removed
+ *      and re-inserted with workflow ON so the platform performs the column DDL,
+ *      re-using the stale row's sys_id so the record keeps its identity;
+ *   2. the physical column EXISTS but the dictionary row disagrees with the
+ *      package - every differing attribute is repaired in place with a normal
+ *      update, which is non-destructive and lets the platform's own alter-column
+ *      rule run for type/length changes. This is the path that matters after a
+ *      SECOND commit of the same Update Set, which re-applies the packaged
+ *      Dictionary payloads over a rebuilt table.
  *
  * @param {string} tableName owning table
  * @param {Object} field one entry of TABLE_SPECS[].fields
@@ -600,10 +957,41 @@ function ensureTable(spec, scopeSysId) {
  */
 function ensureField(tableName, field, scopeSysId) {
     if (columnExists(tableName, field.element)) {
-        STATS.fieldsAlready++;
+        var live = new GlideRecord('sys_dictionary');
+        live.addQuery('name', tableName);
+        live.addQuery('element', field.element);
+        live.query();
+        if (!live.next()) {
+            logError('FIELD|' + tableName + '.' + field.element + '|physical column exists but its' +
+                ' sys_dictionary row is missing - the field layer and the dictionary disagree and this' +
+                ' script will not delete a physical column to reconcile them. Recovery: re-import the' +
+                ' Update Set so the Dictionary payload is re-applied, then re-run this script.');
+            return;
+        }
+        var drift = dictionaryMismatches(live, field);
+        if (drift.length === 0) {
+            STATS.fieldsAlready++;
+            return;
+        }
+        var repaired = [];
+        for (var d = 0; d < drift.length; d++) {
+            live.setValue(drift[d].column, drift[d].wanted);
+            repaired.push(drift[d].column + ':' + drift[d].stored + '->' + drift[d].wanted);
+        }
+        if (!live.update()) {
+            logError('FIELD|' + tableName + '.' + field.element + '|repair update refused for ' +
+                repaired.join(','));
+            return;
+        }
+        STATS.fieldsRepaired++;
+        log('FIELD|' + tableName + '.' + field.element + '|repaired|' + repaired.join('|'));
         return;
     }
 
+    // The physical column is absent. Remove the stale metadata-only row (keeping
+    // its identity) so the re-insert can fire the platform's column DDL. The
+    // delete is verified: proceeding to insert while the old row survives would
+    // create a duplicate dictionary entry for the same column.
     var carriedSysId = '';
     var stale = new GlideRecord('sys_dictionary');
     stale.addQuery('name', tableName);
@@ -611,7 +999,22 @@ function ensureField(tableName, field, scopeSysId) {
     stale.query();
     if (stale.next()) {
         carriedSysId = stale.getUniqueValue();
-        stale.deleteRecord();
+        var removed = false;
+        try {
+            removed = stale.deleteRecord();
+        } catch (e) {
+            logError('FIELD|' + tableName + '.' + field.element + '|stale dictionary row delete threw ' + e);
+        }
+        var readback = new GlideRecord('sys_dictionary');
+        readback.addQuery('name', tableName);
+        readback.addQuery('element', field.element);
+        readback.query();
+        if (!removed || readback.hasNext()) {
+            logError('FIELD|' + tableName + '.' + field.element + '|stale dictionary row could not be' +
+                ' removed (delete_returned=' + removed + ', rows_remaining=' + readback.getRowCount() +
+                ') - not inserting a duplicate. Recovery: remove the row by hand, then re-run.');
+            return;
+        }
     }
 
     var gr = new GlideRecord('sys_dictionary');
@@ -644,8 +1047,8 @@ function ensureField(tableName, field, scopeSysId) {
     if (field.reference) {
         gr.setValue('reference', field.reference);
     }
-    if (field.defaultSort === true) {
-        gr.setValue('defaultsort', true);
+    if (field.defaultSort) {
+        gr.setValue('defaultsort', field.defaultSort);
     }
     if (field.defaultValue) {
         gr.setValue('default_value', field.defaultValue);
@@ -661,14 +1064,158 @@ function ensureField(tableName, field, scopeSysId) {
         logError('FIELD|' + tableName + '.' + field.element + '|insert refused');
         return;
     }
+
+    // Read the row back and compare it attribute-for-attribute against the spec.
+    // The platform's own dictionary business rules can normalize or override what
+    // was submitted (a reference field's max_length, for instance), so what was
+    // written is not assumed to be what was stored.
+    var check = new GlideRecord('sys_dictionary');
+    if (check.get(id)) {
+        var drift2 = dictionaryMismatches(check, field);
+        if (drift2.length > 0) {
+            var fixed = [];
+            for (var k = 0; k < drift2.length; k++) {
+                check.setValue(drift2[k].column, drift2[k].wanted);
+                fixed.push(drift2[k].column + ':' + drift2[k].stored + '->' + drift2[k].wanted);
+            }
+            if (check.update()) {
+                log('FIELD|' + tableName + '.' + field.element + '|post-insert normalization|' + fixed.join('|'));
+            } else {
+                logError('FIELD|' + tableName + '.' + field.element +
+                    '|created but could not be normalized to the package spec: ' + fixed.join(','));
+            }
+        }
+    }
     STATS.fieldsCreated++;
     log('FIELD|' + tableName + '.' + field.element + '|created|type=' + field.type +
-        (field.reference ? '|reference=' + field.reference : '') + '|sys_id=' + id);
+        (field.reference ? '|reference=' + field.reference : '') + '|display=' + (field.display === true) +
+        (field.defaultValue ? '|default=' + field.defaultValue : '') + '|sys_id=' + id);
 }
 
 /**
- * Ensure one choice row exists. Keyed by (name, element, value) so a re-run
- * inserts nothing.
+ * Reconcile a table down to exactly ONE display field, the one `spec.displayField`
+ * names.
+ *
+ * This runs after every field has been ensured, because the platform couples the
+ * display flags to each other: setting `display=true` on one column clears it on
+ * every other column of the same table (measured directly - flagging
+ * `x_casemgmt_case.subject` cleared the flag on `x_casemgmt_case.number`). Field-by
+ * -field repair alone therefore has an order dependency, and this pass removes it:
+ * whatever state the flags are in when it starts, it clears the wrong ones, asserts
+ * the right one, and reads the result back.
+ *
+ * @param {Object} spec one entry of TABLE_SPECS
+ */
+function ensureSingleDisplayField(spec) {
+    if (!columnExists(spec.name, spec.displayField)) {
+        return;
+    }
+    var wrong = [];
+    var correct = null;
+    var gr = new GlideRecord('sys_dictionary');
+    gr.addQuery('name', spec.name);
+    gr.addNotNullQuery('element');
+    gr.orderBy('element');
+    gr.query();
+    while (gr.next()) {
+        var element = gr.getValue('element');
+        var flagged = isTrue(gr.getValue('display'));
+        if (element === spec.displayField) {
+            correct = { sysId: gr.getUniqueValue(), flagged: flagged };
+        } else if (flagged) {
+            wrong.push({ sysId: gr.getUniqueValue(), element: element });
+        }
+    }
+    if (correct === null) {
+        logError('DISPLAY|' + spec.name + '|no sys_dictionary row for the declared display field "' +
+            spec.displayField + '"');
+        return;
+    }
+    if (wrong.length === 0 && correct.flagged) {
+        return;
+    }
+
+    var cleared = [];
+    var i;
+    for (i = 0; i < wrong.length; i++) {
+        var off = new GlideRecord('sys_dictionary');
+        if (off.get(wrong[i].sysId)) {
+            off.setValue('display', false);
+            if (off.update()) {
+                cleared.push(wrong[i].element);
+            } else {
+                logError('DISPLAY|' + spec.name + '.' + wrong[i].element +
+                    '|could not clear the display flag');
+            }
+        }
+    }
+    var on = new GlideRecord('sys_dictionary');
+    if (on.get(correct.sysId) && !isTrue(on.getValue('display'))) {
+        on.setValue('display', true);
+        if (!on.update()) {
+            logError('DISPLAY|' + spec.name + '.' + spec.displayField +
+                '|could not set the display flag');
+        }
+    }
+
+    // Read back: the flags are only correct if the database says so.
+    var live = [];
+    var back = new GlideRecord('sys_dictionary');
+    back.addQuery('name', spec.name);
+    back.addQuery('display', true);
+    back.orderBy('element');
+    back.query();
+    while (back.next()) {
+        live.push(back.getValue('element'));
+    }
+    STATS.displayFieldsFixed++;
+    log('DISPLAY|' + spec.name + '|reconciled|cleared=[' + cleared.join(',') + ']|display_field=' +
+        spec.displayField + '|now=[' + live.join(',') + ']');
+    if (live.length !== 1 || live[0] !== spec.displayField) {
+        logError('DISPLAY|' + spec.name + '|still not exactly one display field after reconciliation: [' +
+            live.join(',') + '] - every reference to this table renders blank while more than one is' +
+            ' flagged, and renders a sys_id while none is.');
+    }
+}
+
+/**
+ * Compare one `sys_choice` row against its authoritative spec.
+ *
+ * @param {GlideRecord} gr a positioned `sys_choice` record
+ * @param {Object} spec one entry of CHOICE_SPECS
+ * @return {Array} list of { column, stored, wanted } for each mismatch
+ */
+function choiceMismatches(gr, spec) {
+    var want = { label: spec.label, sequence: spec.sequence, language: 'en', inactive: false };
+    var out = [];
+    for (var i = 0; i < CHOICE_ATTRIBUTES.length; i++) {
+        var attr = CHOICE_ATTRIBUTES[i];
+        var stored = gr.getValue(attr.column);
+        if (attr.kind === 'bool') {
+            var wantBool = want[attr.spec] === true;
+            if (isTrue(stored) !== wantBool) {
+                out.push({ column: attr.column, stored: isTrue(stored) ? 'true' : 'false',
+                    wanted: wantBool ? 'true' : 'false' });
+            }
+        } else {
+            var wantText = '' + want[attr.spec];
+            if (('' + (stored === null || stored === undefined ? '' : stored)) !== wantText) {
+                out.push({ column: attr.column, stored: '' + (stored === null ? '' : stored), wanted: wantText });
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Ensure one choice row exists AND that its label, sequence, language and
+ * inactive flag match the package's declaration.
+ *
+ * Keyed by (name, element, value). The pre-refine version stopped at "a row with
+ * this key exists", so a row whose label had been edited, whose sequence had
+ * drifted or which had been deactivated counted as correct - which is exactly the
+ * state that makes a choice list render in the wrong order, with the wrong text,
+ * or with a value the user cannot select.
  *
  * @param {Object} spec one entry of CHOICE_SPECS
  * @param {string} scopeSysId the application scope, resolved by name
@@ -678,10 +1225,25 @@ function ensureChoice(spec, scopeSysId) {
     existing.addQuery('name', spec.table);
     existing.addQuery('element', spec.element);
     existing.addQuery('value', spec.value);
-    existing.addQuery('language', 'en');
     existing.query();
-    if (existing.hasNext()) {
-        STATS.choicesAlready++;
+    if (existing.next()) {
+        var drift = choiceMismatches(existing, spec);
+        if (drift.length === 0) {
+            STATS.choicesAlready++;
+            return;
+        }
+        var repaired = [];
+        for (var d = 0; d < drift.length; d++) {
+            existing.setValue(drift[d].column, drift[d].wanted);
+            repaired.push(drift[d].column + ':' + drift[d].stored + '->' + drift[d].wanted);
+        }
+        if (!existing.update()) {
+            logError('CHOICE|' + spec.table + '.' + spec.element + '=' + spec.value +
+                '|repair update refused for ' + repaired.join(','));
+            return;
+        }
+        STATS.choicesRepaired++;
+        log('CHOICE|' + spec.table + '.' + spec.element + '=' + spec.value + '|repaired|' + repaired.join('|'));
         return;
     }
 
@@ -1043,32 +1605,43 @@ function ensureAclRoleLink(aclSysId, aclName, roleName, roleIds, scopeSysId) {
 }
 
 /**
- * Create every missing ACL -> role link for this application.
+ * Build the EXACT set of ACL -> role pairs this application requires.
  *
- * @param {string} scopeSysId the application scope, resolved by name
- * @return {number} total links now present in the application scope
+ * The set is derived, never invented: the 26 ACLs are resolved at run time by
+ * name prefix, and each one's roles come from rolesForAcl() (the package's own
+ * `<roles>` declaration first, then the field-ACL naming convention, then the
+ * ACL description). The result is keyed by the two sys_ids that make up the m2m
+ * row, both read out of the database in this same run, so nothing is hard-coded.
+ *
+ * Having the exact set - rather than only a total - is what lets the caller
+ * reject a pair that should not exist. A link nobody expected is not a harmless
+ * extra: `sys_security_acl_role` is what grants an operation to a role, so a
+ * surplus row is an over-privileged grant, and the pre-refine code accepted any
+ * count of 27 or more as convergence.
+ *
+ * @param {Object} roleIds map of roleName -> sys_id resolved by name
+ * @return {Object} { pairs: Object keyed 'aclSysId|roleSysId', labels: Object,
+ *                    byRole: Object, aclCount: number, unmapped: number }
  */
-function ensureAllAclRoleLinks(scopeSysId) {
-    var roleIds = {};
-    roleIds[ROLE_MANAGER] = lookupRoleSysId(ROLE_MANAGER);
-    roleIds[ROLE_AGENT] = lookupRoleSysId(ROLE_AGENT);
-    roleIds[ROLE_VIEWER] = lookupRoleSysId(ROLE_VIEWER);
-    log('ACL_LINK|roles resolved by name|manager=' + (roleIds[ROLE_MANAGER] ? 'yes' : 'NO') +
-        '|agent=' + (roleIds[ROLE_AGENT] ? 'yes' : 'NO') +
-        '|viewer=' + (roleIds[ROLE_VIEWER] ? 'yes' : 'NO'));
+function buildExpectedAclRolePairs(roleIds) {
+    var pairs = {};
+    var labels = {};
+    var byRole = {};
+    var aclCount = 0;
+    var unmapped = 0;
 
     var acl = new GlideRecord('sys_security_acl');
     acl.addQuery('name', 'STARTSWITH', SCOPE_NAME);
     acl.orderBy('name');
     acl.orderBy('operation');
     acl.query();
-    var aclCount = 0;
     while (acl.next()) {
         aclCount++;
         var aclName = acl.getValue('name');
         var aclSysId = acl.getUniqueValue();
         var roles = rolesForAcl(aclSysId, aclName, acl.getValue('description'));
         if (roles.length === 0) {
+            unmapped++;
             STATS.aclsUnmapped++;
             logError('ACL_LINK|' + aclName + ' (' + acl.getValue('operation') +
                 ')|no role could be derived from any of the three sources, and NO role is guessed.' +
@@ -1079,18 +1652,202 @@ function ensureAllAclRoleLinks(scopeSysId) {
             continue;
         }
         for (var i = 0; i < roles.length; i++) {
-            ensureAclRoleLink(aclSysId, aclName, roles[i], roleIds, scopeSysId);
+            var roleSysId = roleIds[roles[i]];
+            if (!roleSysId) {
+                logError('ACL_LINK|' + aclName + '|role not found: ' + roles[i]);
+                continue;
+            }
+            var key = aclSysId + '|' + roleSysId;
+            pairs[key] = { aclSysId: aclSysId, aclName: aclName, operation: acl.getValue('operation'),
+                roleName: roles[i], roleSysId: roleSysId };
+            labels[key] = aclName + '(' + acl.getValue('operation') + ') -> ' + roles[i];
+            byRole[roles[i]] = (byRole[roles[i]] || 0) + 1;
+        }
+    }
+    return { pairs: pairs, labels: labels, byRole: byRole, aclCount: aclCount, unmapped: unmapped };
+}
+
+/**
+ * Reconcile the live `sys_security_acl_role` rows with the expected pair set:
+ * create every expected pair that is missing, and REMOVE every pair that is not
+ * expected.
+ *
+ * Both directions matter. A missing pair leaves an ACL with no role, which on a
+ * high-security instance evaluates to deny and locks every non-admin out. A
+ * surplus pair silently widens access. Convergence therefore means the live set
+ * EQUALS the expected set, and the caller requires the total to be exactly
+ * EXPECTED_ACL_ROLE_LINKS - not "at least".
+ *
+ * Removal is verified the same way every other delete in this script is: the
+ * return value is checked and the row is read back.
+ *
+ * @param {string} scopeSysId the application scope, resolved by name
+ * @return {Object} { total: number, byRole: Object, expected: Object,
+ *                    extras: Array, missing: Array }
+ */
+function ensureAllAclRoleLinks(scopeSysId) {
+    var roleIds = {};
+    roleIds[ROLE_MANAGER] = lookupRoleSysId(ROLE_MANAGER);
+    roleIds[ROLE_AGENT] = lookupRoleSysId(ROLE_AGENT);
+    roleIds[ROLE_VIEWER] = lookupRoleSysId(ROLE_VIEWER);
+    log('ACL_LINK|roles resolved by name|manager=' + (roleIds[ROLE_MANAGER] ? 'yes' : 'NO') +
+        '|agent=' + (roleIds[ROLE_AGENT] ? 'yes' : 'NO') +
+        '|viewer=' + (roleIds[ROLE_VIEWER] ? 'yes' : 'NO'));
+
+    var expected = buildExpectedAclRolePairs(roleIds);
+    var expectedKeys = [];
+    var key;
+    for (key in expected.pairs) {
+        if (expected.pairs.hasOwnProperty(key)) {
+            expectedKeys.push(key);
+        }
+    }
+    log('ACL_LINK|expected pair set derived|acls_scanned=' + expected.aclCount +
+        '|pairs=' + expectedKeys.length + '|unmapped_acls=' + expected.unmapped +
+        '|by_role=' + describeCounts(expected.byRole));
+
+    // 1. create the expected pairs that are absent
+    var i;
+    for (i = 0; i < expectedKeys.length; i++) {
+        var p = expected.pairs[expectedKeys[i]];
+        ensureAclRoleLink(p.aclSysId, p.aclName, p.roleName, roleIds, scopeSysId);
+    }
+
+    // 2. remove the live pairs that are NOT expected. The candidate set is every
+    //    link on one of this application's ACLs, plus every link recorded in this
+    //    application's scope - so a stray row is caught from either side.
+    var extras = [];
+    var seen = {};
+    var candidates = [
+        { field: 'sys_security_acl.name', op: 'STARTSWITH', value: SCOPE_NAME, label: 'by ACL name' },
+        { field: 'sys_scope', op: '=', value: scopeSysId, label: 'by scope' }
+    ];
+    for (i = 0; i < candidates.length; i++) {
+        var link = new GlideRecord('sys_security_acl_role');
+        if (candidates[i].op === 'STARTSWITH') {
+            link.addQuery(candidates[i].field, 'STARTSWITH', candidates[i].value);
+        } else {
+            link.addQuery(candidates[i].field, candidates[i].value);
+        }
+        link.query();
+        while (link.next()) {
+            var id = link.getUniqueValue();
+            if (seen[id]) {
+                continue;
+            }
+            seen[id] = true;
+            var pairKey = link.getValue('sys_security_acl') + '|' + link.getValue('sys_user_role');
+            if (expected.pairs.hasOwnProperty(pairKey)) {
+                continue;
+            }
+            var label = link.getValue('sys_name') || pairKey;
+            var removed = false;
+            try {
+                removed = link.deleteRecord();
+            } catch (e) {
+                logError('ACL_LINK|unexpected link "' + label + '" delete threw ' + e);
+            }
+            var back = new GlideRecord('sys_security_acl_role');
+            if (removed && !back.get(id)) {
+                STATS.aclLinksRemoved++;
+                extras.push(label);
+                log('ACL_LINK|removed unexpected link|' + label + '|found ' + candidates[i].label +
+                    '|it grants an operation no ACL in this application declares');
+            } else {
+                logError('ACL_LINK|unexpected link "' + label + '" could not be removed' +
+                    ' (delete_returned=' + removed + ', still_present=' + back.isValidRecord() +
+                    ') - the application is over-privileged until it is deleted by hand.');
+                extras.push(label + '(NOT REMOVED)');
+            }
         }
     }
 
-    var total = new GlideAggregate('sys_security_acl_role');
-    total.addQuery('sys_scope', scopeSysId);
-    total.addAggregate('COUNT');
-    total.query();
-    var linkTotal = total.next() ? parseInt(total.getAggregate('COUNT'), 10) : 0;
-    log('ACL_LINK|acls_scanned=' + aclCount + '|links_created=' + STATS.aclLinksCreated +
-        '|links_already_present=' + STATS.aclLinksAlready + '|links_total_in_scope=' + linkTotal);
-    return linkTotal;
+    // 3. report the reconciled state, read back from the database
+    var live = liveAclRolePairs(scopeSysId);
+    var missing = [];
+    for (i = 0; i < expectedKeys.length; i++) {
+        if (!live.pairs.hasOwnProperty(expectedKeys[i])) {
+            missing.push(expected.labels[expectedKeys[i]]);
+        }
+    }
+    log('ACL_LINK|acls_scanned=' + expected.aclCount + '|links_created=' + STATS.aclLinksCreated +
+        '|links_already_present=' + STATS.aclLinksAlready + '|links_removed=' + STATS.aclLinksRemoved +
+        '|links_total_in_scope=' + live.total + '|expected=' + expectedKeys.length +
+        '|by_role=' + describeCounts(live.byRole));
+    for (i = 0; i < missing.length; i++) {
+        logError('ACL_LINK|expected link still absent after reconciliation: ' + missing[i]);
+    }
+    return { total: live.total, byRole: live.byRole, expectedCount: expectedKeys.length,
+        extras: extras, missing: missing };
+}
+
+/**
+ * Read the live ACL -> role pair set back out of the database.
+ *
+ * @param {string} scopeSysId the application scope, resolved by name
+ * @return {Object} { pairs: Object keyed 'aclSysId|roleSysId', total: number, byRole: Object }
+ */
+function liveAclRolePairs(scopeSysId) {
+    var pairs = {};
+    var byRole = {};
+    var roleNames = {};
+    var role = new GlideRecord('sys_user_role');
+    role.addQuery('name', 'STARTSWITH', SCOPE_NAME);
+    role.query();
+    while (role.next()) {
+        roleNames[role.getUniqueValue()] = role.getValue('name');
+    }
+
+    var seen = {};
+    var queries = [
+        { field: 'sys_security_acl.name', op: 'STARTSWITH', value: SCOPE_NAME },
+        { field: 'sys_scope', op: '=', value: scopeSysId }
+    ];
+    for (var q = 0; q < queries.length; q++) {
+        var gr = new GlideRecord('sys_security_acl_role');
+        if (queries[q].op === 'STARTSWITH') {
+            gr.addQuery(queries[q].field, 'STARTSWITH', queries[q].value);
+        } else {
+            gr.addQuery(queries[q].field, queries[q].value);
+        }
+        gr.query();
+        while (gr.next()) {
+            var id = gr.getUniqueValue();
+            if (seen[id]) {
+                continue;
+            }
+            seen[id] = true;
+            var roleSysId = gr.getValue('sys_user_role');
+            pairs[gr.getValue('sys_security_acl') + '|' + roleSysId] = true;
+            var rn = roleNames[roleSysId] || roleSysId;
+            byRole[rn] = (byRole[rn] || 0) + 1;
+        }
+    }
+    var total = 0;
+    for (var k in pairs) {
+        if (pairs.hasOwnProperty(k)) {
+            total++;
+        }
+    }
+    return { pairs: pairs, total: total, byRole: byRole };
+}
+
+/**
+ * Render a name -> count map as a stable, sorted, grep-able string.
+ */
+function describeCounts(counts) {
+    var keys = [];
+    for (var k in counts) {
+        if (counts.hasOwnProperty(k)) {
+            keys.push(k);
+        }
+    }
+    keys.sort();
+    var parts = [];
+    for (var i = 0; i < keys.length; i++) {
+        parts.push(keys[i] + '=' + counts[keys[i]]);
+    }
+    return parts.length ? parts.join(',') : 'none';
 }
 
 /**
@@ -1126,29 +1883,133 @@ function verifyRemediation(scopeSysId) {
 
     for (var t = 0; t < TABLE_SPECS.length; t++) {
         var spec = TABLE_SPECS[t];
-        var physical = tableIsPhysical(spec.name);
+        var probe = probePhysicalState(spec.name);
+        var physical = probe.state === 'yes';
         var missing = [];
+        var drifted = [];
+        var f;
         if (physical) {
-            for (var f = 0; f < spec.fields.length; f++) {
-                if (!columnExists(spec.name, spec.fields[f].element)) {
-                    missing.push(spec.fields[f].element);
+            for (f = 0; f < spec.fields.length; f++) {
+                var field = spec.fields[f];
+                if (!columnExists(spec.name, field.element)) {
+                    missing.push(field.element);
+                    continue;
+                }
+                // The column existing is not proof the field is right: re-read the
+                // dictionary row and compare every attribute the package declares.
+                var dict = new GlideRecord('sys_dictionary');
+                dict.addQuery('name', spec.name);
+                dict.addQuery('element', field.element);
+                dict.query();
+                if (!dict.next()) {
+                    drifted.push(field.element + '{no sys_dictionary row}');
+                    continue;
+                }
+                var mism = dictionaryMismatches(dict, field);
+                for (var m = 0; m < mism.length; m++) {
+                    drifted.push(field.element + '.' + mism[m].column + '=' + mism[m].stored +
+                        '(want ' + mism[m].wanted + ')');
                 }
             }
         }
+
+        // Exactly one display field per table. More than one makes every
+        // reference TO this table render blank; none makes it render its sys_id.
+        var displayFields = [];
+        var disp = new GlideRecord('sys_dictionary');
+        disp.addQuery('name', spec.name);
+        disp.addQuery('display', true);
+        disp.orderBy('element');
+        disp.query();
+        while (disp.next()) {
+            displayFields.push(disp.getValue('element'));
+        }
+
         var choices = new GlideAggregate('sys_choice');
         choices.addQuery('name', spec.name);
         choices.addAggregate('COUNT');
         choices.query();
         var choiceCount = choices.next() ? choices.getAggregate('COUNT') : '0';
-        parts.push(spec.name + '{physical=' + physical + ',columns=' + physicalColumnCount(spec.name) +
+        parts.push(spec.name + '{physical=' + probe.state + ',columns=' + physicalColumnCount(spec.name) +
             ',missing_fields=' + (missing.length === 0 ? 'none' : missing.join('/')) +
+            ',drifted_attributes=' + (drifted.length === 0 ? 'none' : drifted.join('/')) +
+            ',display_fields=[' + displayFields.join(',') + ']' +
             ',choices=' + choiceCount + '}');
         if (!physical) {
-            problems.push(spec.name + ' has no physical storage');
+            problems.push(spec.name + ' physical storage is ' +
+                (probe.state === 'no' ? 'absent' : 'indeterminate') + ' (' + probe.detail + ')');
         }
         if (missing.length > 0) {
             problems.push(spec.name + ' missing columns: ' + missing.join(', '));
         }
+        if (drifted.length > 0) {
+            problems.push(spec.name + ' dictionary attributes disagree with the package: ' + drifted.join(', '));
+        }
+        if (physical && (displayFields.length !== 1 || displayFields[0] !== spec.displayField)) {
+            problems.push(spec.name + ' must have exactly one display field (' + spec.displayField +
+                ') but has [' + displayFields.join(', ') + '] - every reference to this table renders' +
+                ' blank while more than one is flagged');
+        }
+    }
+
+    // The exact choice inventory: seven lists, twenty-four values, no surplus.
+    var choiceListCount = 0;
+    var choiceValueCount = 0;
+    var choiceProblems = [];
+    var wantedByList = {};
+    var c;
+    for (c = 0; c < CHOICE_SPECS.length; c++) {
+        var lk = CHOICE_SPECS[c].table + '.' + CHOICE_SPECS[c].element;
+        if (!wantedByList[lk]) {
+            wantedByList[lk] = {};
+        }
+        wantedByList[lk][CHOICE_SPECS[c].value] = CHOICE_SPECS[c];
+    }
+    for (var listKey in wantedByList) {
+        if (!wantedByList.hasOwnProperty(listKey)) {
+            continue;
+        }
+        choiceListCount++;
+        var dot = listKey.lastIndexOf('.');
+        var lTable = listKey.substring(0, dot);
+        var lElement = listKey.substring(dot + 1);
+        var seenValues = {};
+        var liveChoice = new GlideRecord('sys_choice');
+        liveChoice.addQuery('name', lTable);
+        liveChoice.addQuery('element', lElement);
+        liveChoice.query();
+        while (liveChoice.next()) {
+            var val = liveChoice.getValue('value');
+            seenValues[val] = true;
+            choiceValueCount++;
+            if (!wantedByList[listKey].hasOwnProperty(val)) {
+                choiceProblems.push(listKey + ' has an unexpected value "' + val + '"');
+                continue;
+            }
+            var cm = choiceMismatches(liveChoice, wantedByList[listKey][val]);
+            for (var q = 0; q < cm.length; q++) {
+                choiceProblems.push(listKey + '="' + val + '" ' + cm[q].column + '=' + cm[q].stored +
+                    ' (want ' + cm[q].wanted + ')');
+            }
+        }
+        for (var wanted in wantedByList[listKey]) {
+            if (wantedByList[listKey].hasOwnProperty(wanted) && !seenValues[wanted]) {
+                choiceProblems.push(listKey + ' is missing the value "' + wanted + '"');
+            }
+        }
+    }
+    parts.push('choices{lists=' + choiceListCount + '/' + EXPECTED_CHOICE_LISTS +
+        ',values=' + choiceValueCount + '/' + EXPECTED_CHOICE_VALUES + '}');
+    if (choiceListCount !== EXPECTED_CHOICE_LISTS) {
+        problems.push('expected ' + EXPECTED_CHOICE_LISTS + ' choice lists, the specification describes ' +
+            choiceListCount);
+    }
+    if (choiceValueCount !== EXPECTED_CHOICE_VALUES) {
+        problems.push('expected exactly ' + EXPECTED_CHOICE_VALUES + ' choice values across the ' +
+            EXPECTED_CHOICE_LISTS + ' lists, found ' + choiceValueCount);
+    }
+    for (c = 0; c < choiceProblems.length; c++) {
+        problems.push(choiceProblems[c]);
     }
 
     var numberDict = new GlideRecord('sys_dictionary');
@@ -1199,29 +2060,91 @@ function verifyRemediation(scopeSysId) {
     aclTotal.addAggregate('COUNT');
     aclTotal.query();
     var aclCount = aclTotal.next() ? parseInt(aclTotal.getAggregate('COUNT'), 10) : 0;
-    var linkTotal = new GlideAggregate('sys_security_acl_role');
-    linkTotal.addQuery('sys_scope', scopeSysId);
-    linkTotal.addAggregate('COUNT');
-    linkTotal.query();
-    var linkCount = linkTotal.next() ? parseInt(linkTotal.getAggregate('COUNT'), 10) : 0;
+
+    // The ACL -> role wiring is verified as an exact SET, not as a count that may
+    // grow. The expected pair set is re-derived here from the live ACLs, and the
+    // live pair set is re-read from sys_security_acl_role; convergence requires
+    // the two to be equal, the total to be exactly EXPECTED_ACL_ROLE_LINKS, and
+    // the per-role distribution to match EXPECTED_ROLE_LINK_COUNTS. A shortfall
+    // leaves an ACL role-less, which on this high-security instance evaluates to
+    // DENY and locks out every non-admin; a surplus is an over-privileged grant.
+    // Accepting "27 or more" - which the pre-refine version did - would let both
+    // through while reporting verified=true.
+    var verifyRoleIds = {};
+    verifyRoleIds[ROLE_MANAGER] = lookupRoleSysId(ROLE_MANAGER);
+    verifyRoleIds[ROLE_AGENT] = lookupRoleSysId(ROLE_AGENT);
+    verifyRoleIds[ROLE_VIEWER] = lookupRoleSysId(ROLE_VIEWER);
+    var wantPairs = buildExpectedAclRolePairs(verifyRoleIds);
+    var livePairs = liveAclRolePairs(scopeSysId);
+    var linkCount = livePairs.total;
+
+    var pairKey;
+    var absent = [];
+    var surplus = [];
+    var wantCount = 0;
+    for (pairKey in wantPairs.pairs) {
+        if (!wantPairs.pairs.hasOwnProperty(pairKey)) {
+            continue;
+        }
+        wantCount++;
+        if (!livePairs.pairs.hasOwnProperty(pairKey)) {
+            absent.push(wantPairs.labels[pairKey]);
+        }
+    }
+    for (pairKey in livePairs.pairs) {
+        if (livePairs.pairs.hasOwnProperty(pairKey) && !wantPairs.pairs.hasOwnProperty(pairKey)) {
+            surplus.push(pairKey);
+        }
+    }
+
     parts.push('acls{count=' + aclCount + ',role_links=' + linkCount +
-        ',expected_links=' + EXPECTED_ACL_ROLE_LINKS + '}');
-    // Invariant: EXPECTED_ACL_COUNT ACLs must yield EXPECTED_ACL_ROLE_LINKS
-    // links. A shortfall means at least one ACL is still role-less, and on this
-    // high-security instance a role-less ACL with no condition and no script
-    // evaluates to DENY - so the application would be silently unusable. Report
-    // it loudly instead of letting the summary claim success.
+        ',expected_links=' + EXPECTED_ACL_ROLE_LINKS + ',derived_pairs=' + wantCount +
+        ',missing_pairs=' + absent.length + ',unexpected_pairs=' + surplus.length +
+        ',by_role=' + describeCounts(livePairs.byRole) + '}');
+
     if (aclCount !== EXPECTED_ACL_COUNT) {
         problems.push('found ' + aclCount + ' ' + SCOPE_NAME + ' ACLs, expected ' + EXPECTED_ACL_COUNT);
     }
-    if (linkCount < EXPECTED_ACL_ROLE_LINKS) {
-        problems.push('only ' + linkCount + ' ACL role links for ' + aclCount +
-            ' ACLs, expected ' + EXPECTED_ACL_ROLE_LINKS +
-            ' - every ACL left without a role denies access to every non-admin');
+    if (wantCount !== EXPECTED_ACL_ROLE_LINKS) {
+        problems.push('the ACL set derives ' + wantCount + ' role links, expected exactly ' +
+            EXPECTED_ACL_ROLE_LINKS + ' - the derivation itself disagrees with the package');
+    }
+    if (linkCount !== EXPECTED_ACL_ROLE_LINKS) {
+        problems.push('found ' + linkCount + ' ACL role links for ' + aclCount + ' ACLs, expected exactly ' +
+            EXPECTED_ACL_ROLE_LINKS + ' - a shortfall leaves an ACL that denies every non-admin, a' +
+            ' surplus grants an operation the package never declared');
+    }
+    for (var a = 0; a < absent.length; a++) {
+        problems.push('ACL role link missing: ' + absent[a]);
+    }
+    for (var s = 0; s < surplus.length; s++) {
+        problems.push('unexpected ACL role link present (acl|role sys_ids ' + surplus[s] +
+            ') - it grants an operation no ACL in this application declares');
+    }
+    for (var expectedRole in EXPECTED_ROLE_LINK_COUNTS) {
+        if (!EXPECTED_ROLE_LINK_COUNTS.hasOwnProperty(expectedRole)) {
+            continue;
+        }
+        var got = livePairs.byRole[expectedRole] || 0;
+        if (got !== EXPECTED_ROLE_LINK_COUNTS[expectedRole]) {
+            problems.push('role ' + expectedRole + ' holds ' + got + ' ACL links, expected ' +
+                EXPECTED_ROLE_LINK_COUNTS[expectedRole]);
+        }
+    }
+    for (var liveRole in livePairs.byRole) {
+        if (livePairs.byRole.hasOwnProperty(liveRole) &&
+            !EXPECTED_ROLE_LINK_COUNTS.hasOwnProperty(liveRole)) {
+            problems.push('ACL links are granted to ' + liveRole +
+                ', which is not one of this application\'s three roles');
+        }
     }
     if (STATS.aclsUnmapped > 0) {
         problems.push(STATS.aclsUnmapped + ' ACL(s) named no scoped role in their description' +
             ' so no role could be derived for them');
+    }
+    if (STATS.tablesUncertain > 0) {
+        problems.push(STATS.tablesUncertain + ' table(s) could not be probed conclusively, so their' +
+            ' rebuild was refused rather than risked');
     }
 
     return {
@@ -1233,9 +2156,16 @@ function verifyRemediation(scopeSysId) {
 
 /**
  * Deactivate the bootstrap trigger once the application is fully remediated, so
- * the one-shot hook stops evaluating on every future Update Set commit. Looked
- * up by name, never by sys_id. A failed or partial run deliberately leaves the
- * trigger active so the next commit retries.
+ * the hook stops evaluating on every future Update Set commit. Looked up by name,
+ * never by sys_id.
+ *
+ * The package ships that rule inactive, because it was measured firing on commit
+ * and then failing - the commit engine rewrites its scope to the application,
+ * where the remediation's `GlideTableDescriptor` and `GlideSecurityManager` calls
+ * are refused. This function therefore normally reports "already inactive". It is
+ * retained because an instance carrying an earlier, active copy of the rule must
+ * still be quieted, and a failed or partial run deliberately leaves any active
+ * copy alone.
  */
 function deactivateBootstrapTrigger() {
     var gr = new GlideRecord('sys_script');
@@ -1252,7 +2182,8 @@ function deactivateBootstrapTrigger() {
     if (count > 0) {
         log('TRIGGER|' + BOOTSTRAP_TRIGGER_NAME + '|deactivated after successful remediation');
     } else {
-        log('TRIGGER|' + BOOTSTRAP_TRIGGER_NAME + '|already inactive or not installed');
+        log('TRIGGER|' + BOOTSTRAP_TRIGGER_NAME +
+            '|already inactive or not installed (the package ships it inactive)');
     }
 }
 
@@ -1293,12 +2224,22 @@ function postImportRemediation() {
             ensureField(TABLE_SPECS[i].name, TABLE_SPECS[i].fields[j], scopeSysId);
         }
     }
+    // After the fields, not during them: the platform clears every other column's
+    // display flag when one is set, so the single-display-field invariant is
+    // asserted once per table at the end rather than field by field.
+    for (i = 0; i < TABLE_SPECS.length; i++) {
+        ensureSingleDisplayField(TABLE_SPECS[i]);
+    }
     for (i = 0; i < CHOICE_SPECS.length; i++) {
         ensureChoice(CHOICE_SPECS[i], scopeSysId);
     }
     log('DEFECT_C|tables_built=' + STATS.tablesBuilt + '|tables_already_physical=' + STATS.tablesAlready +
-        '|fields_created=' + STATS.fieldsCreated + '|fields_already_present=' + STATS.fieldsAlready +
-        '|choices_created=' + STATS.choicesCreated + '|choices_already_present=' + STATS.choicesAlready);
+        '|tables_indeterminate=' + STATS.tablesUncertain +
+        '|fields_created=' + STATS.fieldsCreated + '|fields_repaired=' + STATS.fieldsRepaired +
+        '|fields_already_correct=' + STATS.fieldsAlready +
+        '|display_fields_reconciled=' + STATS.displayFieldsFixed +
+        '|choices_created=' + STATS.choicesCreated + '|choices_repaired=' + STATS.choicesRepaired +
+        '|choices_already_correct=' + STATS.choicesAlready);
 
     // ---- Defect E: auto-numbering ------------------------------------------
     for (i = 0; i < COUNTER_SPECS.length; i++) {
@@ -1316,10 +2257,14 @@ function postImportRemediation() {
     log('DEFECT_7|service_ids_written=' + STATS.serviceIdsSet + '|service_ids_already_correct=' + STATS.serviceIdsAlready);
 
     // ---- Defect 9: ACL role links + security cache flush -------------------
-    var linkTotal = ensureAllAclRoleLinks(scopeSysId);
+    var links = ensureAllAclRoleLinks(scopeSysId);
+    var linkTotal = links.total;
     flushSecurityCache();
     log('DEFECT_9|links_created=' + STATS.aclLinksCreated + '|links_already_present=' + STATS.aclLinksAlready +
+        '|links_removed=' + STATS.aclLinksRemoved +
         '|links_total=' + linkTotal + '|links_expected=' + EXPECTED_ACL_ROLE_LINKS +
+        '|links_by_role=' + describeCounts(links.byRole) +
+        '|unexpected_links=' + links.extras.length + '|missing_links=' + links.missing.length +
         '|unmapped_acls=' + STATS.aclsUnmapped +
         '|security_cache_flushed=' + (STATS.securityCacheFlushes > 0));
 
@@ -1337,12 +2282,16 @@ function postImportRemediation() {
     var finished = new GlideDateTime();
     var summary = 'SUMMARY|verified=' + result.ok +
         '|tables_built=' + STATS.tablesBuilt + '|tables_already=' + STATS.tablesAlready +
-        '|fields_created=' + STATS.fieldsCreated + '|fields_already=' + STATS.fieldsAlready +
-        '|choices_created=' + STATS.choicesCreated + '|choices_already=' + STATS.choicesAlready +
+        '|tables_indeterminate=' + STATS.tablesUncertain +
+        '|fields_created=' + STATS.fieldsCreated + '|fields_repaired=' + STATS.fieldsRepaired +
+        '|fields_already=' + STATS.fieldsAlready + '|display_reconciled=' + STATS.displayFieldsFixed +
+        '|choices_created=' + STATS.choicesCreated + '|choices_repaired=' + STATS.choicesRepaired +
+        '|choices_already=' + STATS.choicesAlready +
         '|counters_written=' + STATS.countersUpdated + '|counters_already=' + STATS.countersAlready +
         '|number_default_written=' + STATS.numberDefaultsSet + '|number_default_already=' + STATS.numberDefaultsAlready +
         '|service_ids_written=' + STATS.serviceIdsSet + '|service_ids_already=' + STATS.serviceIdsAlready +
         '|acl_links_created=' + STATS.aclLinksCreated + '|acl_links_already=' + STATS.aclLinksAlready +
+        '|acl_links_removed=' + STATS.aclLinksRemoved +
         '|acl_links_total=' + linkTotal + '|acl_links_expected=' + EXPECTED_ACL_ROLE_LINKS +
         '|security_cache_flushed=' + (STATS.securityCacheFlushes > 0) +
         '|errors=' + STATS.errors + '|finished=' + finished.getDisplayValue();
@@ -1355,14 +2304,13 @@ function postImportRemediation() {
 // ============================================================================
 //
 // Calling the entry point from the bottom of the file keeps it drop-in runnable
-// in every supported invocation context without extra boilerplate:
+// with no extra boilerplate in the one route that was measured to work -
+// System Definition -> Scripts - Background with "In scope" = Global - and in the
+// two packaged copies, which run the same body but are forced into the
+// application scope by the commit engine and therefore cannot complete (see
+// "HOW IT IS INVOKED" in the header).
 //
-//   - the global-scope bootstrap Business Rule
-//     (scripts/sys_script_x_casemgmt_post_import_bootstrap.xml), whose script
-//     body is this file verbatim;
-//   - System Definition -> Scripts - Background with "In scope" = Global;
-//   - a Fix Script executed manually from the update set.
-//
-// The call is safe to repeat: see the idempotency guarantees in the header.
+// The call is safe to repeat: see the idempotency and convergence guarantees in
+// the header.
 
 postImportRemediation();

@@ -479,12 +479,17 @@ CaseTransitionValidator.prototype = {
      *     gs.getUser() (the current session user) - this is the
      *     standard interactive-form-update path.
      *   - When userId is non-empty AND differs from gs.getUserID() -
-     *     look up the named user by sys_id, then call
-     *     gs.getUser(user_name).hasRole(role_name) - this supports
-     *     scheduled flows or system-context calls that validate
-     *     transitions on behalf of a specific user (e.g., "did
-     *     [requested user] have the case_manager role at request
-     *     time?").
+     *     look the user up by sys_id, then resolve the role grant with
+     *     a GlideRecord query on sys_user_has_role
+     *     (user=<that user> ^ role.name=x_casemgmt_case_manager).
+     *     This supports scheduled flows or system-context calls that
+     *     validate transitions on behalf of a specific user (e.g. "does
+     *     [requested user] hold the case_manager role?").
+     *     gs.getUser(user_name) is deliberately NOT used here: on this
+     *     release it ignores its argument and returns the SESSION user,
+     *     which silently answered with the caller's roles and let a
+     *     non-manager pass this guard. See the WARNING in the method
+     *     body and ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md 9.6 E-GU.
      *
      * @param {GlideRecord} caseGr - the case record being transitioned.
      * @param {String} userId - sys_id of the user attempting the
@@ -506,21 +511,45 @@ CaseTransitionValidator.prototype = {
         //   (a) userId is provided and equals the current session user
         //       -> gs.getUser() is the most efficient path.
         //   (b) userId is provided and differs from the current user
-        //       -> look up the named user by sys_id, then resolve
-        //          their roles via gs.getUser(user_name).
+        //       -> resolve THAT user's roles from sys_user_has_role
+        //          directly. See the WARNING below: gs.getUser(userName)
+        //          must NOT be used for this.
         //   (c) userId is null/empty -> default to current session user.
+        //
+        // WARNING - measured platform behaviour, do not "simplify" this.
+        // gs.getUser(userName) IGNORES its argument on this release and
+        // returns the SESSION user. Measured directly:
+        //     gs.getUser('x_casemgmt_demo_agent') -> resolved_name=admin,
+        //     IS_SESSION_USER=true, hasRole(case_manager)=true
+        // An earlier revision of this branch called
+        //     gs.getUser(userGr.getValue('user_name')).hasRole(...)
+        // and therefore answered with the CALLER's roles rather than the
+        // named user's, so a NON-MANAGER passed the Resolved -> Closed
+        // guard and this method returned { ok: true }. That is a silent
+        // bypass of the AAP Section 0.5.5 rule "Resolved -> Closed
+        // requires the caller to hold x_casemgmt_case_manager", and it was
+        // caught by assertion A10 of the transition-logic regression
+        // harness on a clean install.
+        // sys_user_has_role is the platform's own store of EFFECTIVE role
+        // grants - it is maintained to include roles inherited through
+        // groups and through role containment - so querying it answers
+        // the question correctly for ANY user, not only the session user.
         var hasManagerRole;
         if (userId && String(userId).trim() !== '' && String(userId) === String(gs.getUserID())) {
             hasManagerRole = gs.getUser().hasRole('x_casemgmt_case_manager');
         } else if (userId && String(userId).trim() !== '') {
-            // Non-current-user context: look up the user record by the
+            // Non-current-user context. The user is identified by the
             // RUNTIME sys_id passed in by the caller (NOT a hardcoded
-            // literal). The user_name is the stable human-readable key
-            // that gs.getUser() accepts; this satisfies the AAP Section
-            // 0.7.2 stable-key constraint.
+            // literal), and the role is resolved by NAME, which satisfies
+            // the AAP Section 0.7.2 stable-key constraint.
             var userGr = new GlideRecord('sys_user');
             if (userGr.get(String(userId))) {
-                hasManagerRole = gs.getUser(String(userGr.getValue('user_name'))).hasRole('x_casemgmt_case_manager');
+                var grantGr = new GlideRecord('sys_user_has_role');
+                grantGr.addQuery('user', userGr.getUniqueValue());
+                grantGr.addQuery('role.name', 'x_casemgmt_case_manager');
+                grantGr.setLimit(1);
+                grantGr.query();
+                hasManagerRole = grantGr.hasNext();
             } else {
                 // Unknown user sys_id -> deny by default. Returning
                 // false rather than throwing keeps the validator's
@@ -759,7 +788,7 @@ CaseTransitionValidator.prototype = {
         <sys_name>CaseTransitionValidator</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_include_x_casemgmt_CaseTransitionValidator</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

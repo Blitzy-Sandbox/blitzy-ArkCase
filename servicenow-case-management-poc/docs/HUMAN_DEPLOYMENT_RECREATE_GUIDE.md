@@ -16,36 +16,40 @@
 > - `docs/WORKFLOW_TRYOUT_GUIDE.md` — how to exercise the deployed application as the demo users.
 > - `docs/deployment.md` — the deliverable's original (idealized) export/preview/commit walkthrough.
 
-> ### ⚠️ Correction from the clean-instance round trip — read before following §5
+> ### ⚠️ Read this before following §5 — the install is a two-commit, two-script procedure
 >
-> A genuine clean-slate re-import was performed after this guide was written, and it corrected one claim made in
-> several places below. Where §5 says a remediation is **"AUTOMATIC — no action required"** because the package
-> auto-executes `scripts/post_import_remediation.js` on commit, the measured behaviour is:
+> **Upload → preview → commit does not give you a working application.** §5 sets out the required sequence in
+> full; this is the summary:
 >
-> - **The auto-execute trigger does fire.** It logs
->   `X_CASEMGMT_REMEDIATION|BOOTSTRAP|fired|…|state=committed`.
-> - **It cannot succeed.** It reports `SUMMARY|verified=false|tables_built=0|acl_links_total=0|…|errors=121`,
->   every error being `GlideTableDescriptor is not allowed in scoped applications` or
->   `GlideSecurityManager is not allowed in scoped applications` — because the commit engine forces the
->   dispatched record's `sys_scope` to the application, and those APIs are refused in scoped execution.
->   Shipping the script as global in the package does not avoid this.
+> - **Defects E (auto-numbering) and 7 (REST `service_id`) genuinely need nothing.** They are carried by the
+>   package artifacts. Their sections are verification only.
+> - **Defects C (physical schema) and 9 (the 27 ACL role links) require manual steps every time.** The package
+>   ships automation for both, and that automation **fires and then fails** with
+>   `SUMMARY|verified=false|…|errors=121` — every error being `GlideTableDescriptor is not allowed in scoped
+>   applications` or `GlideSecurityManager is not allowed in scoped applications`, because the commit engine
+>   forces the dispatched record's `sys_scope` to the application and those APIs are refused in scoped
+>   execution. Shipping the script as global does not avoid this, so the bootstrap trigger is shipped
+>   **`active=false`**.
+> - **Running the Fix Script from the UI does not work either** — *System Definition → Fix Scripts → Run Fix
+>   Script* executes that record in the **application** scope and fails identically. The only route measured to
+>   work is *System Definition → **Scripts - Background*** with **"In scope" = Global**.
+> - **A second commit is required.** Forcing the table rebuild means deleting three `sys_db_object` rows, which
+>   cascades away all 26 ACLs, the seed rows, the demo users and the role grants; a second commit restores them.
+>   The remediation then has to be run **again** to create the 27 ACL role links.
+> - **The demo data needs preparation.** The packaged seed rows must be deleted before
+>   `scripts/seed_demo_data.js` can populate anything.
 >
-> So **treat every "AUTOMATIC — no action required" note in §5 as a manual step**: run
-> *System Definition → Fix Scripts → "x_casemgmt Post-Import Remediation" → Run Fix Script* with scope
-> **Global**, and confirm `…|SUMMARY|verified=true|…|errors=0`. Defects **E** (auto-numbering) and **7** (REST
-> `service_id`) genuinely need nothing — they are carried by the package artifacts. Defects **C** (physical
-> schema) and **9** (the 27 ACL role links) need the manual run.
+> Two things this guide does not cover, both measured on the clean install and both independent of packaging:
+> the two dashboards **install but cannot render** (their tab child is serialized as `pa_tab`; this release's
+> table is `pa_tabs`), and the portal **pages render blank** (their Service Portal layout records were never
+> authored, so only the REST endpoints work).
 >
-> Three further things this guide does not yet cover, all measured on the clean install: the two dashboards
-> **install but cannot render** (their tab child is serialized as `pa_tab`; this release's table is `pa_tabs`); the portal **pages render blank** (their
-> Service Portal layout records were never authored, so only the REST endpoints work); and each of the three
-> tables arrives with `display=true` on nearly every column, which makes every reference to a case render
-> blank until reduced to one display field per table.
+> The same procedure with its measured evidence, per defect, is
+> **[`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step)**.
 >
-> The full step-by-step procedure that works end to end — including the second commit needed because dropping
-> `sys_db_object` cascades the ACLs away, and the demo-data preparation needed before
-> `scripts/seed_demo_data.js` can populate anything — is
-> **`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5**.
+> *Previously reported here and now fixed in the package: all three tables used to arrive with `display=true`
+> on nearly every column, which made every reference to a case render blank until reduced by hand. The package
+> now ships exactly one display field per table and the remediation verifies it.*
 
 ---
 
@@ -224,56 +228,93 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 
 ## 5. Post-import remediations
 
-> **Read this first — most of this section is now automatic.** Defects **C** (physical tables, fields, choice
-> lists), **E** (auto-numbering), **7** (REST `service_id`) and **9** (ACL role links + security-cache flush)
-> no longer require a human step. E and 7 are carried by the package artifacts themselves; C and 9 are
-> performed by `scripts/post_import_remediation.js`, which the package auto-executes on commit through the
-> global after-update Business Rule `x_casemgmt Post-Import Bootstrap` on `sys_remote_update_set`
-> (condition `current.state.changesTo('committed')`). §5a, §5b, §5d and §5f below are kept as **verification**
-> steps and as a manual fallback, not as required actions. §5c, §5e and §5g are unchanged.
+> **Read this first — this section is REQUIRED, not optional.** Upload → preview → commit does **not** give you
+> a working application. Two defects need manual work every time:
 >
-> **Confirm the automation ran** instead of performing §5a/§5b/§5d/§5f by hand:
+> | Defect | Carried by the package? | What you must do |
+> |---|---|---|
+> | **E** — auto-numbering | ✅ Yes, fully | Nothing. §5b is verification only |
+> | **7** — REST `service_id` | ✅ Yes, fully | Nothing. §5d is verification only |
+> | **C** — physical tables, fields, choice lists | ❌ **No** | §5a — mandatory |
+> | **9** — 27 ACL role links + security-cache flush | ❌ **No** | §5f — mandatory |
 >
-> ```bash
-> # expect: one BOOTSTRAP|fired line, one SUMMARY|verified=true ... errors=0 line,
-> #         and one TRIGGER|... deactivated after successful remediation line
-> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
->   "$SERVICENOW_INSTANCE_URL/api/now/table/syslog?sysparm_query=messageSTARTSWITHX_CASEMGMT_REMEDIATION%5EORDERBYDESCsys_created_on&sysparm_fields=sys_created_on,message&sysparm_limit=100"
+> **Why C and 9 are not automatic, stated plainly.** The package *does* ship the automation:
+> `scripts/post_import_remediation.js`, a Fix Script that carries it verbatim, and an after-update Business Rule
+> `x_casemgmt Post-Import Bootstrap` on `sys_remote_update_set` (condition
+> `current.state.changesTo('committed')`) that dispatches it. That trigger was measured to **fire and then
+> fail**. The commit engine rewrites every committed record's `sys_scope` to the installing application, so the
+> remediation executes with `scope_context=x_casemgmt` instead of global, and every privileged call it needs is
+> refused. The observed result, verbatim from `syslog`:
 >
-> # corroborating, no log reading needed:
-> #   bootstrap rule has self-deactivated  -> active=false
-> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
->   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_script?sysparm_query=name=x_casemgmt%20Post-Import%20Bootstrap&sysparm_fields=name,active"
-> #   27 ACL role links exist
-> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
->   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
+> ```
+> X_CASEMGMT_REMEDIATION|BOOTSTRAP|fired|…|state=committed|scope=x_casemgmt|dispatching Fix Script …
+> X_CASEMGMT_REMEDIATION|START|post-import remediation|scope_context=x_casemgmt|…
+> X_CASEMGMT_REMEDIATION|SUMMARY|verified=false|tables_built=0|…|acl_links_total=0|acl_links_expected=27|security_cache_flushed=false|errors=121
 > ```
 >
-> On a genuinely clean instance the summary line should read `tables_built=3` and `acl_links_created=27` —
-> those counters increment only when the script actually creates something; on a repeat it reads
-> `tables_already=3` and `acl_links_already=27`. Either way `verified=true|…|errors=0` is the proof it
-> converged.
+> All 121 errors are exactly two kinds:
 >
-> **If the summary line is absent** (the bootstrap rule was removed from the instance, or the commit was done
-> in a way that did not transition `sys_remote_update_set.state` to `committed`), run the whole remediation as
-> a single action instead of following §5a–§5f individually:
+> ```
+> java.lang.SecurityException: GlideTableDescriptor is not allowed in scoped applications
+> java.lang.SecurityException: GlideSecurityManager is not allowed in scoped applications
+> ```
 >
-> *System Definition → Fix Scripts → **"x_casemgmt Post-Import Remediation"** → Run Fix Script*
+> No packaging change defeats this — the scope rewrite happens at commit time regardless of the scope the
+> records are authored in. **The bootstrap rule is therefore shipped `active=false`**, so it cannot fire and
+> leave a misleading `verified=false` trail. Its `active` flag is *not* evidence of anything: do not read it as
+> "the automation already ran".
 >
-> — or, equivalently, paste `servicenow-case-management-poc/scripts/post_import_remediation.js` into
-> *System Definition → Scripts - Background* with **"In scope" = Global** and run it:
+> **Running the Fix Script from the UI does not work either.** *System Definition → Fix Scripts → "x_casemgmt
+> Post-Import Remediation" → Run Fix Script* executes that record **in the application scope** for the same
+> reason, and fails the same way. The only route measured to work is a background script in scope **Global**.
+>
+> ### The required sequence, in the order it must be performed
+>
+> Do these four steps in order after the commit. Steps 1-3 come from
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step),
+> where each is recorded with its measured evidence.
+>
+> | # | Step | Detail | Section |
+> |---|---|---|---|
+> | 1 | **Force the table rebuild** | Set the session application picker to **x_casemgmt Case Management** (user preference `apps.current_app`), then **REST-DELETE the three `sys_db_object` rows children-first**: `x_casemgmt_case_task`, `x_casemgmt_case_party`, `x_casemgmt_case`. Some return HTTP 500 *maximum execution time exceeded* but **do** succeed — verify by re-querying, not by the status code. Then run the remediation in scope **Global** | §5a |
+> | 2 | **Commit the same Update Set a second time** | Deleting those three rows **cascades away all 26 ACLs**, the seed rows, the demo users and the role grants. Re-upload → preview → commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems because the tables now exist but are empty — set those to `status=ignored`. **Never ignore a collision problem** | §4 again |
+> | 3 | **Run the remediation in Global again** | This is the pass that creates the 27 `sys_security_acl_role` links and flushes the security cache. Without it, 26 ACLs exist with **0** role links, and on this high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
+> | 4 | **Repair the demo data** | Delete the 10 number-less `Demo case …` rows, their orphan tasks and parties, and the dangling `sys_user_grmember` row, then run `scripts/seed_demo_data.js` **in scope** | §5g |
+>
+> Run the remediation like this — **in `global`, never in scope**:
 >
 > ```bash
 > /tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
 > ```
 >
-> **It must run in `global`, not in scope.** `sys_db_object`, `sys_dictionary`, `sys_choice`, `sys_number`,
+> **Why `global` is mandatory.** `sys_db_object`, `sys_dictionary`, `sys_choice`, `sys_number`,
 > `sys_ws_definition`, `sys_security_acl` and `sys_security_acl_role` are all global tables with cross-scope
-> create/update denied, `GlideTableDescriptor` raises
-> *"GlideTableDescriptor is not allowed in scoped applications"* for a scoped caller, and
-> `GlideSecurityManager` is likewise unavailable in scope. The script writes no `x_casemgmt_*` data rows at
-> all — seeding stays the job of §5g, which does run in scope. It is idempotent, so running it when nothing is
-> wrong is harmless and reports only "already correct" lines.
+> create/update denied; `GlideTableDescriptor` raises *"GlideTableDescriptor is not allowed in scoped
+> applications"* for a scoped caller; and `GlideSecurityManager` is likewise unavailable in scope. The script
+> writes no `x_casemgmt_*` data rows at all — seeding stays the job of §5g, which *does* run in scope. It is
+> idempotent, so running it when nothing is wrong is harmless and reports only "already correct" lines. It is
+> also **fail-closed**: if it cannot positively establish whether a table has physical storage, it leaves that
+> table strictly alone and aborts rather than assuming it is safe to rebuild.
+>
+> ### Confirming it actually converged
+>
+> ```bash
+> # The SUMMARY line is the proof. Expect verified=true and errors=0.
+> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+>   "$SERVICENOW_INSTANCE_URL/api/now/table/syslog?sysparm_query=messageSTARTSWITHX_CASEMGMT_REMEDIATION%5EORDERBYDESCsys_created_on&sysparm_fields=sys_created_on,message&sysparm_limit=100"
+>
+> # Corroborating, no log reading needed: exactly 27 ACL role links must exist.
+> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+>   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
+> ```
+>
+> On a genuinely clean instance the summary reads `tables_built=3` and `acl_links_created=27`; on a repeat it
+> reads `tables_already=3` and `acl_links_already=27`. Either way the proof of convergence is
+> `verified=true|…|errors=0` **together with** `acl_links_total=27|acl_links_expected=27`. The count must be
+> **exactly** 27, distributed manager 14 / agent 10 / viewer 3 — the script rejects a surplus as well as a
+> shortfall, and removes unexpected links, so a number other than 27 means it has not converged.
+>
+> §5c, §5e and §5g are unchanged.
 
 Where a step below still needs a script, run it via `bg.sh`. Read results back from the response
 (`/tmp/bg_out.html`) — extract `*** Script:` lines for `global` scripts, or query `syslog` for `gs.info`
@@ -282,8 +323,34 @@ hard-coded `sys_id`.**
 
 ### 5a. Materialize `x_casemgmt_case_task` & `x_casemgmt_case_party` tables + all choices  *(Defect C)*
 
-**AUTOMATIC — no action required.** Performed by `scripts/post_import_remediation.js` under the auto-execute
-trigger described above. Only verify.
+**MANDATORY MANUAL STEP — this is step 1 of the required sequence above.** The package ships the automation but
+it cannot complete (see the preamble). You must do this yourself — and it is **one command**:
+
+```bash
+/tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+```
+
+The script performs the `sys_db_object` deletion and the table rebuild itself. Measured on a clean install of the
+shipped package, from **Global** with no application picker set: `clean slate|dictionary_rows_removed=14|
+db_object_rows_removed=1|residue=0|reusing_sys_id=yes` per table, then the platform's own DDL
+(`Creating table: x_casemgmt_case`, `DBTable.create() for:`, `ALTER TABLE x_casemgmt_case ADD number VARCHAR(40)`),
+then `built|signals=GlideTableDescriptor.isValid=yes,GlideRecord.isValid=yes,TableUtils.tableExists=yes` — ending
+`tables_built=3, fields_created=25, choices_created=24, counters_written=3`.
+
+> **Then go straight to step 2 — commit the Update Set a second time.** Rebuilding the tables **cascades away all
+> 26 ACLs**, the seed rows, the demo users and the role grants, so this run necessarily ends
+> `verified=false … errors=6`, every error being the ACL check (`found 0 x_casemgmt ACLs, expected 26`, and one per
+> role). **That is the expected outcome of step 1, not a failure** — the script is fail-closed and refuses to
+> report success with zero role links. `verified=true` arrives at step 3.
+
+**Fallback, only if the run reports `db_object_rows_removed=0` or a `tables_indeterminate` count above zero:** set
+the session application picker to **x_casemgmt Case Management** (user preference `apps.current_app`) and
+REST-DELETE the three `sys_db_object` rows children-first — `x_casemgmt_case_task`, `x_casemgmt_case_party`, then
+`x_casemgmt_case` — then re-run the script in Global. Some of those DELETEs return HTTP 500 *maximum execution time
+exceeded* but do succeed, so confirm by re-querying rather than trusting the status code. This route exists because
+`sys_db_object` deletion is gated by `DictionaryUtils.isDeletable()` → `_isItemInUserScope()`; it was **not needed**
+on the release measured here. If the script reports `tables_indeterminate`, it has deliberately refused to touch a
+table whose physical state it could not establish — investigate before forcing anything.
 
 Why it cannot be fixed in the XML: the physical DDL for a brand-new table is emitted by the platform's
 after-insert Business Rule **`Synch Dictionary and Table` (order 500) on `sys_db_object`**, and the Update Set
@@ -300,7 +367,10 @@ for T in x_casemgmt_case x_casemgmt_case_task x_casemgmt_case_party; do
   printf '%s -> ' "$T"
   curl -s -o /dev/null -w '%{http_code}\n' -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" \
     -H "Accept: application/json" "$SN/api/now/table/$T?sysparm_limit=1"
-done      # expect 200 for all three
+done      # NOTE: these return HTTP 403, not 200 - the tables' cross-scope access policy
+          # refuses the REST Table API even for admin. That is NOT a sign the rebuild failed.
+          # Verify row counts from a background script with "In scope" = x_casemgmt instead.
+          # See section 6.1 and PDI_LIMITATIONS_AND_KNOWN_ISSUES.md 9.6 E9.
 ```
 
 The remediation's own `VERIFY|` log line reports the same thing in one place, e.g.
@@ -404,8 +474,23 @@ returns HTTP 404 `{"error":"No case found with that number."}` for an unknown nu
 
 ### 5f. ACL → role link records (27)  *(Defect 9)*
 
-**AUTOMATIC — no action required**, including the security-cache flush. Performed by
-`scripts/post_import_remediation.js` under the auto-execute trigger described at the top of §5. Only verify.
+**MANDATORY MANUAL STEP — this is step 3 of the required sequence at the top of §5.** Run the remediation in
+scope **Global** *after* the second commit:
+
+```bash
+/tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+```
+
+The security-cache flush (`GlideSecurityManager.get().reset()`) happens inside that same run, so there is no
+separate step for it — but it is also the reason the run cannot happen in scope, and therefore cannot happen
+automatically on commit. **Skipping this step leaves 26 ACLs with 0 role links, and on this high-security
+instance an ACL with no role, no condition and no script evaluates to `deny` — no non-admin can use the
+application at all.**
+
+Expect on the `SUMMARY` line: `verified=true`, `acl_links_total=27`, `acl_links_expected=27`,
+`security_cache_flushed=true`, `errors=0`. The total must be **exactly** 27, distributed manager 14 / agent 10 /
+viewer 3; the script rejects a surplus as well as a shortfall and deletes unexpected links, so any other number
+means it has not converged.
 
 Why the 27 links cannot simply be shipped as records — both reasons were measured on this release, not assumed:
 
@@ -461,12 +546,40 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 
 ### 6.1 Metadata / inventory (REST, runs as admin)
 
+> **⚠️ Do not verify the three scoped tables through the REST Table API — it cannot work here.**
+> `GET /api/now/table/x_casemgmt_case` returns **HTTP 403**
+> `{"message":"User Not Authorized","detail":"Failed API level ACL Validation"}` even as `admin`, for all three
+> tables. The platform states the reason plainly when the same read is attempted from a global script:
+> *"Read operation against 'x_casemgmt_case' from scope 'rhino.global' has been refused due to the table's
+> cross-scope access policy."* The record ACLs are **not** the problem — `GlideRecordSecure.canRead()` returns
+> `true` and all 26 ACLs are `active`, `admin_overrides=true`. Setting `ws_access`/`read_access`/
+> `create_access`/`update_access`/`delete_access` to `true` and flushing the platform cache does **not** lift it.
+>
+> **Worse, a global-scope `GlideRecord` read of these tables returns `getRowCount() == 0` instead of raising** —
+> so a global verification script reports "no data" for a table that is in fact fully populated. Never verify
+> these tables from global scope.
+>
+> **Verify them from inside the application scope instead** (*Scripts - Background*, "In scope" =
+> **x_casemgmt Case Management**), which reads them correctly:
+>
+> ```javascript
+> // In scope = x_casemgmt Case Management
+> var t = ['x_casemgmt_case', 'x_casemgmt_case_task', 'x_casemgmt_case_party'];
+> for (var i = 0; i < t.length; i++) {
+>     var gr = new GlideRecord(t[i]);
+>     gr.query();
+>     gs.info('GATE1|' + t[i] + '|rows=' + gr.getRowCount());
+> }
+> ```
+>
+> Read the results back from `syslog` (message starts with `GATE1`). A healthy install reports non-zero rows for
+> all three. This is a **pre-existing** condition of the deliverable, not a step you can fix here; it is recorded
+> in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §9.6 E9.
+
+The role and scope checks below **do** work over REST, because those are global tables:
+
 ```bash
 SN="$SERVICENOW_INSTANCE_URL"
-for t in x_casemgmt_case x_casemgmt_case_task x_casemgmt_case_party; do
-  curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" -o /dev/null -w "$t: HTTP %{http_code}\n" \
-    "$SN/api/now/table/$t?sysparm_limit=1"
-done
 for r in x_casemgmt_case_manager x_casemgmt_case_agent x_casemgmt_case_viewer; do
   curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
     "$SN/api/now/table/sys_user_role?sysparm_query=name=$r&sysparm_fields=name"

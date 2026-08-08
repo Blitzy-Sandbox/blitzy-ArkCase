@@ -39,17 +39,55 @@
     .........
     1. <unload> root with synthetic build timestamp
     2. Single <sys_remote_update_set> envelope (per Rule 1)
-    3. Sequence of <sys_update_xml> records in dependency order
-       (Segments 1 through 28; see segment numbering inline below)
+    3. Sequence of 916 <sys_update_xml> records in dependency order
     4. Single </unload> closing tag
+
+    DEPENDENCY ORDER (AAP Section 0.5.2), as actually serialized
+    ...........................................................
+    Application/scope, then Table, then Dictionary, then Choice List,
+    then Number Maintenance, then Role, then ACL, then Script Include,
+    then the Flow Designer Action Type / Flow Block / Flow records,
+    then Business Rule, then UI Policy and UI Action, then the two
+    Scripted REST Service definitions and their two Scripted REST API
+    operations, then the Service Portal and its two pages and three
+    widgets, then the Fix Script and its bootstrap Business Rule, then
+    Report, then Dashboard, then the ATF test assets, and finally the
+    seed data.
+
+    The REST records deliberately precede the portal UI records: AAP
+    Section 0.5.2 states that the widget client scripts call
+    /api/x_casemgmt/case_submit and /api/x_casemgmt/case_status_lookup
+    by URL, "which means the scripted REST records MUST be present".
+    An earlier revision of this file serialized sp_portal, both sp_page
+    records and all three sp_widget records BEFORE the four REST blocks;
+    the four blocks were relocated ahead of them, carried across
+    byte-identically, with no other change to the file.
 
     INVARIANTS
     ..........
     * Zero hardcoded sys_id literals in any cross-reference field.
       Every assigned_*, case, person, organization, role, user, group,
       company element body resolves by stable human-readable lookup key.
-    * Every record's sys_scope = x_casemgmt (NOT global).
-    * Every record's sys_package source = x_casemgmt (NOT global).
+    * Every record's sys_scope and sys_package source = x_casemgmt,
+      with exactly TWO deliberate exceptions, both authored global:
+        : sys_script_fix_227b757f182d8f3e1d9b774187ae8358
+          (Fix Script "x_casemgmt Post-Import Remediation")
+        : sys_script_5c6cce13d9187f0be47566b6f33ed143
+          (Business Rule "x_casemgmt Post-Import Bootstrap")
+      Both call GlideTableDescriptor and GlideSecurityManager, which the
+      platform refuses to run inside a scoped application, so neither can
+      be authored in x_casemgmt. They are packaged global on purpose.
+      HOWEVER: the commit engine rewrites every committed record's
+      sys_scope to the installing application, so after commit BOTH of
+      these land in x_casemgmt on the target instance regardless of what
+      this file declares. That rewrite is observable on the committed
+      records and is why neither of them can perform the remediation
+      itself. Read the header comment of each of those two records, and
+      ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, before relying on
+      either one: the remediation must be run manually from
+      Scripts - Background with "In scope" set to Global.
+    * No OTHER record in this file is global-scoped: the 2 records above
+      are the complete set (grep sys_scope for display_value="Global").
     * No email-related records (sys_email*, sysevent_email_action,
       cmn_notif_message). Email is disabled on the PDI per AAP.
     * No global-scope dictionary modifications. Global tables (sys_user,
@@ -349,7 +387,7 @@
         <comments>Auto-generated case number with format CASE0000001 (4-char prefix CASE + 7-digit zero-padded sequence). Read-only. Auto-population is configured by the parent table's number_ref pointing at ../numbers/sys_number_x_casemgmt_case.xml. Primary user-facing identifier of the case (referenced by portal submission and lookup, seed scripts, dashboards). Replaces ArkCase CaseFile.caseNumber (@AcmSequence + @TableGenerator).</comments>
         <create_roles/>
         <default_value>javascript:global.getNextObjNumberPadded();</default_value>
-        <defaultsort>true</defaultsort>
+        <defaultsort>1</defaultsort>
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
@@ -444,7 +482,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -535,7 +573,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -626,7 +664,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -717,7 +755,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -808,7 +846,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -899,7 +937,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -990,7 +1028,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1081,7 +1119,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1172,7 +1210,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1263,7 +1301,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1354,7 +1392,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1445,7 +1483,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1627,7 +1665,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1809,7 +1847,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1900,7 +1938,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -1991,7 +2029,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -2082,7 +2120,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -2173,7 +2211,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -2264,7 +2302,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -2355,7 +2393,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -2446,7 +2484,7 @@
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
-        <display>true</display>
+        <display>false</display>
         <dynamic_creation>false</dynamic_creation>
         <dynamic_creation_script/>
         <dynamic_default_value/>
@@ -5027,12 +5065,17 @@ CaseTransitionValidator.prototype = {
      *     gs.getUser() (the current session user) - this is the
      *     standard interactive-form-update path.
      *   - When userId is non-empty AND differs from gs.getUserID() -
-     *     look up the named user by sys_id, then call
-     *     gs.getUser(user_name).hasRole(role_name) - this supports
-     *     scheduled flows or system-context calls that validate
-     *     transitions on behalf of a specific user (e.g., "did
-     *     [requested user] have the case_manager role at request
-     *     time?").
+     *     look the user up by sys_id, then resolve the role grant with
+     *     a GlideRecord query on sys_user_has_role
+     *     (user=<that user> ^ role.name=x_casemgmt_case_manager).
+     *     This supports scheduled flows or system-context calls that
+     *     validate transitions on behalf of a specific user (e.g. "does
+     *     [requested user] hold the case_manager role?").
+     *     gs.getUser(user_name) is deliberately NOT used here: on this
+     *     release it ignores its argument and returns the SESSION user,
+     *     which silently answered with the caller's roles and let a
+     *     non-manager pass this guard. See the WARNING in the method
+     *     body and ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md 9.6 E-GU.
      *
      * @param {GlideRecord} caseGr - the case record being transitioned.
      * @param {String} userId - sys_id of the user attempting the
@@ -5054,21 +5097,45 @@ CaseTransitionValidator.prototype = {
         //   (a) userId is provided and equals the current session user
         //       -> gs.getUser() is the most efficient path.
         //   (b) userId is provided and differs from the current user
-        //       -> look up the named user by sys_id, then resolve
-        //          their roles via gs.getUser(user_name).
+        //       -> resolve THAT user's roles from sys_user_has_role
+        //          directly. See the WARNING below: gs.getUser(userName)
+        //          must NOT be used for this.
         //   (c) userId is null/empty -> default to current session user.
+        //
+        // WARNING - measured platform behaviour, do not "simplify" this.
+        // gs.getUser(userName) IGNORES its argument on this release and
+        // returns the SESSION user. Measured directly:
+        //     gs.getUser('x_casemgmt_demo_agent') -> resolved_name=admin,
+        //     IS_SESSION_USER=true, hasRole(case_manager)=true
+        // An earlier revision of this branch called
+        //     gs.getUser(userGr.getValue('user_name')).hasRole(...)
+        // and therefore answered with the CALLER's roles rather than the
+        // named user's, so a NON-MANAGER passed the Resolved -> Closed
+        // guard and this method returned { ok: true }. That is a silent
+        // bypass of the AAP Section 0.5.5 rule "Resolved -> Closed
+        // requires the caller to hold x_casemgmt_case_manager", and it was
+        // caught by assertion A10 of the transition-logic regression
+        // harness on a clean install.
+        // sys_user_has_role is the platform's own store of EFFECTIVE role
+        // grants - it is maintained to include roles inherited through
+        // groups and through role containment - so querying it answers
+        // the question correctly for ANY user, not only the session user.
         var hasManagerRole;
         if (userId && String(userId).trim() !== '' && String(userId) === String(gs.getUserID())) {
             hasManagerRole = gs.getUser().hasRole('x_casemgmt_case_manager');
         } else if (userId && String(userId).trim() !== '') {
-            // Non-current-user context: look up the user record by the
+            // Non-current-user context. The user is identified by the
             // RUNTIME sys_id passed in by the caller (NOT a hardcoded
-            // literal). The user_name is the stable human-readable key
-            // that gs.getUser() accepts; this satisfies the AAP Section
-            // 0.7.2 stable-key constraint.
+            // literal), and the role is resolved by NAME, which satisfies
+            // the AAP Section 0.7.2 stable-key constraint.
             var userGr = new GlideRecord('sys_user');
             if (userGr.get(String(userId))) {
-                hasManagerRole = gs.getUser(String(userGr.getValue('user_name'))).hasRole('x_casemgmt_case_manager');
+                var grantGr = new GlideRecord('sys_user_has_role');
+                grantGr.addQuery('user', userGr.getUniqueValue());
+                grantGr.addQuery('role.name', 'x_casemgmt_case_manager');
+                grantGr.setLimit(1);
+                grantGr.query();
+                hasManagerRole = grantGr.hasNext();
             } else {
                 // Unknown user sys_id -> deny by default. Returning
                 // false rather than throwing keeps the validator's
@@ -18024,6 +18091,466 @@ function serverSetPending() {
         <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
+        <name>sys_ws_definition_ef9090a5b03f1a36c248ce65065a1b74</name>
+        <payload><![CDATA[<record_update table="sys_ws_definition">
+    <sys_ws_definition action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <api_id>case_submit</api_id>
+        <consumes/>
+        <consumes_customized>false</consumes_customized>
+        <description>Scripted REST API definition for the Case Submit endpoint. Provides anonymously-accessible POST /api/x_casemgmt/case_submit for the unauthenticated Experience Portal submission widget. The actual HTTP-method handler lives in the paired sys_ws_operation record (sys_ws_operation_x_casemgmt_case_submit_post.xml). The handler delegates field whitelisting and persistence to the x_casemgmt.CasePortalService Script Include. Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern (DefaultPluggablePortalRequestService.submitRequest). Per AAP Sections 0.4.3, 0.4.4, 0.5.1.</description>
+        <enforce_acl/>
+        <name>Case Submit</name>
+        <namespace>x_casemgmt</namespace>
+        <produces/>
+        <produces_customized>false</produces_customized>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <service_id>case_submit</service_id>
+        <sys_class_name>sys_ws_definition</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ef9090a5b03f1a36c248ce65065a1b74</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Submit</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_ws_definition_x_casemgmt_case_submit</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_ws_definition>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt_case_submit</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>sys_ws_definition</table>
+        <target_name>x_casemgmt_case_submit</target_name>
+        <type>Scripted REST Service</type>
+        <update_domain>global</update_domain>
+        <update_guid>bbc6dccf493cb8f70c188b79e2d8729f</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ws_definition_b04176032af365e6b8770ba3e6089b58</name>
+        <payload><![CDATA[<record_update table="sys_ws_definition">
+    <sys_ws_definition action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <api_id>case_status_lookup</api_id>
+        <consumes/>
+        <consumes_customized>false</consumes_customized>
+        <description>Scripted REST API definition for the Case Status Lookup endpoint. Provides anonymously-accessible GET /api/x_casemgmt/case_status_lookup for the unauthenticated Experience Portal lookup widget (../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml). The HTTP-method handler lives in the paired sys_ws_operation record (sys_ws_operation_x_casemgmt_case_status_lookup_get.xml). The handler delegates the lookup and field-whitelist enforcement to the x_casemgmt.CasePortalService.lookupCase() Script Include method. Returns ONLY status, subject, opened_date (no internal fields) per AAP Sections 0.4.4 and 0.7.4. Returns the verbatim text 'No case found with that number.' on no-match. Replaces ArkCase's GetCaseByNumberService anonymous-status-lookup pattern. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false on this definition record (and on the paired operation record); the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
+        <enforce_acl/>
+        <name>Case Status Lookup</name>
+        <namespace>x_casemgmt</namespace>
+        <produces/>
+        <produces_customized>false</produces_customized>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <service_id>case_status_lookup</service_id>
+        <sys_class_name>sys_ws_definition</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b04176032af365e6b8770ba3e6089b58</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Status Lookup</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_ws_definition_x_casemgmt_case_status_lookup</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_ws_definition>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt_case_status_lookup</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>sys_ws_definition</table>
+        <target_name>x_casemgmt_case_status_lookup</target_name>
+        <type>Scripted REST Service</type>
+        <update_domain>global</update_domain>
+        <update_guid>38f05529477d3ab5ed5ac07e6ef4d529</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ws_operation_886ad7128907a6351ea04b210c27029e</name>
+        <payload><![CDATA[<record_update table="sys_ws_operation">
+    <sys_ws_operation action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <consumes>application/json</consumes>
+        <consumes_customized>true</consumes_customized>
+        <default_operation_uri>/api/x_casemgmt/case_submit</default_operation_uri>
+        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
+        <enforce_acl/>
+        <http_method>POST</http_method>
+        <name>Case Submit POST</name>
+        <operation_script>(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+    // Per AAP Section 0.4.3 + Section 0.4.4 + Section 0.7.4:
+    // Anonymous case-submission endpoint. The whitelisted-field discipline
+    // (input fields restricted to subject, type, description, requester_name,
+    // requester_email) plus the forced status='Draft' enforcement live in
+    // the Script Include x_casemgmt.CasePortalService.submitCase(). This
+    // handler is intentionally thin: only HTTP-layer concerns (status codes,
+    // body shapes, payload extraction) live here.
+    //
+    // Per AAP Section 0.4.4 (verbatim, non-negotiable): the success
+    // response includes the message text 'Your case has been submitted'.
+    // The submission widget displays this text verbatim in its confirmation
+    // panel; paraphrasing would break the AAP contract.
+
+    // ----------------------------------------------------------------------
+    // 1. Extract the JSON payload defensively.
+    //
+    //    request.body may be undefined (no body supplied - rare but
+    //    possible if a malicious client sends POST with no Content-Type
+    //    or empty body).
+    //    request.body.data is the auto-parsed JSON object when the
+    //    Content-Type is application/json (per &lt;consumes&gt;application/json
+    //    &lt;/consumes&gt; on this operation). It may be undefined if the body
+    //    failed to parse.
+    //    Pass null to the Script Include when either is missing - the
+    //    Script Include's defensive type-check returns
+    //    { error: 'Invalid payload.' } which this handler translates to
+    //    HTTP 400.
+    // ----------------------------------------------------------------------
+    var payload = request.body &amp;&amp; request.body.data ? request.body.data : null;
+
+    // ----------------------------------------------------------------------
+    // 2. Delegate to the Script Include. The Script Include is the single
+    //    source of truth for:
+    //      - The field whitelist (only subject, type, description,
+    //        requester_name, requester_email accepted)
+    //      - The status='Draft' force (regardless of payload contents)
+    //      - The GlideRecord.insert() call against x_casemgmt_case
+    //      - The post-insert re-query for the auto-generated number
+    //
+    //    Contract:
+    //      - submitCase(payload) returns:
+    //          * { error: '&lt;message&gt;' }   - validation/insert failure
+    //          * { number: 'CASE0000001' } - success, auto-generated number
+    //
+    //    The Script Include is invoked via the scope-qualified API name
+    //    `x_casemgmt.CasePortalService` (NOT by sys_id), which complies
+    //    with AAP Section 0.7.2's no-hardcoded-sys_id constraint.
+    // ----------------------------------------------------------------------
+    var svc = new x_casemgmt.CasePortalService();
+    var result = svc.submitCase(payload);
+
+    // ----------------------------------------------------------------------
+    // 3. Validation failure -&gt; HTTP 400 Bad Request.
+    //
+    //    The Script Include returns { error: 'Invalid payload.' } when
+    //    the payload is null/non-object/array, and
+    //    { error: 'Submission failed.' } when GlideRecord.insert() rejects
+    //    the row (typically a before-insert BR rejection or a missing
+    //    mandatory field). Both surface as HTTP 400 to give the calling
+    //    widget actionable feedback.
+    //
+    //    String() coercion on result.error defends against a future
+    //    refactor that returns a non-string error value (e.g., an Error
+    //    object); the JSON serializer would otherwise produce
+    //    unpredictable output.
+    // ----------------------------------------------------------------------
+    if (result &amp;&amp; result.error) {
+        response.setStatus(400);
+        response.setBody({ error: String(result.error) });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 4. Defensive fallback -&gt; HTTP 500 Internal Server Error.
+    //
+    //    This branch should NEVER trigger if the Script Include conforms
+    //    to its contract (always returns either { number } or { error }).
+    //    The fallback exists for production reliability:
+    //      - If a future refactor breaks the Script Include's contract,
+    //        the handler returns a clean 500 rather than serializing
+    //        undefined or throwing an uncaught error.
+    //      - The error message is intentionally generic ('Submission
+    //        failed.') to avoid leaking implementation details to
+    //        anonymous callers.
+    // ----------------------------------------------------------------------
+    if (!result || !result.number) {
+        response.setStatus(500);
+        response.setBody({ error: 'Submission failed.' });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 5. Success -&gt; HTTP 201 Created with { number, message }.
+    //
+    //    HTTP 201 (vs 200): REST convention - 201 indicates a NEW
+    //    resource was created on the server. The submission widget can
+    //    rely on this status code to distinguish successful creation
+    //    from any other 2xx outcome.
+    //
+    //    Response body shape (exactly two keys, no others):
+    //      {
+    //        number:  '&lt;auto-generated CASE0000001-format string&gt;',
+    //        message: 'Your case has been submitted'
+    //      }
+    //
+    //    String(result.number) coercion defends against any future
+    //    GlideElement-typed return value (the Script Include already
+    //    coerces with String(savedGr.getValue('number')), but this
+    //    handler-level coercion is defense-in-depth).
+    //
+    //    The verbatim message 'Your case has been submitted' matches AAP
+    //    Section 0.4.4: "displays a confirmation panel showing the
+    //    returned case number and a friendly 'Your case has been
+    //    submitted' message". The widget displays this text verbatim
+    //    in its confirmation panel.
+    // ----------------------------------------------------------------------
+    response.setStatus(201);
+    response.setBody({
+        number: String(result.number),
+        message: 'Your case has been submitted'
+    });
+})(request, response);</operation_script>
+        <operation_uri>/api/x_casemgmt/case_submit</operation_uri>
+        <produces>application/json</produces>
+        <produces_customized>true</produces_customized>
+        <relative_path>/</relative_path>
+        <request_example/>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error } on validation failure, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
+        <sys_class_name>sys_ws_operation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>886ad7128907a6351ea04b210c27029e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Submit POST</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
+        <web_service_definition display_value="x_casemgmt_case_submit">ef9090a5b03f1a36c248ce65065a1b74</web_service_definition>
+        <web_service_version/>
+    </sys_ws_operation>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt_case_submit_post</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>sys_ws_operation</table>
+        <target_name>x_casemgmt_case_submit_post</target_name>
+        <type>Scripted REST API</type>
+        <update_domain>global</update_domain>
+        <update_guid>75085abc21b66926e08585b68440eaca</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ws_operation_f3b3b39ceb9115bf7bf40e3eaf042b4f</name>
+        <payload><![CDATA[<record_update table="sys_ws_operation">
+    <sys_ws_operation action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <consumes>application/json</consumes>
+        <consumes_customized>true</consumes_customized>
+        <default_operation_uri>/api/x_casemgmt/case_status_lookup</default_operation_uri>
+        <description>GET handler for the Case Status Lookup scripted REST API. Anonymously accepts a case number via the 'number' query parameter from the Experience Portal lookup widget. Delegates to x_casemgmt.CasePortalService.lookupCase() which queries x_casemgmt_case by number and returns ONLY the whitelisted fields { status, subject, opened_date } - never assigned_group, assigned_agent, description, closed_date, requester_* fields, priority, type, pending_reason, or any audit field. On match, returns HTTP 200 with body { status, subject, opened_date }. On no match (or empty/missing query parameter), returns HTTP 404 with the verbatim body { error: 'No case found with that number.' } per AAP Section 0.7.4. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() Spring service. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
+        <enforce_acl/>
+        <http_method>GET</http_method>
+        <name>Case Status Lookup GET</name>
+        <operation_script>(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+    // Per AAP Section 0.4.4 + Section 0.7.4 (Other User-Provided Rules):
+    // Anonymous case-status-lookup endpoint. The whitelisted-field discipline
+    // (response contains ONLY status, subject, opened_date) lives in the
+    // Script Include x_casemgmt.CasePortalService.lookupCase(). This handler
+    // is intentionally thin: only HTTP-layer concerns (status codes, body
+    // shapes, query-parameter extraction) live here.
+    //
+    // Per AAP Section 0.7.4 (verbatim, non-negotiable): when the case number
+    // does NOT match, return HTTP 404 with the verbatim body
+    //   { error: 'No case found with that number.' }
+    // The EXACT text (capital N, lowercase elsewhere, trailing period,
+    // ASCII straight single quotes) is mandated by AAP Sections 0.4.4 and
+    // 0.7.4. The lookup widget displays this text verbatim.
+
+    // ----------------------------------------------------------------------
+    // 1. Extract the 'number' query parameter defensively.
+    //
+    //    request.queryParams may be undefined (no query string supplied).
+    //    request.queryParams.number may be undefined (parameter absent),
+    //    a String (single value supplied), or an Array (when the URL has
+    //    duplicate parameter names, e.g. ?number=A&amp;number=B - the platform
+    //    typically deduplicates but defensive code handles both shapes).
+    // ----------------------------------------------------------------------
+    var caseNumber = '';
+    if (request.queryParams &amp;&amp; request.queryParams.number) {
+        var raw = request.queryParams.number;
+        if (Array.isArray(raw)) {
+            // URL had ?number=A&amp;number=B (rare). Take the first value.
+            // Returning an error ("multiple values supplied") would leak
+            // information about the API's parameter shape; instead,
+            // silently honor the first value to maintain the simple
+            // 200/404 response surface.
+            raw = raw.length &gt; 0 ? raw[0] : '';
+        }
+        // Coerce-to-String defensively (raw may arrive as Number on some
+        // platform versions when the query value is numeric-looking) and
+        // trim leading/trailing whitespace.
+        caseNumber = String(raw || '').trim();
+    }
+
+    // ----------------------------------------------------------------------
+    // 2. Empty/missing parameter -&gt; verbatim 404 (information-leakage
+    //    hardening). DO NOT differentiate "missing parameter" from "case
+    //    not found": returning HTTP 400 with "Missing 'number' parameter"
+    //    would tell anonymous callers (potential attackers) the parameter
+    //    name and shape, useful for crafting follow-on attacks. Returning
+    //    the same 404 response gives no information about the API's
+    //    parameter expectations beyond what is already documented in the
+    //    public widget code.
+    // ----------------------------------------------------------------------
+    if (!caseNumber) {
+        response.setStatus(404);
+        response.setBody({ error: 'No case found with that number.' });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 3. Delegate to the Script Include. The Script Include is the single
+    //    source of truth for:
+    //      - The GlideRecord query against x_casemgmt_case
+    //      - The field whitelist (returns ONLY status, subject, opened_date)
+    //      - The lookup-by-number contract (matches AAP Section 0.7.2's
+    //        no-hardcoded-sys_id rule by querying the public 'number' field)
+    //
+    //    Contract:
+    //      - lookupCase(&lt;non-empty trimmed string&gt;) returns:
+    //          * null       - no case matches the supplied number
+    //          * { status: String, subject: String, opened_date: String }
+    //                       - case found, all values pre-coerced to strings
+    //
+    //    The Script Include is invoked via the scope-qualified API name
+    //    `x_casemgmt.CasePortalService` (NOT by sys_id), which complies
+    //    with AAP Section 0.7.2's no-hardcoded-sys_id constraint.
+    // ----------------------------------------------------------------------
+    var svc = new x_casemgmt.CasePortalService();
+    var result = svc.lookupCase(caseNumber);
+
+    // ----------------------------------------------------------------------
+    // 4. No-match -&gt; verbatim 404. Per AAP Section 0.7.4, the literal text
+    //    'No case found with that number.' MUST appear in the response.
+    //    This is the SAME response shape returned in step 2 for empty/
+    //    missing parameters - intentional uniformity prevents anonymous
+    //    callers from distinguishing "parameter absent" from "case not found".
+    // ----------------------------------------------------------------------
+    if (result === null || result === undefined) {
+        response.setStatus(404);
+        response.setBody({ error: 'No case found with that number.' });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 5. Match -&gt; HTTP 200 with the three whitelisted fields.
+    //
+    //    The Script Include already coerces to String(...) and applies
+    //    `|| ''` defaults; THIS extraction is a defense-in-depth layer
+    //    that:
+    //      a. Re-coerces in case the Script Include's contract changes
+    //         (e.g., a future refactor accidentally returns GlideElement
+    //         instances, which would serialize unpredictably).
+    //      b. Drops any additional fields the Script Include may return
+    //         (defense against accidental field exposure in future edits).
+    //      c. Replaces null/undefined with empty string (cleaner JSON
+    //         than `null` or the literal text "undefined" for missing
+    //         field values).
+    //
+    //    Response body shape (exactly three keys, no others):
+    //      {
+    //        status:      "&lt;value or empty string&gt;",
+    //        subject:     "&lt;value or empty string&gt;",
+    //        opened_date: "&lt;value or empty string&gt;"
+    //      }
+    //
+    //    Internal fields that MUST NOT appear in this response (per AAP
+    //    Section 0.4.4):
+    //      assigned_group, assigned_agent, description, closed_date,
+    //      requester_name, requester_email, priority, type, pending_reason,
+    //      sys_id, sys_created_by, sys_created_on, sys_updated_by,
+    //      sys_updated_on, sys_mod_count, sys_class_name, sys_domain.
+    // ----------------------------------------------------------------------
+    response.setStatus(200);
+    response.setBody({
+        status:      String(result.status      || ''),
+        subject:     String(result.subject     || ''),
+        opened_date: String(result.opened_date || '')
+    });
+})(request, response);</operation_script>
+        <operation_uri>/api/x_casemgmt/case_status_lookup</operation_uri>
+        <produces>application/json</produces>
+        <produces_customized>true</produces_customized>
+        <relative_path>/</relative_path>
+        <request_example/>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>false</requires_authentication>
+        <requires_snc_internal_role>false</requires_snc_internal_role>
+        <short_description>Anonymous GET handler for case status lookup. Returns HTTP 200 with whitelisted fields { status, subject, opened_date } on match, or HTTP 404 with verbatim body { error: 'No case found with that number.' } on no-match per AAP Section 0.7.4.</short_description>
+        <sys_class_name>sys_ws_operation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>f3b3b39ceb9115bf7bf40e3eaf042b4f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Status Lookup GET</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_ws_operation_x_casemgmt_case_status_lookup_get</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
+        <web_service_definition display_value="x_casemgmt_case_status_lookup">b04176032af365e6b8770ba3e6089b58</web_service_definition>
+        <web_service_version/>
+    </sys_ws_operation>
+</record_update>
+]]></payload>
+        <payload_hash/>
+        <record_name>x_casemgmt_case_status_lookup_get</record_name>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
+        <table>sys_ws_operation</table>
+        <target_name>x_casemgmt_case_status_lookup_get</target_name>
+        <type>Scripted REST API</type>
+        <update_domain>global</update_domain>
+        <update_guid>993ca09c0f352ad4287683c91ac1f618</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
         <name>sp_portal_82079e7877f4f6d09975ab96fc0fa2fa</name>
         <payload><![CDATA[<record_update table="sp_portal">
     <sp_portal action="INSERT_OR_UPDATE">
@@ -19089,480 +19616,31 @@ function serverSetPending() {
         <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
         <category>customer</category>
         <comments/>
-        <name>sys_ws_definition_ef9090a5b03f1a36c248ce65065a1b74</name>
-        <payload><![CDATA[<record_update table="sys_ws_definition">
-    <sys_ws_definition action="INSERT_OR_UPDATE">
-        <active>true</active>
-        <api_id>case_submit</api_id>
-        <consumes/>
-        <consumes_customized>false</consumes_customized>
-        <description>Scripted REST API definition for the Case Submit endpoint. Provides anonymously-accessible POST /api/x_casemgmt/case_submit for the unauthenticated Experience Portal submission widget. The actual HTTP-method handler lives in the paired sys_ws_operation record (sys_ws_operation_x_casemgmt_case_submit_post.xml). The handler delegates field whitelisting and persistence to the x_casemgmt.CasePortalService Script Include. Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern (DefaultPluggablePortalRequestService.submitRequest). Per AAP Sections 0.4.3, 0.4.4, 0.5.1.</description>
-        <enforce_acl/>
-        <name>Case Submit</name>
-        <namespace>x_casemgmt</namespace>
-        <produces/>
-        <produces_customized>false</produces_customized>
-        <requires_acl_authorization>false</requires_acl_authorization>
-        <requires_authentication>false</requires_authentication>
-        <requires_snc_internal_role>false</requires_snc_internal_role>
-        <service_id>case_submit</service_id>
-        <sys_class_name>sys_ws_definition</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>ef9090a5b03f1a36c248ce65065a1b74</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>Case Submit</sys_name>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_policy/>
-        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-        <sys_update_name>sys_ws_definition_x_casemgmt_case_submit</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    </sys_ws_definition>
-</record_update>
-]]></payload>
-        <payload_hash/>
-        <record_name>x_casemgmt_case_submit</record_name>
-        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
-        <replace_on_upgrade>false</replace_on_upgrade>
-        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
-        <table>sys_ws_definition</table>
-        <target_name>x_casemgmt_case_submit</target_name>
-        <type>Scripted REST Service</type>
-        <update_domain>global</update_domain>
-        <update_guid>bbc6dccf493cb8f70c188b79e2d8729f</update_guid>
-        <update_guid_history/>
-        <view></view>
-    </sys_update_xml>
-    <sys_update_xml action="INSERT_OR_UPDATE">
-        <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
-        <category>customer</category>
-        <comments/>
-        <name>sys_ws_definition_b04176032af365e6b8770ba3e6089b58</name>
-        <payload><![CDATA[<record_update table="sys_ws_definition">
-    <sys_ws_definition action="INSERT_OR_UPDATE">
-        <active>true</active>
-        <api_id>case_status_lookup</api_id>
-        <consumes/>
-        <consumes_customized>false</consumes_customized>
-        <description>Scripted REST API definition for the Case Status Lookup endpoint. Provides anonymously-accessible GET /api/x_casemgmt/case_status_lookup for the unauthenticated Experience Portal lookup widget (../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml). The HTTP-method handler lives in the paired sys_ws_operation record (sys_ws_operation_x_casemgmt_case_status_lookup_get.xml). The handler delegates the lookup and field-whitelist enforcement to the x_casemgmt.CasePortalService.lookupCase() Script Include method. Returns ONLY status, subject, opened_date (no internal fields) per AAP Sections 0.4.4 and 0.7.4. Returns the verbatim text 'No case found with that number.' on no-match. Replaces ArkCase's GetCaseByNumberService anonymous-status-lookup pattern. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false on this definition record (and on the paired operation record); the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
-        <enforce_acl/>
-        <name>Case Status Lookup</name>
-        <namespace>x_casemgmt</namespace>
-        <produces/>
-        <produces_customized>false</produces_customized>
-        <requires_acl_authorization>false</requires_acl_authorization>
-        <requires_authentication>false</requires_authentication>
-        <requires_snc_internal_role>false</requires_snc_internal_role>
-        <service_id>case_status_lookup</service_id>
-        <sys_class_name>sys_ws_definition</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>b04176032af365e6b8770ba3e6089b58</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>Case Status Lookup</sys_name>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_policy/>
-        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-        <sys_update_name>sys_ws_definition_x_casemgmt_case_status_lookup</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    </sys_ws_definition>
-</record_update>
-]]></payload>
-        <payload_hash/>
-        <record_name>x_casemgmt_case_status_lookup</record_name>
-        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
-        <replace_on_upgrade>false</replace_on_upgrade>
-        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
-        <table>sys_ws_definition</table>
-        <target_name>x_casemgmt_case_status_lookup</target_name>
-        <type>Scripted REST Service</type>
-        <update_domain>global</update_domain>
-        <update_guid>38f05529477d3ab5ed5ac07e6ef4d529</update_guid>
-        <update_guid_history/>
-        <view></view>
-    </sys_update_xml>
-    <sys_update_xml action="INSERT_OR_UPDATE">
-        <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
-        <category>customer</category>
-        <comments/>
-        <name>sys_ws_operation_886ad7128907a6351ea04b210c27029e</name>
-        <payload><![CDATA[<record_update table="sys_ws_operation">
-    <sys_ws_operation action="INSERT_OR_UPDATE">
-        <active>true</active>
-        <consumes>application/json</consumes>
-        <consumes_customized>true</consumes_customized>
-        <default_operation_uri>/api/x_casemgmt/case_submit</default_operation_uri>
-        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
-        <enforce_acl/>
-        <http_method>POST</http_method>
-        <name>Case Submit POST</name>
-        <operation_script>(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
-    // Per AAP Section 0.4.3 + Section 0.4.4 + Section 0.7.4:
-    // Anonymous case-submission endpoint. The whitelisted-field discipline
-    // (input fields restricted to subject, type, description, requester_name,
-    // requester_email) plus the forced status='Draft' enforcement live in
-    // the Script Include x_casemgmt.CasePortalService.submitCase(). This
-    // handler is intentionally thin: only HTTP-layer concerns (status codes,
-    // body shapes, payload extraction) live here.
-    //
-    // Per AAP Section 0.4.4 (verbatim, non-negotiable): the success
-    // response includes the message text 'Your case has been submitted'.
-    // The submission widget displays this text verbatim in its confirmation
-    // panel; paraphrasing would break the AAP contract.
-
-    // ----------------------------------------------------------------------
-    // 1. Extract the JSON payload defensively.
-    //
-    //    request.body may be undefined (no body supplied - rare but
-    //    possible if a malicious client sends POST with no Content-Type
-    //    or empty body).
-    //    request.body.data is the auto-parsed JSON object when the
-    //    Content-Type is application/json (per &lt;consumes&gt;application/json
-    //    &lt;/consumes&gt; on this operation). It may be undefined if the body
-    //    failed to parse.
-    //    Pass null to the Script Include when either is missing - the
-    //    Script Include's defensive type-check returns
-    //    { error: 'Invalid payload.' } which this handler translates to
-    //    HTTP 400.
-    // ----------------------------------------------------------------------
-    var payload = request.body &amp;&amp; request.body.data ? request.body.data : null;
-
-    // ----------------------------------------------------------------------
-    // 2. Delegate to the Script Include. The Script Include is the single
-    //    source of truth for:
-    //      - The field whitelist (only subject, type, description,
-    //        requester_name, requester_email accepted)
-    //      - The status='Draft' force (regardless of payload contents)
-    //      - The GlideRecord.insert() call against x_casemgmt_case
-    //      - The post-insert re-query for the auto-generated number
-    //
-    //    Contract:
-    //      - submitCase(payload) returns:
-    //          * { error: '&lt;message&gt;' }   - validation/insert failure
-    //          * { number: 'CASE0000001' } - success, auto-generated number
-    //
-    //    The Script Include is invoked via the scope-qualified API name
-    //    `x_casemgmt.CasePortalService` (NOT by sys_id), which complies
-    //    with AAP Section 0.7.2's no-hardcoded-sys_id constraint.
-    // ----------------------------------------------------------------------
-    var svc = new x_casemgmt.CasePortalService();
-    var result = svc.submitCase(payload);
-
-    // ----------------------------------------------------------------------
-    // 3. Validation failure -&gt; HTTP 400 Bad Request.
-    //
-    //    The Script Include returns { error: 'Invalid payload.' } when
-    //    the payload is null/non-object/array, and
-    //    { error: 'Submission failed.' } when GlideRecord.insert() rejects
-    //    the row (typically a before-insert BR rejection or a missing
-    //    mandatory field). Both surface as HTTP 400 to give the calling
-    //    widget actionable feedback.
-    //
-    //    String() coercion on result.error defends against a future
-    //    refactor that returns a non-string error value (e.g., an Error
-    //    object); the JSON serializer would otherwise produce
-    //    unpredictable output.
-    // ----------------------------------------------------------------------
-    if (result &amp;&amp; result.error) {
-        response.setStatus(400);
-        response.setBody({ error: String(result.error) });
-        return;
-    }
-
-    // ----------------------------------------------------------------------
-    // 4. Defensive fallback -&gt; HTTP 500 Internal Server Error.
-    //
-    //    This branch should NEVER trigger if the Script Include conforms
-    //    to its contract (always returns either { number } or { error }).
-    //    The fallback exists for production reliability:
-    //      - If a future refactor breaks the Script Include's contract,
-    //        the handler returns a clean 500 rather than serializing
-    //        undefined or throwing an uncaught error.
-    //      - The error message is intentionally generic ('Submission
-    //        failed.') to avoid leaking implementation details to
-    //        anonymous callers.
-    // ----------------------------------------------------------------------
-    if (!result || !result.number) {
-        response.setStatus(500);
-        response.setBody({ error: 'Submission failed.' });
-        return;
-    }
-
-    // ----------------------------------------------------------------------
-    // 5. Success -&gt; HTTP 201 Created with { number, message }.
-    //
-    //    HTTP 201 (vs 200): REST convention - 201 indicates a NEW
-    //    resource was created on the server. The submission widget can
-    //    rely on this status code to distinguish successful creation
-    //    from any other 2xx outcome.
-    //
-    //    Response body shape (exactly two keys, no others):
-    //      {
-    //        number:  '&lt;auto-generated CASE0000001-format string&gt;',
-    //        message: 'Your case has been submitted'
-    //      }
-    //
-    //    String(result.number) coercion defends against any future
-    //    GlideElement-typed return value (the Script Include already
-    //    coerces with String(savedGr.getValue('number')), but this
-    //    handler-level coercion is defense-in-depth).
-    //
-    //    The verbatim message 'Your case has been submitted' matches AAP
-    //    Section 0.4.4: "displays a confirmation panel showing the
-    //    returned case number and a friendly 'Your case has been
-    //    submitted' message". The widget displays this text verbatim
-    //    in its confirmation panel.
-    // ----------------------------------------------------------------------
-    response.setStatus(201);
-    response.setBody({
-        number: String(result.number),
-        message: 'Your case has been submitted'
-    });
-})(request, response);</operation_script>
-        <operation_uri>/api/x_casemgmt/case_submit</operation_uri>
-        <produces>application/json</produces>
-        <produces_customized>true</produces_customized>
-        <relative_path>/</relative_path>
-        <request_example/>
-        <requires_acl_authorization>false</requires_acl_authorization>
-        <requires_authentication>false</requires_authentication>
-        <requires_snc_internal_role>false</requires_snc_internal_role>
-        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error } on validation failure, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
-        <sys_class_name>sys_ws_operation</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
-        <sys_id>886ad7128907a6351ea04b210c27029e</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>Case Submit POST</sys_name>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_policy/>
-        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-        <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
-        <web_service_definition display_value="x_casemgmt_case_submit">ef9090a5b03f1a36c248ce65065a1b74</web_service_definition>
-        <web_service_version/>
-    </sys_ws_operation>
-</record_update>
-]]></payload>
-        <payload_hash/>
-        <record_name>x_casemgmt_case_submit_post</record_name>
-        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
-        <replace_on_upgrade>false</replace_on_upgrade>
-        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
-        <table>sys_ws_operation</table>
-        <target_name>x_casemgmt_case_submit_post</target_name>
-        <type>Scripted REST API</type>
-        <update_domain>global</update_domain>
-        <update_guid>75085abc21b66926e08585b68440eaca</update_guid>
-        <update_guid_history/>
-        <view></view>
-    </sys_update_xml>
-    <sys_update_xml action="INSERT_OR_UPDATE">
-        <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
-        <category>customer</category>
-        <comments/>
-        <name>sys_ws_operation_f3b3b39ceb9115bf7bf40e3eaf042b4f</name>
-        <payload><![CDATA[<record_update table="sys_ws_operation">
-    <sys_ws_operation action="INSERT_OR_UPDATE">
-        <active>true</active>
-        <consumes>application/json</consumes>
-        <consumes_customized>true</consumes_customized>
-        <default_operation_uri>/api/x_casemgmt/case_status_lookup</default_operation_uri>
-        <description>GET handler for the Case Status Lookup scripted REST API. Anonymously accepts a case number via the 'number' query parameter from the Experience Portal lookup widget. Delegates to x_casemgmt.CasePortalService.lookupCase() which queries x_casemgmt_case by number and returns ONLY the whitelisted fields { status, subject, opened_date } - never assigned_group, assigned_agent, description, closed_date, requester_* fields, priority, type, pending_reason, or any audit field. On match, returns HTTP 200 with body { status, subject, opened_date }. On no match (or empty/missing query parameter), returns HTTP 404 with the verbatim body { error: 'No case found with that number.' } per AAP Section 0.7.4. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() Spring service. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
-        <enforce_acl/>
-        <http_method>GET</http_method>
-        <name>Case Status Lookup GET</name>
-        <operation_script>(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
-    // Per AAP Section 0.4.4 + Section 0.7.4 (Other User-Provided Rules):
-    // Anonymous case-status-lookup endpoint. The whitelisted-field discipline
-    // (response contains ONLY status, subject, opened_date) lives in the
-    // Script Include x_casemgmt.CasePortalService.lookupCase(). This handler
-    // is intentionally thin: only HTTP-layer concerns (status codes, body
-    // shapes, query-parameter extraction) live here.
-    //
-    // Per AAP Section 0.7.4 (verbatim, non-negotiable): when the case number
-    // does NOT match, return HTTP 404 with the verbatim body
-    //   { error: 'No case found with that number.' }
-    // The EXACT text (capital N, lowercase elsewhere, trailing period,
-    // ASCII straight single quotes) is mandated by AAP Sections 0.4.4 and
-    // 0.7.4. The lookup widget displays this text verbatim.
-
-    // ----------------------------------------------------------------------
-    // 1. Extract the 'number' query parameter defensively.
-    //
-    //    request.queryParams may be undefined (no query string supplied).
-    //    request.queryParams.number may be undefined (parameter absent),
-    //    a String (single value supplied), or an Array (when the URL has
-    //    duplicate parameter names, e.g. ?number=A&amp;number=B - the platform
-    //    typically deduplicates but defensive code handles both shapes).
-    // ----------------------------------------------------------------------
-    var caseNumber = '';
-    if (request.queryParams &amp;&amp; request.queryParams.number) {
-        var raw = request.queryParams.number;
-        if (Array.isArray(raw)) {
-            // URL had ?number=A&amp;number=B (rare). Take the first value.
-            // Returning an error ("multiple values supplied") would leak
-            // information about the API's parameter shape; instead,
-            // silently honor the first value to maintain the simple
-            // 200/404 response surface.
-            raw = raw.length &gt; 0 ? raw[0] : '';
-        }
-        // Coerce-to-String defensively (raw may arrive as Number on some
-        // platform versions when the query value is numeric-looking) and
-        // trim leading/trailing whitespace.
-        caseNumber = String(raw || '').trim();
-    }
-
-    // ----------------------------------------------------------------------
-    // 2. Empty/missing parameter -&gt; verbatim 404 (information-leakage
-    //    hardening). DO NOT differentiate "missing parameter" from "case
-    //    not found": returning HTTP 400 with "Missing 'number' parameter"
-    //    would tell anonymous callers (potential attackers) the parameter
-    //    name and shape, useful for crafting follow-on attacks. Returning
-    //    the same 404 response gives no information about the API's
-    //    parameter expectations beyond what is already documented in the
-    //    public widget code.
-    // ----------------------------------------------------------------------
-    if (!caseNumber) {
-        response.setStatus(404);
-        response.setBody({ error: 'No case found with that number.' });
-        return;
-    }
-
-    // ----------------------------------------------------------------------
-    // 3. Delegate to the Script Include. The Script Include is the single
-    //    source of truth for:
-    //      - The GlideRecord query against x_casemgmt_case
-    //      - The field whitelist (returns ONLY status, subject, opened_date)
-    //      - The lookup-by-number contract (matches AAP Section 0.7.2's
-    //        no-hardcoded-sys_id rule by querying the public 'number' field)
-    //
-    //    Contract:
-    //      - lookupCase(&lt;non-empty trimmed string&gt;) returns:
-    //          * null       - no case matches the supplied number
-    //          * { status: String, subject: String, opened_date: String }
-    //                       - case found, all values pre-coerced to strings
-    //
-    //    The Script Include is invoked via the scope-qualified API name
-    //    `x_casemgmt.CasePortalService` (NOT by sys_id), which complies
-    //    with AAP Section 0.7.2's no-hardcoded-sys_id constraint.
-    // ----------------------------------------------------------------------
-    var svc = new x_casemgmt.CasePortalService();
-    var result = svc.lookupCase(caseNumber);
-
-    // ----------------------------------------------------------------------
-    // 4. No-match -&gt; verbatim 404. Per AAP Section 0.7.4, the literal text
-    //    'No case found with that number.' MUST appear in the response.
-    //    This is the SAME response shape returned in step 2 for empty/
-    //    missing parameters - intentional uniformity prevents anonymous
-    //    callers from distinguishing "parameter absent" from "case not found".
-    // ----------------------------------------------------------------------
-    if (result === null || result === undefined) {
-        response.setStatus(404);
-        response.setBody({ error: 'No case found with that number.' });
-        return;
-    }
-
-    // ----------------------------------------------------------------------
-    // 5. Match -&gt; HTTP 200 with the three whitelisted fields.
-    //
-    //    The Script Include already coerces to String(...) and applies
-    //    `|| ''` defaults; THIS extraction is a defense-in-depth layer
-    //    that:
-    //      a. Re-coerces in case the Script Include's contract changes
-    //         (e.g., a future refactor accidentally returns GlideElement
-    //         instances, which would serialize unpredictably).
-    //      b. Drops any additional fields the Script Include may return
-    //         (defense against accidental field exposure in future edits).
-    //      c. Replaces null/undefined with empty string (cleaner JSON
-    //         than `null` or the literal text "undefined" for missing
-    //         field values).
-    //
-    //    Response body shape (exactly three keys, no others):
-    //      {
-    //        status:      "&lt;value or empty string&gt;",
-    //        subject:     "&lt;value or empty string&gt;",
-    //        opened_date: "&lt;value or empty string&gt;"
-    //      }
-    //
-    //    Internal fields that MUST NOT appear in this response (per AAP
-    //    Section 0.4.4):
-    //      assigned_group, assigned_agent, description, closed_date,
-    //      requester_name, requester_email, priority, type, pending_reason,
-    //      sys_id, sys_created_by, sys_created_on, sys_updated_by,
-    //      sys_updated_on, sys_mod_count, sys_class_name, sys_domain.
-    // ----------------------------------------------------------------------
-    response.setStatus(200);
-    response.setBody({
-        status:      String(result.status      || ''),
-        subject:     String(result.subject     || ''),
-        opened_date: String(result.opened_date || '')
-    });
-})(request, response);</operation_script>
-        <operation_uri>/api/x_casemgmt/case_status_lookup</operation_uri>
-        <produces>application/json</produces>
-        <produces_customized>true</produces_customized>
-        <relative_path>/</relative_path>
-        <request_example/>
-        <requires_acl_authorization>false</requires_acl_authorization>
-        <requires_authentication>false</requires_authentication>
-        <requires_snc_internal_role>false</requires_snc_internal_role>
-        <short_description>Anonymous GET handler for case status lookup. Returns HTTP 200 with whitelisted fields { status, subject, opened_date } on match, or HTTP 404 with verbatim body { error: 'No case found with that number.' } on no-match per AAP Section 0.7.4.</short_description>
-        <sys_class_name>sys_ws_operation</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
-        <sys_id>f3b3b39ceb9115bf7bf40e3eaf042b4f</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>Case Status Lookup GET</sys_name>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_policy/>
-        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-        <sys_update_name>sys_ws_operation_x_casemgmt_case_status_lookup_get</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
-        <web_service_definition display_value="x_casemgmt_case_status_lookup">b04176032af365e6b8770ba3e6089b58</web_service_definition>
-        <web_service_version/>
-    </sys_ws_operation>
-</record_update>
-]]></payload>
-        <payload_hash/>
-        <record_name>x_casemgmt_case_status_lookup_get</record_name>
-        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
-        <replace_on_upgrade>false</replace_on_upgrade>
-        <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
-        <table>sys_ws_operation</table>
-        <target_name>x_casemgmt_case_status_lookup_get</target_name>
-        <type>Scripted REST API</type>
-        <update_domain>global</update_domain>
-        <update_guid>993ca09c0f352ad4287683c91ac1f618</update_guid>
-        <update_guid_history/>
-        <view></view>
-    </sys_update_xml>
-    <sys_update_xml action="INSERT_OR_UPDATE">
-        <action>INSERT_OR_UPDATE</action>
-        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
-        <category>customer</category>
-        <comments/>
         <name>sys_script_fix_227b757f182d8f3e1d9b774187ae8358</name>
         <payload><![CDATA[<record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
-        <description>Post-import remediation for the x_casemgmt scoped application. Completes the four pieces of wiring an Update Set commit cannot perform for itself, because each is produced by a platform business rule and the commit engine applies payloads with business rules suppressed: Defect C (physical case_task/case_party tables, their fields and all seven choice lists - DDL comes from the after-insert business rule 'Synch Dictionary and Table' on sys_db_object); Defect E (auto-number default_value javascript:global.getNextObjNumberPadded(); on x_casemgmt_case.number plus maximum_digits=7 on the counters); Defect 7 (service_id on the two sys_ws_definition records); Defect 9 (the 27 sys_security_acl_role links plus a GlideSecurityManager security-cache flush). Body is scripts/post_import_remediation.js verbatim. Runs in GLOBAL scope because every table it writes denies cross-scope writes and GlideTableDescriptor/GlideSecurityManager are unavailable to a scoped caller. Fully idempotent: every insert is lookup-guarded and every scalar write is difference-guarded. Auto-executed by the Business Rule 'x_casemgmt Post-Import Bootstrap'; also runnable by hand from System Definition &gt; Fix Scripts &gt; Run Fix Script. Emits gs.info lines prefixed X_CASEMGMT_REMEDIATION| and a final SUMMARY| line carrying verified=true|false.</description>
+        <description>Post-import remediation for the x_casemgmt scoped application. Completes the four pieces of wiring an Update Set commit cannot perform for itself, because each is produced by a platform business rule and the commit engine applies payloads with business rules suppressed: Defect C (physical case_task/case_party tables, their fields and all seven choice lists - DDL comes from the after-insert business rule 'Synch Dictionary and Table' on sys_db_object); Defect E (auto-number default_value javascript:global.getNextObjNumberPadded(); on x_casemgmt_case.number plus maximum_digits=7 on the counters); Defect 7 (service_id on the two sys_ws_definition records); Defect 9 (the 27 sys_security_acl_role links plus a GlideSecurityManager security-cache flush). Body is scripts/post_import_remediation.js verbatim. IMPORTANT - RUNNING THIS INSTALLED RECORD CANNOT COMPLETE C OR 9. The package declares this record sys_scope=global, but the Update Set commit engine rewrites every committed record's sys_scope to the application, so after commit this Fix Script is x_casemgmt-scoped and its GlideTableDescriptor/GlideSecurityManager calls are refused. Measured outcome of running it from the Fix Script UI: verified=false, tables_built=0, acl_links_created=0, errors=121, every error being one of those two SecurityExceptions. No packaging change fixes this because the rewrite happens at commit time. THE ROUTE THAT WORKS: paste scripts/post_import_remediation.js into System Definition &gt; Scripts - Background with 'In scope' = Global and run it - see docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5, acceptance path (b), and docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 for the evidence. The companion trigger 'x_casemgmt Post-Import Bootstrap' was measured firing and then failing for the same reason and is shipped inactive. Idempotent and semantically convergent: every insert is lookup-guarded, every dictionary and choice attribute is compared against the package and repaired, the exact 7-list/24-value choice set is verified, and the ACL-to-role wiring is verified as an exact 27-pair set with unexpected pairs removed. The table rebuild is fail-closed: a tri-state physical-storage probe over three independent signals, no deletion unless all three agree there is no storage, and every deletion verified and read back. Emits gs.info lines prefixed X_CASEMGMT_REMEDIATION| and a final SUMMARY| line carrying verified=true|false.</description>
         <name>x_casemgmt Post-Import Remediation</name>
         <record_for_rollback>true</record_for_rollback>
         <script><![CDATA[/*
  * x_casemgmt_case_management - Post-Import Remediation Script
  *
  * Idempotent server-side script that completes the four remediations a
- * ServiceNow Update Set commit cannot perform for itself, so that a fresh
- * import of update-set/x_casemgmt_case_management_update_set.xml yields a fully
- * functional application with no human step beyond upload -> preview -> commit.
+ * ServiceNow Update Set commit cannot perform for itself.
+ *
+ * THIS IS A REQUIRED POST-IMPORT STEP, NOT AN AUTOMATIC ONE. Importing
+ * update-set/x_casemgmt_case_management_update_set.xml previews and commits
+ * cleanly, but the commit alone does NOT yield a functional application:
+ * Defect C (physical tables/fields/choices) and Defect 9 (the 27 ACL -> role
+ * links) still need this script, and it must be executed BY HAND in the
+ * **Global** scope. The packaged auto-execute trigger was measured firing and
+ * then failing - see "HOW IT IS INVOKED" below and
+ * ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 - so the acceptance
+ * path for this deliverable is the disclosed manual path (b), and
+ * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 is the procedure that
+ * actually works. Defects E and 7 need no script at all: they are carried by
+ * the package artifacts, and this script only re-asserts them.
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS SCRIPT FIXES, AND WHY THE UPDATE SET CANNOT DO IT ALONE
@@ -19640,29 +19718,38 @@ function serverSetPending() {
  *     post_import_remediation.js  ->  global
  *     seed_demo_data.js           ->  x_casemgmt (scope sys_id)
  *
- * HOW IT IS INVOKED
- *   This file is the single source of the remediation body. It ships twice, and
- *   the second copy is generated from the first so the two can never drift:
+ * HOW IT IS INVOKED - THE ONE ROUTE THAT WAS MEASURED TO WORK
+ *   Paste this file into **System Definition -> Scripts - Background** with
+ *   **"In scope" = Global** and run it. That is the only invocation route proven
+ *   on the target PDI, and it is step 4 (and again step 6) of
+ *   ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5.
  *
- *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml - a
- *      global-scope Fix Script named "x_casemgmt Post-Import Remediation" whose
- *      `script` field is this file verbatim, byte for byte.
- *   b. scripts/sys_script_x_casemgmt_post_import_bootstrap.xml - a global-scope,
- *      after-update Business Rule on `sys_remote_update_set`, condition
- *      `current.state.changesTo('committed')`. It holds no remediation logic of
- *      its own: it resolves the Fix Script above BY NAME and dispatches it with
- *      `new GlideScopedEvaluator().evaluateScript(fix, 'script', null)`.
+ *   Two other copies of this body ship inside the package. Neither can perform
+ *   Defect C or Defect 9, and both are shipped for disclosure and for reuse on
+ *   an instance where the scope rewrite below does not apply - not as a working
+ *   fallback:
  *
- *   Both records survive the update engine's apply path, and the Business Rule
- *   fires when the engine flips the retrieved Update Set to `committed` - i.e.
- *   immediately after the last payload of the very commit that installed it.
- *   That is what makes upload -> preview -> commit sufficient with no human step.
+ *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml - a Fix
+ *      Script named "x_casemgmt Post-Import Remediation" whose `script` field is
+ *      this file verbatim, byte for byte. The package declares it
+ *      `sys_scope = global`, but **the Update Set commit engine rewrites every
+ *      committed record's `sys_scope` to the Update Set's application**: read
+ *      back after commit, the installed Fix Script is app-scoped. Running it
+ *      from the Fix Script UI therefore executes in `x_casemgmt`, where
+ *      `GlideTableDescriptor` and `GlideSecurityManager` are refused. Measured
+ *      outcome: `verified=false`, `tables_built=0`, `acl_links_created=0`,
+ *      `errors=121`, all 121 being those two SecurityExceptions.
+ *   b. scripts/sys_script_x_casemgmt_post_import_bootstrap.xml - an after-update
+ *      Business Rule on `sys_remote_update_set`, condition
+ *      `current.state.changesTo('committed')`, which resolves the Fix Script by
+ *      name and dispatches it with `GlideScopedEvaluator`. It was measured
+ *      FIRING correctly on commit and then failing for exactly the reason in
+ *      (a) - the scope rewrite happens at commit time regardless of the packaged
+ *      scope, so no packaging change can fix it. It is therefore shipped
+ *      **inactive** and labelled as such.
  *
- *   If the trigger is ever removed the remediation is still one action:
- *   System Definition -> Fix Scripts -> "x_casemgmt Post-Import Remediation"
- *   -> Run Fix Script. Or paste this file into System Definition -> Scripts -
- *   Background with "In scope" = Global. All three routes are the same code and
- *   produce the same output.
+ *   The full evidence, including the verbatim syslog lines, is in
+ *   ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4.
  *
  * VERIFICATION SIGNAL (what to look for to prove it ran)
  *   Every line this script emits is a `gs.info()` prefixed with the grep-able
@@ -19677,17 +19764,38 @@ function serverSetPending() {
  *   ran to completion; its `verified=` token is the proof the remediation
  *   converged.
  *
- * IDEMPOTENCY GUARANTEES
- *   - Every insert is preceded by a lookup: a table is rebuilt only when it is
- *     not physically valid, a field only when the physical column is absent, a
- *     choice/link only when no equivalent row exists, and a scalar value only
- *     when it differs from the target value.
+ * IDEMPOTENCY AND CONVERGENCE GUARANTEES
+ *   - Every insert is preceded by a lookup, and every write is preceded by a
+ *     comparison against the authoritative specification below.
+ *   - Convergence is SEMANTIC, not merely existential. The physical column
+ *     existing is not treated as proof the field is correct: every attribute the
+ *     package declares (type, length, choice, mandatory, read-only, display,
+ *     unique, default sort, reference target, default value, active) is compared
+ *     against the stored `sys_dictionary` row and repaired where it differs, and
+ *     every choice row's label, sequence, inactive flag and language are
+ *     compared and repaired the same way. Verification then re-reads all of it
+ *     from the database, plus the exact choice-value set and the exact
+ *     ACL -> role pair set, so a malformed schema cannot report `verified=true`.
  *   - A second run therefore creates nothing, changes nothing, and emits only
  *     "already correct" traces plus the summary line. Both runs report the same
  *     `verified=true`.
- *   - The clean-slate rebuild inside ensureTable() only ever deletes
- *     metadata-only rows for a table that has NO physical storage, so it can
- *     never destroy data. A table that already exists is left strictly alone.
+ *
+ * DESTRUCTIVE-SAFETY GUARANTEES (the rebuild in ensureTable)
+ *   - The rebuild deletes metadata rows, so it is fail-CLOSED on uncertainty.
+ *     probePhysicalState() is tri-state: it interrogates three independent
+ *     platform signals (`GlideTableDescriptor.isValid`, `GlideRecord.isValid`,
+ *     `TableUtils.tableExists`) and returns
+ *       'yes'     when ANY signal reports storage - the table is left untouched;
+ *       'no'      only when ALL THREE agree there is none - proven metadata-only;
+ *       'unknown' when any signal throws or the signals disagree.
+ *     A transient failure, a permission refusal or an API change therefore
+ *     produces 'unknown', and 'unknown' ABORTS the table with an error. It never
+ *     reaches the delete. The pre-refine version converted any exception to
+ *     "not physical" and deleted on that basis; that fail-open path is gone.
+ *   - Every deletion is verified: `deleteRecord()`'s return value is checked, the
+ *     collection is re-read afterwards, and any residue or any refused delete
+ *     aborts the rebuild before the fresh insert. Counters record only verified
+ *     removals.
  *
  * CONSTRAINTS HONORED
  *   - Zero hard-coded foreign sys_ids. The application scope is resolved by
@@ -19697,8 +19805,9 @@ function serverSetPending() {
  *     `sys_number.category`, REST definitions by `sys_ws_definition.name`, and
  *     ACLs by their own `name` + `description`. When a table has to be rebuilt,
  *     its existing sys_id is read from the database and re-used so every
- *     reference in the package stays valid. There is not one 32-character hex
- *     literal in this file.
+ *     reference in the package stays valid. The ACL -> role pair set is keyed on
+ *     sys_ids too, but both sides are read out of the database in the same run.
+ *     There is not one 32-character hex literal in this file.
  *   - Zero PII and zero synthetic data creation: this script only repairs
  *     metadata and security wiring. It creates no users, groups or cases.
  *   - No email: no gs.eventQueue(), no notification dispatch.
@@ -19726,16 +19835,16 @@ function serverSetPending() {
  *   acm-plugins/acm-default-plugins/acm-admin-plugin/.../RolesPrivilegesService.java
  */
 
-/* global GlideRecord, GlideAggregate, GlideDateTime, GlideTableDescriptor, GlideSecurityManager, gs */
+/* global GlideRecord, GlideAggregate, GlideDateTime, GlideTableDescriptor, GlideSecurityManager, TableUtils, gs */
 /* eslint-env es5 */
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-// Grep-able marker prefixed to every log line this script emits. U4's
-// clean-instance round trip looks for `LOG_MARKER + '|SUMMARY|'` in syslog to
-// confirm the bootstrap trigger fired.
+// Grep-able marker prefixed to every log line this script emits. Searching
+// syslog for `LOG_MARKER + '|SUMMARY|'` is how an operator confirms the
+// remediation ran, and its `verified=` token is how they confirm it converged.
 var LOG_MARKER = 'X_CASEMGMT_REMEDIATION';
 
 // The scoped application's namespace. Used to resolve the scope record by name
@@ -19762,9 +19871,25 @@ var ROLE_VIEWER = 'x_casemgmt_case_viewer';
 var EXPECTED_ACL_ROLE_LINKS = 27;
 var EXPECTED_ACL_COUNT = 26;
 
-// Name of the bootstrap Business Rule that auto-executes this script, and of the
-// Fix Script that carries this body. Both are looked up by name so this file
-// carries no sys_id for either.
+// How those 27 links distribute across the three roles. Derived by reading the
+// `<roles>` element of all 26 ../acl/*.xml artifacts: the manager appears on
+// every table-level operation of all three tables (12) plus both field ACLs (2);
+// the agent on create/read/write of all three tables (9) plus the assigned_agent
+// field ACL (1); the viewer on read of all three tables (3).
+//
+// This is a fail-closed cross-check on the DERIVATION, not just on the total: if
+// rolesForAcl() ever mapped an ACL to the wrong role the total could still be 27
+// while the distribution moved, so both are asserted.
+var EXPECTED_ROLE_LINK_COUNTS = {
+    'x_casemgmt_case_manager': 14,
+    'x_casemgmt_case_agent': 10,
+    'x_casemgmt_case_viewer': 3
+};
+
+// Name of the bootstrap Business Rule that was built to auto-execute this script
+// - it fires but cannot succeed, so the package ships it INACTIVE (see the header)
+// - and of the Fix Script that carries this body. Both are looked up by name so
+// this file carries no sys_id for either.
 //
 // IMPORTANT: `sys_script.name` and `sys_script_fix.name` are both max_length 40
 // on this release and the platform truncates silently. A longer name would still
@@ -19782,31 +19907,60 @@ var NUMBER_DEFAULT_VALUE = 'javascript:global.getNextObjNumberPadded();';
 // Zero-padding width that yields the mandated CASE0000001 format.
 var NUMBER_MAXIMUM_DIGITS = '7';
 
+// The default-sort rank for x_casemgmt_case.number, i.e. the column a case list
+// sorts by when no other sort is chosen.
+//
+// `sys_dictionary.defaultsort` is an INTEGER column on this release, not a
+// boolean - measured directly against its own dictionary entry
+// (internal_type=integer) and confirmed behaviourally: writing the string 'true'
+// leaves the stored value untouched and does not even increment sys_mod_count,
+// while writing '1' persists. The package originally declared
+// `<defaultsort>true</defaultsort>`, which import therefore discarded silently,
+// so the case list had no default sort at all. Rank 1 is the correct
+// representation and is what both this script and the packaged Dictionary
+// artifact now carry.
+var DEFAULT_SORT_RANK = '1';
+
 // ----------------------------------------------------------------------------
 // TABLE_SPECS - transcribed from ../tables/*.xml + ../dictionary/*.xml, which
 // mirror ../docs/data-model.md verbatim. `label`/`plural` are only used when a
 // table has to be created from nothing; when the committed sys_db_object row is
 // present its own label/plural/access flags and sys_id are re-used instead.
+//
+// `displayField` names the ONE column ServiceNow may mark `display=true`, and
+// exactly one field per table carries `display: true` to match. This is not a
+// stylistic detail: the platform permits a single display field per table, and
+// when several are flagged every reference TO that table renders blank - the
+// `Case` column in the task and party lists, and the mandatory `Case` field on
+// their forms, all showed "(empty)" while 13 of 14 case columns were flagged.
+// verifyRemediation() re-reads the dictionary and fails the run if any table has
+// other than exactly one display field.
+//
+// `defaultValue` carries every authoritative default the package declares, so a
+// table rebuilt by ensureTable() comes back with the same defaults the Update
+// Set ships rather than with empty ones: case.status=Draft, case.priority=Medium
+// and case_task.status=Open, alongside the auto-number default on case.number.
 // ----------------------------------------------------------------------------
 var TABLE_SPECS = [
     {
         name: TABLE_CASE,
         label: 'Case',
         plural: 'Cases',
+        displayField: 'number',
         fields: [
-            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, defaultSort: true, display: true, defaultValue: NUMBER_DEFAULT_VALUE },
-            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: true },
-            { element: 'priority', label: 'Priority', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'description', label: 'Description', type: 'string', maxLength: '4000', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'opened_date', label: 'Opened Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: true },
-            { element: 'closed_date', label: 'Closed Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: true },
-            { element: 'assigned_group', label: 'Assigned Group', type: 'reference', maxLength: '32', reference: 'sys_user_group', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'assigned_agent', label: 'Assigned Agent', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'requester_name', label: 'Requester Name', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'requester_email', label: 'Requester Email', type: 'string', maxLength: '100', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'pending_reason', label: 'Pending Reason', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, defaultSort: DEFAULT_SORT_RANK, display: true, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
+            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false, defaultValue: 'Draft' },
+            { element: 'priority', label: 'Priority', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false, defaultValue: 'Medium' },
+            { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'description', label: 'Description', type: 'string', maxLength: '4000', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'opened_date', label: 'Opened Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false },
+            { element: 'closed_date', label: 'Closed Date', type: 'glide_date_time', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false },
+            { element: 'assigned_group', label: 'Assigned Group', type: 'reference', maxLength: '32', reference: 'sys_user_group', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'assigned_agent', label: 'Assigned Agent', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'requester_name', label: 'Requester Name', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'requester_email', label: 'Requester Email', type: 'string', maxLength: '100', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'pending_reason', label: 'Pending Reason', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
             { element: 'duration_to_close', label: 'Duration to Close', type: 'glide_duration', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false }
         ]
     },
@@ -19814,24 +19968,26 @@ var TABLE_SPECS = [
         name: TABLE_CASE_TASK,
         label: 'Case Task',
         plural: 'Case Tasks',
+        displayField: 'subject',
         fields: [
-            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: true },
+            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false },
             { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: true },
-            { element: 'assigned_to', label: 'Assigned To', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'due_date', label: 'Due Date', type: 'glide_date', maxLength: '40', mandatory: true, choice: '0', readOnly: false, display: true }
+            { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
+            { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false, defaultValue: 'Open' },
+            { element: 'assigned_to', label: 'Assigned To', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'due_date', label: 'Due Date', type: 'glide_date', maxLength: '40', mandatory: true, choice: '0', readOnly: false, display: false }
         ]
     },
     {
         name: TABLE_CASE_PARTY,
         label: 'Case Party',
         plural: 'Case Parties',
+        displayField: 'role_label',
         fields: [
-            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: true },
-            { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: true },
-            { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: true },
-            { element: 'organization', label: 'Organization', type: 'reference', maxLength: '32', reference: 'core_company', mandatory: false, choice: '0', readOnly: false, display: true },
+            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false },
+            { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
+            { element: 'organization', label: 'Organization', type: 'reference', maxLength: '32', reference: 'core_company', mandatory: false, choice: '0', readOnly: false, display: false },
             { element: 'role_label', label: 'Role Label', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: true }
         ]
     }
@@ -19874,6 +20030,47 @@ var CHOICE_SPECS = [
     { table: TABLE_CASE_PARTY, element: 'party_type', value: 'Organization', label: 'Organization', sequence: '200' }
 ];
 
+// The choice inventory CHOICE_SPECS must describe, asserted as an invariant:
+// seven lists and twenty-four values, matching ../choices/*.xml and
+// ../docs/data-model.md. Verification counts the live rows per (table, element)
+// and fails on a shortfall AND on a surplus, so a stray extra value - a
+// mis-keyed insert, or a value left behind by an earlier partial run - is
+// reported rather than silently tolerated.
+var EXPECTED_CHOICE_LISTS = 7;
+var EXPECTED_CHOICE_VALUES = 24;
+
+// Every attribute of a `sys_dictionary` row this script owns and therefore
+// compares and repairs. The physical column existing is NOT proof the field is
+// correct: an Update Set commit can leave a row whose type, length, mandatory
+// flag, reference target, default or display flag disagrees with the package.
+// Each entry maps the dictionary column to the TABLE_SPECS property that governs
+// it and to how the two are compared.
+//   'bool'   - Glide boolean, compared through isTrue()
+//   'string' - compared as text, with '' treated as equal to absent
+var DICTIONARY_ATTRIBUTES = [
+    { column: 'column_label', spec: 'label', kind: 'string' },
+    { column: 'internal_type', spec: 'type', kind: 'string' },
+    { column: 'max_length', spec: 'maxLength', kind: 'string' },
+    { column: 'choice', spec: 'choice', kind: 'string' },
+    { column: 'reference', spec: 'reference', kind: 'string' },
+    { column: 'default_value', spec: 'defaultValue', kind: 'string' },
+    { column: 'mandatory', spec: 'mandatory', kind: 'bool' },
+    { column: 'read_only', spec: 'readOnly', kind: 'bool' },
+    { column: 'display', spec: 'display', kind: 'bool' },
+    { column: 'unique', spec: 'unique', kind: 'bool' },
+    { column: 'defaultsort', spec: 'defaultSort', kind: 'string' },
+    { column: 'active', spec: 'active', kind: 'bool' }
+];
+
+// Every attribute of a `sys_choice` row this script owns and therefore compares
+// and repairs.
+var CHOICE_ATTRIBUTES = [
+    { column: 'label', spec: 'label', kind: 'string' },
+    { column: 'sequence', spec: 'sequence', kind: 'string' },
+    { column: 'language', spec: 'language', kind: 'string' },
+    { column: 'inactive', spec: 'inactive', kind: 'bool' }
+];
+
 // ----------------------------------------------------------------------------
 // COUNTER_SPECS - the three sys_number counters. `category` is a reference to
 // sys_db_object and stores the table name, so it is resolvable by name.
@@ -19901,10 +20098,15 @@ var REST_SPECS = [
 var STATS = {
     tablesBuilt: 0,
     tablesAlready: 0,
+    tablesUncertain: 0,
     fieldsCreated: 0,
     fieldsAlready: 0,
+    fieldsRepaired: 0,
+    displayFieldsFixed: 0,
     choicesCreated: 0,
     choicesAlready: 0,
+    choicesRepaired: 0,
+    aclLinksRemoved: 0,
     countersUpdated: 0,
     countersAlready: 0,
     numberDefaultsSet: 0,
@@ -19981,16 +20183,103 @@ function lookupRoleSysId(roleName) {
 }
 
 /**
- * True when `tableName` has physical storage. GlideTableDescriptor is only
- * reachable from the global scope, which is why this whole script runs there.
+ * Interrogate one physical-storage signal and reduce it to a tri-state.
+ *
+ * @param {string} label signal name, for the trace
+ * @param {Function} fn returns a truthy/falsy verdict, may throw
+ * @return {Object} { state: 'yes'|'no'|'unknown', label: string, note: string }
+ */
+function physicalSignal(label, fn) {
+    try {
+        var verdict = fn();
+        if (verdict === true || verdict === 'true' || verdict === 1 || verdict === '1') {
+            return { state: 'yes', label: label, note: '' };
+        }
+        if (verdict === false || verdict === 'false' || verdict === 0 || verdict === '0') {
+            return { state: 'no', label: label, note: '' };
+        }
+        // Anything that is neither a clean true nor a clean false (null,
+        // undefined, an object, a changed return type on a future release) is
+        // NOT evidence of absence.
+        return { state: 'unknown', label: label, note: 'non-boolean verdict "' + verdict + '"' };
+    } catch (e) {
+        return { state: 'unknown', label: label, note: '' + e };
+    }
+}
+
+/**
+ * Determine whether `tableName` has physical storage, as a TRI-STATE.
+ *
+ * This function guards a destructive branch (ensureTable() deletes a table's
+ * metadata rows before rebuilding it), so it must never answer "no storage"
+ * because a probe failed. Three independent platform signals are interrogated;
+ * each was measured on the target PDI against a physical scoped table, a
+ * metadata-only table produced by a workflow-suppressed `sys_db_object` insert,
+ * and a table name that does not exist at all:
+ *
+ *   signal                         physical | metadata-only | absent
+ *   GlideTableDescriptor.isValid   true     | false         | false
+ *   new GlideRecord(t).isValid()   true     | false         | false
+ *   new TableUtils(t).tableExists()true     | false         | false
+ *
+ * (`GlideRecord.isValidField('sys_id')` and `GlideTableDescriptor.get().getName()`
+ * were also measured and answer identically in all three cases, so they carry no
+ * information and are not used.)
+ *
+ * Reduction rules, in order:
+ *   - ANY signal reporting 'yes'  -> 'yes'. One positive is enough: destroying
+ *     the metadata of a table that does have storage would drop live data, so
+ *     the benign outcome (do nothing) wins every disagreement.
+ *   - ALL THREE reporting 'no'    -> 'no'. Only unanimous agreement is accepted
+ *     as positive proof that there is nothing to destroy.
+ *   - anything else               -> 'unknown', and the caller must abort.
+ *
+ * @param {string} tableName table to probe
+ * @return {Object} { state: 'yes'|'no'|'unknown', detail: string }
+ */
+function probePhysicalState(tableName) {
+    var signals = [
+        physicalSignal('GlideTableDescriptor.isValid', function () {
+            return GlideTableDescriptor.isValid(tableName);
+        }),
+        physicalSignal('GlideRecord.isValid', function () {
+            return new GlideRecord(tableName).isValid();
+        }),
+        physicalSignal('TableUtils.tableExists', function () {
+            return new TableUtils(tableName).tableExists();
+        })
+    ];
+
+    var yes = 0;
+    var no = 0;
+    var parts = [];
+    for (var i = 0; i < signals.length; i++) {
+        parts.push(signals[i].label + '=' + signals[i].state + (signals[i].note ? '(' + signals[i].note + ')' : ''));
+        if (signals[i].state === 'yes') {
+            yes++;
+        } else if (signals[i].state === 'no') {
+            no++;
+        }
+    }
+
+    var state;
+    if (yes > 0) {
+        state = 'yes';
+    } else if (no === signals.length) {
+        state = 'no';
+    } else {
+        state = 'unknown';
+    }
+    return { state: state, detail: parts.join(',') };
+}
+
+/**
+ * Convenience read for the non-destructive callers: true only when storage is
+ * positively confirmed. An 'unknown' answers false here, which is safe because
+ * every caller of this helper only READS.
  */
 function tableIsPhysical(tableName) {
-    try {
-        return GlideTableDescriptor.isValid(tableName);
-    } catch (e) {
-        logError('tableIsPhysical(' + tableName + ') failed: ' + e);
-        return false;
-    }
+    return probePhysicalState(tableName).state === 'yes';
 }
 
 /**
@@ -20034,24 +20323,94 @@ function columnExists(tableName, element) {
 // ============================================================================
 
 /**
+ * Delete every row of `table` matching (`field` = `value`), verifying each
+ * deletion individually and then re-reading the collection.
+ *
+ * This exists because `GlideRecord.deleteRecord()` returns false when a delete is
+ * refused - by an ACL, by a cross-scope policy, by a data policy or by a delete
+ * business rule - and the pre-refine code ignored that return value while
+ * incrementing a "removed" counter regardless. A rebuild that believes it
+ * cleared the metadata when it did not goes on to insert a colliding row.
+ *
+ * @param {string} table table to purge
+ * @param {string} field column to match
+ * @param {string} value value to match
+ * @return {Object} { ok: boolean, deleted: number, refused: number, residue: number }
+ */
+function deleteAllVerified(table, field, value) {
+    var deleted = 0;
+    var refused = 0;
+    var gr = new GlideRecord(table);
+    gr.addQuery(field, value);
+    gr.query();
+    while (gr.next()) {
+        var id = gr.getUniqueValue();
+        var ok = false;
+        try {
+            ok = gr.deleteRecord();
+        } catch (e) {
+            logError('DELETE|' + table + '.' + field + '=' + value + '|sys_id=' + id + '|threw ' + e);
+            ok = false;
+        }
+        if (ok) {
+            deleted++;
+        } else {
+            refused++;
+            logError('DELETE|' + table + '|refused for sys_id=' + id + ' (' + field + '=' + value + ')');
+        }
+    }
+
+    // Read back: the authoritative check is what remains, not what the calls
+    // claimed to do.
+    var after = new GlideRecord(table);
+    after.addQuery(field, value);
+    after.query();
+    var residue = after.getRowCount();
+    return { ok: refused === 0 && residue === 0, deleted: deleted, refused: refused, residue: residue };
+}
+
+/**
  * Ensure `spec.name` has physical storage.
  *
- * Idempotency and safety: when the table is already physical this function
- * touches nothing at all and returns false. Only a table with NO physical
- * storage is rebuilt, so the clean-slate delete can never destroy data - there
- * is no data to destroy. The committed sys_db_object row's own sys_id, label,
- * plural and access flags are captured first and replayed onto the fresh
- * insert, so every ACL, business rule, report and reference field in the
- * package continues to resolve to the same record.
+ * Safety contract - this function contains the only destructive step in the
+ * script, so it is fail-CLOSED:
+ *
+ *   - probePhysicalState() is consulted, not a boolean. 'yes' means the table is
+ *     left strictly alone. 'unknown' - any probe throwing, or the three signals
+ *     disagreeing - ABORTS this table with an error and touches nothing; the run
+ *     then reports verified=false so the operator investigates rather than
+ *     discovering a dropped table afterwards.
+ *   - Only a unanimous 'no' is accepted as proof there is nothing to destroy,
+ *     and that proof is re-taken immediately before the delete.
+ *   - Every delete is verified and read back (deleteAllVerified). Any refused
+ *     delete or any residue aborts the rebuild BEFORE the fresh insert, so the
+ *     table is never left half-dismantled by a silent failure.
+ *
+ * The committed sys_db_object row's own sys_id, label, plural and access flags
+ * are captured first and replayed onto the fresh insert, so every ACL, business
+ * rule, report and reference field in the package continues to resolve to the
+ * same record.
  *
  * @param {Object} spec one entry of TABLE_SPECS
  * @param {string} scopeSysId the application scope, resolved by name
  * @return {boolean} true when this call created the physical table
  */
 function ensureTable(spec, scopeSysId) {
-    if (tableIsPhysical(spec.name)) {
+    var probe = probePhysicalState(spec.name);
+    if (probe.state === 'yes') {
         STATS.tablesAlready++;
-        log('TABLE|' + spec.name + '|already physical|columns=' + physicalColumnCount(spec.name));
+        log('TABLE|' + spec.name + '|already physical|columns=' + physicalColumnCount(spec.name) +
+            '|signals=' + probe.detail);
+        return false;
+    }
+    if (probe.state === 'unknown') {
+        STATS.tablesUncertain++;
+        logError('TABLE|' + spec.name + '|physical state could NOT be established (' + probe.detail +
+            ') - refusing to rebuild. The rebuild deletes this table\'s sys_dictionary and' +
+            ' sys_db_object rows, which would drop live data if the table does in fact exist, so an' +
+            ' uncertain probe aborts instead of guessing. Recovery: re-run this script from' +
+            ' System Definition > Scripts - Background with "In scope" = Global once the platform' +
+            ' answers the probe cleanly.');
         return false;
     }
 
@@ -20076,38 +20435,45 @@ function ensureTable(spec, scopeSysId) {
         }
     }
 
-    // Re-check immediately before the destructive step. The window between the
-    // decision above and the delete below is tiny, but if anything else has
-    // materialized the table in the meantime, deleting its metadata would drop a
-    // live table. Bail out instead.
-    if (tableIsPhysical(spec.name)) {
-        STATS.tablesAlready++;
-        log('TABLE|' + spec.name + '|became physical before the rebuild started|left untouched|columns=' +
-            physicalColumnCount(spec.name));
+    // Re-take the proof immediately before the destructive step. The window
+    // between the decision above and the delete below is tiny, but if anything
+    // else has materialized the table in the meantime, deleting its metadata
+    // would drop a live table. Anything other than a unanimous 'no' bails out.
+    var reprobe = probePhysicalState(spec.name);
+    if (reprobe.state !== 'no') {
+        if (reprobe.state === 'yes') {
+            STATS.tablesAlready++;
+            log('TABLE|' + spec.name + '|became physical before the rebuild started|left untouched|columns=' +
+                physicalColumnCount(spec.name) + '|signals=' + reprobe.detail);
+        } else {
+            STATS.tablesUncertain++;
+            logError('TABLE|' + spec.name + '|physical state became uncertain immediately before the' +
+                ' destructive step (' + reprobe.detail + ') - aborted without deleting anything.');
+        }
         return false;
     }
 
     // Remove the metadata-only rows. Without this the fresh insert would
     // collide with the committed row and the after-insert business rule that
-    // performs the DDL would never be reached.
-    var deletedDict = 0;
-    var dict = new GlideRecord('sys_dictionary');
-    dict.addQuery('name', spec.name);
-    dict.query();
-    while (dict.next()) {
-        dict.deleteRecord();
-        deletedDict++;
+    // performs the DDL would never be reached. Both purges are verified, and a
+    // failure stops the rebuild here rather than proceeding to the insert.
+    var dictPurge = deleteAllVerified('sys_dictionary', 'name', spec.name);
+    if (!dictPurge.ok) {
+        logError('TABLE|' + spec.name + '|aborting rebuild: sys_dictionary purge incomplete' +
+            ' (deleted=' + dictPurge.deleted + ',refused=' + dictPurge.refused +
+            ',rows_remaining=' + dictPurge.residue + '). No sys_db_object row was touched.');
+        return false;
     }
-    var deletedObj = 0;
-    var obj = new GlideRecord('sys_db_object');
-    obj.addQuery('name', spec.name);
-    obj.query();
-    while (obj.next()) {
-        obj.deleteRecord();
-        deletedObj++;
+    var objPurge = deleteAllVerified('sys_db_object', 'name', spec.name);
+    if (!objPurge.ok) {
+        logError('TABLE|' + spec.name + '|aborting rebuild: sys_db_object purge incomplete' +
+            ' (deleted=' + objPurge.deleted + ',refused=' + objPurge.refused +
+            ',rows_remaining=' + objPurge.residue + ').');
+        return false;
     }
-    log('TABLE|' + spec.name + '|clean slate|dictionary_rows_removed=' + deletedDict +
-        '|db_object_rows_removed=' + deletedObj + '|reusing_sys_id=' + (carried.sysId ? 'yes' : 'no'));
+    log('TABLE|' + spec.name + '|clean slate|dictionary_rows_removed=' + dictPurge.deleted +
+        '|db_object_rows_removed=' + objPurge.deleted + '|residue=0|reusing_sys_id=' +
+        (carried.sysId ? 'yes' : 'no'));
 
     // Fresh insert with workflow ON. This is the whole point of the script:
     // the after-insert business rule `Synch Dictionary and Table` runs and
@@ -20133,24 +20499,82 @@ function ensureTable(spec, scopeSysId) {
     }
     var newId = gr.insert();
 
-    if (!newId || !tableIsPhysical(spec.name)) {
-        logError('TABLE|' + spec.name + '|rebuild did not produce physical storage (insert=' + newId + ')');
+    var after = probePhysicalState(spec.name);
+    if (!newId || after.state !== 'yes') {
+        logError('TABLE|' + spec.name + '|rebuild did not produce physical storage (insert=' + newId +
+            ', signals=' + after.detail + ')');
         return false;
     }
     STATS.tablesBuilt++;
-    log('TABLE|' + spec.name + '|built|sys_id=' + newId + '|columns=' + physicalColumnCount(spec.name));
+    log('TABLE|' + spec.name + '|built|sys_id=' + newId + '|columns=' + physicalColumnCount(spec.name) +
+        '|signals=' + after.detail);
     return true;
 }
 
 /**
- * Ensure one field exists as a physical column, creating the dictionary entry
- * with workflow ON so the platform performs the column DDL.
+ * The value TABLE_SPECS/CHOICE_SPECS mandates for one attribute, normalized to
+ * the representation `GlideRecord.getValue()` returns.
  *
- * Idempotency: returns immediately when the physical column is present. When a
- * `sys_dictionary` row exists but the column does not (the exact state an
- * Update Set commit leaves behind) the stale row's sys_id is captured, the row
- * is removed, and it is re-inserted so the DDL fires while the record keeps its
- * identity.
+ * @param {Object} spec the field or choice spec
+ * @param {Object} attr one entry of DICTIONARY_ATTRIBUTES / CHOICE_ATTRIBUTES
+ * @return {Object} { text: string, bool: boolean }
+ */
+function expectedAttribute(spec, attr) {
+    var raw = spec[attr.spec];
+    if (attr.kind === 'bool') {
+        // `active` is not carried per-field: every field this script owns is
+        // active. Anything else absent from the spec means false.
+        var want = attr.spec === 'active' ? true : raw === true;
+        return { text: want ? 'true' : 'false', bool: want };
+    }
+    return { text: (raw === undefined || raw === null) ? '' : '' + raw, bool: false };
+}
+
+/**
+ * Compare one `sys_dictionary` row against its authoritative spec.
+ *
+ * Every attribute in DICTIONARY_ATTRIBUTES is checked, because an Update Set
+ * commit can leave a row whose column exists but whose type, length, mandatory
+ * flag, reference target, default value or display flag disagrees with the
+ * package - and the pre-refine code treated "the physical column exists" as
+ * proof the field was correct, so such a row passed verification untouched.
+ *
+ * @param {GlideRecord} gr a positioned `sys_dictionary` record
+ * @param {Object} field one entry of TABLE_SPECS[].fields
+ * @return {Array} list of { column, stored, wanted } for each mismatch
+ */
+function dictionaryMismatches(gr, field) {
+    var out = [];
+    for (var i = 0; i < DICTIONARY_ATTRIBUTES.length; i++) {
+        var attr = DICTIONARY_ATTRIBUTES[i];
+        var want = expectedAttribute(field, attr);
+        var stored = gr.getValue(attr.column);
+        if (attr.kind === 'bool') {
+            if (isTrue(stored) !== want.bool) {
+                out.push({ column: attr.column, stored: isTrue(stored) ? 'true' : 'false', wanted: want.text });
+            }
+        } else if (('' + (stored === null || stored === undefined ? '' : stored)) !== want.text) {
+            out.push({ column: attr.column, stored: '' + (stored === null ? '' : stored), wanted: want.text });
+        }
+    }
+    return out;
+}
+
+/**
+ * Ensure one field exists as a physical column AND that its dictionary row
+ * matches the package's declaration in every attribute.
+ *
+ * Two distinct states are handled:
+ *
+ *   1. the physical column is MISSING - the dictionary row (if any) is removed
+ *      and re-inserted with workflow ON so the platform performs the column DDL,
+ *      re-using the stale row's sys_id so the record keeps its identity;
+ *   2. the physical column EXISTS but the dictionary row disagrees with the
+ *      package - every differing attribute is repaired in place with a normal
+ *      update, which is non-destructive and lets the platform's own alter-column
+ *      rule run for type/length changes. This is the path that matters after a
+ *      SECOND commit of the same Update Set, which re-applies the packaged
+ *      Dictionary payloads over a rebuilt table.
  *
  * @param {string} tableName owning table
  * @param {Object} field one entry of TABLE_SPECS[].fields
@@ -20158,10 +20582,41 @@ function ensureTable(spec, scopeSysId) {
  */
 function ensureField(tableName, field, scopeSysId) {
     if (columnExists(tableName, field.element)) {
-        STATS.fieldsAlready++;
+        var live = new GlideRecord('sys_dictionary');
+        live.addQuery('name', tableName);
+        live.addQuery('element', field.element);
+        live.query();
+        if (!live.next()) {
+            logError('FIELD|' + tableName + '.' + field.element + '|physical column exists but its' +
+                ' sys_dictionary row is missing - the field layer and the dictionary disagree and this' +
+                ' script will not delete a physical column to reconcile them. Recovery: re-import the' +
+                ' Update Set so the Dictionary payload is re-applied, then re-run this script.');
+            return;
+        }
+        var drift = dictionaryMismatches(live, field);
+        if (drift.length === 0) {
+            STATS.fieldsAlready++;
+            return;
+        }
+        var repaired = [];
+        for (var d = 0; d < drift.length; d++) {
+            live.setValue(drift[d].column, drift[d].wanted);
+            repaired.push(drift[d].column + ':' + drift[d].stored + '->' + drift[d].wanted);
+        }
+        if (!live.update()) {
+            logError('FIELD|' + tableName + '.' + field.element + '|repair update refused for ' +
+                repaired.join(','));
+            return;
+        }
+        STATS.fieldsRepaired++;
+        log('FIELD|' + tableName + '.' + field.element + '|repaired|' + repaired.join('|'));
         return;
     }
 
+    // The physical column is absent. Remove the stale metadata-only row (keeping
+    // its identity) so the re-insert can fire the platform's column DDL. The
+    // delete is verified: proceeding to insert while the old row survives would
+    // create a duplicate dictionary entry for the same column.
     var carriedSysId = '';
     var stale = new GlideRecord('sys_dictionary');
     stale.addQuery('name', tableName);
@@ -20169,7 +20624,22 @@ function ensureField(tableName, field, scopeSysId) {
     stale.query();
     if (stale.next()) {
         carriedSysId = stale.getUniqueValue();
-        stale.deleteRecord();
+        var removed = false;
+        try {
+            removed = stale.deleteRecord();
+        } catch (e) {
+            logError('FIELD|' + tableName + '.' + field.element + '|stale dictionary row delete threw ' + e);
+        }
+        var readback = new GlideRecord('sys_dictionary');
+        readback.addQuery('name', tableName);
+        readback.addQuery('element', field.element);
+        readback.query();
+        if (!removed || readback.hasNext()) {
+            logError('FIELD|' + tableName + '.' + field.element + '|stale dictionary row could not be' +
+                ' removed (delete_returned=' + removed + ', rows_remaining=' + readback.getRowCount() +
+                ') - not inserting a duplicate. Recovery: remove the row by hand, then re-run.');
+            return;
+        }
     }
 
     var gr = new GlideRecord('sys_dictionary');
@@ -20202,8 +20672,8 @@ function ensureField(tableName, field, scopeSysId) {
     if (field.reference) {
         gr.setValue('reference', field.reference);
     }
-    if (field.defaultSort === true) {
-        gr.setValue('defaultsort', true);
+    if (field.defaultSort) {
+        gr.setValue('defaultsort', field.defaultSort);
     }
     if (field.defaultValue) {
         gr.setValue('default_value', field.defaultValue);
@@ -20219,14 +20689,158 @@ function ensureField(tableName, field, scopeSysId) {
         logError('FIELD|' + tableName + '.' + field.element + '|insert refused');
         return;
     }
+
+    // Read the row back and compare it attribute-for-attribute against the spec.
+    // The platform's own dictionary business rules can normalize or override what
+    // was submitted (a reference field's max_length, for instance), so what was
+    // written is not assumed to be what was stored.
+    var check = new GlideRecord('sys_dictionary');
+    if (check.get(id)) {
+        var drift2 = dictionaryMismatches(check, field);
+        if (drift2.length > 0) {
+            var fixed = [];
+            for (var k = 0; k < drift2.length; k++) {
+                check.setValue(drift2[k].column, drift2[k].wanted);
+                fixed.push(drift2[k].column + ':' + drift2[k].stored + '->' + drift2[k].wanted);
+            }
+            if (check.update()) {
+                log('FIELD|' + tableName + '.' + field.element + '|post-insert normalization|' + fixed.join('|'));
+            } else {
+                logError('FIELD|' + tableName + '.' + field.element +
+                    '|created but could not be normalized to the package spec: ' + fixed.join(','));
+            }
+        }
+    }
     STATS.fieldsCreated++;
     log('FIELD|' + tableName + '.' + field.element + '|created|type=' + field.type +
-        (field.reference ? '|reference=' + field.reference : '') + '|sys_id=' + id);
+        (field.reference ? '|reference=' + field.reference : '') + '|display=' + (field.display === true) +
+        (field.defaultValue ? '|default=' + field.defaultValue : '') + '|sys_id=' + id);
 }
 
 /**
- * Ensure one choice row exists. Keyed by (name, element, value) so a re-run
- * inserts nothing.
+ * Reconcile a table down to exactly ONE display field, the one `spec.displayField`
+ * names.
+ *
+ * This runs after every field has been ensured, because the platform couples the
+ * display flags to each other: setting `display=true` on one column clears it on
+ * every other column of the same table (measured directly - flagging
+ * `x_casemgmt_case.subject` cleared the flag on `x_casemgmt_case.number`). Field-by
+ * -field repair alone therefore has an order dependency, and this pass removes it:
+ * whatever state the flags are in when it starts, it clears the wrong ones, asserts
+ * the right one, and reads the result back.
+ *
+ * @param {Object} spec one entry of TABLE_SPECS
+ */
+function ensureSingleDisplayField(spec) {
+    if (!columnExists(spec.name, spec.displayField)) {
+        return;
+    }
+    var wrong = [];
+    var correct = null;
+    var gr = new GlideRecord('sys_dictionary');
+    gr.addQuery('name', spec.name);
+    gr.addNotNullQuery('element');
+    gr.orderBy('element');
+    gr.query();
+    while (gr.next()) {
+        var element = gr.getValue('element');
+        var flagged = isTrue(gr.getValue('display'));
+        if (element === spec.displayField) {
+            correct = { sysId: gr.getUniqueValue(), flagged: flagged };
+        } else if (flagged) {
+            wrong.push({ sysId: gr.getUniqueValue(), element: element });
+        }
+    }
+    if (correct === null) {
+        logError('DISPLAY|' + spec.name + '|no sys_dictionary row for the declared display field "' +
+            spec.displayField + '"');
+        return;
+    }
+    if (wrong.length === 0 && correct.flagged) {
+        return;
+    }
+
+    var cleared = [];
+    var i;
+    for (i = 0; i < wrong.length; i++) {
+        var off = new GlideRecord('sys_dictionary');
+        if (off.get(wrong[i].sysId)) {
+            off.setValue('display', false);
+            if (off.update()) {
+                cleared.push(wrong[i].element);
+            } else {
+                logError('DISPLAY|' + spec.name + '.' + wrong[i].element +
+                    '|could not clear the display flag');
+            }
+        }
+    }
+    var on = new GlideRecord('sys_dictionary');
+    if (on.get(correct.sysId) && !isTrue(on.getValue('display'))) {
+        on.setValue('display', true);
+        if (!on.update()) {
+            logError('DISPLAY|' + spec.name + '.' + spec.displayField +
+                '|could not set the display flag');
+        }
+    }
+
+    // Read back: the flags are only correct if the database says so.
+    var live = [];
+    var back = new GlideRecord('sys_dictionary');
+    back.addQuery('name', spec.name);
+    back.addQuery('display', true);
+    back.orderBy('element');
+    back.query();
+    while (back.next()) {
+        live.push(back.getValue('element'));
+    }
+    STATS.displayFieldsFixed++;
+    log('DISPLAY|' + spec.name + '|reconciled|cleared=[' + cleared.join(',') + ']|display_field=' +
+        spec.displayField + '|now=[' + live.join(',') + ']');
+    if (live.length !== 1 || live[0] !== spec.displayField) {
+        logError('DISPLAY|' + spec.name + '|still not exactly one display field after reconciliation: [' +
+            live.join(',') + '] - every reference to this table renders blank while more than one is' +
+            ' flagged, and renders a sys_id while none is.');
+    }
+}
+
+/**
+ * Compare one `sys_choice` row against its authoritative spec.
+ *
+ * @param {GlideRecord} gr a positioned `sys_choice` record
+ * @param {Object} spec one entry of CHOICE_SPECS
+ * @return {Array} list of { column, stored, wanted } for each mismatch
+ */
+function choiceMismatches(gr, spec) {
+    var want = { label: spec.label, sequence: spec.sequence, language: 'en', inactive: false };
+    var out = [];
+    for (var i = 0; i < CHOICE_ATTRIBUTES.length; i++) {
+        var attr = CHOICE_ATTRIBUTES[i];
+        var stored = gr.getValue(attr.column);
+        if (attr.kind === 'bool') {
+            var wantBool = want[attr.spec] === true;
+            if (isTrue(stored) !== wantBool) {
+                out.push({ column: attr.column, stored: isTrue(stored) ? 'true' : 'false',
+                    wanted: wantBool ? 'true' : 'false' });
+            }
+        } else {
+            var wantText = '' + want[attr.spec];
+            if (('' + (stored === null || stored === undefined ? '' : stored)) !== wantText) {
+                out.push({ column: attr.column, stored: '' + (stored === null ? '' : stored), wanted: wantText });
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Ensure one choice row exists AND that its label, sequence, language and
+ * inactive flag match the package's declaration.
+ *
+ * Keyed by (name, element, value). The pre-refine version stopped at "a row with
+ * this key exists", so a row whose label had been edited, whose sequence had
+ * drifted or which had been deactivated counted as correct - which is exactly the
+ * state that makes a choice list render in the wrong order, with the wrong text,
+ * or with a value the user cannot select.
  *
  * @param {Object} spec one entry of CHOICE_SPECS
  * @param {string} scopeSysId the application scope, resolved by name
@@ -20236,10 +20850,25 @@ function ensureChoice(spec, scopeSysId) {
     existing.addQuery('name', spec.table);
     existing.addQuery('element', spec.element);
     existing.addQuery('value', spec.value);
-    existing.addQuery('language', 'en');
     existing.query();
-    if (existing.hasNext()) {
-        STATS.choicesAlready++;
+    if (existing.next()) {
+        var drift = choiceMismatches(existing, spec);
+        if (drift.length === 0) {
+            STATS.choicesAlready++;
+            return;
+        }
+        var repaired = [];
+        for (var d = 0; d < drift.length; d++) {
+            existing.setValue(drift[d].column, drift[d].wanted);
+            repaired.push(drift[d].column + ':' + drift[d].stored + '->' + drift[d].wanted);
+        }
+        if (!existing.update()) {
+            logError('CHOICE|' + spec.table + '.' + spec.element + '=' + spec.value +
+                '|repair update refused for ' + repaired.join(','));
+            return;
+        }
+        STATS.choicesRepaired++;
+        log('CHOICE|' + spec.table + '.' + spec.element + '=' + spec.value + '|repaired|' + repaired.join('|'));
         return;
     }
 
@@ -20601,32 +21230,43 @@ function ensureAclRoleLink(aclSysId, aclName, roleName, roleIds, scopeSysId) {
 }
 
 /**
- * Create every missing ACL -> role link for this application.
+ * Build the EXACT set of ACL -> role pairs this application requires.
  *
- * @param {string} scopeSysId the application scope, resolved by name
- * @return {number} total links now present in the application scope
+ * The set is derived, never invented: the 26 ACLs are resolved at run time by
+ * name prefix, and each one's roles come from rolesForAcl() (the package's own
+ * `<roles>` declaration first, then the field-ACL naming convention, then the
+ * ACL description). The result is keyed by the two sys_ids that make up the m2m
+ * row, both read out of the database in this same run, so nothing is hard-coded.
+ *
+ * Having the exact set - rather than only a total - is what lets the caller
+ * reject a pair that should not exist. A link nobody expected is not a harmless
+ * extra: `sys_security_acl_role` is what grants an operation to a role, so a
+ * surplus row is an over-privileged grant, and the pre-refine code accepted any
+ * count of 27 or more as convergence.
+ *
+ * @param {Object} roleIds map of roleName -> sys_id resolved by name
+ * @return {Object} { pairs: Object keyed 'aclSysId|roleSysId', labels: Object,
+ *                    byRole: Object, aclCount: number, unmapped: number }
  */
-function ensureAllAclRoleLinks(scopeSysId) {
-    var roleIds = {};
-    roleIds[ROLE_MANAGER] = lookupRoleSysId(ROLE_MANAGER);
-    roleIds[ROLE_AGENT] = lookupRoleSysId(ROLE_AGENT);
-    roleIds[ROLE_VIEWER] = lookupRoleSysId(ROLE_VIEWER);
-    log('ACL_LINK|roles resolved by name|manager=' + (roleIds[ROLE_MANAGER] ? 'yes' : 'NO') +
-        '|agent=' + (roleIds[ROLE_AGENT] ? 'yes' : 'NO') +
-        '|viewer=' + (roleIds[ROLE_VIEWER] ? 'yes' : 'NO'));
+function buildExpectedAclRolePairs(roleIds) {
+    var pairs = {};
+    var labels = {};
+    var byRole = {};
+    var aclCount = 0;
+    var unmapped = 0;
 
     var acl = new GlideRecord('sys_security_acl');
     acl.addQuery('name', 'STARTSWITH', SCOPE_NAME);
     acl.orderBy('name');
     acl.orderBy('operation');
     acl.query();
-    var aclCount = 0;
     while (acl.next()) {
         aclCount++;
         var aclName = acl.getValue('name');
         var aclSysId = acl.getUniqueValue();
         var roles = rolesForAcl(aclSysId, aclName, acl.getValue('description'));
         if (roles.length === 0) {
+            unmapped++;
             STATS.aclsUnmapped++;
             logError('ACL_LINK|' + aclName + ' (' + acl.getValue('operation') +
                 ')|no role could be derived from any of the three sources, and NO role is guessed.' +
@@ -20637,18 +21277,202 @@ function ensureAllAclRoleLinks(scopeSysId) {
             continue;
         }
         for (var i = 0; i < roles.length; i++) {
-            ensureAclRoleLink(aclSysId, aclName, roles[i], roleIds, scopeSysId);
+            var roleSysId = roleIds[roles[i]];
+            if (!roleSysId) {
+                logError('ACL_LINK|' + aclName + '|role not found: ' + roles[i]);
+                continue;
+            }
+            var key = aclSysId + '|' + roleSysId;
+            pairs[key] = { aclSysId: aclSysId, aclName: aclName, operation: acl.getValue('operation'),
+                roleName: roles[i], roleSysId: roleSysId };
+            labels[key] = aclName + '(' + acl.getValue('operation') + ') -> ' + roles[i];
+            byRole[roles[i]] = (byRole[roles[i]] || 0) + 1;
+        }
+    }
+    return { pairs: pairs, labels: labels, byRole: byRole, aclCount: aclCount, unmapped: unmapped };
+}
+
+/**
+ * Reconcile the live `sys_security_acl_role` rows with the expected pair set:
+ * create every expected pair that is missing, and REMOVE every pair that is not
+ * expected.
+ *
+ * Both directions matter. A missing pair leaves an ACL with no role, which on a
+ * high-security instance evaluates to deny and locks every non-admin out. A
+ * surplus pair silently widens access. Convergence therefore means the live set
+ * EQUALS the expected set, and the caller requires the total to be exactly
+ * EXPECTED_ACL_ROLE_LINKS - not "at least".
+ *
+ * Removal is verified the same way every other delete in this script is: the
+ * return value is checked and the row is read back.
+ *
+ * @param {string} scopeSysId the application scope, resolved by name
+ * @return {Object} { total: number, byRole: Object, expected: Object,
+ *                    extras: Array, missing: Array }
+ */
+function ensureAllAclRoleLinks(scopeSysId) {
+    var roleIds = {};
+    roleIds[ROLE_MANAGER] = lookupRoleSysId(ROLE_MANAGER);
+    roleIds[ROLE_AGENT] = lookupRoleSysId(ROLE_AGENT);
+    roleIds[ROLE_VIEWER] = lookupRoleSysId(ROLE_VIEWER);
+    log('ACL_LINK|roles resolved by name|manager=' + (roleIds[ROLE_MANAGER] ? 'yes' : 'NO') +
+        '|agent=' + (roleIds[ROLE_AGENT] ? 'yes' : 'NO') +
+        '|viewer=' + (roleIds[ROLE_VIEWER] ? 'yes' : 'NO'));
+
+    var expected = buildExpectedAclRolePairs(roleIds);
+    var expectedKeys = [];
+    var key;
+    for (key in expected.pairs) {
+        if (expected.pairs.hasOwnProperty(key)) {
+            expectedKeys.push(key);
+        }
+    }
+    log('ACL_LINK|expected pair set derived|acls_scanned=' + expected.aclCount +
+        '|pairs=' + expectedKeys.length + '|unmapped_acls=' + expected.unmapped +
+        '|by_role=' + describeCounts(expected.byRole));
+
+    // 1. create the expected pairs that are absent
+    var i;
+    for (i = 0; i < expectedKeys.length; i++) {
+        var p = expected.pairs[expectedKeys[i]];
+        ensureAclRoleLink(p.aclSysId, p.aclName, p.roleName, roleIds, scopeSysId);
+    }
+
+    // 2. remove the live pairs that are NOT expected. The candidate set is every
+    //    link on one of this application's ACLs, plus every link recorded in this
+    //    application's scope - so a stray row is caught from either side.
+    var extras = [];
+    var seen = {};
+    var candidates = [
+        { field: 'sys_security_acl.name', op: 'STARTSWITH', value: SCOPE_NAME, label: 'by ACL name' },
+        { field: 'sys_scope', op: '=', value: scopeSysId, label: 'by scope' }
+    ];
+    for (i = 0; i < candidates.length; i++) {
+        var link = new GlideRecord('sys_security_acl_role');
+        if (candidates[i].op === 'STARTSWITH') {
+            link.addQuery(candidates[i].field, 'STARTSWITH', candidates[i].value);
+        } else {
+            link.addQuery(candidates[i].field, candidates[i].value);
+        }
+        link.query();
+        while (link.next()) {
+            var id = link.getUniqueValue();
+            if (seen[id]) {
+                continue;
+            }
+            seen[id] = true;
+            var pairKey = link.getValue('sys_security_acl') + '|' + link.getValue('sys_user_role');
+            if (expected.pairs.hasOwnProperty(pairKey)) {
+                continue;
+            }
+            var label = link.getValue('sys_name') || pairKey;
+            var removed = false;
+            try {
+                removed = link.deleteRecord();
+            } catch (e) {
+                logError('ACL_LINK|unexpected link "' + label + '" delete threw ' + e);
+            }
+            var back = new GlideRecord('sys_security_acl_role');
+            if (removed && !back.get(id)) {
+                STATS.aclLinksRemoved++;
+                extras.push(label);
+                log('ACL_LINK|removed unexpected link|' + label + '|found ' + candidates[i].label +
+                    '|it grants an operation no ACL in this application declares');
+            } else {
+                logError('ACL_LINK|unexpected link "' + label + '" could not be removed' +
+                    ' (delete_returned=' + removed + ', still_present=' + back.isValidRecord() +
+                    ') - the application is over-privileged until it is deleted by hand.');
+                extras.push(label + '(NOT REMOVED)');
+            }
         }
     }
 
-    var total = new GlideAggregate('sys_security_acl_role');
-    total.addQuery('sys_scope', scopeSysId);
-    total.addAggregate('COUNT');
-    total.query();
-    var linkTotal = total.next() ? parseInt(total.getAggregate('COUNT'), 10) : 0;
-    log('ACL_LINK|acls_scanned=' + aclCount + '|links_created=' + STATS.aclLinksCreated +
-        '|links_already_present=' + STATS.aclLinksAlready + '|links_total_in_scope=' + linkTotal);
-    return linkTotal;
+    // 3. report the reconciled state, read back from the database
+    var live = liveAclRolePairs(scopeSysId);
+    var missing = [];
+    for (i = 0; i < expectedKeys.length; i++) {
+        if (!live.pairs.hasOwnProperty(expectedKeys[i])) {
+            missing.push(expected.labels[expectedKeys[i]]);
+        }
+    }
+    log('ACL_LINK|acls_scanned=' + expected.aclCount + '|links_created=' + STATS.aclLinksCreated +
+        '|links_already_present=' + STATS.aclLinksAlready + '|links_removed=' + STATS.aclLinksRemoved +
+        '|links_total_in_scope=' + live.total + '|expected=' + expectedKeys.length +
+        '|by_role=' + describeCounts(live.byRole));
+    for (i = 0; i < missing.length; i++) {
+        logError('ACL_LINK|expected link still absent after reconciliation: ' + missing[i]);
+    }
+    return { total: live.total, byRole: live.byRole, expectedCount: expectedKeys.length,
+        extras: extras, missing: missing };
+}
+
+/**
+ * Read the live ACL -> role pair set back out of the database.
+ *
+ * @param {string} scopeSysId the application scope, resolved by name
+ * @return {Object} { pairs: Object keyed 'aclSysId|roleSysId', total: number, byRole: Object }
+ */
+function liveAclRolePairs(scopeSysId) {
+    var pairs = {};
+    var byRole = {};
+    var roleNames = {};
+    var role = new GlideRecord('sys_user_role');
+    role.addQuery('name', 'STARTSWITH', SCOPE_NAME);
+    role.query();
+    while (role.next()) {
+        roleNames[role.getUniqueValue()] = role.getValue('name');
+    }
+
+    var seen = {};
+    var queries = [
+        { field: 'sys_security_acl.name', op: 'STARTSWITH', value: SCOPE_NAME },
+        { field: 'sys_scope', op: '=', value: scopeSysId }
+    ];
+    for (var q = 0; q < queries.length; q++) {
+        var gr = new GlideRecord('sys_security_acl_role');
+        if (queries[q].op === 'STARTSWITH') {
+            gr.addQuery(queries[q].field, 'STARTSWITH', queries[q].value);
+        } else {
+            gr.addQuery(queries[q].field, queries[q].value);
+        }
+        gr.query();
+        while (gr.next()) {
+            var id = gr.getUniqueValue();
+            if (seen[id]) {
+                continue;
+            }
+            seen[id] = true;
+            var roleSysId = gr.getValue('sys_user_role');
+            pairs[gr.getValue('sys_security_acl') + '|' + roleSysId] = true;
+            var rn = roleNames[roleSysId] || roleSysId;
+            byRole[rn] = (byRole[rn] || 0) + 1;
+        }
+    }
+    var total = 0;
+    for (var k in pairs) {
+        if (pairs.hasOwnProperty(k)) {
+            total++;
+        }
+    }
+    return { pairs: pairs, total: total, byRole: byRole };
+}
+
+/**
+ * Render a name -> count map as a stable, sorted, grep-able string.
+ */
+function describeCounts(counts) {
+    var keys = [];
+    for (var k in counts) {
+        if (counts.hasOwnProperty(k)) {
+            keys.push(k);
+        }
+    }
+    keys.sort();
+    var parts = [];
+    for (var i = 0; i < keys.length; i++) {
+        parts.push(keys[i] + '=' + counts[keys[i]]);
+    }
+    return parts.length ? parts.join(',') : 'none';
 }
 
 /**
@@ -20684,29 +21508,133 @@ function verifyRemediation(scopeSysId) {
 
     for (var t = 0; t < TABLE_SPECS.length; t++) {
         var spec = TABLE_SPECS[t];
-        var physical = tableIsPhysical(spec.name);
+        var probe = probePhysicalState(spec.name);
+        var physical = probe.state === 'yes';
         var missing = [];
+        var drifted = [];
+        var f;
         if (physical) {
-            for (var f = 0; f < spec.fields.length; f++) {
-                if (!columnExists(spec.name, spec.fields[f].element)) {
-                    missing.push(spec.fields[f].element);
+            for (f = 0; f < spec.fields.length; f++) {
+                var field = spec.fields[f];
+                if (!columnExists(spec.name, field.element)) {
+                    missing.push(field.element);
+                    continue;
+                }
+                // The column existing is not proof the field is right: re-read the
+                // dictionary row and compare every attribute the package declares.
+                var dict = new GlideRecord('sys_dictionary');
+                dict.addQuery('name', spec.name);
+                dict.addQuery('element', field.element);
+                dict.query();
+                if (!dict.next()) {
+                    drifted.push(field.element + '{no sys_dictionary row}');
+                    continue;
+                }
+                var mism = dictionaryMismatches(dict, field);
+                for (var m = 0; m < mism.length; m++) {
+                    drifted.push(field.element + '.' + mism[m].column + '=' + mism[m].stored +
+                        '(want ' + mism[m].wanted + ')');
                 }
             }
         }
+
+        // Exactly one display field per table. More than one makes every
+        // reference TO this table render blank; none makes it render its sys_id.
+        var displayFields = [];
+        var disp = new GlideRecord('sys_dictionary');
+        disp.addQuery('name', spec.name);
+        disp.addQuery('display', true);
+        disp.orderBy('element');
+        disp.query();
+        while (disp.next()) {
+            displayFields.push(disp.getValue('element'));
+        }
+
         var choices = new GlideAggregate('sys_choice');
         choices.addQuery('name', spec.name);
         choices.addAggregate('COUNT');
         choices.query();
         var choiceCount = choices.next() ? choices.getAggregate('COUNT') : '0';
-        parts.push(spec.name + '{physical=' + physical + ',columns=' + physicalColumnCount(spec.name) +
+        parts.push(spec.name + '{physical=' + probe.state + ',columns=' + physicalColumnCount(spec.name) +
             ',missing_fields=' + (missing.length === 0 ? 'none' : missing.join('/')) +
+            ',drifted_attributes=' + (drifted.length === 0 ? 'none' : drifted.join('/')) +
+            ',display_fields=[' + displayFields.join(',') + ']' +
             ',choices=' + choiceCount + '}');
         if (!physical) {
-            problems.push(spec.name + ' has no physical storage');
+            problems.push(spec.name + ' physical storage is ' +
+                (probe.state === 'no' ? 'absent' : 'indeterminate') + ' (' + probe.detail + ')');
         }
         if (missing.length > 0) {
             problems.push(spec.name + ' missing columns: ' + missing.join(', '));
         }
+        if (drifted.length > 0) {
+            problems.push(spec.name + ' dictionary attributes disagree with the package: ' + drifted.join(', '));
+        }
+        if (physical && (displayFields.length !== 1 || displayFields[0] !== spec.displayField)) {
+            problems.push(spec.name + ' must have exactly one display field (' + spec.displayField +
+                ') but has [' + displayFields.join(', ') + '] - every reference to this table renders' +
+                ' blank while more than one is flagged');
+        }
+    }
+
+    // The exact choice inventory: seven lists, twenty-four values, no surplus.
+    var choiceListCount = 0;
+    var choiceValueCount = 0;
+    var choiceProblems = [];
+    var wantedByList = {};
+    var c;
+    for (c = 0; c < CHOICE_SPECS.length; c++) {
+        var lk = CHOICE_SPECS[c].table + '.' + CHOICE_SPECS[c].element;
+        if (!wantedByList[lk]) {
+            wantedByList[lk] = {};
+        }
+        wantedByList[lk][CHOICE_SPECS[c].value] = CHOICE_SPECS[c];
+    }
+    for (var listKey in wantedByList) {
+        if (!wantedByList.hasOwnProperty(listKey)) {
+            continue;
+        }
+        choiceListCount++;
+        var dot = listKey.lastIndexOf('.');
+        var lTable = listKey.substring(0, dot);
+        var lElement = listKey.substring(dot + 1);
+        var seenValues = {};
+        var liveChoice = new GlideRecord('sys_choice');
+        liveChoice.addQuery('name', lTable);
+        liveChoice.addQuery('element', lElement);
+        liveChoice.query();
+        while (liveChoice.next()) {
+            var val = liveChoice.getValue('value');
+            seenValues[val] = true;
+            choiceValueCount++;
+            if (!wantedByList[listKey].hasOwnProperty(val)) {
+                choiceProblems.push(listKey + ' has an unexpected value "' + val + '"');
+                continue;
+            }
+            var cm = choiceMismatches(liveChoice, wantedByList[listKey][val]);
+            for (var q = 0; q < cm.length; q++) {
+                choiceProblems.push(listKey + '="' + val + '" ' + cm[q].column + '=' + cm[q].stored +
+                    ' (want ' + cm[q].wanted + ')');
+            }
+        }
+        for (var wanted in wantedByList[listKey]) {
+            if (wantedByList[listKey].hasOwnProperty(wanted) && !seenValues[wanted]) {
+                choiceProblems.push(listKey + ' is missing the value "' + wanted + '"');
+            }
+        }
+    }
+    parts.push('choices{lists=' + choiceListCount + '/' + EXPECTED_CHOICE_LISTS +
+        ',values=' + choiceValueCount + '/' + EXPECTED_CHOICE_VALUES + '}');
+    if (choiceListCount !== EXPECTED_CHOICE_LISTS) {
+        problems.push('expected ' + EXPECTED_CHOICE_LISTS + ' choice lists, the specification describes ' +
+            choiceListCount);
+    }
+    if (choiceValueCount !== EXPECTED_CHOICE_VALUES) {
+        problems.push('expected exactly ' + EXPECTED_CHOICE_VALUES + ' choice values across the ' +
+            EXPECTED_CHOICE_LISTS + ' lists, found ' + choiceValueCount);
+    }
+    for (c = 0; c < choiceProblems.length; c++) {
+        problems.push(choiceProblems[c]);
     }
 
     var numberDict = new GlideRecord('sys_dictionary');
@@ -20757,29 +21685,91 @@ function verifyRemediation(scopeSysId) {
     aclTotal.addAggregate('COUNT');
     aclTotal.query();
     var aclCount = aclTotal.next() ? parseInt(aclTotal.getAggregate('COUNT'), 10) : 0;
-    var linkTotal = new GlideAggregate('sys_security_acl_role');
-    linkTotal.addQuery('sys_scope', scopeSysId);
-    linkTotal.addAggregate('COUNT');
-    linkTotal.query();
-    var linkCount = linkTotal.next() ? parseInt(linkTotal.getAggregate('COUNT'), 10) : 0;
+
+    // The ACL -> role wiring is verified as an exact SET, not as a count that may
+    // grow. The expected pair set is re-derived here from the live ACLs, and the
+    // live pair set is re-read from sys_security_acl_role; convergence requires
+    // the two to be equal, the total to be exactly EXPECTED_ACL_ROLE_LINKS, and
+    // the per-role distribution to match EXPECTED_ROLE_LINK_COUNTS. A shortfall
+    // leaves an ACL role-less, which on this high-security instance evaluates to
+    // DENY and locks out every non-admin; a surplus is an over-privileged grant.
+    // Accepting "27 or more" - which the pre-refine version did - would let both
+    // through while reporting verified=true.
+    var verifyRoleIds = {};
+    verifyRoleIds[ROLE_MANAGER] = lookupRoleSysId(ROLE_MANAGER);
+    verifyRoleIds[ROLE_AGENT] = lookupRoleSysId(ROLE_AGENT);
+    verifyRoleIds[ROLE_VIEWER] = lookupRoleSysId(ROLE_VIEWER);
+    var wantPairs = buildExpectedAclRolePairs(verifyRoleIds);
+    var livePairs = liveAclRolePairs(scopeSysId);
+    var linkCount = livePairs.total;
+
+    var pairKey;
+    var absent = [];
+    var surplus = [];
+    var wantCount = 0;
+    for (pairKey in wantPairs.pairs) {
+        if (!wantPairs.pairs.hasOwnProperty(pairKey)) {
+            continue;
+        }
+        wantCount++;
+        if (!livePairs.pairs.hasOwnProperty(pairKey)) {
+            absent.push(wantPairs.labels[pairKey]);
+        }
+    }
+    for (pairKey in livePairs.pairs) {
+        if (livePairs.pairs.hasOwnProperty(pairKey) && !wantPairs.pairs.hasOwnProperty(pairKey)) {
+            surplus.push(pairKey);
+        }
+    }
+
     parts.push('acls{count=' + aclCount + ',role_links=' + linkCount +
-        ',expected_links=' + EXPECTED_ACL_ROLE_LINKS + '}');
-    // Invariant: EXPECTED_ACL_COUNT ACLs must yield EXPECTED_ACL_ROLE_LINKS
-    // links. A shortfall means at least one ACL is still role-less, and on this
-    // high-security instance a role-less ACL with no condition and no script
-    // evaluates to DENY - so the application would be silently unusable. Report
-    // it loudly instead of letting the summary claim success.
+        ',expected_links=' + EXPECTED_ACL_ROLE_LINKS + ',derived_pairs=' + wantCount +
+        ',missing_pairs=' + absent.length + ',unexpected_pairs=' + surplus.length +
+        ',by_role=' + describeCounts(livePairs.byRole) + '}');
+
     if (aclCount !== EXPECTED_ACL_COUNT) {
         problems.push('found ' + aclCount + ' ' + SCOPE_NAME + ' ACLs, expected ' + EXPECTED_ACL_COUNT);
     }
-    if (linkCount < EXPECTED_ACL_ROLE_LINKS) {
-        problems.push('only ' + linkCount + ' ACL role links for ' + aclCount +
-            ' ACLs, expected ' + EXPECTED_ACL_ROLE_LINKS +
-            ' - every ACL left without a role denies access to every non-admin');
+    if (wantCount !== EXPECTED_ACL_ROLE_LINKS) {
+        problems.push('the ACL set derives ' + wantCount + ' role links, expected exactly ' +
+            EXPECTED_ACL_ROLE_LINKS + ' - the derivation itself disagrees with the package');
+    }
+    if (linkCount !== EXPECTED_ACL_ROLE_LINKS) {
+        problems.push('found ' + linkCount + ' ACL role links for ' + aclCount + ' ACLs, expected exactly ' +
+            EXPECTED_ACL_ROLE_LINKS + ' - a shortfall leaves an ACL that denies every non-admin, a' +
+            ' surplus grants an operation the package never declared');
+    }
+    for (var a = 0; a < absent.length; a++) {
+        problems.push('ACL role link missing: ' + absent[a]);
+    }
+    for (var s = 0; s < surplus.length; s++) {
+        problems.push('unexpected ACL role link present (acl|role sys_ids ' + surplus[s] +
+            ') - it grants an operation no ACL in this application declares');
+    }
+    for (var expectedRole in EXPECTED_ROLE_LINK_COUNTS) {
+        if (!EXPECTED_ROLE_LINK_COUNTS.hasOwnProperty(expectedRole)) {
+            continue;
+        }
+        var got = livePairs.byRole[expectedRole] || 0;
+        if (got !== EXPECTED_ROLE_LINK_COUNTS[expectedRole]) {
+            problems.push('role ' + expectedRole + ' holds ' + got + ' ACL links, expected ' +
+                EXPECTED_ROLE_LINK_COUNTS[expectedRole]);
+        }
+    }
+    for (var liveRole in livePairs.byRole) {
+        if (livePairs.byRole.hasOwnProperty(liveRole) &&
+            !EXPECTED_ROLE_LINK_COUNTS.hasOwnProperty(liveRole)) {
+            problems.push('ACL links are granted to ' + liveRole +
+                ', which is not one of this application\'s three roles');
+        }
     }
     if (STATS.aclsUnmapped > 0) {
         problems.push(STATS.aclsUnmapped + ' ACL(s) named no scoped role in their description' +
             ' so no role could be derived for them');
+    }
+    if (STATS.tablesUncertain > 0) {
+        problems.push(STATS.tablesUncertain + ' table(s) could not be probed conclusively, so their' +
+            ' rebuild was refused rather than risked');
     }
 
     return {
@@ -20791,9 +21781,16 @@ function verifyRemediation(scopeSysId) {
 
 /**
  * Deactivate the bootstrap trigger once the application is fully remediated, so
- * the one-shot hook stops evaluating on every future Update Set commit. Looked
- * up by name, never by sys_id. A failed or partial run deliberately leaves the
- * trigger active so the next commit retries.
+ * the hook stops evaluating on every future Update Set commit. Looked up by name,
+ * never by sys_id.
+ *
+ * The package ships that rule inactive, because it was measured firing on commit
+ * and then failing - the commit engine rewrites its scope to the application,
+ * where the remediation's `GlideTableDescriptor` and `GlideSecurityManager` calls
+ * are refused. This function therefore normally reports "already inactive". It is
+ * retained because an instance carrying an earlier, active copy of the rule must
+ * still be quieted, and a failed or partial run deliberately leaves any active
+ * copy alone.
  */
 function deactivateBootstrapTrigger() {
     var gr = new GlideRecord('sys_script');
@@ -20810,7 +21807,8 @@ function deactivateBootstrapTrigger() {
     if (count > 0) {
         log('TRIGGER|' + BOOTSTRAP_TRIGGER_NAME + '|deactivated after successful remediation');
     } else {
-        log('TRIGGER|' + BOOTSTRAP_TRIGGER_NAME + '|already inactive or not installed');
+        log('TRIGGER|' + BOOTSTRAP_TRIGGER_NAME +
+            '|already inactive or not installed (the package ships it inactive)');
     }
 }
 
@@ -20851,12 +21849,22 @@ function postImportRemediation() {
             ensureField(TABLE_SPECS[i].name, TABLE_SPECS[i].fields[j], scopeSysId);
         }
     }
+    // After the fields, not during them: the platform clears every other column's
+    // display flag when one is set, so the single-display-field invariant is
+    // asserted once per table at the end rather than field by field.
+    for (i = 0; i < TABLE_SPECS.length; i++) {
+        ensureSingleDisplayField(TABLE_SPECS[i]);
+    }
     for (i = 0; i < CHOICE_SPECS.length; i++) {
         ensureChoice(CHOICE_SPECS[i], scopeSysId);
     }
     log('DEFECT_C|tables_built=' + STATS.tablesBuilt + '|tables_already_physical=' + STATS.tablesAlready +
-        '|fields_created=' + STATS.fieldsCreated + '|fields_already_present=' + STATS.fieldsAlready +
-        '|choices_created=' + STATS.choicesCreated + '|choices_already_present=' + STATS.choicesAlready);
+        '|tables_indeterminate=' + STATS.tablesUncertain +
+        '|fields_created=' + STATS.fieldsCreated + '|fields_repaired=' + STATS.fieldsRepaired +
+        '|fields_already_correct=' + STATS.fieldsAlready +
+        '|display_fields_reconciled=' + STATS.displayFieldsFixed +
+        '|choices_created=' + STATS.choicesCreated + '|choices_repaired=' + STATS.choicesRepaired +
+        '|choices_already_correct=' + STATS.choicesAlready);
 
     // ---- Defect E: auto-numbering ------------------------------------------
     for (i = 0; i < COUNTER_SPECS.length; i++) {
@@ -20874,10 +21882,14 @@ function postImportRemediation() {
     log('DEFECT_7|service_ids_written=' + STATS.serviceIdsSet + '|service_ids_already_correct=' + STATS.serviceIdsAlready);
 
     // ---- Defect 9: ACL role links + security cache flush -------------------
-    var linkTotal = ensureAllAclRoleLinks(scopeSysId);
+    var links = ensureAllAclRoleLinks(scopeSysId);
+    var linkTotal = links.total;
     flushSecurityCache();
     log('DEFECT_9|links_created=' + STATS.aclLinksCreated + '|links_already_present=' + STATS.aclLinksAlready +
+        '|links_removed=' + STATS.aclLinksRemoved +
         '|links_total=' + linkTotal + '|links_expected=' + EXPECTED_ACL_ROLE_LINKS +
+        '|links_by_role=' + describeCounts(links.byRole) +
+        '|unexpected_links=' + links.extras.length + '|missing_links=' + links.missing.length +
         '|unmapped_acls=' + STATS.aclsUnmapped +
         '|security_cache_flushed=' + (STATS.securityCacheFlushes > 0));
 
@@ -20895,12 +21907,16 @@ function postImportRemediation() {
     var finished = new GlideDateTime();
     var summary = 'SUMMARY|verified=' + result.ok +
         '|tables_built=' + STATS.tablesBuilt + '|tables_already=' + STATS.tablesAlready +
-        '|fields_created=' + STATS.fieldsCreated + '|fields_already=' + STATS.fieldsAlready +
-        '|choices_created=' + STATS.choicesCreated + '|choices_already=' + STATS.choicesAlready +
+        '|tables_indeterminate=' + STATS.tablesUncertain +
+        '|fields_created=' + STATS.fieldsCreated + '|fields_repaired=' + STATS.fieldsRepaired +
+        '|fields_already=' + STATS.fieldsAlready + '|display_reconciled=' + STATS.displayFieldsFixed +
+        '|choices_created=' + STATS.choicesCreated + '|choices_repaired=' + STATS.choicesRepaired +
+        '|choices_already=' + STATS.choicesAlready +
         '|counters_written=' + STATS.countersUpdated + '|counters_already=' + STATS.countersAlready +
         '|number_default_written=' + STATS.numberDefaultsSet + '|number_default_already=' + STATS.numberDefaultsAlready +
         '|service_ids_written=' + STATS.serviceIdsSet + '|service_ids_already=' + STATS.serviceIdsAlready +
         '|acl_links_created=' + STATS.aclLinksCreated + '|acl_links_already=' + STATS.aclLinksAlready +
+        '|acl_links_removed=' + STATS.aclLinksRemoved +
         '|acl_links_total=' + linkTotal + '|acl_links_expected=' + EXPECTED_ACL_ROLE_LINKS +
         '|security_cache_flushed=' + (STATS.securityCacheFlushes > 0) +
         '|errors=' + STATS.errors + '|finished=' + finished.getDisplayValue();
@@ -20913,15 +21929,14 @@ function postImportRemediation() {
 // ============================================================================
 //
 // Calling the entry point from the bottom of the file keeps it drop-in runnable
-// in every supported invocation context without extra boilerplate:
+// with no extra boilerplate in the one route that was measured to work -
+// System Definition -> Scripts - Background with "In scope" = Global - and in the
+// two packaged copies, which run the same body but are forced into the
+// application scope by the commit engine and therefore cannot complete (see
+// "HOW IT IS INVOKED" in the header).
 //
-//   - the global-scope bootstrap Business Rule
-//     (scripts/sys_script_x_casemgmt_post_import_bootstrap.xml), whose script
-//     body is this file verbatim;
-//   - System Definition -> Scripts - Background with "In scope" = Global;
-//   - a Fix Script executed manually from the update set.
-//
-// The call is safe to repeat: see the idempotency guarantees in the header.
+// The call is safe to repeat: see the idempotency and convergence guarantees in
+// the header.
 
 postImportRemediation();
 ]]]]><![CDATA[></script>
@@ -20968,13 +21983,13 @@ postImportRemediation();
         <action_insert>false</action_insert>
         <action_query>false</action_query>
         <action_update>true</action_update>
-        <active>true</active>
+        <active>false</active>
         <add_message>false</add_message>
         <advanced>true</advanced>
         <change_fields>false</change_fields>
         <collection>sys_remote_update_set</collection>
         <condition>current.state.changesTo('committed')</condition>
-        <description>Verified auto-execute trigger for the Fix Script 'x_casemgmt Post-Import Remediation'. Fix Scripts do not auto-run on Update Set commit - the platform only runs them on application install from a repository or the Store - so without this rule the remediation would be a manual step. The commit engine applies every payload in the retrieved Update Set and then sets sys_remote_update_set.state='committed', which fires this rule; it resolves the Fix Script by name and executes it with GlideScopedEvaluator. The condition is current.state.changesTo('committed') - the state transition rather than the current value - so later writes to an already-committed retrieved Update Set cannot re-run the remediation. Global scope is required: an app-scoped copy fires but runs in the x_casemgmt scope where GlideTableDescriptor is refused and sys_dictionary.update() returns null, so it can remediate nothing. when=after (synchronous, exactly once): the async variant was measured dispatching twice for a single transition, and two concurrent passes would race on the destructive half of the table rebuild. The dispatch is wrapped in try/catch so it can never abort the commit. The remediation deactivates this rule once the application verifies as fully wired, making it a one-shot bootstrap. Verification signal: syslog messages starting X_CASEMGMT_REMEDIATION|, ending with a SUMMARY| line.</description>
+        <description>SHIPPED INACTIVE ON PURPOSE - it fires and cannot succeed. This rule was built as the auto-execute trigger for the Fix Script 'x_casemgmt Post-Import Remediation', because Fix Scripts do not auto-run on Update Set commit. It works as designed up to the point of dispatch: the commit engine applies every payload in the retrieved Update Set and then sets sys_remote_update_set.state='committed', which fires this rule exactly once (condition current.state.changesTo('committed') - the transition, not the current value, so later writes to an already-committed set cannot re-run it), and it resolves the Fix Script by name and executes it with GlideScopedEvaluator. WHY IT CANNOT SUCCEED: the commit engine rewrites every committed record's sys_scope to the Update Set's application, so both this rule and the Fix Script it dispatches are x_casemgmt-scoped at run time, and the remediation's GlideTableDescriptor and GlideSecurityManager calls are refused there. Measured on the target PDI: the rule logged BOOTSTRAP|fired|...|scope=x_casemgmt and the remediation reported verified=false, tables_built=0, acl_links_created=0, errors=121, every error being one of those two SecurityExceptions. The commit itself completed normally - when=after plus a try/catch around the dispatch guarantees the rule can never abort a commit. No packaging change fixes this because the rewrite happens at commit time. THE ROUTE THAT WORKS: paste scripts/post_import_remediation.js into System Definition &gt; Scripts - Background with 'In scope' = Global and run it; see docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 (acceptance path (b)) and docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 for the evidence. when=after rather than async is deliberate: the async variant was measured dispatching TWICE for a single transition, and two concurrent passes would race on the destructive half of the table rebuild. Verification signal: syslog messages starting X_CASEMGMT_REMEDIATION|, ending with a SUMMARY| line carrying verified=true|false.</description>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
@@ -20991,18 +22006,33 @@ postImportRemediation();
         <script><![CDATA[(function executeRule(current, previous) {
     // Auto-execute bootstrap for the x_casemgmt post-import remediation.
     //
-    // Fix Scripts do not auto-run when an Update Set is committed - the platform
-    // only runs them on application install from a repository or the Store. This
-    // rule is the verified auto-execute trigger that closes that gap: the Update
-    // Set commit engine applies every captured payload and then flips the
-    // retrieved Update Set's state to 'committed', which fires this rule.
+    // SHIPPED INACTIVE. This rule fires correctly and still cannot complete the
+    // remediation, so activating it is not the supported path. Read the record's
+    // description, or docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4, before
+    // relying on it.
     //
-    // Design notes (each verified on the target PDI before shipping):
-    //   - The rule is GLOBAL scope on purpose. An app-scoped copy does fire, but
-    //     it executes in the x_casemgmt scope where GlideTableDescriptor raises
-    //     "GlideTableDescriptor is not allowed in scoped applications" and
-    //     sys_dictionary.update() is refused, so it cannot perform any of the
-    //     four remediations. Global is the narrowest scope that works.
+    // What it does: Fix Scripts do not auto-run when an Update Set is committed -
+    // the platform only runs them on application install from a repository or the
+    // Store. The commit engine applies every captured payload and then flips the
+    // retrieved Update Set's state to 'committed', which fires this rule, which
+    // resolves the Fix Script by name and dispatches it.
+    //
+    // Why that is not enough (measured on the target PDI, not inferred):
+    //   - The commit engine REWRITES every committed record's sys_scope to the
+    //     Update Set's application. This rule is declared global and is read back
+    //     app-scoped after commit, as is the Fix Script it dispatches. The
+    //     remediation then runs in the x_casemgmt scope, where
+    //     GlideTableDescriptor and GlideSecurityManager both raise
+    //     "... is not allowed in scoped applications".
+    //   - Observed result: 'BOOTSTRAP|fired|...|scope=x_casemgmt' followed by
+    //     'SUMMARY|verified=false|tables_built=0|acl_links_created=0|errors=121',
+    //     all 121 errors being those two SecurityExceptions. Nothing was created.
+    //   - No packaging change fixes it: the rewrite happens at commit time
+    //     regardless of the scope the package declares.
+    //   - The route that works is the global background script - see the operator
+    //     messages below, which point there rather than at the Fix Script UI.
+    //
+    // Design notes that DID hold up, and are worth keeping:
     //   - when = after, i.e. synchronous and exactly once. An async variant was
     //     built and tested first, because giving the physical DDL its own
     //     transaction is attractive; it was rejected on evidence. For a single
@@ -21010,23 +22040,22 @@ postImportRemediation();
     //     TWICE, milliseconds apart, and two concurrent passes would race on the
     //     destructive half of the table rebuild (one pass deleting the metadata
     //     the other had just created). The synchronous rule fires exactly once.
-    //     The dispatch below is wrapped in try/catch so a failure inside the
-    //     remediation can never abort the commit transaction.
+    //   - The dispatch below is wrapped in try/catch, so a failure inside the
+    //     remediation can never abort the commit transaction. That property was
+    //     exercised for real: the 121 errors were logged and the commit completed.
     //   - The condition is current.state.changesTo('committed') - the state
     //     TRANSITION, not merely the current value, because the platform writes
     //     to an already-committed retrieved Update Set more than once and each
-    //     write would otherwise re-run the whole remediation. The remediation
-    //     body additionally early-returns when x_casemgmt is not installed, and
-    //     deactivates this rule once the application verifies as fully wired, so
-    //     it is a one-shot bootstrap rather than a permanent hook.
-    //   - The remediation body itself lives in exactly one place - the Fix Script
-    //     named below, whose script field is
+    //     write would otherwise re-run the whole remediation.
+    //   - The remediation body lives in exactly one place - the Fix Script named
+    //     below, whose script field is
     //     servicenow-case-management-poc/scripts/post_import_remediation.js
     //     verbatim. It is resolved by name; no sys_id is hard-coded.
     //
     // Verification signal: every line the remediation emits is a gs.info()
     // prefixed 'X_CASEMGMT_REMEDIATION|'. The last one starts with
-    // 'X_CASEMGMT_REMEDIATION|SUMMARY|' and carries verified=true|false.
+    // 'X_CASEMGMT_REMEDIATION|SUMMARY|' and carries verified=true|false. Read it
+    // rather than assuming the dispatch succeeded.
 
     // sys_script_fix.name is max_length 40 on this release and the platform
     // truncates silently, so this literal must stay at 40 characters or fewer or
@@ -21041,11 +22070,16 @@ postImportRemediation();
         fix.query();
         if (!fix.next()) {
             gs.warn(MARKER + '|BOOTSTRAP|Fix Script "' + FIX_SCRIPT_NAME +
-                '" is not present on this instance. Run the remediation manually: ' +
-                'System Definition > Fix Scripts > "' + FIX_SCRIPT_NAME + '" > Run Fix Script.');
+                '" is not present on this instance. Run the remediation the way that works: paste' +
+                ' servicenow-case-management-poc/scripts/post_import_remediation.js into' +
+                ' System Definition > Scripts - Background with "In scope" = Global and run it' +
+                ' (docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5).');
             return;
         }
 
+        // gs.getCurrentScopeName() is logged deliberately: on the supported path it
+        // reads 'x_casemgmt' rather than 'rhino.global', which is the single fact
+        // that explains the 121 SecurityExceptions that follow.
         gs.info(MARKER + '|BOOTSTRAP|fired|remote_update_set=' + current.getValue('name') +
             '|state=' + current.getValue('state') + '|scope=' + gs.getCurrentScopeName() +
             '|dispatching Fix Script "' + FIX_SCRIPT_NAME + '"');
@@ -21055,8 +22089,12 @@ postImportRemediation();
         gs.info(MARKER + '|BOOTSTRAP|dispatch complete for "' + FIX_SCRIPT_NAME + '"');
     } catch (e) {
         gs.warn(MARKER + '|BOOTSTRAP|dispatch failed: ' + e +
-            ' - run the remediation manually: System Definition > Fix Scripts > "' +
-            FIX_SCRIPT_NAME + '" > Run Fix Script (scope Global).');
+            ' - do NOT retry through the Fix Script UI: the commit engine rewrites the installed' +
+            ' Fix Script into the application scope, where GlideTableDescriptor and' +
+            ' GlideSecurityManager are refused. Paste' +
+            ' servicenow-case-management-poc/scripts/post_import_remediation.js into' +
+            ' System Definition > Scripts - Background with "In scope" = Global and run it there' +
+            ' (docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5).');
     }
 })(current, previous);]]]]><![CDATA[></script>
         <sys_class_name>sys_script</sys_class_name>

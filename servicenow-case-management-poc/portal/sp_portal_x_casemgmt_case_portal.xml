@@ -279,14 +279,14 @@
         <description>Unauthenticated Experience Portal for the Case Management scoped application. Provides two pages: case_submit (anonymous case submission) and case_status (anonymous case status lookup). Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern (PortalRequestService.submitRequest and PortalRequestService.getRequestStatus). Per AAP Section 0.4.4 (UI Design - default theme), Section 0.7.2 (deployment step 3 - portal URL), and the seven validation gates (Gate 4 portal-submission, Gate 5 portal-lookup). Public access is enabled via the public flag plus a login_page redirect target that points to the submission page itself, so anonymous callers never see a login prompt. The portal uses the platform default Service Portal theme (no custom CSS, no custom branding) per AAP Section 0.4.4. Knowledge-base and service-catalog integrations are out of scope per AAP Section 0.3.2 and are intentionally empty.</description>
         <enable_legacy_recents>false</enable_legacy_recents>
         <hide_portal_name>false</hide_portal_name>
-        <homepage display_value="Case Submission">x_casemgmt_case_submit</homepage>
+        <homepage>6a1f3c2ffd653613304512a734aab83b</homepage>
         <homepage_dv display_value="Case Submission">x_casemgmt_case_submit</homepage_dv>
         <icon/>
         <icon_dv/>
         <kb_categories_visible>false</kb_categories_visible>
         <knowledge_base/>
         <knowledge_base_dv/>
-        <login_page display_value="Case Submission">x_casemgmt_case_submit</login_page>
+        <login_page/>
         <login_page_dv display_value="Case Submission">x_casemgmt_case_submit</login_page_dv>
         <logo/>
         <logo_dv/>
@@ -302,7 +302,7 @@
         <sys_name>x_casemgmt_case_portal</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sp_portal_x_casemgmt_case_portal</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

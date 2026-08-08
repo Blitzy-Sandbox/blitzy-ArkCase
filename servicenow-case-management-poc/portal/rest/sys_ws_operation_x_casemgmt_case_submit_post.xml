@@ -220,13 +220,26 @@
     RECORD IDENTITY:
 
       Three identifiers anchor this record:
-        - <sys_id>e1b7bfa9aff542fa88a645612a73e54c</sys_id> - 32-char
-          deterministic hex primary key derived from
-          MD5("sys_ws_operation_x_casemgmt_case_submit_post"). The
-          deterministic derivation guarantees idempotent re-import on
-          a fresh PDI: re-importing the same Update Set produces the
-          same sys_id, which collides on the existing record and
-          updates it in place rather than creating a duplicate.
+        - <sys_id>886ad7128907a6351ea04b210c27029e</sys_id> - the
+          canonical 32-char hex primary key of this endpoint. Re-importing
+          the same Update Set produces the same sys_id, which collides on
+          the existing record and updates it in place rather than creating
+          a duplicate.
+
+          This artifact previously carried a SECOND identity,
+          e1b7bfa9aff542fa88a645612a73e54c (the MD5 of
+          "sys_ws_operation_x_casemgmt_case_submit_post"), while the
+          deliverable's Update Set carried 886ad712... - one logical
+          endpoint described by two record identities, which is how a
+          duplicate live record gets created. 886ad712... is the canonical
+          one on evidence: it is the identity the package ships, the
+          identity that was uploaded, previewed and committed, and the only
+          one that exists on the instance
+          (GET /api/now/table/sys_ws_operation/e1b7bfa9aff542fa88a645612a73e54c
+          returns HTTP 404, while 886ad712... returns the live, active
+          POST /api/x_casemgmt/case_submit operation). The artifact now
+          carries that single identity, so artifact, wrapper name and
+          payload all name the same record.
         - <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
           - the Update Set engine's logical record key. Pattern is
           <table_name>_<scope>_<api_id>_<http_method_lower>.
@@ -309,7 +322,7 @@
     <sys_ws_operation action="INSERT_OR_UPDATE">
         <active>true</active>
         <consumes>application/json</consumes>
-        <consumes_customized>false</consumes_customized>
+        <consumes_customized>true</consumes_customized>
         <default_operation_uri>/api/x_casemgmt/case_submit</default_operation_uri>
         <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
         <enforce_acl/>
@@ -440,8 +453,8 @@
 })(request, response);]]></operation_script>
         <operation_uri>/api/x_casemgmt/case_submit</operation_uri>
         <produces>application/json</produces>
-        <produces_customized>false</produces_customized>
-        <relative_path/>
+        <produces_customized>true</produces_customized>
+        <relative_path>/</relative_path>
         <request_example/>
         <requires_acl_authorization>false</requires_acl_authorization>
         <requires_authentication>false</requires_authentication>
@@ -449,17 +462,17 @@
         <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error } on validation failure, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
         <sys_class_name>sys_ws_operation</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>e1b7bfa9aff542fa88a645612a73e54c</sys_id>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>886ad7128907a6351ea04b210c27029e</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name>Case Submit POST</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ws_operation_x_casemgmt_case_submit_post</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <web_service_definition display_value="Case Submit">x_casemgmt_case_submit</web_service_definition>
+        <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
+        <web_service_definition display_value="x_casemgmt_case_submit">ef9090a5b03f1a36c248ce65065a1b74</web_service_definition>
         <web_service_version/>
     </sys_ws_operation>
 </record_update>

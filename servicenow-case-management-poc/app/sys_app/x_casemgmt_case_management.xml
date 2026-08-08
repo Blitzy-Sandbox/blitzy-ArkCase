@@ -9,6 +9,7 @@
         <name>x_casemgmt Case Management</name>
         <private>false</private>
         <scope>x_casemgmt</scope>
+        <source>x_casemgmt</source>
         <short_description>Proof-of-concept ServiceNow re-platforming of ArkCase case-management capabilities.</short_description>
         <sys_id>82b99028936f74320d74d6f88357a5af</sys_id>
         <trackable>true</trackable>

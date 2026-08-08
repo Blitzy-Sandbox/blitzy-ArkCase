@@ -352,6 +352,28 @@
         Phase 4. An inactive dictionary entry would not appear on
         the form despite mandatory=true, leading to a
         contradictory/broken state.
+
+    SINGLE DISPLAY FIELD FOR `x_casemgmt_case_party` (`display=true`):
+
+      ServiceNow permits exactly ONE display field per table, and `role_label`
+      is it for `x_casemgmt_case_party`. Every other dictionary entry on this table
+      therefore carries `<display>false</display>`.
+
+      This is not cosmetic. When several columns are flagged, every reference to a case party
+      renders blank; when none is flagged, they render a raw sys_id. An
+      earlier revision of this package flagged 13 of the 14 `x_casemgmt_case`
+      columns, 6 of 6 on `x_casemgmt_case_task` and 5 of 5 on
+      `x_casemgmt_case_party`, and the effect was measured on the live
+      instance: `getDisplayValue('case')` returned the empty string and the
+      `Case` column showed "(empty)" on every task and party row.
+
+      Normal writes cannot produce that state - the platform clears the flag
+      on sibling columns whenever one is set - but an Update Set commit
+      applies payloads with business rules suppressed, so the package itself
+      is the only thing that can create it. Hence the flags shipped here.
+      `../scripts/post_import_remediation.js` carries the same declaration,
+      reconciles a table down to this one field, and fails verification if a
+      table ends up with any number of display fields other than one.
 -->
 <record_update table="sys_dictionary">
     <sys_dictionary action="INSERT_OR_UPDATE">
@@ -407,7 +429,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_role_label</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

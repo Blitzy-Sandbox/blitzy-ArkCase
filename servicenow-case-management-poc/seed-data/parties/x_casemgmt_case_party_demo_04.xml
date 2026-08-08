@@ -515,7 +515,7 @@
         <sys_created_by>admin</sys_created_by>
         <sys_id>947634cfd3a1ef3dc9a59179ba9f515a</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_04</sys_update_name>
     </x_casemgmt_case_party>
 </record_update>

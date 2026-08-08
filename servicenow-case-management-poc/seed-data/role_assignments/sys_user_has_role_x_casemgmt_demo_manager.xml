@@ -298,7 +298,7 @@
         <sys_created_by>admin</sys_created_by>
         <sys_id>c6ed64934879ee3ea435a2276bb5bf79</sys_id>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_user_has_role_x_casemgmt_demo_manager</sys_update_name>
         <user display_value="x_casemgmt_demo_manager">x_casemgmt_demo_manager</user>
     </sys_user_has_role>

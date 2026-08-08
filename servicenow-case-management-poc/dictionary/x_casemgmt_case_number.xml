@@ -91,11 +91,19 @@
         generator and assign a duplicate value. The platform's auto-number
         generator already guarantees uniqueness; this adds an
         index-backed enforcement layer.
-      - Default-sort at the dictionary level is TRUE: ServiceNow list views
-        on `x_casemgmt_case` will default to sorting by `number`. With
-        descending sort, the most recently created cases (with the highest
-        sequential numbers) appear at the top of the list - matching
-        agent / manager workflow expectations.
+      - Default-sort rank is 1: ServiceNow list views on `x_casemgmt_case`
+        default to sorting by `number`, so the most recently created cases
+        (with the highest sequential numbers) sit together at one end of the
+        list - matching agent / manager workflow expectations.
+        `sys_dictionary.defaultsort` is an INTEGER column on this release,
+        not a boolean: its own dictionary entry reports
+        internal_type=integer, and writing the string `true` was measured
+        leaving the stored value untouched without even incrementing
+        sys_mod_count, while writing `1` persists. An earlier revision of
+        this artifact declared `<defaultsort>true</defaultsort>`, which
+        import therefore discarded in silence and left the case list with no
+        default sort at all. `../scripts/post_import_remediation.js` carries
+        the same rank and verifies it.
       - max_length 40 is generous: the prescribed format `CASE0000001`
         consumes 11 characters; the additional headroom accommodates
         future format extensions (e.g., `CASE-2026-0000001` = 17 chars,
@@ -129,6 +137,28 @@
           * ../seed-data/cases/x_casemgmt_case_demo_*.xml (synthetic demo
             cases that may pre-assign numbers `CASE0000001` through
             `CASE0000010` during seeding)
+
+    SINGLE DISPLAY FIELD FOR `x_casemgmt_case` (`display=true`):
+
+      ServiceNow permits exactly ONE display field per table, and `number`
+      is it for `x_casemgmt_case`. Every other dictionary entry on this table
+      therefore carries `<display>false</display>`.
+
+      This is not cosmetic. When several columns are flagged, every reference to a case - the `Case` column on the task and party lists, and the mandatory `Case` field on their forms
+      renders blank; when none is flagged, they render a raw sys_id. An
+      earlier revision of this package flagged 13 of the 14 `x_casemgmt_case`
+      columns, 6 of 6 on `x_casemgmt_case_task` and 5 of 5 on
+      `x_casemgmt_case_party`, and the effect was measured on the live
+      instance: `getDisplayValue('case')` returned the empty string and the
+      `Case` column showed "(empty)" on every task and party row.
+
+      Normal writes cannot produce that state - the platform clears the flag
+      on sibling columns whenever one is set - but an Update Set commit
+      applies payloads with business rules suppressed, so the package itself
+      is the only thing that can create it. Hence the flags shipped here.
+      `../scripts/post_import_remediation.js` carries the same declaration,
+      reconciles a table down to this one field, and fails verification if a
+      table ends up with any number of display fields other than one.
 -->
 <record_update table="sys_dictionary">
     <sys_dictionary action="INSERT_OR_UPDATE">
@@ -144,7 +174,7 @@
         <comments>Auto-generated case number with format CASE0000001 (4-char prefix CASE + 7-digit zero-padded sequence). Read-only. Auto-population is configured by the parent table's number_ref pointing at ../numbers/sys_number_x_casemgmt_case.xml. Primary user-facing identifier of the case (referenced by portal submission and lookup, seed scripts, dashboards). Replaces ArkCase CaseFile.caseNumber (@AcmSequence + @TableGenerator).</comments>
         <create_roles/>
         <default_value>javascript:global.getNextObjNumberPadded();</default_value>
-        <defaultsort>true</defaultsort>
+        <defaultsort>1</defaultsort>
         <delete_roles/>
         <dependent/>
         <dependent_on_field/>
@@ -184,7 +214,7 @@
         <sys_name/>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_number</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

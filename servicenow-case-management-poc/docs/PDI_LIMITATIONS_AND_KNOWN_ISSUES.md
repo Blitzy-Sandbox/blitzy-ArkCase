@@ -27,7 +27,7 @@
 
 | Capability | Runtime status on the PDI |
 |---|---|
-| 3 custom tables + fields + choices + auto-number | ⚠️ **Working, but not from the package alone.** The physical schema is built by `scripts/post_import_remediation.js`. The package ships that script *and* an auto-execute trigger, and the trigger demonstrably **fires** on commit — but it **cannot succeed**, because the commit engine forces the record's `sys_scope` to the application and the script's `GlideTableDescriptor`/`GlideSecurityManager` calls are then refused in scoped execution (§9.4). On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage**, and one manual remediation run is required (§9.5, step 4). Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
+| 3 custom tables + fields + choices + auto-number | ⚠️ **Working, but not from the package alone.** The physical schema is built by `scripts/post_import_remediation.js`. The package ships that script *and* an auto-execute trigger, and the trigger demonstrably **fires** on commit — but it **cannot succeed**, because the commit engine forces the record's `sys_scope` to the application and the script's `GlideTableDescriptor`/`GlideSecurityManager` calls are then refused in scoped execution (§9.4). On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage**, and the manual sequence in §9.5, **steps 1-3**, is required. Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
 | 3 roles + ACL role × CRUD matrix (manager/agent/viewer, incl. assigned-only + field ACLs) | ⚠️ **Working, but not from the package alone.** A clean commit produces the 26 ACLs with **0 of 27** `sys_security_acl_role` links; the 27 links and the security-cache flush appear only after the remediation is run manually (§9.4–§9.5). Once run, the live 12-cell matrix is correct: manager full CRUD on all three tables; agent create with **no blanket** read/write and `delete=false`; viewer read-only. **Record-level narrowing empirically confirmed for both halves of the AAP §0.5.6 "Assigned only" definition** — impersonated agent sees 9 of 14 cases; `CASE0000453` and `CASE0000458` are visible with an *empty* `assigned_agent`, so group membership is the only possible grant path, and the five cases with neither group nor agent are absent. Direct-URL access to an unassigned row returns "Security constraints prevent access to requested page". Field-level ACLs confirmed too: the agent sees `assigned_group` read-only while `assigned_agent` stays editable. **Caveat:** the agent's *child-table* narrowing does not work — see ATF 07 in §8.3 and §9.6 E-ATF. |
 | Prohibited-transition guards (Any→Draft, Closed→*) | ✅ Working (Business Rules) |
 | Transition side-effects (`opened_date`, `closed_date`, clear `pending_reason`) | ✅ Working (Business Rules) |
@@ -78,8 +78,15 @@ step-by-step remedy in §9.5 and §9.6. Acceptance path **(b)** of the Refine-PR
 - **Remediation:** replaced all 149 `<application>` values with the scope sys_id `82b99028…`. XML re-uploaded
   and re-previewed with **zero errors** (problem progression 111 → 5 → 0).
 
-### Defect C — Update Set commit does not trigger DDL for **new** tables  *(platform limitation; now automated inside the package)*
-**Verdict: automated by an auto-executing script shipped in the package. No human step.**
+### Defect C — Update Set commit does not trigger DDL for **new** tables  *(platform limitation; automation is shipped, fires, and cannot complete — one manual run is required)*
+**Verdict: NOT automated end-to-end. A human step is required.** The package ships the remediation script and
+an auto-execute trigger; the trigger demonstrably **fires** on commit and then **fails with 121
+`SecurityException`s**, because the commit engine rewrites the record's `sys_scope` to the application and
+`GlideTableDescriptor` is refused in scoped execution (§9.4). The physical schema therefore appears only after
+an operator runs `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with
+**"In scope" = Global**, preceded by the application-picker table deletion. The exact sequence, in the order it
+must be performed, is [§9.5](#95-residual-manual-footprint-per-defect-with-the-precise-step) steps 1-3.
+Acceptance path **(b)**, not (a).
 
 - **Symptom:** after a clean zero-error commit, `x_casemgmt_case` materialized but `x_casemgmt_case_task`
   and `x_casemgmt_case_party` physical tables and **all** choice lists were absent (persisted across 6 commit
@@ -104,12 +111,19 @@ step-by-step remedy in §9.5 and §9.6. Acceptance path **(b)** of the Refine-PR
   it does not substitute for the business rule, so those three blocks were deliberately **not** added rather
   than shipped inert (they would also risk a duplicate-collection-row hazard on a table that is already
   physical, the same class of failure as Defect A).
-- **Remediation, now in the package.** `scripts/post_import_remediation.js` builds the tables, all 25 fields
-  and all 24 choice values from the deliverable's own specs (`../tables/*.xml`, `../dictionary/*.xml`,
-  `../choices/*.xml`, which mirror `docs/data-model.md`), and the package **auto-executes** it on commit —
-  see the trigger described under Defect 9 and in §4.14. Idempotent: a table that is already physical is left
-  strictly alone, and the clean-slate rebuild only ever deletes metadata-only rows for a table with no
-  physical storage, so it can never destroy data.
+- **Remediation — shipped in the package, but run by hand.** `scripts/post_import_remediation.js` builds the
+  tables, all 25 fields and all 24 choice values from the deliverable's own specs (`../tables/*.xml`,
+  `../dictionary/*.xml`, `../choices/*.xml`, which mirror `docs/data-model.md`). The package also ships a
+  trigger intended to run it on commit, **but that trigger cannot complete the work** (§9.4), and it is now
+  shipped `active=false` so it cannot mislead an operator into believing the remediation happened. **An
+  operator must run the script explicitly, in scope Global**, per §9.5 steps 1-3.
+  Idempotent, and **fail-closed by design**: a table whose physical state cannot be positively established is
+  left **strictly untouched** and the run aborts for that table rather than assuming the table is
+  metadata-only. The clean-slate rebuild only ever deletes rows for a table it has *proved* has no physical
+  storage — proof requires three independent signals (`GlideTableDescriptor.isValid`,
+  `GlideRecord.isValid`, `TableUtils.tableExists`) to agree on "no"; any one of them saying "yes", or any of
+  them throwing, aborts. Every `deleteRecord()` return value is checked and the collection is read back, so a
+  partial deletion aborts instead of proceeding. It can therefore never destroy data.
 - **Cross-check for whoever runs the clean import.** Because the DDL provably cannot happen until after the
   commit completes, the 28 **seed-data** blocks (10 Case, 10 Case Task, 8 Case Party) cannot land on a
   genuinely clean import: applying a data payload to a table that has metadata but no physical storage was
@@ -217,9 +231,13 @@ step-by-step remedy in §9.5 and §9.6. Acceptance path **(b)** of the Refine-PR
   already contains the correct scripts**, a clean fresh import does not reproduce this defect — it was a
   deployment state-sync artifact.
 
-### Defect 9 — ACL → role link records entirely missing  *(now automated inside the package)*
-**Verdict: automated by an auto-executing script shipped in the package. No human step. Cannot be shipped as
-records — see the negative result below.**
+### Defect 9 — ACL → role link records entirely missing  *(automation is shipped, fires, and cannot complete — one manual run is required)*
+**Verdict: NOT automated end-to-end. A human step is required.** The 27 links cannot be shipped as records at
+all (two independent measured reasons below), so a script is the only mechanism available — and the script's
+auto-execute path fires but fails, for the same commit-time scope rewrite as Defect C, because
+`GlideSecurityManager` is refused in scoped execution (§9.4). The links and the security-cache flush appear only
+after an operator runs `scripts/post_import_remediation.js` in scope **Global**
+([§9.5](#95-residual-manual-footprint-per-defect-with-the-precise-step) step 3). Acceptance path **(b)**, not (a).
 
 - **Symptom:** with the app committed, **no** role (manager/agent/viewer) could use the application; only
   `admin` (via `admin_overrides`) had access.
@@ -242,12 +260,22 @@ records — see the negative result below.**
   Shipping 27 `sys_security_acl_role` `<sys_update_xml>` blocks would therefore have looked correct in the
   package and delivered nothing on import. They are deliberately **not** in the deliverable, and no
   link-artifact files were added under `acl/` — that directory still holds exactly the original 26 ACL records.
-- **Remediation, now in the package.** `scripts/post_import_remediation.js` creates the 27 links and flushes
-  the security cache, and the package auto-executes it on commit (see the trigger below). The
-  `.assigned_agent` field ACL needs both manager and agent, which is why 26 ACLs yield 27 links (manager 14,
-  agent 10, viewer 3). The script asserts that total as an invariant: a shortfall, an unexpected ACL count, or
-  any ACL it could not map makes the run report `verified=false` rather than quietly leaving a role-less ACL
-  that would deny everyone.
+- **Remediation — shipped in the package, but run by hand.** `scripts/post_import_remediation.js` creates the
+  27 links and flushes the security cache. The package ships a trigger intended to do this on commit, but it
+  cannot succeed (§9.4) and is now shipped `active=false`; **an operator must run the script in scope Global**
+  (§9.5 step 3). The `.assigned_agent` field ACL needs both manager and agent, which is why 26 ACLs yield 27
+  links (manager 14, agent 10, viewer 3).
+- **The verification is fail-closed in *both* directions.** The script builds the **exact expected set of
+  (ACL, role) pairs** from the ACLs' own `<roles>` declarations and then requires the live set to equal it
+  — not merely to reach a threshold. `verified=false` is reported for a shortfall, for an **unexpected extra
+  pair**, for an unexpected ACL count, or for any ACL it could not map. Extra pairs are not just flagged but
+  **removed**, with each `deleteRecord()` return value checked and the row read back to confirm it is gone.
+  Two invariants must both hold: `acl_links_total === 27` **exactly**, and the per-role distribution
+  `manager 14 / agent 10 / viewer 3`. An earlier revision accepted any count `>= 27`, which would have let an
+  **over-privileged** link — for example a `viewer` attached to a write ACL — pass verification silently; that
+  hole is closed. Proven by injection: an extra `(case write ACL, viewer)` pair was created deliberately,
+  verification failed on 28 links, reconciliation deleted exactly that pair, restored 27, and the read-back
+  confirmed its removal.
 - **How the role for each ACL is determined — and why it is never guessed.** Three sources, in order of
   authority, which independently agree on all 27 links:
   1. **The package's own `<roles>` declaration.** Every `acl/*.xml` artifact (and therefore every `ACL`
@@ -275,10 +303,12 @@ records — see the negative result below.**
   `<roles>` declaration in their committed payload. Each link's own `sys_security_acl`/`sys_user_role` values
   are sys_ids read out of the database during the same run — never literals. `post_import_remediation.js`
   contains **zero** 32-character hex literals of any kind.
-- **The security-cache flush is automated, not an instruction.** `GlideSecurityManager.get().reset()` runs in
-  the same pass, in global scope (it is unavailable to a scoped caller). Without it the links exist but
-  enforcement does not change, which is the difference between "the records are there" and "access control
-  works".
+- **The security-cache flush needs no separate operator step.** `GlideSecurityManager.get().reset()` runs
+  inside the same script pass that creates the links, in global scope (it is unavailable to a scoped caller),
+  so the operator performing §9.5 step 3 does not have to flush anything by hand. Without it the links exist
+  but enforcement does not change, which is the difference between "the records are there" and "access control
+  works". This is the second of the two scoped-execution barriers that make the auto-execute path impossible
+  (§9.4).
 - **Empirical validation** (live, global scope, `GlideImpersonate` + `GlideRecordSecure`, after all package
   edits) — 27 links present, distributed manager 14 / agent 10 / viewer 3:
 
@@ -295,15 +325,22 @@ records — see the negative result below.**
   `readable=true canWrite=true canDelete=false`; on an unassigned case **NOT READABLE — filtered out of the
   query entirely**; 9 of the 10 demo cases visible (the tenth is the Draft case with no `assigned_group`).
   Manager sees 10 of 10 with full write and delete; viewer sees 10 of 10 read-only.
-- **How the remediation auto-executes.** The package ships
-  `scripts/sys_script_x_casemgmt_post_import_bootstrap.xml` — a **global-scope, after-update Business Rule on
-  `sys_remote_update_set`**, `order=1000`, condition `current.state.changesTo('committed')`. It carries no
-  logic of its own: it resolves the Fix Script `x_casemgmt Post-Import Remediation` (which carries
-  `post_import_remediation.js` verbatim) **by name** and dispatches it with
+- **What the shipped trigger actually is, and why it is shipped inactive.** The package ships
+  `scripts/sys_script_x_casemgmt_post_import_bootstrap.xml` — an after-update Business Rule on
+  `sys_remote_update_set`, `order=1000`, condition `current.state.changesTo('committed')`, authored
+  global-scope. It carries no logic of its own: it resolves the Fix Script `x_casemgmt Post-Import Remediation`
+  (which carries `post_import_remediation.js` verbatim) **by name** and dispatches it with
   `new GlideScopedEvaluator().evaluateScript(fix, 'script', null)`, inside a try/catch so it can never abort a
-  commit. Both records are folded into the Update Set at positions 103 (Fix Script) and 104 (Business Rule),
-  after every record the remediation repairs. Fuller rationale, the rejected alternatives, and the exact
-  post-commit verification signal are in §4.14.
+  commit. Both records are folded into the Update Set as records **104 (Fix Script) and 105 (Business Rule) of
+  916**, after every record the remediation repairs.
+
+  It is shipped **`active=false`**. It was measured to fire and then fail with 121 `SecurityException`s (§9.4),
+  and a rule that fires, logs a `SUMMARY|verified=false` line and changes nothing is worse than no rule at all:
+  it invites an operator to believe the remediation ran. Shipping it inactive keeps the mechanism, its rationale
+  and its dispatch wiring in the deliverable — auditable and one checkbox away from active — while making the
+  required manual step unavoidable rather than optional. Its own header comment states this, states that it
+  cannot succeed if activated, and points at the global background-script procedure. Fuller rationale, the
+  rejected alternatives, and the exact verification signal are in §4.14 and §9.4.
 
 ---
 
@@ -578,6 +615,15 @@ so future operators don't mistake them for bugs.
     one-shot bootstrap and not a permanent hook — and a failed or partial run deliberately leaves it active so
     the next commit retries.
 
+    > **⚠️ STATUS: the rule is now shipped `active=false`.** Everything above describes its design and is
+    > accurate as design. It does not describe what happens on a real install, because on the real
+    > upload → preview → commit path the rule **cannot succeed** (§9.4): the commit engine rewrites its scope to
+    > the application and the privileged calls are refused. Since the self-deactivation only happens on
+    > `verified=true`, a failing run left the rule **active**, retrying and re-logging `verified=false` on every
+    > subsequent commit — which invites an operator to believe the remediation ran. It is therefore shipped
+    > inactive, and the required procedure is the manual one in §9.5. The paragraphs below record what was
+    > measured, and distinguish the synthetic exercise from the real commit path.
+
     **What was verified, and what remains for the clean-instance round trip.** The trigger was exercised
     directly: a synthetic `sys_remote_update_set` row was driven through `loaded → committed`, and the rule
     fired once, dispatched the Fix Script, and produced exactly one `BOOTSTRAP|fired` line, one
@@ -589,12 +635,20 @@ so future operators don't mistake them for bugs.
     upload → preview → commit on a clean instance; confirming the rule fires on that path is the
     clean-instance round trip's job, using the signal below.
 
-    **Post-commit verification signal.** Every line the remediation emits is a `gs.info()` prefixed
-    `X_CASEMGMT_REMEDIATION|`. Read them with
+    **Verification signal — and which path it applies to.** Every line the remediation emits is a `gs.info()`
+    prefixed `X_CASEMGMT_REMEDIATION|`. Read them with
     `GET /api/now/table/syslog?sysparm_query=messageSTARTSWITHX_CASEMGMT_REMEDIATION^ORDERBYDESCsys_created_on`
-    (or *System Logs → All*, message starts with `X_CASEMGMT_REMEDIATION`). Expect, written synchronously
-    during the commit: one `…|BOOTSTRAP|fired|remote_update_set=<name>|state=committed|scope=rhino.global`,
-    one `…|SUMMARY|verified=true|…|errors=0`, and one
+    (or *System Logs → All*, message starts with `X_CASEMGMT_REMEDIATION`).
+
+    The expectation below was measured in the **synthetic exercise** described above — a hand-driven
+    `sys_remote_update_set` transition, where the rule genuinely ran in `rhino.global`. **It is not what a real
+    commit produces.** On the real path the scope is rewritten and the run reports
+    `scope_context=x_casemgmt|…|verified=false|…|errors=121` (§9.4); and because the rule now ships
+    `active=false`, a real commit of the current package emits **no marker lines at all**. Read the expectation
+    below as the signal to look for **after running the remediation manually from *Scripts - Background* with
+    "In scope" = Global** (§9.5 steps 1-3), which is the only route that produces it: one
+    `…|BOOTSTRAP|fired|remote_update_set=<name>|state=committed|scope=rhino.global` *(bootstrap line only if the
+    rule was activated deliberately)*, one `…|SUMMARY|verified=true|…|errors=0`, and one
     `…|TRIGGER|x_casemgmt Post-Import Bootstrap|deactivated after successful remediation`. On a genuinely clean
     instance the summary should read `tables_built=3` and `acl_links_created=27`, because those counters
     increment only when the script actually creates something; on a re-run it reads `tables_already=3` and
@@ -603,8 +657,11 @@ so future operators don't mistake them for bugs.
     are what the clean-instance round trip should confirm.) The created-vs-already counters are how a real
     first install is told apart from a repeat. Corroborating checks that need no log reading: the Business Rule
     `x_casemgmt Post-Import Bootstrap` reads `active=false`; `sys_security_acl_role` filtered to
-    `sys_scope.scope=x_casemgmt` returns **27** rows; and `x_casemgmt_case_task` / `x_casemgmt_case_party`
-    answer HTTP 200 on the Table API.
+    `sys_scope.scope=x_casemgmt` returns **27** rows. Do **not** try to corroborate by reading
+    `x_casemgmt_case_task` / `x_casemgmt_case_party` over the REST Table API — those return **HTTP 403**
+    (`Failed API level ACL Validation`) even as `admin`, because of the tables' cross-scope access policy, and a
+    global-scope `GlideRecord` read of them returns `getRowCount() == 0` rather than raising. Verify row counts
+    from inside the application scope instead. See §9.6 E9.
 
     Idempotency was proved by running the shipped Fix Script twice back-to-back: both runs reported
     `verified=true`, `errors=0`, and every counter at `created=0` / `already=<expected>`.
@@ -676,7 +733,7 @@ so future operators don't mistake them for bugs.
 |---|:---:|:---:|:---:|:---:|
 | A duplicate scope | ✅ | — | ✅ | — |
 | B `application` ref | ✅ | — | ✅ | — |
-| C commit-no-DDL | ✅ the remediation script **and** its auto-execute trigger are folded into the Update Set (Fix Script at position 103, Business Rule at 104; 151 → 153 records) | ✅ | ✅ `scripts/post_import_remediation.js` + `scripts/sys_script_fix_…xml` + `scripts/sys_script_…bootstrap.xml` | ⚠️ **trigger fires but cannot succeed — one manual run required.** Measured on a clean install: `SUMMARY` reports `verified=false`, `tables_built=0`, `errors=121`. See §9.4 and the procedure in §9.5. |
+| C commit-no-DDL | ✅ the remediation script **and** its (now inactive) auto-execute trigger are folded into the Update Set — records **104** (Fix Script) and **105** (Business Rule) of **916**, counting `<sys_update_xml>` blocks from 1 | ✅ | ✅ `scripts/post_import_remediation.js` + `scripts/sys_script_fix_…xml` + `scripts/sys_script_…bootstrap.xml` | ⚠️ **trigger fires but cannot succeed — one manual run required.** Measured on a clean install: `SUMMARY` reports `verified=false`, `tables_built=0`, `errors=121`. See §9.4 and the procedure in §9.5. |
 | D cross-scope barrier | n/a | n/a (workaround) | n/a | n/a — the remediation runs entirely in **global** and writes no `x_casemgmt_*` data; data seeding stays `seed_demo_data.js`'s job, in scope |
 | E auto-numbering | ✅ `Dictionary` + 3 × `Number Maintenance` payload blocks updated | ✅ | ✅ `dictionary/x_casemgmt_case_number.xml`, `numbers/sys_number_x_casemgmt_case{,_task,_party}.xml` | re-asserted by the script (needed only because Defect C's rebuild re-creates the dictionary row) |
 | 6 `gs.nowDateTime` | partial | ✅ | ✅ | — |
@@ -1074,7 +1131,7 @@ reverted — so preview and commit must be driven through `UpdateSetPreviewAjax`
 Before committing, the platform's own predicate was checked: `state=previewed`, `unresolvedProblems=false`,
 `shouldDisplay=true` — i.e. nothing manual sat between preview and commit.
 
-### 9.3 The three edits made to the deliverable in this pass
+### 9.3 The three edits made to the deliverable in the clean-instance round-trip pass
 
 The package remains **one** file at `update-set/x_casemgmt_case_management_update_set.xml`, with **916 records**
 (pre-refine 148; delta +768). Every edit was verified to change nothing else: after edit 1 there were **zero**
@@ -1127,10 +1184,65 @@ differences, zero other wrapper-field differences, and **exactly two** `<name>` 
    there are no local records to collide with. Edit 3 therefore cannot change the clean-slate preview outcome,
    and the **AFTER = 0** of §9.2 is attributable to the file as shipped.
 
-> **Reported, not fixed:** the artifact `portal/rest/sys_ws_operation_x_casemgmt_case_submit_post.xml` carries
-> `sys_id e1b7bfa9aff542fa88a645612a73e54c`, which is **absent from the package** — the package uses
-> `886ad7128907a6351ea04b210c27029e` for the same logical endpoint. Two records exist for one endpoint. The
-> functional fields were reconciled; the duplicate identity was left alone and is recorded here.
+> **Since fixed — the duplicate endpoint identity is gone.** This section previously reported that the artifact
+> `portal/rest/sys_ws_operation_x_casemgmt_case_submit_post.xml` carried `sys_id
+> e1b7bfa9aff542fa88a645612a73e54c` while the package used `886ad7128907a6351ea04b210c27029e` for the same
+> logical endpoint — two identities for one endpoint, functional fields reconciled but the identity left
+> unresolved. It has now been resolved in favour of the package's value. The instance settled it: `GET
+> /api/now/table/sys_ws_operation/886ad7128907a6351ea04b210c27029e` returns the single live Case Submit POST
+> operation, while `…/e1b7bfa9aff542fa88a645612a73e54c` returns **HTTP 404** — that `sys_id` corresponds to no
+> record anywhere. The artifact now carries `886ad7128907a6351ea04b210c27029e` as its sole identity, in its
+> `<sys_id>`, and the package block's `<name>` and payload agree with it. `e1b7bfa9aff542fa88a645612a73e54c`
+> no longer appears anywhere in the deliverable.
+
+### 9.3a Edits made to the deliverable in the packaging-and-schema pass
+
+A later review pass targeted packaging, configuration and schema self-sufficiency. Its changes are recorded here
+so that §9.3 is not read as the complete edit history. Every one was verified by a four-part static gate suite
+run over the whole deliverable: a **structural** gate (single `<unload>` root, 1 descriptor + 916
+`sys_update_xml`, the full 18-element wrapper set on every record, unique `<name>` and `<update_guid>`, every
+payload parses, canonical `<table>_<sys_id>` naming, and 14 AAP §0.5.2 ordering invariants), a **parity** gate
+(all 1181 standalone artifact records compared field-by-field against their embedded payloads), an **embedded**
+gate (all 916 payloads parse, all 60 embedded scripts parse), and a **script-copy** gate (the remediation body
+ships as three byte-identical copies). All four pass.
+
+| # | Change | Why | Evidence |
+|---|---|---|---|
+| 1 | **Artifact ↔ package parity brought to exact.** 181 elements normalized across 136 artifact files — `sys_scope` ×170, the REST metadata fields, `number_ref` ×3, `sp_portal.homepage`/`login_page`, `sys_app.source` | The standalone artifacts and the package payloads disagreed on 171 records. A reader could not tell which copy was authoritative, and a regenerate-from-artifacts step would have silently changed the package | Parity gate: **1181 records compared, 0 absent, 0 divergent.** The `flows/` directory is excluded and documented as such — its apparent divergence is an artefact of two same-`sys_id` `sys_hub_flow` children per composite block, and it is owned by a different review lens |
+| 2 | **One display field per table, in the package itself** | See §9.6 E7. The package was the *sole* carrier of this defect, because a normal write cannot create multiple display fields — the platform clears the flag on every sibling — so only an Update Set commit, which suppresses business rules, can produce the broken state | 21 dictionary artifacts and their payloads set to `display=false`; live read-back gives `x_casemgmt_case → [number]`, `case_task → [subject]`, `case_party → [role_label]` |
+| 3 | **`defaultsort` corrected from `true` to `1`** on `x_casemgmt_case.number` | **`sys_dictionary.defaultsort` is an integer column** (`internal_type=integer` on its own dictionary entry). Writing the string `true` is **silently discarded** — no error, and no `sys_mod_count` increment — so the case list had *no* default sort at all. Measured directly: setting `'true'` left the stored value unchanged, setting `'1'` persisted | Fixed in three places that must agree: the artifact, its payload, and the remediation script's expected value |
+| 4 | **Duplicate Scripted REST operation identity resolved** | Two `sys_id`s existed for one endpoint | See the note at the end of §9.3 — the instance returned **HTTP 404** for the artifact's value |
+| 5 | **The four REST blocks moved ahead of the portal UI blocks** | AAP §0.5.2 requires the scripted REST records to precede the widgets that call them by URL, and the portal artifacts' own `CROSS-REFERENCES` sections already declared that order — the package was the copy violating it | Relocated by exact line-range move with no reserialization; the sorted multiset of per-block text hashes is **identical** before and after, proving nothing but position changed. The four previously-failing ordering assertions now pass |
+| 6 | **The remediation script made fail-closed and semantically convergent** | It could destroy a populated table on an exception, it accepted a surplus of ACL role links, and it treated a field as correct merely because the column existed | See §9.3b |
+
+### 9.3b The remediation script's safety and convergence changes
+
+The script is the only mechanism that can complete Defects C and 9, so its failure modes matter more than its
+happy path. Four classes of defect were fixed.
+
+- **It could delete a populated table.** `tableIsPhysical()` mapped **any** exception to `false`, and
+  `ensureTable()` then treated `false` as licence to delete every `sys_dictionary` and `sys_db_object` row for
+  that table. A transient failure of a privileged call was therefore indistinguishable from "this table has no
+  physical storage". It now uses a **tri-state probe**: three independent signals
+  (`GlideTableDescriptor.isValid`, `GlideRecord.isValid`, `TableUtils.tableExists`), where a throw or a
+  non-boolean answer yields `unknown`, any `yes` yields `yes`, and only unanimous `no` yields `no`. Anything but
+  a proven `no` **aborts that table untouched**. Every `deleteRecord()` return value is checked and the
+  collection is read back, so a partial deletion aborts rather than continuing. Proven by injection: forcing the
+  probe to `unknown` left `sys_dictionary` at 13 rows and `sys_db_object` at 1 row — **nothing was deleted**.
+- **It accepted over-privileged ACL links.** Verification failed only below 27 links, so 28 passed — meaning an
+  extra `(write ACL, viewer)` pair would have been accepted silently. It now builds the **exact expected pair
+  set** from the ACLs' own `<roles>` declarations, requires equality, deletes extras with verified deletes, and
+  asserts both `total === 27` and the per-role distribution manager 14 / agent 10 / viewer 3.
+- **It called a field "correct" if the column merely existed.** Type, length, mandatory, read-only, display,
+  unique, reference target, default value and active were never compared, so a wrong `max_length` or a missing
+  default survived. It now compares and repairs **12 dictionary attributes** and **4 choice attributes**, and
+  verifies the choice configuration as an **exact set** — 7 lists and 24 values, failing on a missing *or* an
+  unexpected value. Missing authoritative defaults were also added (`case.status=Draft`, `case.priority=Medium`,
+  `case_task.status=Open`).
+- **Its header described an execution contract that did not hold.** It claimed no human step beyond
+  upload → preview → commit, and that running the Fix Script from the UI was equivalent to a global background
+  run. Neither is true (§9.4). The header now states the one route measured to work.
+
 
 ### 9.4 Did the auto-execute trigger fire? Yes — and it cannot succeed
 
@@ -1171,10 +1283,10 @@ Everything that could be automated is in the package. What remains, in the order
 
 | # | Defect | What is missing after upload → preview → commit | Precise step | Why automation was not achievable |
 |---|---|---|---|---|
-| 1 | **C** — physical schema | `sys_db_object` metadata exists but has **no physical storage**; REST returns 403; 0 `sys_choice` rows for all 7 choice lists; inserts fail with `invalid table name` | Set the session's application picker to **x_casemgmt Case Management** (user preference `apps.current_app`), then **REST-DELETE the three `sys_db_object` rows children-first** (`x_casemgmt_case_task`, `x_casemgmt_case_party`, `x_casemgmt_case`) — some return HTTP 500 *maximum execution time exceeded* but do succeed. Then run `scripts/post_import_remediation.js` in scope **Global** | The DDL comes from the platform's `Synch Dictionary and Table` business rule, which the commit engine suppresses; and the remediation cannot run from the auto-execute path because commit rewrites its scope (§9.4). `sys_db_object` deletion is gated by `DictionaryUtils.isDeletable()` → `_isItemInUserScope()`, which refuses from Global, while the cross-scope policy on `sys_db_object` refuses from the app scope — the application-picker route is the only one that works |
-| 2 | **C**, second pass | Deleting the three `sys_db_object` rows **cascades away all 26 ACLs** | **Upload → preview → commit the same Update Set a second time.** This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — accept those (`status=ignored`); never ignore a collision problem. The second commit restores the 26 ACLs, the seed rows, the users and the role grants | A consequence of step 1, not avoidable while the DDL must be produced by a table rebuild |
+| 1 | **C** — physical schema | `sys_db_object` metadata exists but has **no physical storage**; REST returns 403; 0 `sys_choice` rows for all 7 choice lists; inserts fail with `invalid table name` | **Run `scripts/post_import_remediation.js` in scope Global — that is the whole step.** It performs the `sys_db_object` deletion and the rebuild itself. Re-measured on a clean install of the final package: from Global alone it reported `clean slate|dictionary_rows_removed=14|db_object_rows_removed=1|residue=0|reusing_sys_id=yes` for each table, the platform emitted its DDL (`Creating table:`, `DBTable.create() for:`, `ALTER TABLE x_casemgmt_case ADD number VARCHAR(40)`), and all three finished `built|signals=...isValid=yes,...isValid=yes,...tableExists=yes` with `tables_built=3, fields_created=25, choices_created=24`. **No application picker was set at any point.** An earlier revision of this row required setting `apps.current_app` first and REST-DELETEing the three rows by hand, on the basis that `DictionaryUtils.isDeletable()` refuses from Global; that is retained below as a fallback only | The DDL comes from the platform's `Synch Dictionary and Table` business rule, which the commit engine suppresses; and the remediation cannot run from the auto-execute path because commit rewrites its scope (§9.4). `sys_db_object` deletion is gated by `DictionaryUtils.isDeletable()` → `_isItemInUserScope()`, which refuses from Global, while the cross-scope policy on `sys_db_object` refuses from the app scope — the application-picker route is the only one that works |
+| 2 | **C**, second pass | Deleting the three `sys_db_object` rows **cascades away all 26 ACLs** | **Upload → preview → commit the same Update Set a second time.** This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — accept those (`status=ignored`). **On collisions, read this carefully:** the rule "never ignore a collision" still holds for every table EXCEPT `sys_dictionary`. Re-measured on the final package, this preview reported 46 problems = 25 collisions + the 21 references, and **all 25 collisions were `sys_dictionary` rows the remediation had written moments earlier**. The original caution existed because ignoring them used to discard the hand-repaired display fields; the package now carries the corrected `display` and `defaultsort` values itself, so accepting the remote is the correct action there, and the step-3 remediation re-verifies afterwards. Note that on this platform `status='ignored'` means *ignore the problem and apply the incoming record*; the only other choices are `skipped` and `skip_collision`. The second commit restores the 26 ACLs, the seed rows, the users and the role grants | A consequence of step 1, not avoidable while the DDL must be produced by a table rebuild |
 | 3 | **9** — 27 ACL role links | 26 ACLs with **0** role links. On this high-security instance an ACL with no role, no condition and no script evaluates to **deny**, which makes the application unusable | Run `scripts/post_import_remediation.js` in scope **Global** again. Expected on the `SUMMARY` line: `verified=true`, `acl_links_created=27`, `acl_links_total=27`, `acl_links_expected=27`, `security_cache_flushed=true`, `errors=0` — followed by a `TRIGGER` line recording that the bootstrap rule deactivated itself after a successful remediation | `sys_security_acl` has no `roles` column and `sys_security_acl_role` link payloads are silently discarded by the commit engine (5 payload shapes tested, §2 Defect 9). The creating script cannot auto-run for the reason in §9.4 |
-| 4 | **E7** — one display field per table | All three tables arrive with `display=true` on nearly every column (13 of 14 on `x_casemgmt_case`). ServiceNow permits exactly one. Effect: every reference **to** a case renders blank — the `Case` column in the task and party lists, and the mandatory `Case` field on their forms | Reduce each table to a single display field: `x_casemgmt_case` → `number`, `x_casemgmt_case_task` → `subject`, `x_casemgmt_case_party` → `role_label`. Verified immediately afterwards: `getDisplayValue('case')` returns `CASE0000455`, and the `Case` column is populated on 10/10 task rows and 8/8 party rows | Not attempted by any automation. The defect is present in **both** the packaged `Dictionary` blocks and in `scripts/post_import_remediation.js` (which sets `display: true` on every field it creates), so re-running the remediation reintroduces it. This is the first thing to fix in the next generation pass |
+| 4 | ~~**E7** — one display field per table~~ **NO LONGER MANUAL — now carried by the package** | Nothing. This step is retained with its original number so that existing references to "§9.5 step 4" still resolve | **No operator action.** Previously the operator had to reduce each table to one display field by hand, because all three arrived with `display=true` on nearly every column (13 of 14 on `x_casemgmt_case`) while ServiceNow permits exactly one — so every reference **to** a case rendered blank. Both carriers of the defect are now fixed: the 24 `dictionary/*.xml` artifacts and their Update Set payloads ship `display=false` on all but one column per table (`x_casemgmt_case` → `number`, `x_casemgmt_case_task` → `subject`, `x_casemgmt_case_party` → `role_label`), and `post_import_remediation.js` no longer sets `display: true` on every field it creates. The script additionally **reconciles** the flag after its field loop and **verifies exactly one display field per table**, failing the run if that does not hold | Now fully automated. Two platform behaviours had to be understood first: (a) a normal write that sets `display=true` on one column **silently clears it on every sibling**, so multiple display fields can only ever be *created* by an Update Set commit, where business rules are suppressed — which is why the package was the sole carrier; and (b) the reconciliation therefore has to run once per table after all fields are settled, not per field. Verified by injection: forcing `display=true` onto a non-display column was detected by attribute and value and repaired in a single pass |
 | 5 | **E1/E2** — demo data | The packaged seed rows commit with **`number` empty on all 10 demo cases** and dangling parent references, and they **block the app's own seed script from repairing them** | Delete the 10 number-less `Demo case …` rows, their orphan tasks and parties, and the dangling `sys_user_grmember` row; then run `scripts/seed_demo_data.js` in scope. It then inserts all 10 cases with platform-allocated numbers and fully resolved references, with zero warnings | Every packaged `Case Record` payload **omits the `number` element**, and auto-numbering does not fire on an Update-Set data insert. `ensureCase()` keys on `subject`, so the number-less rows match and the script makes no change. See §9.6 E1 |
 | 6 | Instance prerequisites (not package artifacts, deliberately not captured) | — | `sn_atf.runner.enabled = true` to run the ATF suite (it survived this teardown). `sn_atf.headless.enabled = false` and cannot be enabled here, so `/atf_test_runner.do?sysparm_nostack=true` must be open in a browser before launching the suite. The three demo personas have **no password** by design and can only be exercised through admin **UI Impersonation** | These are instance test-harness settings, not application configuration; capturing them into the Update Set would be a global write |
 
@@ -1195,12 +1307,15 @@ Defect F, not Defects C/E/7/9, and not the ATF suite). They are recorded here so
 | **E3** | `sys_ui_action.condition` is `condition_string`, **max length 254**. Four conditions exceed it and are silently truncated mid-expression on import: `x_casemgmt_case_start_progress` (264), `_set_pending` (271), `_resume` (267), `_resolve` (271). The Resolve condition ends `…isMemberOf(current.assigned_grou` | Exactly those four buttons render for the **viewer**, who has no write ACL, a fully read-only form and no Update button; the two short-condition actions (`_open` 76, `_close` 79) behave correctly | A truncated condition cannot evaluate, so the guard fails open. Data security is intact — the write ACL rejects the change server-side — but the affordance is misleading. Fix: move the condition into a Script Include call short enough to fit, or into the UI Action's script |
 | **E4** | UI Policy `x_casemgmt_case_party_conditional_fields` does not re-evaluate on change | Both branches are configured correctly and apply correctly **at form load** (Person record → Person visible and mandatory, Organization absent from the DOM; Organization record → the mirror). Driving `party_type` through the real `<select>` *and* through `g_form.setValue()` in both directions on both record types left `isVisible`/`isMandatory` frozen at the load-time branch every time | A user switching Party Type is not shown the field they now need and is still required to fill the wrong one. Signature of **"Reverse if false" unchecked** |
 | **E5** | The two Dashboard composite blocks serialize their tab child as **`<pa_tab>`**; this release's table is **`pa_tabs`** | `GET /api/now/table/pa_tab` → **HTTP 400** (unknown table); `…/pa_tabs` → **200**; `sys_db_object` holds `pa_tabs` (label "Tab") and `pa_m2m_dashboard_tabs` but **no** `pa_tab`. Two commit errors on every import: `Table 'pa_tab' does not exist`. Both `pa_dashboards` rows nevertheless commit and are live, while `pa_m2m_dashboard_tabs` for them is **0 rows** | Each dashboard installs **with no tab**, so it renders no widgets and validation gate 6 fails. The PDI capability is present — this is a **one-element packaging defect in the deliverable**. **Pre-existing**: `dashboards/pa_dashboards_x_casemgmt_*.xml` are byte-unchanged since the pre-refine commit and the pre-refine Update Set carried the same two `<pa_tab>` elements, so no unit of this pass introduced it. Fix in §10.2 item 11 |
-| **E7** | 13 of 14 `x_casemgmt_case` dictionary entries carry `display=true` (also 6 of 6 on `case_task`, 5 of 5 on `case_party`), in the packaged blocks **and** in `post_import_remediation.js` lines 239–265 | `getDisplayValue('case')` returned `""`; the `Case` column showed "(empty)" on every task and party row | Every reference to a case renders blank. Remedy in §9.5 step 4 |
+| **E7** — ✅ **FIXED, both carriers** | Was: 13 of 14 `x_casemgmt_case` dictionary entries carried `display=true` (also 6 of 6 on `case_task`, 5 of 5 on `case_party`), in the packaged blocks **and** in `post_import_remediation.js`. Now: the 24 dictionary artifacts and their payloads ship `display=false` except one column per table, and the script sets `display: true` only on `case.number` / `case_task.subject` / `case_party.role_label`, reconciles the flag per table, and **verifies exactly one display field per table** | Was: `getDisplayValue('case')` returned `""`; the `Case` column showed "(empty)" on every task and party row. Now: the package itself yields one display field per table on commit, and the script's verification fails the run if it does not | Resolved. No longer a residual manual step — see §9.5 step 4, retained only so existing cross-references resolve |
 | **E8** | AAP §0.4.4's **Related Lists were never authored** | `sys_ui_related_list` is empty for every table in the app; `#related_lists_wrapper` renders at height 0 and the case form does not scroll; no `sys_ui_related_list`/`sys_ui_form`/`sys_ui_section`/`sys_ui_element` artifact exists in the repository or the package (only 1 `sys_ui_policy` and 6 `sys_ui_action`) | AAP §0.4.4 requires related lists for `case_task` and `case_party` on the case form. A user cannot see or add a case's tasks or parties from the case form |
 | **E8-P** | The Service Portal **layout** records were never authored | `GET /api/now/sp/page` returns HTTP 200 with `containers: []` for all three routes, alongside `theme:{footer:{},header:{}}`. `sp_portal`, both `sp_page` records (`public:true`, `draft:false`, correct titles and routing) and all 3 `sp_widget` records are present and healthy. No `sp_container`/`sp_row`/`sp_column`/`sp_instance` record exists on disk, in the package, or in the pre-refine package | Both portal pages render **completely blank** — 0 labels, 0 inputs, 0 buttons; all six portal screenshots are byte-identical. `Your case has been submitted`, the case number, the whitelisted lookup result and `No case found with that number.` appear **only** in the API responses, never on screen. Validation gates 4 and 5 pass at the REST layer only. There is also no navigation: the only link on any page is "Skip to page content". **ACL filtering is ruled out by control probe:** the *same* anonymous guest session receives **populated** `containers` (length 1, 2 widget instances, an 11,867-byte body carrying the full `sys_container` shape) from the out-of-the-box `404` and `unauthorized` portal pages, while both `x_casemgmt` pages return a 927–947-byte body with `containers: []` on a fully resolved `public:true, draft:false` record. Three response signatures were characterised — 565 B page-does-not-exist, 927–947 B page-healthy-but-no-layout, 11,867 B page-with-layout — and both `x_casemgmt` pages sit in the middle band. The rendered `<main>` is 336 characters ending in `<!-- ngRepeat: container in containers -->` with zero instances; the three route screenshots are byte-identical (one sha256) and each is 100 % pure white across all 1,296,000 pixels; console errors 0, and of 77 requests the only non-2xx are two benign 304 revalidations of the platform’s own `sn_banner.xml` — so this is configuration, not a crash. `sp_portal.theme_dv` is also empty, which is why no header/footer chrome renders. Fix: capture the container/row/column/widget-instance records for both pages, plus a menu |
 | **E-ATF** | The four scoped **child-table** ACL conditions dereference `current.case`, and `case` is a JavaScript reserved word | `Javascript compiler exception: missing name after . operator (sys_security_acl.1ea69bf11f64a85ddf0c7e970779fefe; line 2)`, plus `AccessTerm: Slow ACL … for the path record/x_casemgmt_case_task/read`. Caught by **ATF 07** | `x_casemgmt_case_task` read+write and `x_casemgmt_case_party` read+write **deny every row** for the agent. The parent-table ACLs are unaffected. Fix: replace `current.case` with `current.getValue('case')` / `current.getElement('case')` |
 | **E-ATF15** | `ATF 15/16/17` fail on a clean instance at step 3/7 `Open an Existing Record`: `Table 'x_casemgmt_case' does not have a record with id '…'` | Deterministic across three runs, including one with the client runner deliberately throttled. Steps 1 (fixture) and 2 (Impersonate) succeed; steps 4–7 skip. **The application is not at fault** — replicating the fixture exactly (`setNewGuidValue(<fixed sys_id>)` + `insert()`) returned the requested id, read back as `CASE0000540` with the display value resolving, and passed `GlideRecordSecure` with `canRead=true` | An ATF **server-fixture → client-form handoff** problem: a row created by a `Run Server Side Script` step is not visible to a following client-side form step. The fixture's own first action is to delete stale residue, which is what those tests had been relying on; the clean slate removed it. Fix: create the fixture inside the client step's own transaction, or address it with ATF's `{{step[…]}}` substitution |
-| **E-GU** | `gs.getUser(userName)` **ignores its argument** on this release and returns the **session** user | Measured in both scope and global: `gs.getUser("x_casemgmt_demo_agent")` → `resolved_name=admin`, `IS_SESSION_USER=true`, `hasRole(manager)=true` | `CaseTransitionValidator.canTransitionToClosed()`'s branch (b) — "userId provided and differs from the current user" — silently degrades to the session user, so it answers `{ok:true}` for a non-manager. Branches (a) and (c), which call `gs.getUser()` with no argument, are correct and are the **only** branches the shipped runtime uses; an unknown `sys_id` still denies by default. Fix: resolve roles with `sys_user_has_role` directly rather than `gs.getUser(userName)`. Found by a probe stricter than the 13 baseline assertions, which pass a **deliberately unresolvable** id and therefore never reach this branch — so this is a latent hole, not a regression. See §9.7 |
+| **E-GU** — ✅ **FIXED** | `gs.getUser(userName)` **ignores its argument** on this release and returns the **session** user | Measured in both scope and global: `gs.getUser("x_casemgmt_demo_agent")` → `resolved_name=admin`, `IS_SESSION_USER=true`, `hasRole(manager)=true` | `CaseTransitionValidator.canTransitionToClosed()`'s branch (b) — "userId provided and differs from the current user" — silently degrades to the session user, so it answers `{ok:true}` for a non-manager. Branches (a) and (c), which call `gs.getUser()` with no argument, are correct and are the **only** branches the shipped runtime uses; an unknown `sys_id` still denies by default. Fix: resolve roles with `sys_user_has_role` directly rather than `gs.getUser(userName)`. **No longer latent, and now fixed.** On the clean-slate reseed the demo users got resolvable `sys_id`s, so harness assertion **A10 reached branch (b) and FAILED** — `canTransitionToClosed` returned `{ok:true}` for a non-manager, a real bypass of the AAP §0.5.5 Resolved→Closed rule. Branch (b) now resolves the grant with a `GlideRecord` query on `sys_user_has_role` (`user=<runtime sys_id>` ^ `role.name=x_casemgmt_case_manager`) instead of `gs.getUser(userName)`, which is the platform's own store of effective role grants. After the fix the harness is **13/13 PASS** including A10. Fixed in `script_includes/x_casemgmt_CaseTransitionValidator.xml` and its Update Set payload, with the measured behaviour recorded as a WARNING in the method body so it is not "simplified" back. See §9.7 |
+| **E9** | The three scoped tables are **unreachable from outside the application scope**. `GET /api/now/table/x_casemgmt_case?sysparm_limit=1` returns **HTTP 403** `{"message":"User Not Authorized","detail":"Failed API level ACL Validation"}` as `admin`, for all three tables. The platform names the reason when the same read runs in a global background script: *"Read operation against 'x_casemgmt_case' from scope 'rhino.global' has been refused due to the table's cross-scope access policy."* Two aggravating properties: a **global-scope `GlideRecord` read returns `getRowCount() == 0` instead of raising**, so a global verification script silently reports "no data" for a fully populated table; and `GlideRecordSecure.canRead()` returns **`true`** with all 26 ACLs `active`, `admin_overrides=true`, so the record ACLs are **not** the cause | **The capability is not broken — only the external access path is.** Read from inside the app scope and all three answer correctly: 21 cases, 10 tasks, 8 parties, with `getDisplayValue()` returning `CASE0000449`. The app's own anonymous scripted REST endpoints also work (201/200/404). **A related but separate packaging bug was found and disproved as the cause:** the package declares all six access columns as `public`, but on `sys_db_object` only `access` is a *string* — `ws_access`, `read_access`, `create_access`, `update_access`, `delete_access` are **boolean**, so `"public"` coerces to **false** (live rows read `access=public`, the other five `false`). `post_import_remediation.js` has the same bug, assigning `'public'` to four of them. **Correcting the flags does not lift the 403:** all five were set `true` on `x_casemgmt_case`, confirmed written, then `GlideSecurityManager` reset, the session cache cleared and a full `/cache.do` Cache Flush performed — still 403, still refused from `rhino.global`. A control shows the flags are normally decisive: of 392 `sn_*` scoped tables, the 326 with both `ws_access` and `read_access` true return HTTP 200 | Any REST-based verification of the three tables fails, including the post-commit gate in the deployment instructions. **Pre-existing, not introduced by the packaging pass**: `tables/*.xml` declared `public` at the pre-pass commit unchanged, and the Update Set carried `<ws_access>public</ws_access>` three times before and after. Deliberately **not** "fixed", because the only available fix was measured **not** to work and shipping it would be a speculative change. Fix properly by root-causing the cross-scope policy first, then correcting the five boolean columns in `tables/*.xml`, their three Update Set payloads, and `ensureTable()` in `post_import_remediation.js` together. Until then, verify from the app scope (guide §6.1) |
+| **E10** | **The commit engine silently drops `read_only=true` on dictionary fields.** The package declares `read_only` on `x_casemgmt_case.number`, `opened_date`, `closed_date` and `duration_to_close`; after a clean commit all four arrive **writable**. Found on the first real clean-slate install by the remediation's semantic dictionary comparison, which reported `FIELD` / `x_casemgmt_case.number` / `repaired` / `read_only:false->true` and the same for the other three (`fields_repaired=4`) | Effect had it gone unnoticed: the **auto-numbered case number, both audit dates and the computed duration would all have been user-editable** on the form, so a user could overwrite the case number or backdate `opened_date`/`closed_date`. This is the third measured instance of one root pattern — the commit engine not honouring a declared `sys_dictionary` attribute — the other two being `display` (E7) and `defaultsort` (§9.3a item 3) | **Self-correcting as shipped**: `post_import_remediation.js` compares all 12 dictionary attributes and repairs any drift, so the required step-3 remediation run restores all four to `read_only=true` and verification fails if it cannot. The pre-remediation package alone leaves them writable, so the remediation is not optional for correctness either. The pre-Phase-2 script treated a field as correct whenever its column existed and would have left all four writable indefinitely |
+
 
 ### 9.7 Regression report (13 transition-logic assertions)
 
@@ -1335,6 +1450,47 @@ following was observed on `dev379024`, and nothing was repaired between measurin
 
 ---
 
+### 9.10 Clean-slate round trip repeated on the FINAL bytes
+
+§9.1–§9.9 describe a round trip performed before the packaging-and-schema pass. Because the package changed after
+that (§9.3a), the whole trip was repeated end to end against the exact bytes that ship, identified by hash so the
+claim is checkable:
+
+**`update-set/x_casemgmt_case_management_update_set.xml` — sha256 `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a`, 3,448,009 bytes, 916 records.**
+
+> **Why the trip was run twice.** The first pass used sha256 `475a97a3…a17ea` and reached the same result (54 → 296 → **0**, committed). It also surfaced the **E-GU** authorization bypass through harness assertion A10, which was then fixed in `script_includes/x_casemgmt_CaseTransitionValidator.xml` — changing one payload **after** the trip. Rather than argue that a script body cannot affect preview resolution, the entire trip was **repeated from a fresh teardown on the corrected bytes**, and every figure below is from that second run. This is deliberately not the earlier mistake of attributing a clean-slate result to bytes that were subsequently edited.
+
+| Stage | Measurement |
+|---|---|
+| Pre-flight | Instance reachable, credentials valid. **The upgrade check in the deployment instructions is invalid on this release:** it queries `sys_upgrade_history` for `state=executing`, but that table has **no `state` column** (its columns are `upgrade_started` / `upgrade_finished`), and an invalid field in `sysparm_query` is silently ignored — so the query returns unfiltered rows and always looks like an upgrade is running. Correct predicate `upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` → **0 rows** |
+| Upload mechanics | The file's `<sys_remote_update_set>` descriptor carries a fixed `sys_id`, so **re-uploading MERGES into the same row and appends its children** (observed: 1832 = 2 × 916). Every upload here was preceded by a staging reset and the child count asserted at exactly **916** before previewing |
+| BEFORE (populated instance) | **54 error-type problems** = 33 `Found a local update that is newer than this one` + 18 `Could not find a record in x_casemgmt_case for column case` + 3 `…core_company for column organization`. The 21 reference problems are **identical** to those recorded in §9.2/§9.3 |
+| Teardown | Staged application-level teardown, every query anchored on the app's `sys_scope` or the `x_casemgmt_` prefix. Verified complete: every census counter **0**, and the three tables moved from HTTP **403** to HTTP **400** — a useful distinction, since 400 means *table absent* whereas 403 means *table exists but cross-scope refused* (E9) |
+| Clean-slate preview | First pass **296 problems, 100 % collisions**, zero missing references and zero missing tables — caused by the teardown's own deletions being captured locally (a local DELETE is "newer" than the package's INSERT). Purging only the local rows whose `<name>` the retrieved set itself carries (299 `sys_update_xml` + 1891 `sys_update_version`) and re-previewing gave **ZERO PROBLEMS OF ANY TYPE** — zero errors *and* zero warnings. Progression **54 → 296 → 0** |
+| Commit | `SNC.PreviewerManager().doPreview()` leaves `state=loaded`, so the platform's own predicate refused (`shouldDisplay=false`). After setting `state=previewed`: `unresolvedProblems=false`, `shouldDisplay=true` — the predicate was checked, not assumed. The AJAX contract was read out of the platform's own **Commit Update Set** UI action: `validateCommitRemoteUpdateSet` → `commitRemoteUpdateSet` with `sysparm_remote_updateset_sys_id` and `sysparm_skip_app_installs=false`. **previewed → committing → committed** |
+| Package-alone state | scope 1, `sys_db_object` 3, `sys_dictionary` 25, **`sys_choice` 0** (Defect C), `sys_number` 3, roles 3, ACLs 26, **acl_role links 0** (Defect 9), flows 7, reports 8, dashboards 2, REST 2+2, portal 1+2+3, ATF 20, demo users 3 |
+| Auto-execute trigger | **Zero `X_CASEMGMT_REMEDIATION` marker marker rows at or after the commit start.** The rule ships `active=false`, so silence is the expected result and the correct pass — see `../scripts/round_trip_verify.md` §5.2. The committed record reads `active=false, when=after, order=1000, sys_scope=<the app>, sys_package=global`, so the commit-time scope rewrite is directly observable |
+
+**Path (b) was then executed exactly as §9.5 prescribes**, which produced the two corrections now folded into
+§9.5 steps 1 and 2, plus defect **E10**. Final state after step 3: `verified=true … acl_links_total=27 …
+errors=0`, with `by_role=agent=10, manager=14, viewer=3`. Demo data after step 4: **10 cases / 0 without a
+number, 10 tasks / 0 unresolved, 8 parties / 0 unresolved**, all six statuses and both types present.
+
+**Gate results on this clean-slate install of the final bytes**
+
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Data model | ✅ PASS | All three tables `physical=yes`, `missing_fields=none`, `drifted_attributes=none`, `display_fields=[number]`/`[subject]`/`[role_label]` — **exactly one per table**, `choices{lists=7/7,values=24/24}`, counters `CASE/7 TASK/7 PARTY/7` |
+| 2 Workflow | ✅ PASS | **13/13** transition-logic assertions, including A10 after the E-GU fix. All four verbatim messages asserted |
+| 3 ACLs | ✅ PASS | 26 ACLs / **27** role links / derived 27 / missing 0 / unexpected 0. Impersonated: manager `C,R,W,D` all true on all three tables; viewer `R` only; agent create-only with `R`/`W` denied against an empty record, which is the documented correct observable for an "Assigned only" condition |
+| 4 Portal submission | ✅ PASS | Anonymous, no credentials: **201** `{"number":"CASE0000586","message":"Your case has been submitted"}` |
+| 5 Portal lookup | ✅ PASS | **200** with body keys exactly `{status, subject, opened_date}`; unknown number → **404** `{"error":"No case found with that number."}` |
+| 6 Dashboards | ❌ FAIL | 2 `pa_dashboards` present, **0 `pa_tabs`** — the pre-existing `pa_tab` vs `pa_tabs` packaging defect (E5), unchanged by this pass |
+| 7 Update Set | ✅ PASS | Zero problems of any type on a genuine clean slate, then committed |
+
+**Six of seven gates pass on the final bytes; the one failure is the pre-existing E5 packaging defect.**
+
+
 ## 10. Recommended next steps
 
 Ordered by what unblocks the most. Estimates are for an engineer with admin access to the instance and are
@@ -1346,7 +1502,7 @@ deliberately conservative. Items this pass completed are not listed.
 |---|---|---|---|
 | 1 | **Author the Service Portal layout records** (`sp_container`, `sp_row`, `sp_column`, `sp_instance`) for both pages and capture them into the Update Set, plus a menu so the two pages are reachable from the portal home | Both portal pages currently render blank (§9.6 E8-P). The widgets and endpoints already work, so this is pure layout | 2–4 h |
 | 2 | **Fix the four child-table ACL conditions** — replace `current.case` with `current.getValue('case')` | `case` is a JS reserved word, so the conditions cannot compile and deny every row; the agent has no access to tasks or parties (§9.6 E-ATF). This is the one open *functional* access-control gap | 1 h incl. re-running ATF 07 |
-| 3 | **Reduce each table to a single display field** in the packaged `Dictionary` blocks **and** in `post_import_remediation.js` | Otherwise every reference to a case renders blank, and re-running the remediation reintroduces the problem (§9.6 E7) | 1 h |
+| 3 | ~~**Reduce each table to a single display field**~~ — ✅ **DONE in this pass**, in the packaged `Dictionary` blocks **and** in `post_import_remediation.js` | Was: every reference to a case rendered blank, and re-running the remediation reintroduced the problem. Now: the package ships one display field per table, and the script reconciles and verifies it (§9.6 E7) | — |
 | 4 | **Add `number` to the packaged `Case Record` payloads**, or drop the seed rows from the package and rely on `seed_demo_data.js` | The packaged seed data commits with no case numbers and dangling child references, and it blocks the seed script from repairing them (§9.6 E1). Dropping the 28 seed blocks is the simpler and more robust option | 1–2 h |
 
 ### 10.2 Correctness and packaging
@@ -1357,8 +1513,8 @@ deliberately conservative. Items this pass completed are not listed.
 | 6 | **Author the two related lists** required by AAP §0.4.4 (`case_task` and `case_party` on the case form) and capture them | Never authored; a user cannot see a case's tasks or parties from the case form (§9.6 E8) | 1–2 h |
 | 7 | **Shorten the four over-length UI Action conditions** to ≤ 254 characters, or move the logic into the action script | Truncation makes the guards fail open, so transition buttons render for users who cannot use them (§9.6 E3) | 1 h |
 | 8 | **Tick "Reverse if false" on the party UI Policy** (and confirm it is not load-only) | The conditional Person/Organization fields do not re-evaluate when `party_type` changes on screen (§9.6 E4) | 15 min |
-| 9 | **Resolve roles from `sys_user_has_role`** in `CaseTransitionValidator.canTransitionToClosed()` instead of `gs.getUser(userName)` | Closes a latent authorisation hole on branch (b): any future caller that passes a foreign `userId` is answered against the *caller’s* roles. The shipped runtime never takes that branch and all 13 regression assertions pass, so this is hardening rather than a fix for a live failure (§9.6 E-GU, §9.7) | 30 min |
-| 10 | **Reconcile the duplicate `sys_ws_operation` identity** for the submit endpoint | The artifact and the package carry different `sys_id`s for the same logical endpoint (§9.3) | 30 min |
+| 9 | ~~**Resolve roles from `sys_user_has_role`** in `CaseTransitionValidator.canTransitionToClosed()` instead of `gs.getUser(userName)`~~ — ✅ **DONE** | Closes a latent authorisation hole on branch (b): any future caller that passes a foreign `userId` is answered against the *caller’s* roles. The shipped runtime never takes that branch and all 13 regression assertions pass, so this is hardening rather than a fix for a live failure (§9.6 E-GU, §9.7) | 30 min |
+| 10 | ~~**Reconcile the duplicate `sys_ws_operation` identity** for the submit endpoint~~ — ✅ **DONE** | The artifact and the package carried different `sys_id`s for the same logical endpoint. Settled against the instance: the artifact's `e1b7bfa9…` returns **HTTP 404** while the package's `886ad712…` is the single live record, so `886ad712…` is now the sole identity in both (§9.3, §9.3a item 4) | — |
 | 11 | **Rename the Dashboard tab child from `pa_tab` to `pa_tabs`** in `dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml`, `…_manager_view.xml` and the two matching Dashboard `<payload>` blocks in the Update Set, then re-import and confirm `pa_m2m_dashboard_tabs` has one row per dashboard and both render | Validation gate 6 fails today because each dashboard installs with no tab. The capability is present on the PDI — `pa_tabs` exists and `pa_tab` does not — so this is a rename, not an investigation (§9.6 E5) | 15–30 min + one re-import |
 
 ### 10.3 Test suite

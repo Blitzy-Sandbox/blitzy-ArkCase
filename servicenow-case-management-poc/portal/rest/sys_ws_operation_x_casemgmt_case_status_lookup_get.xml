@@ -289,7 +289,7 @@
     <sys_ws_operation action="INSERT_OR_UPDATE">
         <active>true</active>
         <consumes>application/json</consumes>
-        <consumes_customized>false</consumes_customized>
+        <consumes_customized>true</consumes_customized>
         <default_operation_uri>/api/x_casemgmt/case_status_lookup</default_operation_uri>
         <description>GET handler for the Case Status Lookup scripted REST API. Anonymously accepts a case number via the 'number' query parameter from the Experience Portal lookup widget. Delegates to x_casemgmt.CasePortalService.lookupCase() which queries x_casemgmt_case by number and returns ONLY the whitelisted fields { status, subject, opened_date } - never assigned_group, assigned_agent, description, closed_date, requester_* fields, priority, type, pending_reason, or any audit field. On match, returns HTTP 200 with body { status, subject, opened_date }. On no match (or empty/missing query parameter), returns HTTP 404 with the verbatim body { error: 'No case found with that number.' } per AAP Section 0.7.4. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() Spring service. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
         <enforce_acl/>
@@ -424,8 +424,8 @@
 })(request, response);]]></operation_script>
         <operation_uri>/api/x_casemgmt/case_status_lookup</operation_uri>
         <produces>application/json</produces>
-        <produces_customized>false</produces_customized>
-        <relative_path/>
+        <produces_customized>true</produces_customized>
+        <relative_path>/</relative_path>
         <request_example/>
         <requires_acl_authorization>false</requires_acl_authorization>
         <requires_authentication>false</requires_authentication>
@@ -433,17 +433,17 @@
         <short_description>Anonymous GET handler for case status lookup. Returns HTTP 200 with whitelisted fields { status, subject, opened_date } on match, or HTTP 404 with verbatim body { error: 'No case found with that number.' } on no-match per AAP Section 0.7.4.</short_description>
         <sys_class_name>sys_ws_operation</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
         <sys_id>f3b3b39ceb9115bf7bf40e3eaf042b4f</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name>Case Status Lookup GET</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_ws_operation_x_casemgmt_case_status_lookup_get</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <web_service_definition display_value="Case Status Lookup">x_casemgmt_case_status_lookup</web_service_definition>
+        <sys_updated_on>2026-04-30 12:00:00</sys_updated_on>
+        <web_service_definition display_value="x_casemgmt_case_status_lookup">b04176032af365e6b8770ba3e6089b58</web_service_definition>
         <web_service_version/>
     </sys_ws_operation>
 </record_update>
