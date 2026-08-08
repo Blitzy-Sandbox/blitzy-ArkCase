@@ -83,22 +83,30 @@
         resolves every `source="x_casemgmt"` reference
         against the scope's `name` field on sys_scope / sys_app rather than
         via sys_id, guaranteeing portability across PDIs.
-      - CROSS-SCOPE ACCESS COLUMNS ARE BOOLEAN, NOT STRINGS. On sys_db_object
-        only `access` is a string (public | package_private); ws_access,
-        read_access, create_access, update_access, delete_access, alter_access,
-        client_scripts_access and configuration_access are `boolean`. An
-        earlier revision declared all of them as the string "public", which a
-        boolean column coerces to FALSE, so the platform refused every
-        cross-scope operation on this table ("Read operation against
-        'x_casemgmt_case_task' from scope 'rhino.global' has been refused due to
-        the table's cross-scope access policy"). That broke the REST Table API
-        verification gate, every global-scope verification script, and the ATF
-        client test runner, whose Global-scope TestExecutorAjax resolves form
-        records with a plain GlideRecord. read/create/update/delete_access and
-        ws_access are therefore emitted as booleans below; alter_access,
-        client_scripts_access and configuration_access stay explicitly FALSE.
-        See ../tables/x_casemgmt_case.xml for the full measurement record and
-        the syscache_tabledescriptor cache note.
+      - CROSS-SCOPE ACCESS IS LEAST PRIVILEGE: READ ONLY, AND THE COLUMNS ARE
+        BOOLEAN, NOT STRINGS. On sys_db_object only `access` is a string
+        (public | package_private); ws_access, read_access, create_access,
+        update_access, delete_access, alter_access, client_scripts_access and
+        configuration_access are `boolean`. An earlier revision declared all of
+        them as the string "public", which a boolean column coerces to FALSE, so
+        the platform refused every cross-scope operation on this table ("Read
+        operation against 'x_casemgmt_case_task' from scope 'rhino.global' has
+        been refused due to the table's cross-scope access policy"). That broke
+        the REST Table API verification gate, every global-scope verification
+        script, and the ATF client test runner, whose Global-scope
+        TestExecutorAjax resolves form records with a plain GlideRecord - all
+        three of which need only READ. read_access and ws_access are therefore
+        emitted as boolean true below and create_access, update_access and
+        delete_access as boolean FALSE: Application Access is a separate gate
+        from ../acl/*.xml (plain GlideRecord in another scope is not filtered by
+        record ACLs, and Global code can suppress this application's
+        before-update guards with setWorkflow(false)), so an open write column
+        let any Global caller mutate this table outside the role matrix of AAP
+        Section 0.5.6. alter_access, client_scripts_access and
+        configuration_access stay explicitly FALSE. See
+        ../tables/x_casemgmt_case.xml for the full measurement record, the
+        evidence that no capability depends on cross-scope writes, and the
+        syscache_tabledescriptor cache note.
 
     Cross-Update-Set load ordering (per AAP Section 0.5.2):
       - This record MUST be loaded AFTER ../app/sys_scope/x_casemgmt.xml and
@@ -138,9 +146,9 @@
         <caller_access/>
         <client_scripts_access>false</client_scripts_access>
         <configuration_access>false</configuration_access>
-        <create_access>true</create_access>
+        <create_access>false</create_access>
         <create_access_controls>false</create_access_controls>
-        <delete_access>true</delete_access>
+        <delete_access>false</delete_access>
         <extension_model/>
         <is_extendable>false</is_extendable>
         <label>Case Task</label>
@@ -164,7 +172,7 @@
         <sys_update_name>sys_db_object_x_casemgmt_case_task</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <update_access>true</update_access>
+        <update_access>false</update_access>
         <user_role/>
         <ws_access>true</ws_access>
     </sys_db_object>

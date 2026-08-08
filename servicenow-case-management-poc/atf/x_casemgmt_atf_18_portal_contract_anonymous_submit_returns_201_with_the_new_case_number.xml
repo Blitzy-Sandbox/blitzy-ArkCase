@@ -63,7 +63,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>POST /api/x_casemgmt/case_submit with Content-Type application/json must answer HTTP 201 carrying the generated case number and the verbatim message "Your case has been submitted", and the created case must land with status Draft and a CASE0000001-format number. The inbound-REST step type only supports basic or mutual authentication, so a genuinely anonymous call is made in addition from a server-side script with no credentials on the request. RESIDUE NOTICE: that anonymous call travels over HTTP as the guest user, in a transaction ATF cannot enrol in its rollback context, and the rollback also reverses this test's own cleanup delete - so each run leaves exactly ONE synthetic case behind, subject "ATF-PORTAL-18 anonymous submission", created by guest, status Draft. Remove it with: x_casemgmt_case where subject STARTSWITH ATF-PORTAL-18.</description>
+        <description>POST /api/x_casemgmt/case_submit with Content-Type application/json must answer HTTP 201 carrying the generated case number and the verbatim message "Your case has been submitted", and the created case must land with status Draft and a CASE0000001-format number. Steps 2-8 assert that contract through the ATF-instrumented Send REST Request - Inbound step, which carries no credentials: the platform serves it as guest, its response carries X-Is-Logged-In false and the row it creates is guest-owned, so the 201 contract is asserted on behalf of a genuinely unauthenticated caller - and because ATF instruments that step type the insert sits inside the rollback context, measured on 2026-08-08 when a run whose step 10 had been skipped still came back clean. That step type cannot vary its request, so step 9 covers the rest of the anonymous surface from a server-side script with no credentials, WITHOUT persisting anything: an unauthenticated POST whose payload the handler must reject comes back carrying the handler own verbatim validation message, which a 401 or 403 from the authenticator could never do; the case step 2 submitted is read back through the anonymous lookup endpoint and exposes only status, subject and opened_date; and a census proves neither of those calls persisted a case. An earlier design submitted a valid case from that script - an outbound call from a script is NOT ATF-instrumented, so the rollback reversed this test own cleanup delete and every run left one synthetic case behind. It no longer does: this test asserts its own cleanliness.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 18 - Portal contract: anonymous submit returns 201 with the new case number</name>
@@ -674,7 +674,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>The anonymous path - no credentials on the request - honours the same contract</notes>
+        <notes>The genuinely anonymous path - no credentials on the request - is served, enforces its own validation perimeter and persists nothing</notes>
         <order>9</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -741,28 +741,118 @@
         var resp = r.execute();
         return { status: String(resp.getStatusCode()), body: String(resp.getBody() || '') };
     }
+    function envelope(raw) {
+        try { return JSON.parse(raw).result || {}; } catch (e) { return {}; }
+    }
 
-    var res = anonCall('post', '/api/x_casemgmt/case_submit', '{"subject":"ATF-PORTAL-18 anonymous submission","type":"General Inquiry","description":"Synthetic ATF portal submission. No PII.","requester_name":"ATF Synthetic Requester","requester_email":"atf-portal@example.invalid"}');
-    chk('anonymous submit status', '201', res.status);
-    var parsed = JSON.parse(res.body).result;
-    chkTrue('anonymous response carries a number', /^CASE[0-9]{7}$/.test(String(parsed.number)));
-    chk('anonymous response message is verbatim', 'Your case has been submitted', String(parsed.message));
-    var created = new GlideRecord('x_casemgmt_case');
-    chkTrue('the anonymously created case exists', created.get('number', String(parsed.number)));
-    chk('the anonymously created case is Draft', 'Draft', created.getValue('status'));
-    chk('the whitelist forced the subject through unchanged', 'ATF-PORTAL-18 anonymous submission',
-        created.getValue('subject'));
+    // THE ANONYMOUS DIMENSION, ASSERTED WITHOUT LEAVING ANYTHING BEHIND.
+    //
+    // Measured, not assumed: the Send REST Request - Inbound step in step 2 sends no
+    // credentials unless a basic or mutual auth profile is configured on it, and none
+    // is - so the platform serves that call as `guest`. Its response carries
+    // X-Is-Logged-In: false and the row it creates is owned by guest. ATF instruments
+    // that step type, so the row IS inside the rollback context: in the run captured
+    // on 2026-08-08 the Rollback batch removed the submitted case even though step 10
+    // had been skipped by an earlier failure. Steps 2-8 therefore already assert the
+    // 201-with-a-number contract on behalf of an UNAUTHENTICATED caller, and the row
+    // is cleaned up whether or not step 10 gets to run.
+    //
+    // What that step type cannot do is vary its request: its inputs are static
+    // configuration, it cannot read a value produced earlier in the same run, and it
+    // cannot be pointed at a second endpoint. This step covers the rest of the
+    // anonymous surface with sn_ws.RESTMessageV2 and no credentials at all - and it
+    // does so WITHOUT persisting anything.
+    //
+    // It used to POST a VALID submission here. The endpoint accepted it, and because
+    // an outbound call made from a script is NOT ATF-instrumented, the row guest
+    // created that way sat OUTSIDE the rollback context: this test's own cleanup
+    // delete ran inside the ATF transaction, the rollback reversed that delete, and
+    // every run left one publicly lookup-addressable synthetic case behind, which
+    // repeat runs accumulated. A test may not leave mutated state behind, and no
+    // teardown available to it runs after the rollback in its own transaction without
+    // either holding credentials or adding a second anonymous write surface to the
+    // application. So the assertions below are non-mutating:
+    //
+    //   1. An unauthenticated POST carrying a body the handler MUST reject. A 401 or
+    //      403 would come from the authenticator, ahead of the handler, so the
+    //      handler's own verbatim validation message coming back proves both that the
+    //      endpoint serves an anonymous caller and that its validation perimeter runs
+    //      for one. A JSON array is the body used, because submitCase() rejects any
+    //      non-object payload before it touches GlideRecord - see
+    //      ../script_includes/x_casemgmt_CasePortalService.xml - so nothing can be
+    //      written. The alternatives were measured and rejected: a bare string, a
+    //      number or unparseable text is refused by the platform's body parser with
+    //      HTTP 500 BEFORE the operation script runs, proving nothing about the
+    //      handler, and an EMPTY body parses to no payload at all, which this
+    //      endpoint accepts - it WOULD create a row.
+    //   2. The case step 2 submitted, read back through the anonymous lookup endpoint
+    //      with no credentials: the portal round trip is reachable end to end by an
+    //      unauthenticated caller, and the three-field whitelist holds for one.
+    //   3. Proof that neither call made HERE persisted a row. Every credential-free
+    //      call runs as guest, so a row caused here would be guest-owned. The census
+    //      opens after step 2's row exists and excludes that row by sys_id, so it can
+    //      only catch a row these two calls created, and it stays valid on an
+    //      instance other work is also using. The two-second backdate absorbs clock
+    //      skew between this script and the sys_created_on the database stamps.
+    var submitted = new GlideRecord('x_casemgmt_case');
+    submitted.addQuery('subject', 'ATF-PORTAL-18 anonymous submission');
+    submitted.orderByDesc('sys_created_on');
+    submitted.setLimit(1);
+    submitted.query();
+    chkTrue('the case submitted in step 2 is readable', submitted.next());
+    var submittedId = submitted.getUniqueValue();
+    var submittedNumber = String(submitted.getValue('number'));
+    chk('the submission step 2 made was itself served with no credentials, as guest',
+        'guest', String(submitted.getValue('sys_created_by')));
+
+    var sinceGdt = new GlideDateTime();
+    sinceGdt.addSeconds(-2);
+    var since = sinceGdt.getValue();
+
+    var res = anonCall('post', '/api/x_casemgmt/case_submit', '[]');
+    chkTrue('the unauthenticated submit was not challenged for credentials', res.status !== '401');
+    chkTrue('the unauthenticated submit was not refused by authorization', res.status !== '403');
+    chk('the unauthenticated submit reached the handler, which rejected the payload', '400', res.status);
+    chk('the handler answered the anonymous caller with its own verbatim validation message',
+        'Invalid payload.', String(envelope(res.body).error));
+
+    var look = anonCall('get', '/api/x_casemgmt/case_status_lookup?number=' +
+        encodeURIComponent(submittedNumber), null);
+    chk('an unauthenticated caller can look that submitted case up', '200', look.status);
+    var seen = envelope(look.body);
+    chk('the anonymous lookup exposes EXACTLY the three whitelisted keys',
+        'opened_date,status,subject', Object.keys(seen).sort().join(','));
+    chk('the anonymous lookup returns the stored status', 'Draft', String(seen.status));
+    chk('the anonymous lookup returns the stored subject', 'ATF-PORTAL-18 anonymous submission',
+        String(seen.subject));
+    chk('the anonymous lookup returns the stored opened_date character for character',
+        submitted.getValue('opened_date'), String(seen.opened_date));
+
+    var guestRows = [];
+    var guestGr = new GlideRecord('x_casemgmt_case');
+    guestGr.addQuery('sys_created_by', 'guest');
+    guestGr.addQuery('sys_created_on', '&gt;=', since);
+    guestGr.addQuery('sys_id', '!=', submittedId);
+    guestGr.query();
+    while (guestGr.next())
+        guestRows.push(guestGr.getUniqueValue() + ' [' + guestGr.getValue('number') + ']');
+    chk('neither call in this step persisted a case', '', guestRows.join(' | '));
+
     // setOutputMessage OVERWRITES rather than appends. Emitted separately, the
-    // evidence line below was written and then silently discarded, so the run output
-    // never showed the value these assertions were made against.
+    // evidence lines below were written and then silently discarded, so the run output
+    // never showed the values these assertions were made against.
     var notes = [];
-    notes.push('anonymous 201 body: ' + res.body);
-    notes.push('genuinely anonymous submit with no credentials: checks=' + checks + ' failures=' + fails.length +
+    notes.push('step 2 submitted ' + submittedNumber + ' [' + submittedId + '] as ' +
+        submitted.getValue('sys_created_by'));
+    notes.push('anonymous POST [] -&gt; ' + res.status + ' ' + res.body);
+    notes.push('anonymous GET ' + submittedNumber + ' -&gt; ' + look.status + ' ' + look.body);
+    notes.push('further guest-owned cases created since ' + since + '=' + guestRows.length +
+        (guestRows.length ? ' [' + guestRows.join(' ') + ']' : ''));
+    notes.push('genuinely anonymous, non-mutating portal probe: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     stepResult.setOutputMessage(notes.join('\n'));
-    return assertEqual({ name: 'genuinely anonymous submit with no credentials', shouldbe: '', value: fails.join(' | ') });
-})(outputs, steps, params, stepResult, assertEqual);
-</value>
+    return assertEqual({ name: 'genuinely anonymous, non-mutating portal probe', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);</value>
         <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
     </sys_variable_value>
     <sys_variable_value action="INSERT_OR_UPDATE">
@@ -788,7 +878,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>Remove the synthetic submissions this test created. The row created by the anonymous HTTP call is restored by ATF rollback because that request ran in its own transaction - see the test description for the one-line cleanup query</notes>
+        <notes>Remove the case step 2 submitted, and assert this test left nothing behind - nothing is created outside the ATF transaction any more</notes>
         <order>10</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -857,34 +947,48 @@
         return out;
     }
 
-    // CLEANUP IS ASSERTED, NOT ASSUMED - WITH ONE DISCLOSED EXCEPTION.
+    // CLEANUP IS ASSERTED, NOT ASSUMED - AND THERE IS NO LONGER AN EXCEPTION.
     //
-    // This step used to end with a "cleanup ran" check that compared the literal string
-    // true against itself - a tautology that passed even if every delete had failed.
-    // What follows checks the outcome of each delete and then re-queries.
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology that passed even if every delete had
+    // failed. What follows checks the outcome of each delete and then re-queries.
     //
-    // THE EXCEPTION, and why this test cannot assert post-run cleanliness. The rows this
-    // test creates are inserted by the ANONYMOUS submit endpoint, i.e. by the `guest`
-    // user in its own HTTP transaction, OUTSIDE the transaction ATF wraps this test in.
-    // The deletes below happen INSIDE that ATF transaction, so when ATF rolls the test
-    // back at the end of the run it also rolls back the deletions and the guest-created
-    // row reappears. That is a property of ATF's rollback, not a leak this step can fix.
+    // It also used to carry a disclosed exception: step 9 submitted a real case
+    // anonymously with sn_ws.RESTMessageV2, and an outbound call made from a script
+    // is NOT ATF-instrumented, so that row - inserted by `guest`, over HTTP, in its
+    // own transaction - sat OUTSIDE the transaction ATF wraps this test in. The
+    // deletes below run INSIDE that transaction, so the ATF rollback reversed them
+    // and the guest-created row reappeared after every run.
     //
-    // So this step asserts exactly what IS within its control and no more:
-    //   1. every delete it issues reports success, and
-    //   2. an in-transaction re-query immediately afterwards finds zero rows,
-    //      proving the deletes really took effect rather than silently no-oping.
-    // The surviving sys_ids are reported in the step output so the row can be swept
-    // manually; docs/ATF_MANUAL_TEST_PLAN.md carries that sweep as an explicit step.
-    // Nothing here claims the instance is clean after the run - see the plan.
+    // Step 9 no longer submits anonymously; it proves the same anonymous perimeter
+    // without persisting anything. The ONLY row this test now creates is the one
+    // step 2 submits through the ATF-instrumented Send REST Request - Inbound step.
+    // That request is itself served as `guest` - it carries no credentials, and its
+    // response carries X-Is-Logged-In: false - but ATF instruments the step, so the
+    // insert IS inside the rollback context. Measured on 2026-08-08: a run whose
+    // step 10 was skipped by an earlier failure still came back clean, the Rollback
+    // batch having removed the submitted case on its own. Deleting it here takes
+    // effect, and the rollback then nets that insert and this delete to nothing.
+    // Creator identity is therefore NOT a residue signal any more - both the old
+    // leaked row and today's rolled-back row are guest-owned - so what is reported
+    // below is who created each row, and what is asserted is the outcome:
+    //   1. every delete this step issues reports success; and
+    //   2. a re-query immediately afterwards finds zero rows.
+    //
+    // One historical caveat, stated rather than hidden: a row left on the instance
+    // by a run of the PREVIOUS design is deleted by step 1, and the rollback - which
+    // reverses deletions of rows that pre-dated the test - reinstates it. Such rows
+    // must be swept once, by hand; runs of this design leave none.
     var gr = new GlideRecord('x_casemgmt_case');
     gr.addQuery('subject', 'STARTSWITH', 'ATF-PORTAL-18');
     gr.query();
     var n = 0, failedDeletes = [], deletedIds = [];
     while (gr.next()) {
         var rowId = gr.getUniqueValue();
+        var createdBy = String(gr.getValue('sys_created_by'));
         gr.setWorkflow(false);
-        if (gr.deleteRecord()) { n++; deletedIds.push(rowId); }
+        if (gr.deleteRecord())
+            { n++; deletedIds.push(rowId + ' [' + gr.getValue('number') + '] created by ' + createdBy); }
         else failedDeletes.push(rowId);
     }
     chk('every delete reported success', '', failedDeletes.join(' | '));
@@ -895,24 +999,20 @@
     after.query();
     while (after.next())
         residue.push(after.getUniqueValue() + ' [' + after.getValue('subject') + ']');
-    chk('no ATF-PORTAL-18 row survives the delete inside this transaction', '',
-        residue.join(' | '));
+    chk('no ATF-PORTAL-18 row survives this test', '', residue.join(' | '));
 
     // setOutputMessage OVERWRITES rather than appends, so every reported line is
     // accumulated and emitted once, at the end of the step.
     var notes = [];
     notes.push('submissions removed=' + n +
         ' | deletes reporting failure=' + failedDeletes.length +
-        ' | in-transaction residue rows=' + residue.length);
-    notes.push('removed sys_ids=' + (deletedIds.join(' ') || 'none') +
-        ' -- ATF rollback will reinstate any row the anonymous endpoint created outside' +
-        ' this transaction; sweep manually with subject STARTSWITH ATF-PORTAL-18');
-    notes.push('remove both submissions: checks=' + checks + ' failures=' + fails.length +
+        ' | residue rows=' + residue.length);
+    notes.push('removed=' + (deletedIds.join(' ; ') || 'none'));
+    notes.push('remove the submitted case: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     stepResult.setOutputMessage(notes.join('\n'));
-    return assertEqual({ name: 'remove both submissions', shouldbe: '', value: fails.join(' | ') });
-})(outputs, steps, params, stepResult, assertEqual);
-</value>
+    return assertEqual({ name: 'remove the submitted case', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);</value>
         <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
     </sys_variable_value>
 </unload>

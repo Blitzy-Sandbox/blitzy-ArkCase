@@ -104,6 +104,29 @@
         - On insert : returns immediately (`previous` is null), so anonymous portal
                       submissions that insert a Draft case are never blocked
 
+    FAIL-CLOSED IN BOTH DIRECTIONS THAT MATTER:
+        1) UNRECOGNISED STATUS VALUES ARE REFUSED. The six canonical statuses of
+           AAP Section 0.5.7 are the only values this rule will let through:
+           `Draft` passes to order 200, which owns the Any -&gt; Draft prohibition,
+           and the other five each have a gate here. Anything else - `Approved`,
+           a stale choice, a typo written straight through the Table API or a
+           scoped script - is REFUSED with a blocking message and
+           setAbortAction(true), and the offending value is logged server-side
+           (sanitized, never echoed to the user). A mandatory Choice dictionary
+           is NOT a server-side allowlist: the platform stores and displays a
+           value that is not a valid choice. An earlier revision returned
+           silently here, which let a direct write park a case in an
+           unrecognised state with every assignment, task-closure and
+           manager check skipped.
+        2) AN UNEVALUATED TRANSITION IS REFUSED. Validator construction, guard
+           dispatch AND verdict-shape validation all run inside one try/catch. A
+           Script Include resolution failure, a membership / task / role query
+           error or timeout, a malformed verdict, a non-boolean `ok`, or a
+           rejection carrying no message each produce an explicit deny: a
+           sanitized gs.error() for the operator, a generic blocking message for
+           the user, and current.setAbortAction(true). Enforcement never depends
+           on platform exception semantics.
+
     ZERO HARDCODED FOREIGN sys_ids: the only 32-char hex literal in this file is
     this record's own &lt;sys_id&gt;. The subflows are addressed by their
     scope-qualified internal names, the role by its name, and the case by the
@@ -149,7 +172,7 @@
         <client_callable>false</client_callable>
         <collection>x_casemgmt_case</collection>
         <condition/>
-        <description>Before-update guard on x_casemgmt_case that enforces the forward-transition preconditions of the case state machine. On a status change it invokes the matching natively authored Flow Designer subflow (x_casemgmt.validate_open_transition, validate_in_progress_transition, validate_pending_transition, validate_resolved_transition, validate_closed_transition) synchronously with sn_fd.FlowAPI.getRunner().inForeground(), then re-evaluates the same gate against the in-flight record through x_casemgmt.CaseTransitionValidator and, on failure, calls gs.addErrorMessage() with the verbatim blocking message plus current.setAbortAction(true) so the error surfaces on the form. Order 250 runs after the Closed-terminal (100) and Any-to-Draft (200) prohibition guards and before the side-effect rules (300/400/500).</description>
+        <description>Before-update guard on x_casemgmt_case that enforces the forward-transition preconditions of the case state machine. On a status change it invokes the matching natively authored Flow Designer subflow (x_casemgmt.validate_open_transition, validate_in_progress_transition, validate_pending_transition, validate_resolved_transition, validate_closed_transition) synchronously with sn_fd.FlowAPI.getRunner().inForeground(), then re-evaluates the same gate against the in-flight record through x_casemgmt.CaseTransitionValidator and, on failure, calls gs.addErrorMessage() with the verbatim blocking message plus current.setAbortAction(true) so the error surfaces on the form. Order 250 runs after the Closed-terminal (100) and Any-to-Draft (200) prohibition guards and before the side-effect rules (300/400/500). FAIL-CLOSED: the six canonical statuses are an explicit allowlist - Draft passes to the order-200 rule that owns it, the other five are gated here, and any other value (a stale choice, a direct Table API or scripted write such as Approved) is refused with a blocking message and setAbortAction(true) rather than skipping every gate; and validator construction, guard dispatch and verdict-shape validation all run inside one try/catch, so an exception, a malformed verdict, a non-boolean ok or a rejection with no message produces an explicit deny with a sanitized server diagnostic and a generic user message instead of relying on platform exception semantics.</description>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
@@ -223,6 +246,40 @@
     };
     var subflowName = SUBFLOW_FOR_STATUS[proposedStatus];
     if (!subflowName) {
+        // ------------------------------------------------------------------
+        // ALLOWLIST, NOT A LOOKUP MISS. Reaching here means the proposed
+        // status is not one of the five this rule dispatches on. Exactly one
+        // value legitimately lands here - 'Draft' - because the Any -&gt; Draft
+        // prohibition belongs to x_casemgmt_block_draft_backtransition at
+        // order 200, which has already aborted the save with its own verbatim
+        // message. Every OTHER value is a status this application does not
+        // recognise, and it must NOT be allowed through.
+        //
+        // Why this matters: a mandatory Choice dictionary is not a server-side
+        // allowlist. ServiceNow stores and displays a value that is not (or is
+        // no longer) a valid choice, and a direct write - Table API, a scoped
+        // script, an import - can set `status` to anything at all. Returning
+        // without aborting, as an earlier revision did, let such a write park a
+        // case in an unrecognised state with NO assignment check, NO task
+        // closure check and NO manager check: every order-250 gate skipped.
+        // ------------------------------------------------------------------
+        if (proposedStatus === 'Draft') {
+            return;
+        }
+        // The offending value is recorded server-side, sanitized (newlines
+        // stripped, length capped) so a crafted value cannot forge log lines,
+        // and is deliberately NOT echoed back to the user.
+        var sanitized = proposedStatus.replace(/[\r\n\t]+/g, ' ');
+        if (sanitized.length &gt; 80) {
+            sanitized = sanitized.substring(0, 80) + '...';
+        }
+        gs.error('x_casemgmt_enforce_forward_transitions: refused a status this application does not' +
+                 ' recognise on case ' + String(current.getUniqueValue()) + ' (' + previousStatus +
+                 ' -&gt; "' + sanitized + '"). Only Draft, Open, In Progress, Pending, Resolved and Closed' +
+                 ' are valid; the write was aborted.');
+        gs.addErrorMessage('That is not a valid case status. A case may only be Draft, Open, In Progress, ' +
+                           'Pending, Resolved or Closed.');
+        current.setAbortAction(true);
         return;
     }
 
@@ -269,19 +326,56 @@
     // UI Actions and the case form produce - the two verdicts are
     // identical and the subflow's verdict IS the decision.
     // ------------------------------------------------------------------
-    var validator = new x_casemgmt.CaseTransitionValidator();
+    // Everything that decides the outcome is inside this try/catch, because
+    // this is the load-bearing authorization step for a direct update and it
+    // must fail CLOSED. Constructing the Script Include can throw (a scope
+    // resolution failure, a compile error in the include, an upgrade in
+    // flight); the guards themselves run GlideRecord and GlideAggregate
+    // queries against sys_user_grmember, sys_user_has_role and
+    // x_casemgmt_case_task, any of which can throw or time out; and a future
+    // edit could return something that is not a verdict at all. Without this
+    // wrapper any of those exits before the only explicit
+    // current.setAbortAction(true) below, and enforcement would then depend on
+    // platform exception semantics rather than on a deny decision this rule
+    // actually took.
     var verdict;
-    if (proposedStatus === 'Open') {
-        verdict = validator.canTransitionToOpen(current);
-    } else if (proposedStatus === 'In Progress') {
-        verdict = validator.canTransitionToInProgress(current);
-    } else if (proposedStatus === 'Resolved') {
-        verdict = validator.canTransitionToResolved(current);
-    } else if (proposedStatus === 'Closed') {
-        verdict = validator.canTransitionToClosed(current, gs.getUserID());
-    } else {
-        // 'Pending' carries no precondition per the transition matrix.
-        verdict = { ok: true };
+    try {
+        var validator = new x_casemgmt.CaseTransitionValidator();
+        if (proposedStatus === 'Open') {
+            verdict = validator.canTransitionToOpen(current);
+        } else if (proposedStatus === 'In Progress') {
+            verdict = validator.canTransitionToInProgress(current);
+        } else if (proposedStatus === 'Resolved') {
+            verdict = validator.canTransitionToResolved(current);
+        } else if (proposedStatus === 'Closed') {
+            verdict = validator.canTransitionToClosed(current, gs.getUserID());
+        } else {
+            // 'Pending' carries no precondition per the transition matrix.
+            verdict = { ok: true };
+        }
+        // VERDICT SHAPE IS VALIDATED, NOT ASSUMED. A missing verdict, a
+        // non-object, a non-boolean `ok`, or a rejection with no message would
+        // all read as "allowed" or as a blank blocking error, i.e. a silent
+        // failure - which AAP Section 0.7.1 forbids.
+        if (!verdict || typeof verdict !== 'object' || typeof verdict.ok !== 'boolean') {
+            throw 'the validator returned a malformed verdict for ' + previousStatus + ' -&gt; ' +
+                  proposedStatus + ' (' + String(verdict) + ')';
+        }
+        if (verdict.ok === false &amp;&amp; (typeof verdict.error !== 'string' || verdict.error === '')) {
+            throw 'the validator rejected ' + previousStatus + ' -&gt; ' + proposedStatus +
+                  ' without supplying a message';
+        }
+    } catch (validatorError) {
+        // Deny, explicitly. The diagnostic goes to the server log; the user
+        // gets a generic message that leaks no internals.
+        gs.error('x_casemgmt_enforce_forward_transitions: the transition guard could not be evaluated for' +
+                 ' case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus + ') - ' +
+                 validatorError + '. The save was aborted: an unevaluated transition is refused, never' +
+                 ' allowed.');
+        gs.addErrorMessage('This change could not be validated and has not been saved. Please try again, ' +
+                           'and tell your administrator if it keeps happening.');
+        current.setAbortAction(true);
+        return;
     }
 
     // Record any divergence so an operator can see when a combined

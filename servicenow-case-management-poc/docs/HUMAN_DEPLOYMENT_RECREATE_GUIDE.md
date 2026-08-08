@@ -172,9 +172,12 @@ chmod +x /tmp/bg.sh
 ```
 
 > **Scope gotchas (proven on this PDI):**
-> - To **write/read the scoped `x_casemgmt_*` tables** from a background script you must run **in scope** —
->   pass the scope sys_id `82b99028936f74320d74d6f88357a5af` as the `SCOPE` argument. A `global` script
->   cannot create or even read rows in `x_casemgmt_case` (cross-scope barrier returns 0 rows / refuses writes).
+> - To **write** the scoped `x_casemgmt_*` tables from a background script you must run **in scope** — pass the
+>   scope sys_id `82b99028936f74320d74d6f88357a5af` as the `SCOPE` argument. A `global` script may **read** them
+>   (`read_access` is open, which is what the REST gate and the ATF client runner need) but every cross-scope
+>   **write** is refused by design: *"Create operation against 'x_casemgmt_case' from scope 'rhino.global' has
+>   been refused due to the table's cross-scope access policy."* That is deliberate least privilege, not a
+>   defect — see PDI_LIMITATIONS_AND_KNOWN_ISSUES.md Defect D and §9.6 E9.
 > - `gs.print()` is **forbidden** in a scoped script — use `gs.info('MARKER| ...')` and read it back from the
 >   `syslog` table. In a `global` script, `gs.print()` output appears as `*** Script:` lines in the response.
 > - `case` is a JavaScript reserved word — always use `gr.getValue('case')` and quote it as a property key (`{'case': sysId}`).
@@ -238,11 +241,15 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > | **C** — physical tables, fields, choice lists | ❌ **No** | §5a — mandatory |
 > | **9** — 27 ACL role links + security-cache flush | ❌ **No** | §5f — mandatory |
 >
-> **Why C and 9 are not automatic, stated plainly.** The package *does* ship the automation:
-> `scripts/post_import_remediation.js`, a Fix Script that carries it verbatim, and an after-update Business Rule
-> `x_casemgmt Post-Import Bootstrap` on `sys_remote_update_set` (condition
-> `current.state.changesTo('committed')`) that dispatches it. That trigger was measured to **fire and then
-> fail**. The commit engine rewrites every committed record's `sys_scope` to the installing application, so the
+> **Why C and 9 are not automatic, stated plainly.** The package ships the remediation itself —
+> `scripts/post_import_remediation.js` and a Fix Script that carries it verbatim — but **not** an auto-execute
+> trigger. One was built: an after-update Business Rule `x_casemgmt Post-Import Bootstrap` on
+> `sys_remote_update_set` (condition `current.state.changesTo('committed')`) that dispatched the Fix Script. It
+> was measured to **fire and then fail**, and it has since been **removed from the package** for a second
+> reason: that condition matches the commit of *any* retrieved Update Set, not only this application's, so
+> activating it would dispatch privileged, partly destructive remediation on unrelated deployments. The
+> remediation still deactivates a legacy copy of that rule if it finds one, identified by name **and**
+> `collection` **and** `sys_update_name`. The commit engine rewrites every committed record's `sys_scope` to the installing application, so the
 > remediation executes with `scope_context=x_casemgmt` instead of global, and every privileged call it needs is
 > refused. The observed result, verbatim from `syslog`:
 >
@@ -260,9 +267,11 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > ```
 >
 > No packaging change defeats this — the scope rewrite happens at commit time regardless of the scope the
-> records are authored in. **The bootstrap rule is therefore shipped `active=false`**, so it cannot fire and
-> leave a misleading `verified=false` trail. Its `active` flag is *not* evidence of anything: do not read it as
-> "the automation already ran".
+> records are authored in. **The bootstrap rule is therefore not shipped at all** (an earlier revision shipped
+> it `active=false`). Nothing in the package fires on commit, so a fresh install leaves no marker lines in
+> `syslog` until you run the remediation by hand. If an instance you inherit *does* carry that rule, treat an
+> `active=true` copy as a hazard rather than as evidence that the automation ran: the remediation deactivates
+> it once the application verifies as fully wired.
 >
 > **Running the Fix Script from the UI does not work either.** *System Definition → Fix Scripts → "x_casemgmt
 > Post-Import Remediation" → Run Fix Script* executes that record **in the application scope** for the same
@@ -367,10 +376,12 @@ for T in x_casemgmt_case x_casemgmt_case_task x_casemgmt_case_party; do
   printf '%s -> ' "$T"
   curl -s -o /dev/null -w '%{http_code}\n' -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" \
     -H "Accept: application/json" "$SN/api/now/table/$T?sysparm_limit=1"
-done      # NOTE: these return HTTP 403, not 200 - the tables' cross-scope access policy
-          # refuses the REST Table API even for admin. That is NOT a sign the rebuild failed.
-          # Verify row counts from a background script with "In scope" = x_casemgmt instead.
-          # See section 6.1 and PDI_LIMITATIONS_AND_KNOWN_ISSUES.md 9.6 E9.
+done      # These return HTTP 200 once the package's access flags are in place: ws_access and
+          # read_access are open, so the REST Table API can READ all three tables as admin.
+          # (An earlier revision of this guide said 403; that was the boolean-versus-string
+          # packaging defect, fixed - see PDI_LIMITATIONS_AND_KNOWN_ISSUES.md 9.6 E9.)
+          # Writes are a different matter: cross-scope create/update/delete are refused by
+          # design, so seed and repair data from a background script with "In scope" = x_casemgmt.
 ```
 
 The remediation's own `VERIFY|` log line reports the same thing in one place, e.g.
@@ -546,18 +557,22 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 
 ### 6.1 Metadata / inventory (REST, runs as admin)
 
-> **⚠️ Do not verify the three scoped tables through the REST Table API — it cannot work here.**
-> `GET /api/now/table/x_casemgmt_case` returns **HTTP 403**
-> `{"message":"User Not Authorized","detail":"Failed API level ACL Validation"}` even as `admin`, for all three
-> tables. The platform states the reason plainly when the same read is attempted from a global script:
-> *"Read operation against 'x_casemgmt_case' from scope 'rhino.global' has been refused due to the table's
-> cross-scope access policy."* The record ACLs are **not** the problem — `GlideRecordSecure.canRead()` returns
-> `true` and all 26 ACLs are `active`, `admin_overrides=true`. Setting `ws_access`/`read_access`/
-> `create_access`/`update_access`/`delete_access` to `true` and flushing the platform cache does **not** lift it.
+> **✅ The three scoped tables ARE verifiable through the REST Table API, and reads from global scope work.**
+> `GET /api/now/table/x_casemgmt_case?sysparm_limit=1` answers **HTTP 200** as `admin` for all three tables,
+> because the package ships `ws_access` and `read_access` as boolean `true`. An earlier revision of this guide
+> recorded **HTTP 403** and told you never to read these tables from global scope; that was the
+> boolean-versus-string packaging defect (`"public"` stored into a boolean column lands `false`), and it is
+> fixed — see PDI_LIMITATIONS_AND_KNOWN_ISSUES.md §9.6 **E9**. Two things are worth knowing:
 >
-> **Worse, a global-scope `GlideRecord` read of these tables returns `getRowCount() == 0` instead of raising** —
-> so a global verification script reports "no data" for a table that is in fact fully populated. Never verify
-> these tables from global scope.
+> - **A stale table descriptor can make a corrected flag look ineffective.** Writing the access columns flushes
+>   the `sys_db_object` catalogue but not `syscache_tabledescriptor`. Touch the table's **collection**
+>   `sys_dictionary` row (`element` empty) with a value that genuinely changes and then restore it;
+>   `scripts/post_import_remediation.js` does exactly that.
+> - **Cross-scope WRITES are refused on purpose.** `create_access`, `update_access` and `delete_access` are
+>   `false`, so a global-scope `GlideRecord` insert/update/delete answers *"… has been refused due to the
+>   table's cross-scope access policy"*. Application Access is a gate separate from the record ACLs, so an open
+>   write column would let un-ACL'd global code mutate cases. Run anything that writes application data **in
+>   scope** (`sys_scope = x_casemgmt`).
 >
 > **Verify them from inside the application scope instead** (*Scripts - Background*, "In scope" =
 > **x_casemgmt Case Management**), which reads them correctly:

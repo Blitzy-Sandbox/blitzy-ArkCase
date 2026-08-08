@@ -40,32 +40,51 @@
         x CRUD matrix with custom "Assigned only" conditions for case_agent,
         the auto-generated ACLs would conflict and are explicitly suppressed
         here.
-      - CROSS-SCOPE ACCESS COLUMNS ARE BOOLEAN, NOT STRINGS. On sys_db_object
-        only `access` is a string (public | package_private). ws_access,
-        read_access, create_access, update_access, delete_access, alter_access,
-        client_scripts_access and configuration_access are all `boolean`
-        (verified against sys_dictionary on the target release). An earlier
-        revision of this artifact declared every one of them as the string
-        "public"; a boolean column coerces that to FALSE, and the platform then
-        refuses every cross-scope operation on this table with
+      - CROSS-SCOPE ACCESS IS LEAST PRIVILEGE: READ ONLY, AND THE COLUMNS ARE
+        BOOLEAN, NOT STRINGS. On sys_db_object only `access` is a string
+        (public | package_private); ws_access, read_access, create_access,
+        update_access, delete_access, alter_access, client_scripts_access and
+        configuration_access are all `boolean` (verified against sys_dictionary
+        on the target release). Assigning the string "public" to a boolean column
+        stores FALSE - an earlier revision of this artifact did exactly that -
+        and the platform then refuses EVERY cross-scope operation on this table:
         "Read operation against 'x_casemgmt_case' from scope 'rhino.global' has
-        been refused due to the table's cross-scope access policy". Three
-        capabilities depend on those refusals not happening:
-          1. the REST Table API post-commit verification gate
-             (GET /api/now/table/x_casemgmt_case answered HTTP 403 as admin),
-          2. any global-scope verification script (a global GlideRecord read
-             silently reported getRowCount() == 0 on a fully populated table),
-          3. the ATF client test runner: the platform's own Global-scope Script
-             Include TestExecutorAjax.validateFormParameters resolves the record
-             for the "Open an Existing Record" step with a plain GlideRecord, so
-             every form-level test failed with "Table 'x_casemgmt_case' does not
-             have a record with id '...'".
-        The four columns this application genuinely needs opened are therefore
-        emitted as booleans below (read/create/update/delete plus ws_access for
-        the web-service path). alter_access, client_scripts_access and
-        configuration_access stay FALSE - no other scope may reshape this
-        table's schema, client scripts or configuration - and are now stated
-        explicitly rather than relying on a mis-typed string coercing to false.
+        been refused due to the table's cross-scope access policy".
+        Exactly two columns are opened below, each because a capability
+        measurably depends on the READ it permits:
+          1. read_access : the REST Table API post-commit verification gate
+             (GET /api/now/table/x_casemgmt_case answered HTTP 403 as admin);
+             any Global-scope verification script (a Global GlideRecord read
+             silently reported getRowCount() == 0 on a fully populated table);
+             and the ATF client test runner, because the platform's own
+             Global-scope Script Include TestExecutorAjax.validateFormParameters
+             resolves the record for the "Open an Existing Record" step with a
+             plain GlideRecord, so without it every form-level test failed with
+             "Table 'x_casemgmt_case' does not have a record with id '...'".
+          2. ws_access : the same REST Table API path, which is refused outright
+             when this column is false.
+        create_access, update_access and delete_access are deliberately FALSE.
+        Application Access is a SEPARATE gate from the record ACLs: a Global or
+        foreign-scoped script using plain GlideRecord is not filtered by
+        ../acl/*.xml at all (only GlideRecordSecure applies record ACLs), and
+        Global code can additionally suppress this application's before-update
+        transition guards with setWorkflow(false). Leaving the three write
+        columns open therefore allowed any Global caller to create, modify or
+        delete case rows outside the manager/agent/viewer matrix of AAP
+        Section 0.5.6 and outside the state machine of AAP Section 0.5.5 -
+        measured on the target PDI, where a Global-scope GlideRecord insert,
+        update and delete against this table all succeeded. Closing them costs
+        this deliverable nothing: the seed script runs in scope, the portal REST
+        endpoints and every Script Include are in scope, the remediation script
+        writes only platform tables, and the ATF suite scored 16 of 20 with all
+        five columns false - the four failures being the Global READ path above
+        (ATF 15/16/17) and an unrelated ACL compile defect (ATF 07), with zero
+        failures among the 26 Record Update, 6 Record Insert and 7 Record Delete
+        steps that write these tables.
+        alter_access, client_scripts_access and configuration_access stay FALSE:
+        no other scope may reshape this table's schema, client scripts or
+        configuration. All eight are stated explicitly below rather than left to
+        a mis-typed string coercing to false.
       - CACHE NOTE for anyone repairing a live instance by hand: writing these
         columns flushes only the sys_db_object catalog, NOT
         syscache_tabledescriptor, so the new values appear in the record while
@@ -83,9 +102,9 @@
         <caller_access/>
         <client_scripts_access>false</client_scripts_access>
         <configuration_access>false</configuration_access>
-        <create_access>true</create_access>
+        <create_access>false</create_access>
         <create_access_controls>false</create_access_controls>
-        <delete_access>true</delete_access>
+        <delete_access>false</delete_access>
         <extension_model/>
         <is_extendable>false</is_extendable>
         <label>Case</label>
@@ -109,7 +128,7 @@
         <sys_update_name>sys_db_object_x_casemgmt_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <update_access>true</update_access>
+        <update_access>false</update_access>
         <user_role/>
         <ws_access>true</ws_access>
     </sys_db_object>

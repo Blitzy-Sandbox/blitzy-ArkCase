@@ -63,7 +63,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>GET /api/x_casemgmt/case_status_lookup?number=&lt;valid&gt; must answer HTTP 200 with exactly the three whitelisted keys. The whitelist is asserted negatively as well: the body must not contain assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, sys_id. The call is made with no credentials at all. Each returned value is compared to the stored value exactly - status, subject AND opened_date - so a response carrying a different case's data, a placeholder or a reformatted date fails. Because lookupCase() resolves the number with setLimit(1) and no orderBy, step 1 also guarantees the pinned number CASE9000019 is carried by exactly one row, so the lookup cannot resolve to a foreign record.</description>
+        <description>GET /api/x_casemgmt/case_status_lookup?number=&lt;valid&gt; must answer HTTP 200 with exactly the three whitelisted keys. The whitelist is asserted negatively as well: the body must not contain assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, sys_id. The call is made with no credentials at all. Each returned value is compared to the stored value exactly - status, subject AND opened_date - so a response carrying a different case's data, a placeholder or a reformatted date fails. Because lookupCase() resolves the number with setLimit(1) and no orderBy, step 1 also VERIFIES that exactly one row carries the pinned number CASE9000019 and that the row is its own fixture, so the lookup cannot resolve to a foreign record. Verification, never enforcement by deletion: a row this test does not own - one carrying that number, or occupying the fixture sys_id without this test subject marker - fails the test, is named in the failure message and is left exactly as it was found.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 19 - Portal contract: lookup of a valid number returns only status, subject, opened_date</name>
@@ -94,7 +94,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>A synthetic case whose internal fields must NOT leak through the lookup</notes>
+        <notes>A synthetic case whose internal fields must NOT leak through the lookup - inserted only after verifying that no row this test does not own holds the fixture slot or the pinned number</notes>
         <order>1</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -192,32 +192,85 @@
         var kind = v.substring(1, sep), key = v.substring(sep + 1);
         return kind === 'user' ? userId(key) : groupId(key);
     }
-    for (var d = FIX.length - 1; d &gt;= 0; d--) {
-        var old = new GlideRecord(FIX[d].table);
-        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); }
-    }
-
+    // A ROW IS DELETED ONLY WHEN IT IS PROVABLY THIS TEST'S OWN, AND A COLLISION IS
+    // A FAILURE RATHER THAN SOMETHING TO CLEAR OUT OF THE WAY.
+    //
+    // Two independent things must hold before this step deletes anything: the row
+    // must sit at the fixture's DETERMINISTIC sys_id - md5-derived, so a rebuild
+    // converges on the same slot - AND it must carry this test's provenance marker,
+    // a subject starting with the fixture's declared prefix, which is a string only
+    // this test ever writes. A row occupying the slot without the marker is not
+    // ours: it is named and left exactly as it was found.
+    //
     // PINNED-NUMBER UNIQUENESS. This test pins number=CASE9000019 so the later
     // steps can drive the lookup with a known key. The endpoint resolves that key
     // with addQuery('number', trimmed).setLimit(1) and NO orderBy - see lookupCase()
     // in ../script_includes/x_casemgmt_CasePortalService.xml - so if a SECOND row
     // ever carried the same number, which row the lookup returned would be
     // non-deterministic: this test could then assert against a foreign record, or
-    // pass while the contract was genuinely broken. Deleting only FIX[0].sys_id
-    // above does not prevent that, because a stray carrier can have any sys_id
-    // (a partially-completed earlier run, a hand-made row, an import).
-    // So: every other row carrying the pinned number is removed here, whatever its
-    // sys_id, and uniqueness is asserted after the insert below.
+    // pass while the contract was genuinely broken.
+    //
+    // This step used to DELETE every other carrier of the pinned number, whatever
+    // its sys_id - including, by its own admission, a hand-made or imported row. A
+    // test must never destroy data it does not own: the loss lasted only as long as
+    // the ATF rollback took to restore it, and a failed or nonstandard run made it
+    // permanent. A collision now FAILS this step instead, naming every offending
+    // row, and nothing is deleted, inserted or updated - the instance is left
+    // exactly as it was found, for a human to adjudicate.
+    //
+    // The pinned number is deliberately out of sequence: the generator mints
+    // CASE0000001 upward with 7-digit padding, so it would take nine million cases
+    // to reach CASE9000019. A carrier this test did not create can therefore never
+    // be something a run of it caused - it is foreign data, and stopping is the only
+    // safe response. A unique per-run key would side-step the question entirely, but
+    // step 3 feeds the number to a Send REST Request - Inbound step whose query
+    // parameters are static configuration, so the key has to be known before the run
+    // starts (see F11 in ../docs/ATF_MANUAL_TEST_PLAN.md).
     var PINNED_NUMBER = FIX[0].fields.number;
-    var strayIds = [];
+    var foreignSlots = [], strayCarriers = [];
+    for (var s = 0; s &lt; FIX.length; s++) {
+        var slot = new GlideRecord(FIX[s].table);
+        if (!slot.get(FIX[s].sys_id)) { continue; }
+        var slotSubject = String(slot.getValue('subject') || '');
+        if (FIX[s].prefix &amp;&amp; slotSubject.indexOf(FIX[s].prefix) !== 0)
+            foreignSlots.push(FIX[s].table + ':' + FIX[s].sys_id + ' [subject=' + slotSubject +
+                ' created by ' + slot.getValue('sys_created_by') + ']');
+    }
     var stray = new GlideRecord('x_casemgmt_case');
     stray.addQuery('number', PINNED_NUMBER);
     stray.addQuery('sys_id', '!=', FIX[0].sys_id);
     stray.query();
-    while (stray.next()) {
-        strayIds.push(stray.getUniqueValue());
-        stray.setWorkflow(false);
-        stray.deleteRecord();
+    while (stray.next())
+        strayCarriers.push(stray.getUniqueValue() + ' [subject=' + stray.getValue('subject') +
+            ' created by ' + stray.getValue('sys_created_by') + ']');
+    chk('no foreign row occupies a fixture slot', '', foreignSlots.join(' | '));
+    chk('no foreign row already carries the pinned lookup number ' + PINNED_NUMBER, '',
+        strayCarriers.join(' | '));
+
+    // Stop before touching anything: inserting the fixture on top of a second carrier
+    // of the pinned number would deepen the ambiguity, and every later step would then
+    // assert against a row nobody can identify.
+    if (foreignSlots.length || strayCarriers.length) {
+        stepResult.setOutputMessage([
+            'REFUSING TO RUN - nothing was deleted, inserted or updated.',
+            'fixture slots held by foreign data=' + foreignSlots.length +
+                (foreignSlots.length ? ' :: ' + foreignSlots.join(' | ') : ''),
+            'foreign rows carrying ' + PINNED_NUMBER + '=' + strayCarriers.length +
+                (strayCarriers.length ? ' :: ' + strayCarriers.join(' | ') : ''),
+            'This test owns exactly one row: sys_id ' + FIX[0].sys_id + ', carrying a subject' +
+                ' that starts with ' + FIX[0].prefix + '. Adjudicate the rows above by hand.',
+            'fixture setup: checks=' + checks + ' failures=' + fails.length + ' :: ' + fails.join(' | ')
+        ].join('\n'));
+        return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
+    }
+
+    var replaced = 0;
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) replaced++;
+        }
     }
     for (var f = 0; f &lt; FIX.length; f++) {
         var gr = new GlideRecord(FIX[f].table);
@@ -252,8 +305,9 @@
     // setOutputMessage OVERWRITES rather than appends, so every reported line is
     // accumulated and emitted once, at the end of the step.
     var notes = [];
-    notes.push('pre-existing rows carrying ' + PINNED_NUMBER + ' removed=' + strayIds.length +
-        (strayIds.length ? ' [' + strayIds.join(' ') + ']' : ''));
+    notes.push('foreign rows carrying ' + PINNED_NUMBER + ' found=' + strayCarriers.length +
+        ' | fixture slots held by foreign data=' + foreignSlots.length +
+        ' | own fixture rows replaced=' + replaced);
     notes.push('fixture setup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     stepResult.setOutputMessage(notes.join('\n'));
@@ -867,7 +921,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>Remove this test's synthetic fixtures</notes>
+        <notes>Remove this test's synthetic fixtures - only rows carrying this test's own marker are ever deleted</notes>
         <order>10</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -970,14 +1024,26 @@
     // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
     // `subject` column to match on) is swept by pinned sys_id only - the same guard the
     // delete loop uses - because that is the only key such a row is ever created with.
-    var removed = 0, failedDeletes = [];
+    //
+    // OWNERSHIP, NOT JUST THE SLOT. The pinned sys_id on its own is not proof of
+    // ownership: a row occupying that slot must ALSO carry this test's provenance
+    // marker - a subject starting with the fixture's declared prefix - before it is
+    // deleted. One that does not is named and left exactly as it was found, and this
+    // step fails: cleanup never destroys data this test did not create.
+    var removed = 0, failedDeletes = [], foreignSlots = {}, foreignReport = [];
     for (var d = FIX.length - 1; d &gt;= 0; d--) {
         var old = new GlideRecord(FIX[d].table);
-        if (old.get(FIX[d].sys_id)) {
-            old.setWorkflow(false);
-            if (old.deleteRecord()) removed++;
-            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        if (!old.get(FIX[d].sys_id)) { continue; }
+        var slotSubject = String(old.getValue('subject') || '');
+        if (FIX[d].prefix &amp;&amp; slotSubject.indexOf(FIX[d].prefix) !== 0) {
+            foreignSlots[FIX[d].table + ':' + FIX[d].sys_id] = true;
+            foreignReport.push(FIX[d].table + ':' + FIX[d].sys_id + ' [subject=' + slotSubject +
+                ' created by ' + old.getValue('sys_created_by') + ']');
+            continue;
         }
+        old.setWorkflow(false);
+        if (old.deleteRecord()) removed++;
+        else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
     }
     for (var p = 0; p &lt; FIX.length; p++) {
         if (!FIX[p].prefix) continue;
@@ -992,13 +1058,14 @@
         }
     }
     chk('every delete reported success', '', failedDeletes.join(' | '));
+    chk('no foreign row occupied a fixture slot', '', foreignReport.join(' | '));
 
     // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
     // fixture that has one. Any row still present here is a real leak.
     var residue = [];
     for (var q = 0; q &lt; FIX.length; q++) {
         var byId = new GlideRecord(FIX[q].table);
-        if (byId.get(FIX[q].sys_id))
+        if (byId.get(FIX[q].sys_id) &amp;&amp; !foreignSlots[FIX[q].table + ':' + FIX[q].sys_id])
             residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
         if (!FIX[q].prefix) continue;
         var byPrefix = new GlideRecord(FIX[q].table);
@@ -1015,6 +1082,7 @@
     var notes = [];
     notes.push('fixtures removed=' + removed +
         ' | deletes reporting failure=' + failedDeletes.length +
+        ' | fixture slots held by foreign data=' + foreignReport.length +
         ' | residue rows=' + residue.length);
     notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
