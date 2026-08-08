@@ -94,6 +94,22 @@
         `organization`) are OOB ServiceNow tables that this record does NOT
         modify. They are referenced ONLY via dictionary entries in
         ../dictionary/, never via super_class.
+      - CROSS-SCOPE ACCESS COLUMNS ARE BOOLEAN, NOT STRINGS. On sys_db_object
+        only `access` is a string (public | package_private); ws_access,
+        read_access, create_access, update_access, delete_access, alter_access,
+        client_scripts_access and configuration_access are `boolean`. An
+        earlier revision declared all of them as the string "public", which a
+        boolean column coerces to FALSE, so the platform refused every
+        cross-scope operation on this table ("Read operation against
+        'x_casemgmt_case_party' from scope 'rhino.global' has been refused due
+        to the table's cross-scope access policy"). That broke the REST Table
+        API verification gate, every global-scope verification script, and the
+        ATF client test runner, whose Global-scope TestExecutorAjax resolves
+        form records with a plain GlideRecord. read/create/update/delete_access
+        and ws_access are therefore emitted as booleans below; alter_access,
+        client_scripts_access and configuration_access stay explicitly FALSE.
+        See ../tables/x_casemgmt_case.xml for the full measurement record and
+        the syscache_tabledescriptor cache note.
       - The concrete scope identifier casemgmt is used throughout per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export. At Update Set import time, the platform resolves
         every `source="x_casemgmt"` reference against the
         scope's `name` field on sys_scope / sys_app rather than via sys_id,
@@ -123,13 +139,13 @@
     <sys_db_object action="INSERT_OR_UPDATE">
         <access>public</access>
         <actions_update>true</actions_update>
-        <alter_access>public</alter_access>
+        <alter_access>false</alter_access>
         <caller_access/>
-        <client_scripts_access>public</client_scripts_access>
-        <configuration_access>public</configuration_access>
-        <create_access>public</create_access>
+        <client_scripts_access>false</client_scripts_access>
+        <configuration_access>false</configuration_access>
+        <create_access>true</create_access>
         <create_access_controls>false</create_access_controls>
-        <delete_access>public</delete_access>
+        <delete_access>true</delete_access>
         <extension_model/>
         <is_extendable>false</is_extendable>
         <label>Case Party</label>
@@ -138,7 +154,7 @@
         <number_ref display_value="PARTY" source="x_casemgmt">2358f94646aa1afdf84c10b836dce064</number_ref>
         <plural>Case Parties</plural>
         <provider_class/>
-        <read_access>public</read_access>
+        <read_access>true</read_access>
         <scriptable_table>false</scriptable_table>
         <super_class/>
         <sys_class_name>sys_db_object</sys_class_name>
@@ -153,8 +169,8 @@
         <sys_update_name>sys_db_object_x_casemgmt_case_party</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <update_access>public</update_access>
+        <update_access>true</update_access>
         <user_role/>
-        <ws_access>public</ws_access>
+        <ws_access>true</ws_access>
     </sys_db_object>
 </record_update>

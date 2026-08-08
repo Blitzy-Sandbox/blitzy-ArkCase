@@ -67,7 +67,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>Form-level companion to ATF 14 for the verbatim message "Closed cases are terminal and cannot be modified.". Runs in the ATF client test runner: the case form is opened, the status field is set and the form is submitted, so the block is exercised through the same UI path a user takes. ATF ships no step type that reads the form error banner, so the on-screen wording is captured separately as a browser screenshot while this test asserts, server-side, that the aborted save changed nothing.</description>
+        <description>Form-level companion to ATF 14 for the verbatim message "Closed cases are terminal and cannot be modified.". Runs in the ATF client test runner: the case form is opened, the status field is set and the form is submitted, so the block is exercised through the same UI path a user takes. AUTOMATED COVERAGE: the submit reaches the server, the stored row is proven unchanged, and step 7 asserts the blocking string CHARACTER-EXACTLY against the same fixture in the same transaction - so a missing or reworded message turns this test red. NOT AUTOMATED, BY FRAMEWORK LIMITATION: that the string is RENDERED on the form. ATF has no step type that can read the classic form error banner - its only text-on-page assertion is "Assert Text on Page (Custom UI)", which targets the Custom UI DOM rather than the platform form this test drives, and "Submit a Form" exposes only form_ui and assert_type inputs. The rendered wording is therefore a MANUAL observation: read it from the runner step-5 screenshot, per docs/ATF_MANUAL_TEST_PLAN.md. It is not counted as automated coverage anywhere.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form</name>
@@ -220,6 +220,23 @@
         for (var fld in FIX[f].fields) gr.setValue(fld, resolveToken(FIX[f].fields[fld]));
         var newId = gr.insert();
         chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
+    }
+    // GUARD FOR THE CLIENT HANDOFF (step 3, "Open an Existing Record").
+    // That step does not read the row itself: the browser calls the platform's own
+    // GLOBAL-scope Script Include TestExecutorAjax.validateFormParameters, which
+    // resolves it with a plain GlideRecord. If this application's tables refuse
+    // cross-scope reads, that lookup returns nothing and the step fails with
+    // "Table 'x_casemgmt_case' does not have a record with id '...'" - which reads
+    // like a missing fixture but is really a table access-policy problem. The five
+    // boolean cross-scope columns on sys_db_object (ws_access, read_access,
+    // create_access, update_access, delete_access) must be TRUE; see
+    // ../tables/x_casemgmt_case.xml. Asserting the fixture is resolvable HERE turns
+    // that misleading downstream failure into a precise one, and it also removes any
+    // dependence on a row left behind by an earlier run.
+    for (var g = 0; g &lt; FIX.length; g++) {
+        var reread = new GlideRecord(FIX[g].table);
+        chkTrue('fixture ' + FIX[g].label + ' is resolvable by sys_id after insert (the client form step resolves it the same way)',
+            reread.get(FIX[g].sys_id));
     }
     stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
@@ -429,7 +446,7 @@
         <display_name>Submit a Form</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>Submit the form - the server rejects the transition out of Closed</notes>
+        <notes>Submit the form - the server rejects the transition out of Closed. The rendered error banner is a MANUAL observation from this step's runner screenshot - ATF cannot assert text on a classic form</notes>
         <order>5</order>
         <snapshot />
         <step_config display_value="Submit a Form">be8e0a935332120028bc29cac2dc34e4</step_config>
@@ -589,7 +606,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>Remove this test's synthetic fixtures</notes>
+        <notes>Assert the blocking message character-exactly against the fixture the form just submitted, then remove this test's synthetic fixtures</notes>
         <order>7</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -677,22 +694,100 @@
         }
     ];
 
-    var removed = 0;
+    // ------------------------------------------------------------------------
+    // VERBATIM MESSAGE, asserted before the fixtures are removed.
+    //
+    // WHAT ATF CAN AND CANNOT SEE HERE. The submit in step 5 is refused by the
+    // server and step 6 proves the stored row did not change, but ATF ships no step
+    // type that can read the classic form's error banner: the only text-on-page
+    // assertion in the framework is "Assert Text on Page (Custom UI)", which targets
+    // the Custom UI DOM and not the platform form these tests drive, and the
+    // "Submit a Form" step exposes only `form_ui` and `assert_type` inputs. So the
+    // fact that the message is RENDERED is a MANUAL observation - see the runner's
+    // step-5 screenshot and docs/ATF_MANUAL_TEST_PLAN.md - and is not claimed as
+    // automated coverage anywhere.
+    //
+    // What IS automated is the string itself. Without the block below this test could
+    // pass while the message was missing or reworded, because nothing it asserted
+    // depended on the wording. Asserting the exact string here, in the same
+    // transaction and against the same fixture the form just submitted, means a
+    // missing or altered message turns this test RED.
+    var gate = new GlideRecord('x_casemgmt_case');
+    chkTrue('the fixture case is still present for the message assertion',
+        gate.get('518799bb2fe107d3647146a08b3af61d'));
+    chk('the case is still Closed, so the refused submit changed nothing',
+        'Closed', gate.getValue('status'));
+    var validator = new x_casemgmt.CaseTransitionValidator();
+    var verdict = validator.validateNoBacktransition(gate.getValue('status'), 'In Progress');
+    chk('the transition out of Closed is refused', 'false', String(verdict.ok));
+    chk('the blocking message is verbatim (AAP 0.7.4)',
+        'Closed cases are terminal and cannot be modified.', String(verdict.error));
+    // stepResult.setOutputMessage OVERWRITES the step's output on every call - it does
+    // NOT append. Measured in the client runner: this step called it three times and
+    // only the last line survived, so the message-assertion evidence below was written
+    // and then silently discarded. Every line is therefore accumulated here and emitted
+    // exactly once, at the end of the step.
+    var notes = ['message asserted server-side: [' + verdict.error + ']'];
+
+    // CLEANUP IS ASSERTED, NOT ASSUMED.
+    //
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology. It therefore passed even when every
+    // delete had
+    // silently failed, so fixtures could survive and contaminate later steps, later
+    // tests in the suite, and later runs (a stale pinned sys_id or a stale prefix row
+    // makes another test assert against the wrong record). What follows checks the
+    // outcome of each delete and then RE-QUERIES for residue, so a surviving row fails
+    // this step and is named in the failure message.
+    //
+    // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
+    // `subject` column to match on) is swept by pinned sys_id only - the same guard the
+    // delete loop uses - because that is the only key such a row is ever created with.
+    var removed = 0, failedDeletes = [];
     for (var d = FIX.length - 1; d &gt;= 0; d--) {
         var old = new GlideRecord(FIX[d].table);
-        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); removed++; }
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        }
     }
     for (var p = 0; p &lt; FIX.length; p++) {
         if (!FIX[p].prefix) continue;
         var extra = new GlideRecord(FIX[p].table);
         extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
         extra.query();
-        while (extra.next()) { extra.setWorkflow(false); extra.deleteRecord(); removed++; }
+        while (extra.next()) {
+            var extraId = extra.getUniqueValue();
+            extra.setWorkflow(false);
+            if (extra.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[p].table + ':' + extraId);
+        }
     }
-    stepResult.setOutputMessage('fixtures removed=' + removed);
-    chk('cleanup ran', 'true', 'true');
-    stepResult.setOutputMessage('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+    chk('every delete reported success', '', failedDeletes.join(' | '));
+
+    // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
+    // fixture that has one. Any row still present here is a real leak.
+    var residue = [];
+    for (var q = 0; q &lt; FIX.length; q++) {
+        var byId = new GlideRecord(FIX[q].table);
+        if (byId.get(FIX[q].sys_id))
+            residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
+        if (!FIX[q].prefix) continue;
+        var byPrefix = new GlideRecord(FIX[q].table);
+        byPrefix.addQuery('subject', 'STARTSWITH', FIX[q].prefix);
+        byPrefix.query();
+        while (byPrefix.next())
+            residue.push(FIX[q].table + ' ' + byPrefix.getUniqueValue() +
+                ' [' + byPrefix.getValue('subject') + '] survived');
+    }
+    chk('no fixture residue remains after cleanup', '', residue.join(' | '));
+    notes.push('fixtures removed=' + removed +
+        ' | deletes reporting failure=' + failedDeletes.length +
+        ' | residue rows=' + residue.length);
+    notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>

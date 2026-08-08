@@ -63,7 +63,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>The agent row of the ACL matrix on the child tables: an agent may read and write a task or party whose PARENT case is assigned to that agent (directly or through assigned_group), may create, and may never delete. KNOWN RED on the shipped deployment: the four scripted child- table ACLs (x_casemgmt_case_task read/write, x_casemgmt_case_party read/write) dereference the reserved word "case" as current.case, which the platform script engine refuses to compile - "missing name after . operator" - so the assigned-only narrowing denies every row. The assertions below follow AAP 0.5.6 and turn green once those ACL scripts read the parent through getValue('case') instead. The ACL artifacts are outside this unit's edit scope.</description>
+        <description>The agent row of the ACL matrix on the child tables (AAP 0.5.6): an agent may read and write a task or party whose PARENT case is assigned to that agent, may create, and may never delete. "Assigned only" is a disjunction - assigned_agent = current user OR assigned_group contains current user - so five parent fixtures isolate it: both branches at once, direct-only, group-only, unassigned, and a group the agent is not a member of. Each parent carries one task and one party child, and every child is asserted for read, write and delete, so neither OR branch can pass on the strength of the other and a fail-open ACL cannot hide. This test previously ran RED because the four scripted child-table ACLs dereferenced the reserved word "case" as current.case, which the script engine refuses to compile ("missing name after . operator"), denying every row; those ACLs now read the parent through current.getElement('case') and the test is green.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)</name>
@@ -94,7 +94,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>A parent case assigned to the demo agent, with one child task and one child party</notes>
+        <notes>Five parent cases - both-branch, direct-only, group-only, unassigned and nonmember-group - each with one child task and one child party</notes>
         <order>1</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -163,9 +163,32 @@
     var AGT_ID = userId('x_casemgmt_demo_agent');
     var VWR_ID = userId('x_casemgmt_demo_viewer');
     var GRP_ID = groupId('x_casemgmt_demo_team');
+    // A group the demo agent is definitively NOT a member of, resolved at run time by
+    // elimination rather than by name, so the test needs no second seeded group and no
+    // hardcoded group name. AAP 0.5.6 defines "Assigned only" as
+    //     assigned_agent = current user OR assigned_group contains current user
+    // and proving the "only" half requires a parent whose group does NOT contain the
+    // agent. The chosen group is asserted below to be a genuine non-membership.
+    function nonMemberGroupId(userName) {
+        var uid = userId(userName);
+        var mine = {}, m = new GlideRecord('sys_user_grmember');
+        m.addQuery('user', uid);
+        m.query();
+        while (m.next()) { mine[m.getValue('group')] = 1; }
+        var g = new GlideRecord('sys_user_group');
+        g.addQuery('active', true);
+        g.orderBy('name');
+        g.query();
+        while (g.next()) {
+            if (!mine[g.getUniqueValue()]) { return g.getUniqueValue(); }
+        }
+        return '';
+    }
+    var OTHER_GRP_ID = nonMemberGroupId('x_casemgmt_demo_agent');
+
     var FIX = [
         {
-            "label": "parent",
+            "label": "parent-both",
             "table": "x_casemgmt_case",
             "sys_id": "ee66fab2aae0daab57a18a04fa5fc3bd",
             "prefix": "ATF-RBAC-07",
@@ -206,6 +229,173 @@
                 "person": "@user:x_casemgmt_demo_agent",
                 "role_label": "Witness"
             }
+        },
+        {
+            "label": "parent-direct",
+            "table": "x_casemgmt_case",
+            "sys_id": "bad75eb1c21c932236a5cd1a275fc83f",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned DIRECTLY to the agent, no group",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "task-direct",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "74896b49d2174d3fbf07b0f3c0e13cfb",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "bad75eb1c21c932236a5cd1a275fc83f",
+                "subject": "ATF-RBAC-07 task on the direct parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-direct",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "e1655540ada67a5667dea0cc155f2d04",
+            "prefix": null,
+            "fields": {
+                "case": "bad75eb1c21c932236a5cd1a275fc83f",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-group",
+            "table": "x_casemgmt_case",
+            "sys_id": "f7fb08a92f84b635e1118fbf871a97c5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned to the agent GROUP only, no agent",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team"
+            }
+        },
+        {
+            "label": "task-group",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "f3573645a8f769471a11daeeb63a75b1",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "f7fb08a92f84b635e1118fbf871a97c5",
+                "subject": "ATF-RBAC-07 task on the group parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-group",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "d97f9690087d07b7e9a2633a357fbd28",
+            "prefix": null,
+            "fields": {
+                "case": "f7fb08a92f84b635e1118fbf871a97c5",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-unassigned",
+            "table": "x_casemgmt_case",
+            "sys_id": "c12db6ba96650309f874e2245ad94102",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned to NOBODY",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium"
+            }
+        },
+        {
+            "label": "task-unassigned",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "255261c44d7e569393eb5b378f093cf5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "c12db6ba96650309f874e2245ad94102",
+                "subject": "ATF-RBAC-07 task on the unassigned parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-unassigned",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "84d0b2cec80ea74f5d3b34003cfb2629",
+            "prefix": null,
+            "fields": {
+                "case": "c12db6ba96650309f874e2245ad94102",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-othergroup",
+            "table": "x_casemgmt_case",
+            "sys_id": "8e8ba999d36f28846a3a63a1889b0794",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned to a group the agent is NOT in",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@nonmembergroup:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "task-othergroup",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "d0d522c65c706fd4e973124487d5a306",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "8e8ba999d36f28846a3a63a1889b0794",
+                "subject": "ATF-RBAC-07 task on the othergroup parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-othergroup",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "1549f71e383e795314639032274605b9",
+            "prefix": null,
+            "fields": {
+                "case": "8e8ba999d36f28846a3a63a1889b0794",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
         }
     ];
 
@@ -215,6 +405,7 @@
         if (typeof v !== 'string' || v.charAt(0) !== '@') { return v; }
         var sep = v.indexOf(':');
         var kind = v.substring(1, sep), key = v.substring(sep + 1);
+        if (kind === 'nonmembergroup') { return nonMemberGroupId(key); }
         return kind === 'user' ? userId(key) : groupId(key);
     }
     for (var d = FIX.length - 1; d &gt;= 0; d--) {
@@ -229,6 +420,19 @@
         var newId = gr.insert();
         chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
     }
+    chkTrue('a group the demo agent is NOT a member of was found for the negative branch',
+        String(OTHER_GRP_ID).length === 32);
+    var memberProbe = new GlideRecord('sys_user_grmember');
+    memberProbe.addQuery('user', userId('x_casemgmt_demo_agent'));
+    memberProbe.addQuery('group', OTHER_GRP_ID);
+    memberProbe.query();
+    chk('the agent really is NOT a member of that group', '0', String(memberProbe.getRowCount()));
+    var teamProbe = new GlideRecord('sys_user_grmember');
+    teamProbe.addQuery('user', userId('x_casemgmt_demo_agent'));
+    teamProbe.addQuery('group', GRP_ID);
+    teamProbe.query();
+    chk('the demo agent IS a member of x_casemgmt_demo_team, so the positive group branch is real',
+        '1', String(teamProbe.getRowCount()));
     stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
@@ -304,7 +508,7 @@
         <display_name>Run Server Side Script</display_name>
         <inputs />
         <mugshots_cache_json />
-        <notes>Assert the AAP 0.5.6 child-table narrowing for the assigned agent</notes>
+        <notes>Assert the AAP 0.5.6 child-table narrowing: each OR branch allows read/write independently, and the unassigned and nonmember-group parents deny read, write and delete</notes>
         <order>3</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
@@ -391,6 +595,87 @@
         chk('agent canDelete that party', 'false', String(pt.canDelete()));
         chkTrue('agent canCreate parties', pt.canCreate());
     }
+
+    // ------------------------------------------------------------------------
+    // AAP 0.5.6 "Assigned only" is a DISJUNCTION on the parent case:
+    //     assigned_agent = current user OR assigned_group contains current user
+    // The fixture above satisfies BOTH halves at once, so on its own it cannot show
+    // that either half works independently, and it cannot show the "only" at all.
+    // The four parents below isolate each branch:
+    //     direct      assigned_agent = the agent, assigned_group EMPTY   -> ALLOW
+    //     group       assigned_group = the agent's team, no agent        -> ALLOW
+    //     unassigned  neither field populated                            -> DENY
+    //     othergroup  a group the agent is NOT a member of               -> DENY
+    // Each carries its own task and party child, and each is asserted for read AND
+    // write AND delete, so a fail-open ACL cannot hide behind the both-branch case.
+    function childProbe(table, sysId) {
+        var secure = new GlideRecordSecure(table);
+        var visible = secure.get(sysId);
+        // A plain GlideRecord loads the row without applying the read ACL (measured),
+        // which is the only way to ask the platform for its per-record write and delete
+        // decisions on a row the identity may not see.
+        var plain = new GlideRecord(table);
+        var exists = plain.get(sysId);
+        return {
+            visible: visible, exists: exists,
+            canRead: exists ? plain.canRead() : null,
+            canWrite: exists ? plain.canWrite() : null,
+            canDelete: exists ? plain.canDelete() : null
+        };
+    }
+    var ALLOW = [
+        ['direct-assigned', 'x_casemgmt_case_task', '74896b49d2174d3fbf07b0f3c0e13cfb'],
+        ['direct-assigned', 'x_casemgmt_case_party', 'e1655540ada67a5667dea0cc155f2d04'],
+        ['group-assigned', 'x_casemgmt_case_task', 'f3573645a8f769471a11daeeb63a75b1'],
+        ['group-assigned', 'x_casemgmt_case_party', 'd97f9690087d07b7e9a2633a357fbd28']
+    ];
+    var DENY = [
+        ['unassigned-parent', 'x_casemgmt_case_task', '255261c44d7e569393eb5b378f093cf5'],
+        ['unassigned-parent', 'x_casemgmt_case_party', '84d0b2cec80ea74f5d3b34003cfb2629'],
+        ['nonmember-group-parent', 'x_casemgmt_case_task', 'd0d522c65c706fd4e973124487d5a306'],
+        ['nonmember-group-parent', 'x_casemgmt_case_party', '1549f71e383e795314639032274605b9']
+    ];
+    var a, p;
+    for (a = 0; a &lt; ALLOW.length; a++) {
+        var okCase = ALLOW[a], okName = okCase[0] + ' ' + okCase[1];
+        p = childProbe(okCase[1], okCase[2]);
+        chkTrue('fixture exists: ' + okName, p.exists);
+        chkTrue('ALLOW read (' + okName + ')', p.visible);
+        chkTrue('ALLOW canRead (' + okName + ')', p.canRead);
+        chkTrue('ALLOW canWrite (' + okName + ')', p.canWrite);
+        chk('DENY canDelete - the agent never deletes (' + okName + ')', 'false', String(p.canDelete));
+    }
+    for (var dn = 0; dn &lt; DENY.length; dn++) {
+        var noCase = DENY[dn], noName = noCase[0] + ' ' + noCase[1];
+        p = childProbe(noCase[1], noCase[2]);
+        chkTrue('fixture exists: ' + noName, p.exists);
+        chk('DENY read (' + noName + ')', 'false', String(p.visible));
+        chk('DENY canRead (' + noName + ')', 'false', String(p.canRead));
+        chk('DENY canWrite (' + noName + ')', 'false', String(p.canWrite));
+        chk('DENY canDelete (' + noName + ')', 'false', String(p.canDelete));
+    }
+    // Set-level narrowing: the allowed children must be inside the agent's visible
+    // sets and the denied children must be outside them. GlideRecordSecure.getRowCount()
+    // is NOT ACL-filtered, so the sets are built by iteration.
+    function visibleIds(table) {
+        var o = {}, g = new GlideRecordSecure(table);
+        g.query();
+        while (g.next()) { o[g.getUniqueValue()] = 1; }
+        return o;
+    }
+    var visTask = visibleIds('x_casemgmt_case_task'), visParty = visibleIds('x_casemgmt_case_party');
+    chkTrue('the direct-assigned task is in the visible task set', !!visTask['74896b49d2174d3fbf07b0f3c0e13cfb']);
+    chkTrue('the group-assigned task is in the visible task set', !!visTask['f3573645a8f769471a11daeeb63a75b1']);
+    chk('the unassigned-parent task is NOT in the visible task set', 'false',
+        String(!!visTask['255261c44d7e569393eb5b378f093cf5']));
+    chk('the nonmember-group task is NOT in the visible task set', 'false',
+        String(!!visTask['d0d522c65c706fd4e973124487d5a306']));
+    chkTrue('the direct-assigned party is in the visible party set', !!visParty['e1655540ada67a5667dea0cc155f2d04']);
+    chkTrue('the group-assigned party is in the visible party set', !!visParty['d97f9690087d07b7e9a2633a357fbd28']);
+    chk('the unassigned-parent party is NOT in the visible party set', 'false',
+        String(!!visParty['84d0b2cec80ea74f5d3b34003cfb2629']));
+    chk('the nonmember-group party is NOT in the visible party set', 'false',
+        String(!!visParty['1549f71e383e795314639032274605b9']));
     stepResult.setOutputMessage('agent assigned-only narrowing on the child tables: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     return assertEqual({ name: 'agent assigned-only narrowing on the child tables', shouldbe: '', value: fails.join(' | ') });
@@ -678,25 +963,156 @@
                 "person": "@user:x_casemgmt_demo_agent",
                 "role_label": "Witness"
             }
+        },
+        {
+            "label": "parent-direct",
+            "table": "x_casemgmt_case",
+            "sys_id": "bad75eb1c21c932236a5cd1a275fc83f",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-direct",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "74896b49d2174d3fbf07b0f3c0e13cfb",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-direct",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "e1655540ada67a5667dea0cc155f2d04",
+            "prefix": null,
+            "fields": {}
+        },
+        {
+            "label": "parent-group",
+            "table": "x_casemgmt_case",
+            "sys_id": "f7fb08a92f84b635e1118fbf871a97c5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-group",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "f3573645a8f769471a11daeeb63a75b1",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-group",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "d97f9690087d07b7e9a2633a357fbd28",
+            "prefix": null,
+            "fields": {}
+        },
+        {
+            "label": "parent-unassigned",
+            "table": "x_casemgmt_case",
+            "sys_id": "c12db6ba96650309f874e2245ad94102",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-unassigned",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "255261c44d7e569393eb5b378f093cf5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-unassigned",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "84d0b2cec80ea74f5d3b34003cfb2629",
+            "prefix": null,
+            "fields": {}
+        },
+        {
+            "label": "parent-othergroup",
+            "table": "x_casemgmt_case",
+            "sys_id": "8e8ba999d36f28846a3a63a1889b0794",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-othergroup",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "d0d522c65c706fd4e973124487d5a306",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-othergroup",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "1549f71e383e795314639032274605b9",
+            "prefix": null,
+            "fields": {}
         }
     ];
 
-    var removed = 0;
+    // CLEANUP IS ASSERTED, NOT ASSUMED.
+    //
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology. It therefore passed even when every
+    // delete had
+    // silently failed, so fixtures could survive and contaminate later steps, later
+    // tests in the suite, and later runs (a stale pinned sys_id or a stale prefix row
+    // makes another test assert against the wrong record). What follows checks the
+    // outcome of each delete and then RE-QUERIES for residue, so a surviving row fails
+    // this step and is named in the failure message.
+    //
+    // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
+    // `subject` column to match on) is swept by pinned sys_id only - the same guard the
+    // delete loop uses - because that is the only key such a row is ever created with.
+    var removed = 0, failedDeletes = [];
     for (var d = FIX.length - 1; d &gt;= 0; d--) {
         var old = new GlideRecord(FIX[d].table);
-        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); removed++; }
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        }
     }
     for (var p = 0; p &lt; FIX.length; p++) {
         if (!FIX[p].prefix) continue;
         var extra = new GlideRecord(FIX[p].table);
         extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
         extra.query();
-        while (extra.next()) { extra.setWorkflow(false); extra.deleteRecord(); removed++; }
+        while (extra.next()) {
+            var extraId = extra.getUniqueValue();
+            extra.setWorkflow(false);
+            if (extra.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[p].table + ':' + extraId);
+        }
     }
-    stepResult.setOutputMessage('fixtures removed=' + removed);
-    chk('cleanup ran', 'true', 'true');
-    stepResult.setOutputMessage('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+    chk('every delete reported success', '', failedDeletes.join(' | '));
+
+    // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
+    // fixture that has one. Any row still present here is a real leak.
+    var residue = [];
+    for (var q = 0; q &lt; FIX.length; q++) {
+        var byId = new GlideRecord(FIX[q].table);
+        if (byId.get(FIX[q].sys_id))
+            residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
+        if (!FIX[q].prefix) continue;
+        var byPrefix = new GlideRecord(FIX[q].table);
+        byPrefix.addQuery('subject', 'STARTSWITH', FIX[q].prefix);
+        byPrefix.query();
+        while (byPrefix.next())
+            residue.push(FIX[q].table + ' ' + byPrefix.getUniqueValue() +
+                ' [' + byPrefix.getValue('subject') + '] survived');
+    }
+    chk('no fixture residue remains after cleanup', '', residue.join(' | '));
+
+    // setOutputMessage OVERWRITES rather than appends, so every reported
+    // line is accumulated and emitted once, at the end of the step.
+    var notes = [];
+    notes.push('fixtures removed=' + removed +
+        ' | deletes reporting failure=' + failedDeletes.length +
+        ' | residue rows=' + residue.length);
+    notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>

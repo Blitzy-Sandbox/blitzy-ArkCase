@@ -40,19 +40,52 @@
         x CRUD matrix with custom "Assigned only" conditions for case_agent,
         the auto-generated ACLs would conflict and are explicitly suppressed
         here.
+      - CROSS-SCOPE ACCESS COLUMNS ARE BOOLEAN, NOT STRINGS. On sys_db_object
+        only `access` is a string (public | package_private). ws_access,
+        read_access, create_access, update_access, delete_access, alter_access,
+        client_scripts_access and configuration_access are all `boolean`
+        (verified against sys_dictionary on the target release). An earlier
+        revision of this artifact declared every one of them as the string
+        "public"; a boolean column coerces that to FALSE, and the platform then
+        refuses every cross-scope operation on this table with
+        "Read operation against 'x_casemgmt_case' from scope 'rhino.global' has
+        been refused due to the table's cross-scope access policy". Three
+        capabilities depend on those refusals not happening:
+          1. the REST Table API post-commit verification gate
+             (GET /api/now/table/x_casemgmt_case answered HTTP 403 as admin),
+          2. any global-scope verification script (a global GlideRecord read
+             silently reported getRowCount() == 0 on a fully populated table),
+          3. the ATF client test runner: the platform's own Global-scope Script
+             Include TestExecutorAjax.validateFormParameters resolves the record
+             for the "Open an Existing Record" step with a plain GlideRecord, so
+             every form-level test failed with "Table 'x_casemgmt_case' does not
+             have a record with id '...'".
+        The four columns this application genuinely needs opened are therefore
+        emitted as booleans below (read/create/update/delete plus ws_access for
+        the web-service path). alter_access, client_scripts_access and
+        configuration_access stay FALSE - no other scope may reshape this
+        table's schema, client scripts or configuration - and are now stated
+        explicitly rather than relying on a mis-typed string coercing to false.
+      - CACHE NOTE for anyone repairing a live instance by hand: writing these
+        columns flushes only the sys_db_object catalog, NOT
+        syscache_tabledescriptor, so the new values appear in the record while
+        the old policy is still enforced. Touch this table's collection
+        sys_dictionary row (name=<table>, element=NULL) afterwards to force the
+        descriptor rebuild. ../scripts/post_import_remediation.js does exactly
+        that and then verifies the effective access.
       - The concrete scope identifier casemgmt is used throughout per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export.
 -->
 <record_update table="sys_db_object">
     <sys_db_object action="INSERT_OR_UPDATE">
         <access>public</access>
         <actions_update>true</actions_update>
-        <alter_access>public</alter_access>
+        <alter_access>false</alter_access>
         <caller_access/>
-        <client_scripts_access>public</client_scripts_access>
-        <configuration_access>public</configuration_access>
-        <create_access>public</create_access>
+        <client_scripts_access>false</client_scripts_access>
+        <configuration_access>false</configuration_access>
+        <create_access>true</create_access>
         <create_access_controls>false</create_access_controls>
-        <delete_access>public</delete_access>
+        <delete_access>true</delete_access>
         <extension_model/>
         <is_extendable>false</is_extendable>
         <label>Case</label>
@@ -61,7 +94,7 @@
         <number_ref display_value="CASE" source="x_casemgmt">4fc55a26e01ab60d8ea5ce13ce35f6f3</number_ref>
         <plural>Cases</plural>
         <provider_class/>
-        <read_access>public</read_access>
+        <read_access>true</read_access>
         <scriptable_table>false</scriptable_table>
         <super_class/>
         <sys_class_name>sys_db_object</sys_class_name>
@@ -76,8 +109,8 @@
         <sys_update_name>sys_db_object_x_casemgmt_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <update_access>public</update_access>
+        <update_access>true</update_access>
         <user_role/>
-        <ws_access>public</ws_access>
+        <ws_access>true</ws_access>
     </sys_db_object>
 </record_update>

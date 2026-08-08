@@ -169,8 +169,13 @@
       advanced=true and the script encodes the parent-case "Assigned
       only" check that walks from the case_task row up to its parent
       x_casemgmt_case row to evaluate
-      `current.case.assigned_agent == gs.getUserID() ||
-      gs.getUser().isMemberOf(current.case.assigned_group)`).
+      `var p = current.getElement('case').getRefRecord();
+      p.assigned_agent == gs.getUserID() ||
+      gs.getUser().isMemberOf(p.assigned_group)` - reached with
+      getElement('case') because `case` is a JavaScript reserved word, so
+      the direct property form `current.case` does not compile under Rhino
+      ("missing name after . operator") and an ACL body that cannot compile
+      denies every row).
 
     Why CREATE is granted to manager unconditionally (design rationale):
       - Operational origination: managers must be able to file new tasks

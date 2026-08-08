@@ -493,7 +493,45 @@ var STATS = {
     aclsUnmapped: 0,
     securityCacheFlushes: 0,
     dictionaryCacheFlushes: 0,
+    tableAccessRepaired: 0,
+    tableAccessAlready: 0,
     errors: 0
+};
+
+/**
+ * The cross-scope access columns on sys_db_object, with the value each one MUST
+ * carry for this application.
+ *
+ * WARNING - THESE ARE BOOLEAN COLUMNS, NOT STRINGS. Only `access` is a string
+ * (public | package_private). ws_access, read_access, create_access,
+ * update_access, delete_access, alter_access, client_scripts_access and
+ * configuration_access are all `boolean` in sys_dictionary. Assigning the
+ * string 'public' to a boolean column stores FALSE, and the platform then
+ * refuses every cross-scope operation on the table:
+ *   "Read operation against 'x_casemgmt_case' from scope 'rhino.global' has
+ *    been refused due to the table's cross-scope access policy"
+ * Three capabilities break when that happens: the REST Table API verification
+ * gate (HTTP 403 even as admin), any global-scope verification script (a global
+ * GlideRecord read reports getRowCount() == 0 instead of raising), and the ATF
+ * client test runner - the platform's own Global-scope TestExecutorAjax
+ * resolves the record for an "Open an Existing Record" step with a plain
+ * GlideRecord, so every form-level test fails with "Table 'x_casemgmt_case'
+ * does not have a record with id '...'".
+ *
+ * alter_access, client_scripts_access and configuration_access stay false: no
+ * other scope may reshape this application's schema, client scripts or
+ * configuration.
+ */
+var TABLE_ACCESS_SPEC = {
+    access: 'public',
+    ws_access: true,
+    read_access: true,
+    create_access: true,
+    update_access: true,
+    delete_access: true,
+    alter_access: false,
+    client_scripts_access: false,
+    configuration_access: false
 };
 
 /**
@@ -789,13 +827,14 @@ function ensureTable(spec, scopeSysId) {
         return false;
     }
 
-    // Capture whatever the commit left behind so the rebuild is faithful.
+    // Capture whatever the commit left behind so the rebuild is faithful. Access
+    // flags are deliberately NOT carried over: the committed row's flags are the
+    // very thing that is wrong (see TABLE_ACCESS_SPEC), so they are re-declared
+    // from the spec on the fresh insert.
     var carried = {
         sysId: '',
         label: spec.label,
-        plural: spec.plural,
-        accessible: 'public',
-        wsAccess: true
+        plural: spec.plural
     };
     var existing = new GlideRecord('sys_db_object');
     existing.addQuery('name', spec.name);
@@ -861,12 +900,14 @@ function ensureTable(spec, scopeSysId) {
     gr.setValue('sys_name', spec.name);
     gr.setValue('super_class', '');
     gr.setValue('is_extendable', false);
-    gr.setValue('ws_access', carried.wsAccess);
-    gr.setValue('access', carried.accessible);
-    gr.setValue('create_access', carried.accessible);
-    gr.setValue('read_access', carried.accessible);
-    gr.setValue('update_access', carried.accessible);
-    gr.setValue('delete_access', carried.accessible);
+    // Access flags come from TABLE_ACCESS_SPEC, never from a string constant:
+    // every column here except `access` is boolean (see the WARNING on
+    // TABLE_ACCESS_SPEC). An earlier revision assigned the string 'public' to
+    // create/read/update/delete_access, which stored false and refused all
+    // cross-scope access.
+    for (var accCol in TABLE_ACCESS_SPEC) {
+        gr.setValue(accCol, TABLE_ACCESS_SPEC[accCol]);
+    }
     gr.setValue('sys_scope', scopeSysId);
     gr.setValue('sys_package', scopeSysId);
     if (carried.sysId) {
@@ -884,6 +925,148 @@ function ensureTable(spec, scopeSysId) {
     log('TABLE|' + spec.name + '|built|sys_id=' + newId + '|columns=' + physicalColumnCount(spec.name) +
         '|signals=' + after.detail);
     return true;
+}
+
+/**
+ * Force the platform to rebuild one table's cached descriptor.
+ *
+ * Writing the access columns on sys_db_object flushes only the sys_db_object
+ * catalog - NOT syscache_tabledescriptor - so the corrected values sit in the
+ * record while the OLD cross-scope policy is still enforced. That is why an
+ * earlier investigation concluded, wrongly, that correcting the flags "does not
+ * lift the 403": the write landed but the descriptor was stale. Updating the
+ * table's collection dictionary row (name=<table>, element=NULL) is the
+ * platform's own trigger for a descriptor rebuild - it flushes
+ * metacache_system_wide, syscache_tabledescriptor, syscache_sizeclass and the
+ * dbi_table_exists catalogs - after which the new policy takes effect
+ * immediately. Measured: before the touch a global-scope read of
+ * x_casemgmt_case still returned 0 rows and REST answered 403; after it, the
+ * read returned rows and REST answered 200.
+ *
+ * The row's `attributes` value is written back byte-for-byte, so the touch
+ * changes no configuration - it exists only to invalidate the cache.
+ *
+ * @param {string} tableName the table whose descriptor must be rebuilt
+ * @return {boolean} true when a collection row was found and touched
+ */
+function refreshTableDescriptor(tableName) {
+    var coll = new GlideRecord('sys_dictionary');
+    coll.addQuery('name', tableName);
+    coll.addNullQuery('element');
+    coll.setLimit(1);
+    coll.query();
+    if (!coll.next()) {
+        logError('TABLE_ACCESS|' + tableName + '|no collection dictionary row (element=NULL) found;' +
+            ' the table-descriptor cache could not be invalidated. The corrected access flags are' +
+            ' stored but may not take effect until the next cache flush or instance restart.');
+        return false;
+    }
+    var attributes = String(coll.getValue('attributes') || '');
+    coll.setValue('attributes', attributes === '' ? 'no_audit=false' : '');
+    coll.update();
+    var back = new GlideRecord('sys_dictionary');
+    back.get(coll.getUniqueValue());
+    back.setValue('attributes', attributes);
+    back.update();
+    var check = new GlideRecord('sys_dictionary');
+    check.get(coll.getUniqueValue());
+    if (String(check.getValue('attributes') || '') !== attributes) {
+        logError('TABLE_ACCESS|' + tableName + '|descriptor touch did not restore attributes|expected=[' +
+            attributes + ']|actual=[' + String(check.getValue('attributes') || '') + ']');
+        return false;
+    }
+    STATS.dictionaryCacheFlushes++;
+    return true;
+}
+
+/**
+ * Reconcile one table's cross-scope access columns against TABLE_ACCESS_SPEC.
+ *
+ * This runs for EVERY table on EVERY run, including the "already physical" path
+ * that ensureTable() short-circuits: when the Update Set commit succeeds in
+ * creating the tables - the normal case - the row it leaves behind still carries
+ * whatever the payload declared, so nothing else in this script would ever look
+ * at the access flags. Every value is read back after the write, and the
+ * effective policy is then proved by an actual cross-scope read.
+ *
+ * @param {Object} spec one entry of TABLE_SPECS
+ * @return {boolean} true when the table ends the call with the correct flags
+ */
+function ensureTableAccess(spec) {
+    var gr = new GlideRecord('sys_db_object');
+    gr.addQuery('name', spec.name);
+    gr.setLimit(1);
+    gr.query();
+    if (!gr.next()) {
+        logError('TABLE_ACCESS|' + spec.name + '|no sys_db_object row - cannot reconcile access flags');
+        return false;
+    }
+
+    var drift = [];
+    var col;
+    for (col in TABLE_ACCESS_SPEC) {
+        var want = TABLE_ACCESS_SPEC[col];
+        var actual = gr.getValue(col);
+        var same = (typeof want === 'boolean') ? (isTrue(actual) === want) : (String(actual || '') === want);
+        if (!same) {
+            drift.push(col + ':' + actual + '->' + want);
+            gr.setValue(col, want);
+        }
+    }
+    if (drift.length === 0) {
+        STATS.tableAccessAlready++;
+        log('TABLE_ACCESS|' + spec.name + '|already correct|' + describeTableAccess(spec.name));
+        return true;
+    }
+    gr.update();
+    refreshTableDescriptor(spec.name);
+
+    var after = new GlideRecord('sys_db_object');
+    after.addQuery('name', spec.name);
+    after.setLimit(1);
+    after.query();
+    var stillWrong = [];
+    if (after.next()) {
+        for (col in TABLE_ACCESS_SPEC) {
+            var w = TABLE_ACCESS_SPEC[col];
+            var a = after.getValue(col);
+            var ok = (typeof w === 'boolean') ? (isTrue(a) === w) : (String(a || '') === w);
+            if (!ok) {
+                stillWrong.push(col + '=' + a);
+            }
+        }
+    } else {
+        stillWrong.push('row disappeared');
+    }
+    if (stillWrong.length) {
+        logError('TABLE_ACCESS|' + spec.name + '|repair did not stick|' + stillWrong.join(','));
+        return false;
+    }
+    STATS.tableAccessRepaired++;
+    log('TABLE_ACCESS|' + spec.name + '|repaired|' + drift.join(',') + '|descriptor_refreshed=yes|' +
+        describeTableAccess(spec.name));
+    return true;
+}
+
+/**
+ * Render one table's live access columns for the log.
+ *
+ * @param {string} tableName the table to describe
+ * @return {string} a compact key=value rendering
+ */
+function describeTableAccess(tableName) {
+    var gr = new GlideRecord('sys_db_object');
+    gr.addQuery('name', tableName);
+    gr.setLimit(1);
+    gr.query();
+    if (!gr.next()) {
+        return 'absent';
+    }
+    var parts = [];
+    for (var col in TABLE_ACCESS_SPEC) {
+        parts.push(col + '=' + gr.getValue(col));
+    }
+    return parts.join(' ');
 }
 
 /**
@@ -1930,11 +2113,41 @@ function verifyRemediation(scopeSysId) {
         choices.addAggregate('COUNT');
         choices.query();
         var choiceCount = choices.next() ? choices.getAggregate('COUNT') : '0';
+
+        // Cross-scope access, verified as a stored value AND as effective policy.
+        // The stored flags are necessary but not sufficient: the descriptor cache
+        // can still be serving the old policy, so the effective check below is the
+        // one that matters (see refreshTableDescriptor).
+        var accessDrift = [];
+        var accGr = new GlideRecord('sys_db_object');
+        accGr.addQuery('name', spec.name);
+        accGr.setLimit(1);
+        accGr.query();
+        if (!accGr.next()) {
+            accessDrift.push('no sys_db_object row');
+        } else {
+            for (var ac in TABLE_ACCESS_SPEC) {
+                var wantAc = TABLE_ACCESS_SPEC[ac];
+                var gotAc = accGr.getValue(ac);
+                var okAc = (typeof wantAc === 'boolean') ? (isTrue(gotAc) === wantAc)
+                    : (String(gotAc || '') === wantAc);
+                if (!okAc) {
+                    accessDrift.push(ac + '=' + gotAc + '(want ' + wantAc + ')');
+                }
+            }
+        }
+
         parts.push(spec.name + '{physical=' + probe.state + ',columns=' + physicalColumnCount(spec.name) +
             ',missing_fields=' + (missing.length === 0 ? 'none' : missing.join('/')) +
             ',drifted_attributes=' + (drifted.length === 0 ? 'none' : drifted.join('/')) +
             ',display_fields=[' + displayFields.join(',') + ']' +
+            ',cross_scope_access=' + (accessDrift.length === 0 ? 'correct' : accessDrift.join('/')) +
             ',choices=' + choiceCount + '}');
+        if (accessDrift.length > 0) {
+            problems.push(spec.name + ' cross-scope access columns disagree with the package: ' +
+                accessDrift.join(', ') + ' - the REST Table API, every global-scope verification' +
+                ' script and the ATF client test runner are all refused while this is wrong');
+        }
         if (!physical) {
             problems.push(spec.name + ' physical storage is ' +
                 (probe.state === 'no' ? 'absent' : 'indeterminate') + ' (' + probe.detail + ')');
@@ -2219,6 +2432,12 @@ function postImportRemediation() {
     for (i = 0; i < TABLE_SPECS.length; i++) {
         ensureTable(TABLE_SPECS[i], scopeSysId);
     }
+    // Runs whether or not ensureTable() had to build anything: a table the
+    // commit created successfully still carries the committed access flags, and
+    // those are what refuse every cross-scope read (see TABLE_ACCESS_SPEC).
+    for (i = 0; i < TABLE_SPECS.length; i++) {
+        ensureTableAccess(TABLE_SPECS[i]);
+    }
     for (i = 0; i < TABLE_SPECS.length; i++) {
         for (j = 0; j < TABLE_SPECS[i].fields.length; j++) {
             ensureField(TABLE_SPECS[i].name, TABLE_SPECS[i].fields[j], scopeSysId);
@@ -2235,6 +2454,8 @@ function postImportRemediation() {
     }
     log('DEFECT_C|tables_built=' + STATS.tablesBuilt + '|tables_already_physical=' + STATS.tablesAlready +
         '|tables_indeterminate=' + STATS.tablesUncertain +
+        '|cross_scope_access_repaired=' + STATS.tableAccessRepaired +
+        '|cross_scope_access_already_correct=' + STATS.tableAccessAlready +
         '|fields_created=' + STATS.fieldsCreated + '|fields_repaired=' + STATS.fieldsRepaired +
         '|fields_already_correct=' + STATS.fieldsAlready +
         '|display_fields_reconciled=' + STATS.displayFieldsFixed +

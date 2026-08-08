@@ -50,7 +50,7 @@
             - case_manager: Read=All           -> THIS FILE
             - case_agent:   Read=Assigned only -> ../acl/x_casemgmt_case_task_read_agent_assigned.xml
                                                   (carries the row-level filter
-                                                   that dereferences current.case
+                                                   that dereferences current.getElement('case')
                                                    and applies the parent-case
                                                    "Assigned only" predicate
                                                    "parentCase.assigned_agent =
@@ -451,7 +451,7 @@
         - <advanced>      false             vs true (the agent ACL
                                               carries a scripted
                                               condition that dereferences
-                                              current.case to apply the
+                                              current.getElement('case') to apply the
                                               parent-case "Assigned only"
                                               predicate; the manager ACL
                                               is unconditional)
@@ -459,7 +459,7 @@
                                               asserts parent-case
                                               "Assigned only"
         - <script>        empty             vs server-side dereference
-                                              of current.case followed
+                                              of current.getElement('case') followed
                                               by disjunction of
                                               parent-case
                                               assigned_agent /

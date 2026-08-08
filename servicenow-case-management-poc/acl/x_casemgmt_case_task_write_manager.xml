@@ -50,7 +50,7 @@
             - case_manager: Write=All           -> THIS FILE
             - case_agent:   Write=Assigned only -> ../acl/x_casemgmt_case_task_write_agent_assigned.xml
                                                    (carries the row-level filter
-                                                    that dereferences current.case
+                                                    that dereferences current.getElement('case')
                                                     and applies the parent-case
                                                     "Assigned only" predicate
                                                     "parentCase.assigned_agent =
@@ -324,7 +324,7 @@
         - <condition>     empty             vs encoded query that asserts
                                               parent-case "Assigned only"
         - <script>        empty             vs server-side dereference of
-                                              current.case followed by
+                                              current.getElement('case') followed by
                                               disjunction of parent-case
                                               assigned_agent/assigned_group
                                               checks

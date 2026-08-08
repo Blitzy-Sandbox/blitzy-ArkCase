@@ -101,7 +101,7 @@
         Note that case_party does NOT carry its own assigned_group /
         assigned_agent fields - the "Assigned only" predicate from the
         AAP's matrix is therefore evaluated against the PARENT CASE row
-        (referenced via current.case) by the read/write _agent_assigned
+        (referenced via current.getElement('case')) by the read/write _agent_assigned
         siblings. For CREATE this dereference is irrelevant because no
         current row exists pre-insert; this is the second reason CREATE
         is unconditional (in addition to "current is null pre-insert").
@@ -109,7 +109,7 @@
     Why <advanced>false</advanced> (in contrast to read/write _agent_assigned):
       The READ and WRITE agent-assigned siblings on case_party use
       <advanced>true</advanced> so the platform invokes their CDATA
-      scripted condition that dereferences current.case via
+      scripted condition that dereferences current.getElement('case') via
       getRefRecord() and evaluates "parentCase.assigned_agent ==
       gs.getUserID() OR parentCase.assigned_group contains current
       user." That predicate cannot be evaluated at create time because:

@@ -54,7 +54,7 @@
             - case_agent:   Write=Assigned only -> ../acl/x_casemgmt_case_party_write_agent_assigned.xml
                                                    (carries the row-level
                                                     filter that dereferences
-                                                    current.case and applies
+                                                    current.getElement('case') and applies
                                                     the parent-case "Assigned
                                                     only" predicate
                                                     "parentCase.assigned_agent
@@ -198,7 +198,7 @@
       is to reserve advanced=true for ACLs that actually carry a scripted
       body (see, for contrast, ../acl/x_casemgmt_case_party_write_agent_assigned.xml
       where advanced=true and the script encodes the parent-case "Assigned
-      only" disjunctive ownership check that traverses current.case
+      only" disjunctive ownership check that traverses current.getElement('case')
       via getRefRecord() to evaluate parentCase.assigned_agent and
       parentCase.assigned_group membership).
 
@@ -367,7 +367,7 @@
                                             vs x_casemgmt_case_agent
         - <advanced>      false             vs true (the agent ACL carries a
                                               scripted condition that
-                                              dereferences current.case and
+                                              dereferences current.getElement('case') and
                                               evaluates the parent-case
                                               "Assigned only" predicate; the
                                               manager ACL is unconditional)

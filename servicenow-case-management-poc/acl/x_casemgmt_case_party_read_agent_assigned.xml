@@ -37,7 +37,7 @@
         assigned_agent fields (per AAP Section 0.5.7 the case_party schema
         is case, party_type, person, organization, role_label), the
         predicate is evaluated against the PARENT CASE referenced by
-        current.case. The script below dereferences current.case via
+        current.getElement('case'). The script below dereferences current.getElement('case') via
         getRefRecord() and applies the same two-clause predicate
         (parentCase.assigned_agent == currentUserId, OR parentCase.
         assigned_group membership) used by the case-level and case_task-
@@ -93,7 +93,7 @@
         encoded in the ACL condition script as a query: assigned_agent =
         current.sys_id OR assigned_group IN current.user_group_membership.
         No global ACLs are touched." For case_party the same query shape
-        is applied but on the parent case row reached via current.case.
+        is applied but on the parent case row reached via current.getElement('case').
       - Section 0.5.7 (Data-Model Mapping - x_casemgmt_case_party): the
         case_party schema declares `case` as a mandatory Reference->
         x_casemgmt_case field. The script below relies on that mandatory
@@ -135,7 +135,25 @@
       The CDATA script body is byte-identical between the two records by
       design; both encode the same predicate per AAP Section 0.5.6.
 
-    Why current.case.getRefRecord() (NOT direct field access on `current`):
+    Why current.getElement('case').getRefRecord() (NOT current.getElement('case'), and NOT
+    direct field access on `current`):
+
+      *** RESERVED WORD - DO NOT "SIMPLIFY" THIS BACK TO current.case ***
+      `case` is a reserved word in JavaScript, and the Rhino engine that
+      evaluates scoped ACL scripts rejects it as a property accessor after a
+      dot. An earlier revision of this ACL used `current.case` and the
+      platform refused to compile the body on every evaluation:
+        Javascript compiler exception: missing name after . operator
+        (sys_security_acl.<sys_id>; line 2)
+      A body that cannot compile denies, so this ACL denied EVERY row to
+      EVERY case_agent, silently collapsing the AAP Section 0.5.6 "Assigned
+      only" grant on the child tables to no access at all. ATF 07 is the
+      regression test that caught it. The column is therefore reached with
+      current.getElement('case'), which returns the same
+      GlideElementReference and supports .nil() and .getRefRecord() exactly
+      as before. Measured on the target release: getElement('case') returns
+      the reference, .getRefRecord() resolves the parent row, .nil() answers
+      correctly.
       This is a TABLE-LEVEL ACL on x_casemgmt_case_party, so at evaluation
       time the platform binds `current` to the CASE_PARTY row being read
       - NOT to the parent case. Direct access of current.assigned_agent
@@ -143,7 +161,7 @@
       exist on x_casemgmt_case_party per the AAP Section 0.5.7 case_party
       schema (the party row has only case, party_type, person,
       organization, role_label). To reach the parent case's assignment
-      fields, the script must dereference current.case (a Reference field
+      fields, the script must dereference current.getElement('case') (a Reference field
       on case_party whose target is x_casemgmt_case per AAP Section 0.5.7)
       by calling .getRefRecord() - the GlideElementReference-supplied
       accessor that returns a fully-populated GlideRecord of the
@@ -151,11 +169,11 @@
       x_casemgmt_case_read_agent_assigned ACL where `current` IS the case
       row and direct field access works, and it mirrors exactly the
       pattern used in the sibling x_casemgmt_case_task_read_agent_assigned
-      ACL where current.case is also dereferenced because case_task
+      ACL where current.getElement('case') is also dereferenced because case_task
       likewise has no assignment columns of its own.
 
       Defensive null-checks before .getRefRecord():
-        - if (!current.case || current.case.nil()) - guards against the
+        - if (!caseElement || caseElement.nil()) - guards against the
           edge case where a party row is somehow inserted/updated without
           a parent case reference. ServiceNow's "case is mandatory"
           dictionary flag (../dictionary/x_casemgmt_case_party_case.xml)
@@ -331,7 +349,7 @@
         references the scoped table x_casemgmt_case_party (NOT the OOB
         `sys_user_grmember` table or any other global table), and
         <roles> references the scoped role x_casemgmt_case_agent. The
-        script body dereferences current.case to a row of x_casemgmt_case
+        script body dereferences current.getElement('case') to a row of x_casemgmt_case
         (also a scoped table); no global table is written or read for
         access enforcement (the gs.getUser().isMemberOf() probe consults
         OOB membership infrastructure as a read-only API call - it does
@@ -340,7 +358,7 @@
         <sys_scope>, and <sys_package> all resolve their targets by name
         / source attribute lookup at Update Set apply time. The CDATA
         script body uses gs.getUserID() (returns the runtime user's
-        sys_id, NOT a literal), current.case dereferenced via
+        sys_id, NOT a literal), current.getElement('case') dereferenced via
         .getRefRecord() (resolves the parent reference at request time
         from the actual stored sys_id, NOT from any literal in this
         XML), and parentCase.assigned_agent / parentCase.assigned_group
@@ -392,12 +410,12 @@
         - ../app/sys_scope/x_casemgmt.xml (scope record - resolves
           sys_scope and sys_package source="x_casemgmt")
         - ../tables/x_casemgmt_case.xml (the script dereferences
-          current.case to a row of x_casemgmt_case; the table must exist
+          current.getElement('case') to a row of x_casemgmt_case; the table must exist
           when the script body is parsed/registered)
         - ../tables/x_casemgmt_case_party.xml (resolves
           <name>x_casemgmt_case_party</name>)
         - ../dictionary/x_casemgmt_case_party_case.xml (the script
-          references current.case; the column must exist when the
+          references current.getElement('case'); the column must exist when the
           script body is parsed/registered)
         - ../dictionary/x_casemgmt_case_assigned_agent.xml (the script
           references parentCase.assigned_agent; the column must exist
@@ -432,8 +450,9 @@
         <operation>read</operation>
         <roles>x_casemgmt_case_agent</roles>
         <script><![CDATA[(function() {
-    if (!current.case || current.case.nil()) { return false; }
-    var parentCase = current.case.getRefRecord();
+    var caseElement = current.getElement('case');
+    if (!caseElement || caseElement.nil()) { return false; }
+    var parentCase = caseElement.getRefRecord();
     if (!parentCase || !parentCase.isValidRecord()) { return false; }
     var currentUserId = gs.getUserID();
     if (parentCase.assigned_agent == currentUserId) { return true; }

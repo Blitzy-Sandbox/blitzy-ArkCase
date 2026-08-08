@@ -9,19 +9,20 @@ A working suite exists and was executed on the live PDI:
 | Fact | Value |
 | --- | --- |
 | Suite name | `x_casemgmt Case Management POC` (`sys_atf_test_suite`, scope `x_casemgmt`) |
-| Tests | 20 (`ATF 01` … `ATF 20`), 180 `sys_atf_step` rows, 542 step-input rows |
+| Tests | 20 (`ATF 01` … `ATF 20`), 180 `sys_atf_step` rows, 540 step-input rows |
 | Serialized artifacts | `servicenow-case-management-poc/atf/*.xml` (21 files) |
-| Folded into the package | 763 `<sys_update_xml>` blocks in `update-set/x_casemgmt_case_management_update_set.xml` |
-| Last full-suite verdict | `TES0001006` — 19 Success / 1 Failure in 5 m 31 s. The single red test (`ATF 07`) is a **genuine application defect the suite found**, not a broken test |
-| Can the suite fail? | Yes — proven with one deliberate negative control per area (see the register's ATF section) |
-| Do the records survive serialization + re-import? | Yes. Every one of the 763 records was re-applied from the shipped artifacts through the platform's own payload loader (0 load errors, all 542 step-input values byte-identical afterwards), and the suite then produced that same verdict — so `TES0001006` belongs to the serialized package, not just to what was authored in the UI |
+| Folded into the package | 761 `<sys_update_xml>` blocks in `update-set/x_casemgmt_case_management_update_set.xml` |
+| Last full-suite verdict | **`TES0001014` — 20 Success / 0 Failure / 0 Error / 0 Skipped in 5 m 44 s**, with **180 of 180 steps Success**. Corroborated four ways: the *Failed Tests in Suite* list is empty, the rolled-up failure/error/skip counts are all `0`, a step-level sweep returns 180/180 Success, and no child result carries a `first_failing_step`. The three form tests genuinely drove a browser — `UI Batches Executed` went `0 → 3` |
+| Previous verdicts, and what they found | `TES0001013` was **19 / 1**: `ATF 03` failed at step 8 with `FAILURE: Unable to find record '…' in table 'x_casemgmt_case'` — a defect in the *test's own construction*, since ATF's native `Record Update` step must locate a row before it can attempt a write, and the assigned-only read ACL had already hidden that row from the impersonated agent. `TES0001006` was also **19 / 1**, for the unrelated `ATF 07` child-table ACL defect (`current.case` could not compile). Both are fixed; see §8 |
+| Can the suite fail? | Yes, and not only by construction. Deliberate inverted controls exist per area — field-set equality, the `status` default, the four RBAC assertions, the `opened_date` exact-value comparison, pinned-number uniqueness, and the cleanup residue assertions (each was inverted, observed to fail with a precise message, and restored). Stronger still, `TES0001013` was an **unplanned real failure**: the suite caught it, attributed it to the exact step, reported it verbatim, and went green once the step was corrected |
+| Do the records survive serialization + re-import? | Yes, re-verified after the test-asset remediation pass. All **761** records were re-applied from the shipped artifacts through the platform's own payload loader with 0 load errors, and all **540** step-input values were confirmed byte-identical afterwards by md5 per `(document_key, variable)` — 540 identical, 0 different, 0 missing. The suite then produced the verdict above, so `TES0001014` belongs to the serialized package and not merely to what was authored in the UI. (The earlier `TES0001006` run established the same property at 763 records / 542 inputs, before `ATF 03` step 8 was rebuilt.) |
 
 So the **D3.3 fallback condition did not fire**: ATF did *not* degrade the way Flow Designer did in Defect F. Nothing in this document should be read as "automated generation didn't hold".
 
 This plan is shipped anyway, for three concrete uses:
 
 1. **A UI-build recipe.** Everything below is what a human would click in the ATF UI (`All → Automated Test Framework → Tests`) to build the same coverage from nothing — useful for extending the suite, for rebuilding a single test, or for an instance where importing serialized ATF records is not desirable.
-2. **A standing fallback.** If a future target instance refuses the serialized records (see *§7 Known structural risk*), this plan is the recovery path and is costed at **well under the original 16-hour estimate** (§6: ~7 h 15 m).
+2. **A standing fallback.** If a future target instance refuses the serialized records (see *§7 Known structural risk*), this plan is the recovery path. It is costed **once**, in §6, and §6 is the only figure to quote; earlier drafts of this document carried a second, larger total in the body, which is withdrawn. See the note at the head of §6 for what the figure covers and what it excludes.
 3. **A specification of intent.** Each scenario states the exact expected values — including the five verbatim strings — independently of how any one test is wired.
 
 Where the shipped test differs from the recipe here, the difference is called out inline, with the reason.
@@ -220,24 +221,42 @@ Build it as **seven server-side tests plus three form-level tests**. The server-
 | **B7** `ATF 14`, 9 steps | `Closed → *` | Closed case | `Closed → In Progress`, `→ Resolved`, `→ Open` and `→ Draft` all blocked; status still Closed; message === `Closed cases are terminal and cannot be modified.` | 25 m |
 
 > Two honest notes on B5 and B7, both discovered while building:
-> - `CaseTransitionValidator.canTransitionToClosed()` has a branch that calls `gs.getUser(userName)`, which a scoped app cannot use to fetch *another* user. So assert the role-positive and role-negative halves each **under the matching impersonation** rather than passing a foreign user id from one identity. (Code-hygiene defect, reported, not fixed here.)
+> - `CaseTransitionValidator.canTransitionToClosed()` **used to have** a branch that called `gs.getUser(userName)`, which on this release ignores its argument and returns the *session* user — so a foreign user id was evaluated against the caller's own roles, answering `{ok:true}` for a non-manager. That branch now resolves the grant with a `GlideRecord` query against `sys_user_has_role`, and the register records it as §9.6 **E-GU**, fixed. Asserting each half **under the matching impersonation** is still the better habit and is what the shipped `ATF 12` does.
 > - AAP §0.5.5 row 8 is a **transition** row. The shipped guard blocks status changes out of `Closed`; it permits an unrelated field edit on a Closed case. Do not assert that an unrelated field edit is blocked — that is not what the row says.
 
 **The three form-level tests** (`ATF 15`, `ATF 16`, `ATF 17` — 7 steps each, ~30 min each, **require P4**)
 
-One per verbatim message, so each string is proven on screen and not only in a return value:
+One per verbatim message. These prove the *behaviour* on a real form — the save is refused by the server and the
+stored row does not change — while the message string itself is asserted server-side in step 7 (see M6 in §8 for
+why the rendered banner cannot be asserted by ATF).
+
+> **⚠️ PREREQUISITE — READ THIS BEFORE BUILDING THESE THREE. Without it, step 3 fails and the recipe below looks
+> broken.** `Open an Existing Record` resolves the record through the platform Script Include
+> `TestExecutorAjax.validateFormParameters`, **which runs in Global scope** and performs a plain
+> `new GlideRecord(<table>).get(<sys_id>)`. If the scoped table refuses cross-scope reads, that lookup fails and the
+> step reports `Table 'x_casemgmt_case' does not have a record with id '…'` — which looks exactly like a missing
+> fixture and is not one. On `sys_db_object`, **only `access` is a string**; `ws_access`, `read_access`,
+> `create_access`, `update_access` and `delete_access` are **boolean**, so a value of `"public"` coerces to `false`
+> and refuses every cross-scope read. Set those five to boolean `true`, then force a table-descriptor rebuild by
+> touching the table's **collection** `sys_dictionary` row (the one whose `element` is empty) — writing the columns
+> alone flushes the `sys_db_object` catalogue but **not** `syscache_tabledescriptor`, and no amount of
+> `GlideSecurityManager` resetting or `/cache.do` flushing substitutes for it. The shipped `tables/*.xml` now carry
+> the booleans, and `scripts/post_import_remediation.js` reconciles them and performs the descriptor touch on every
+> run. This is the whole of what once made these three tests fail on a clean instance; see the register §9.6
+> **E-ATF15** / **E9**.
 
 | # | Step type | Inputs |
 | --- | --- | --- |
-| 1 | Run Server Side Script | fixture setup — the case (and for `ATF 15`, its open child task) at the *from* status |
+| 1 | Run Server Side Script | fixture setup — the case (and for `ATF 15`, its open child task) at the *from* status. **Add a handoff guard:** after inserting, re-read every fixture by `sys_id` with a plain `GlideRecord` and assert it resolves. Step 3 resolves it the same way, through Global-scope `TestExecutorAjax`, so if anything is wrong with the fixture this fails here — precisely and upstream — instead of surfacing later as a misleading "does not have a record with id". Do **not** rely on the fixture's own stale-residue delete having left something behind |
 | 2 | Impersonate | `x_casemgmt_demo_manager` |
 | 3 | Open an Existing Record | *Table* `x_casemgmt_case`; *Record ID* the pinned fixture id |
 | 4 | Set Field Values | *Table* `x_casemgmt_case`; *Field values* `status=Resolved^EQ` (`ATF 16`: `status=Draft`; `ATF 17`: `status=In Progress`) |
 | 5 | Submit a Form | *Assert type* [`assert_type`] `form_submitted_to_server` — the submit is expected to be **rejected by the server**, and ATF captures the resulting page |
 | 6 | Record Validation | assert the row's `status` is unchanged — i.e. the save really was refused |
-| 7 | Run Server Side Script | assert the validator returns the identical verbatim string, then clean up |
+| 7 | Run Server Side Script | assert the validator returns the identical verbatim string — `new x_casemgmt.CaseTransitionValidator()`, comparing `verdict.error` character-for-character — **then** clean up and assert the cleanup. Two traps: (a) `stepResult.setOutputMessage()` **overwrites** rather than appends, so accumulate every line you want reported and emit it once at the end, otherwise the message-assertion evidence is silently replaced by the cleanup summary; (b) do not finish with a `chk('cleanup ran','true','true')`-style tautology — check each `deleteRecord()` return value and re-query for residue |
 
-Verify on screen, in the runner's step screenshot for step 5, that the message reads exactly:
+**Manual observation (M6 in §8) — this part is not automated.** ATF cannot assert text on a classic form, so verify
+on screen, in the runner's own step-5 screenshot attachment, that the message reads exactly:
 
 - `ATF 15` → `All tasks must be closed before resolving this case.`
 - `ATF 16` → `Cases cannot be returned to Draft.`
@@ -309,6 +328,13 @@ Then delete the two `ATF-CURL-COMPANION` / `ATF-PORTAL-18` cases the anonymous c
 
 ## 6. Build-time estimate
 
+**This table is the single authoritative estimate for this document.** Earlier drafts also quoted a smaller
+"~7 h 15 m" figure in the status section, which double-counted nothing and simply omitted the form-level tests, the
+negative controls and suite assembly; it is withdrawn, and the total below is the only figure to quote. The estimate
+covers building the coverage **from nothing in the ATF UI**. It excludes: importing the shipped package (minutes,
+not hours), the one-off prerequisite work in §2, and the cross-scope table-access prerequisite described with the
+form-level tests — which is a packaging fix rather than test-authoring effort.
+
 | Item | Estimate |
 | --- | --- |
 | Harness prep — P1–P5, confirm identities, one throwaway pass/fail probe | 0 h 30 m |
@@ -321,6 +347,22 @@ Then delete the two `ATF-CURL-COMPANION` / `ATF-PORTAL-18` cases the anonymous c
 | **Total** | **≈ 10 h 00 m** |
 
 Against the original **16-hour** estimate that is a saving of roughly 6 hours, and the plan is decomposed so it can be delivered incrementally — Scenario A alone is ~3 h and already covers the RBAC matrix end to end. Someone rebuilding only what the shipped suite already contains needs none of this; importing the package is minutes.
+
+### 6.1 Where the shipped suite deviates from the recipe above
+
+The recipe is what a human would build from nothing; the shipped tests were then strengthened past it in specific
+places. Each difference is listed here rather than left for a reader to discover by diffing.
+
+| Test | Recipe says | Shipped test does | Why |
+| --- | --- | --- | --- |
+| `ATF 01` | Assert the §0.5.7 schema field by field | Additionally asserts **exact field-set equality** per table — it enumerates every non-`sys_*` element and compares it as a *set* against the AAP list (case 14, `case_task` 7, `case_party` 6), so an **extra** column fails the test as loudly as a missing one. Its fixture also **omits `status`** so the platform's own default is what gets asserted, rather than the test pre-setting `Draft` and then confirming its own input | Field-by-field assertions cannot detect an undeclared extra column, and a fixture that sets the value it later checks proves nothing about the default |
+| `ATF 02`, `ATF 04` | Assert the role can read all cases | Compares **iterated visible sys_id sets** — `GlideRecordSecure` iteration against an authoritative plain-`GlideRecord` set — and asserts the assigned *and* unassigned fixtures are both present | `GlideRecordSecure.getRowCount()` is **not** ACL-filtered (measured: agent `getRowCount=11` while iterating 9), so any `>= N` threshold can pass while the role sees nothing. See register §9.6a P2 |
+| `ATF 03` | Step 8 is a `Record Update` with *Assert type* `record_not_updated` | Step 8 is a **`Run Server Side Script`** that attempts the write through `GlideRecordSecure` and asserts the secured API cannot reach the row, `canWrite()` is false, and the stored value is unchanged | ATF's `Record Update` step must **locate** the row before it can attempt a write, and the assigned-only read ACL already hides it — so the native step aborts with `Unable to find record` instead of observing a denial. This was a real suite failure (`TES0001013`) before it was rebuilt. Note also that plain `GlideRecord.update()` **bypasses ACLs** and must never be the vehicle here. See register §9.6a P1 and P4 |
+| `ATF 07` | One parent fixture carrying both grant paths | **Five** parents — both-branch, direct-only, group-only, unassigned, and a group the agent is **not** a member of — each with a task and a party child (15 fixtures), asserting positive read/write on both allowed branches and negative read/write/delete on both denied ones | A single fixture carrying both grant paths cannot tell the two apart, and without denied branches the test cannot show the narrowing is real rather than blanket access |
+| `ATF 15`, `ATF 16`, `ATF 17` | Step 3 resolves the pinned fixture; step 7 asserts the validator string | Step 1 additionally carries a **handoff guard** (re-reads each fixture by `sys_id` and asserts it resolves) and step 7 asserts the message **character-exactly** before cleaning up. The rendered banner is labelled a manual observation (M6) rather than counted as automated coverage | The guard converts a misleading downstream "does not have a record with id" into a precise upstream failure; the string assertion means a reworded message turns the test red even though ATF cannot read the banner |
+| Every test with fixtures | "Clean up at the end" | Cleanup is **asserted**: each `deleteRecord()` return value is checked and every fixture is re-queried by pinned `sys_id` and by prefix, failing the step and naming survivors on residue | The previous `chk('cleanup ran','true','true')` was a tautology that passed even if every delete silently failed — and deletes **do** silently fail in some conditions (register §9.6a P7) |
+| `ATF 18` | Clean up the submitted case | Asserts only what it controls — every delete reported success and an in-transaction re-query finds zero rows — and reports the removed sys_ids plus the manual sweep | The row is created by `guest` outside the ATF transaction, so the rollback reinstates it. Claiming a clean instance would be false. See M4 and register §9.6a P6 |
+| `ATF 19` | Assert `opened_date` is returned | Asserts `opened_date` **equals the stored value character-for-character**, and that exactly **one** row carries the pinned lookup number | "Populated" passes on a display-formatted or timezone-converted date (control: stored `17:19:27` vs displayed `10:19:27`), and `lookupCase()` resolves the number with `setLimit(1)` and no `orderBy`, so a duplicate would make the result non-deterministic |
 
 ---
 
@@ -338,7 +380,7 @@ D3.2 warned that ATF's step configuration is multi-table and might degrade the w
 
 1. `sys_atf_test` where `sys_scope.scope=x_casemgmt` → **20**
 2. `sys_atf_step` where `test.sys_scope.scope=x_casemgmt` → **180**
-3. `sys_variable_value` where `document=sys_atf_step` and `document_key` is one of those steps → **542**
+3. `sys_variable_value` where `document=sys_atf_step` and `document_key` is one of those steps → **540**
 4. `sys_atf_test_suite` → **1**, named `x_casemgmt Case Management POC`; `sys_atf_test_suite_test` → **20**
 5. **Any step with zero input rows is the failure signature.** If it appears, the input records did not load, or loaded before their parent step. A step with *more* rows than it should have means the package was imported over a natively authored copy of the suite (see the `delete_multiple` note above).
 6. Set `sn_atf.runner.enabled=true`, run the suite, expect 19 Success / 1 Failure (`ATF 07`, §8) — or 20/0 once the ACL defect is fixed.
@@ -348,12 +390,13 @@ D3.2 warned that ATF's step configuration is multi-table and might degrade the w
 
 ## 8. What is covered automatically, and what stays manual
 
-**Covered automatically** — all three areas, by the 20 shipped tests:
+**Covered automatically** — all three areas, by the 20 shipped tests. One thing that is **not** automated is named
+explicitly in the state-machine row and again as **M6** below, rather than being folded into a general claim.
 
 | Area | Automated coverage |
 | --- | --- |
 | Data model + RBAC | Full 3-role × 4-operation matrix on `x_casemgmt_case`, "assigned only" in both directions (`assigned_agent` and `assigned_group`), field-level ACLs on `assigned_group`/`assigned_agent` for all three identities, the mirror on `x_casemgmt_case_task` and `x_casemgmt_case_party`, and the complete §0.5.7 schema including choices, reference targets, the read-only `number` and the `CASE0000001` format |
-| State machine | Every row of the §0.5.5 matrix — four forward preconditions, both `pending_reason` side effects, both prohibited transitions, and the task-closure gate proven in both directions — with all three verbatim messages asserted character-exactly, three of them additionally on the rendered form |
+| State machine | Every row of the §0.5.5 matrix — four forward preconditions, both `pending_reason` side effects, both prohibited transitions, and the task-closure gate proven in both directions — with all three verbatim messages asserted character-exactly **server-side**. `ATF 15/16/17` additionally prove the *behaviour* on a real form end to end: the form is opened, the field is set, the save is submitted and **refused by the server**, and a Record Validation step confirms the stored `status` did not change. What those three do **not** assert is the message as **rendered in the form's error banner** — ATF has no step type that can read text from a classic platform form (see M6). Each of the three instead asserts the exact string server-side, in the same transaction and against the same fixture the form just submitted, so a missing or reworded message turns the test red |
 | Portal contracts | Submit → 201 with `number` + `Your case has been submitted` + `Draft` landing + `CASE`-format number; valid lookup → 200 with exactly `{status, subject, opened_date}` and the forbidden keys/values asserted **negatively**; invalid lookup → 404 with the verbatim message |
 
 **Stays manual:**
@@ -362,8 +405,15 @@ D3.2 warned that ATF's step configuration is multi-table and might degrade the w
 | --- | --- | --- | --- |
 | M1 | Setting `sn_atf.runner.enabled=true` on any instance where the suite is to run | It is an instance test-harness setting and is deliberately not captured into the Update Set | < 1 min |
 | M2 | Opening a client test runner tab for `ATF 15`, `ATF 16`, `ATF 17` | Form-level steps need a browser. `sn_atf.headless.enabled` is `false` and was not changed. | ~2 min per run |
-| M3 | The genuinely anonymous REST leg (C4) | `Send REST Request - Inbound` supports only `basic`/`mutual` auth (F11). The in-suite tests exercise the same endpoints authenticated; the `curl` companion proves the anonymous path. | ~10 min |
-| M4 | Deleting the `ATF-PORTAL-18` case after each `ATF 18` run | ATF cannot roll back a row created by an inbound HTTP request running as `guest` (F12) | < 1 min |
-| M5 | Fixing the `current.case` ACL defect so `ATF 07` turns green | The four scripted child-table ACLs on `x_casemgmt_case_task` / `x_casemgmt_case_party` dereference the reserved word `case`, so they fail to compile (`missing name after . operator`) and deny every row. Owned by the unit that owns `acl/*.xml`; the remedy is `getValue('case')` / `current['case']`. The test needs no change. | not owned here |
+| ~~M3~~ | ~~The genuinely anonymous REST leg (C4)~~ — **not manual; this entry was wrong** | It is true that the `Send REST Request - Inbound` **step type** supports only `basic`/`mutual` auth, but the suite does not rely on that step for the anonymous leg. `ATF 18`, `ATF 19` and `ATF 20` each additionally call the public endpoint from a server-side script through `sn_ws.RESTMessageV2` **with no credentials set at all** — verified by inspection: none of the three contains a `setBasicAuth` or an `Authorization` header. Their step names say so (`genuinely anonymous submit with no credentials`, `genuinely anonymous 404 with no credentials`) and their output records the raw response body. The anonymous path is therefore **automated**, and no `curl` companion is needed to establish it | — |
+| M4 | Deleting the `x_casemgmt_case` rows whose `subject` starts with `ATF-PORTAL-18` after each `ATF 18` run | The row is inserted by **`guest`** in its own HTTP transaction, i.e. outside the transaction ATF wraps the test in. `ATF 18`'s cleanup *does* delete it, but the ATF rollback then undoes that deletion and the row reappears — confirmed in `TES0001014`, where the leftovers were exactly the `ATF-PORTAL-18` rows with `sys_created_by = guest`. The test therefore asserts only what it controls (every delete reported success, and an in-transaction re-query finds zero rows) and reports the sys_ids it removed instead of claiming a clean instance. This sweep was executed after the last run and cleared both rows | < 1 min |
+| ~~M5~~ | ~~Fixing the `current.case` ACL defect so `ATF 07` turns green~~ — ✅ **DONE** | The four scripted child-table ACLs dereferenced the reserved word `case` and could not compile (`missing name after . operator`), denying every row. Fixed with `current.getElement('case')` — chosen over `getValue('case')` because measurement showed it supports every operation the conditions need (`.nil()` and `.getRefRecord()`). The test needed no change and is now green: 58 checks across five parent fixtures, passing in `TES0001014` | spent |
+| **M6** | **Observing the blocking message in the form's error banner for `ATF 15/16/17`** | **A framework limitation, not an omission.** ATF's `Submit a Form` step config exposes only `form_ui` and `assert_type` — there is no text or message input — and the only text-on-page assertion in the framework, `Assert Text on Page (Custom UI)`, targets the Custom UI DOM rather than the classic platform form these tests drive. The message *string* is asserted character-exactly server-side by each test, so wording regressions are caught automatically; what a human adds is confirmation that it is **displayed**. The runner's own step-5 screenshot attachment is sufficient evidence — on the last run it showed, verbatim, `All tasks must be closed before resolving this case.`, `Cases cannot be returned to Draft.` and `Closed cases are terminal and cannot be modified.`, each accompanied by the platform's generic `Invalid update` banner | ~2 min per run, or none if the runner screenshot is accepted |
 
-`ATF 07` is left in the suite deliberately, red, rather than deleted or weakened: it asserts the documented AAP §0.5.6 behaviour, and a suite that hides a real defect to look green is worth less than one that shows it.
+`ATF 07` was left in the suite deliberately **red** for a period, rather than deleted or weakened, because it asserted
+the documented AAP §0.5.6 behaviour and a suite that hides a real defect to look green is worth less than one that
+shows it. The defect it exposed has since been fixed at its root cause (M5) and the test now passes — having been
+strengthened rather than relaxed on the way: it went from a single parent fixture carrying both grant paths to five
+parents (both-branch, direct-only, group-only, unassigned, and a group the agent is not a member of) with a task and
+a party child each, asserting positive read and write on both allowed branches and negative read, write and delete on
+both denied ones.

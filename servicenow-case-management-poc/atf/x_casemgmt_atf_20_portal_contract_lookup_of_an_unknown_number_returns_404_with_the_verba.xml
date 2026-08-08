@@ -551,9 +551,14 @@
     var empty = anonCall('get', '/api/x_casemgmt/case_status_lookup', null);
     chk('a missing number parameter also answers 404', '404', empty.status);
     chk('the empty-parameter message is verbatim', 'No case found with that number.', String(JSON.parse(empty.body).result.error));
-    stepResult.setOutputMessage('anonymous 404 body: ' + res.body);
-    stepResult.setOutputMessage('genuinely anonymous 404 with no credentials: checks=' + checks + ' failures=' + fails.length +
+    // setOutputMessage OVERWRITES rather than appends. Emitted separately, the
+    // evidence line below was written and then silently discarded, so the run output
+    // never showed the value these assertions were made against.
+    var notes = [];
+    notes.push('anonymous 404 body: ' + res.body);
+    notes.push('genuinely anonymous 404 with no credentials: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'genuinely anonymous 404 with no credentials', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>

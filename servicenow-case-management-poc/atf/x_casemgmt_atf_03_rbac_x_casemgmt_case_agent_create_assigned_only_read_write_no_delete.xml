@@ -63,7 +63,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>Agent row of the ACL matrix (AAP 0.5.6): create YES, read/write ASSIGNED ONLY, delete NO. "Assigned only" is exercised both ways - assigned_agent is the agent, and assigned_group contains the agent - plus the negative case of a case assigned to nobody.</description>
+        <description>Agent row of the ACL matrix (AAP 0.5.6): create YES, read/write ASSIGNED ONLY, delete NO. "Assigned only" is exercised both ways - assigned_agent is the agent, and assigned_group contains the agent - plus the negative case of a case assigned to nobody. The negative WRITE is a genuine attempted write, not a query: step 8 attempts the update through GlideRecordSecure - the only scoped API that applies the write ACL - and asserts the stored row is unchanged. It is a script step rather than a native Record Update step because ATF's Record Update must first LOCATE the row, and the assigned-only read ACL already hides it from the agent, so that step aborts with "Unable to find record" instead of reaching an update-refused outcome. For this role read scope and write scope are the same set, so a case the agent can read but not write does not exist by design; the readable-row-with-forbidden-field case is covered by ATF 05.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 03 - RBAC: x_casemgmt_case_agent create, ASSIGNED-ONLY read/write, no delete</name>
@@ -758,28 +758,28 @@ Confirm the record was successfully updated</description>
         <callable_outputs />
         <sys_variable_value action="delete_multiple" query="document_key=3c3ef25ced2dc93cd7ae4b0617e9f2ad" />
         <copied_from />
-        <description>Set field values</description>
-        <display_name>Record Query</display_name>
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
         <inputs />
-        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_2d82e3c7531400109e02ddeeff7b12a7^id=3c3ef25ced2dc93cd7ae4b0617e9f2ad" />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_41de4a935332120028bc29cac2dc349a^id=3c3ef25ced2dc93cd7ae4b0617e9f2ad" />
         <mugshots_cache_json />
-        <notes>Agent WRITE on an unassigned case is unreachable: the row is filtered out of every query</notes>
+        <notes>Agent WRITE on an UNASSIGNED case must be REFUSED: a secured update is genuinely attempted through GlideRecordSecure and must not change the row</notes>
         <order>8</order>
         <snapshot />
-        <step_config display_value="Record Query">2d82e3c7531400109e02ddeeff7b12a7</step_config>
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
         <sys_class_name>sys_atf_step</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
         <sys_id>3c3ef25ced2dc93cd7ae4b0617e9f2ad</sys_id>
         <sys_mod_count>0</sys_mod_count>
-        <sys_name>Record Query</sys_name>
+        <sys_name>Run Server Side Script</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy />
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_atf_step_3c3ef25ced2dc93cd7ae4b0617e9f2ad</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <table>x_casemgmt_case</table>
+        <table />
         <test display_value="ATF 03 - RBAC: x_casemgmt_case_agent create, ASSIGNED-ONLY read/write, no delete">afd33eebe6f49b746316b620f3886027</test>
         <timeout />
         <warning_message />
@@ -791,54 +791,137 @@ Confirm the record was successfully updated</description>
         <sys_class_name>sys_variable_value</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>b1617347dcfa76a2b19b52e79ffd7fdf</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>no_records_match_query</value>
-        <variable display_value="Assert type">b86c0427531000109e02ddeeff7b1227</variable>
-    </sys_variable_value>
-    <sys_variable_value action="INSERT_OR_UPDATE">
-        <document>sys_atf_step</document>
-        <document_key>3c3ef25ced2dc93cd7ae4b0617e9f2ad</document_key>
-        <order />
-        <sys_class_name>sys_variable_value</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>21b878041f8af2b221e629485ce3a1be</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>x_casemgmt_case</value>
-        <variable display_value="Table">78b8d86b531000109e02ddeeff7b12f3</variable>
-    </sys_variable_value>
-    <sys_variable_value action="INSERT_OR_UPDATE">
-        <document>sys_atf_step</document>
-        <document_key>3c3ef25ced2dc93cd7ae4b0617e9f2ad</document_key>
-        <order />
-        <sys_class_name>sys_variable_value</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>349d5fbe044d3f8298025cbf9353058f</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>sys_id=ad246e3efcb417cf87cc4d8eb2bc6df5^priority=High^EQ</value>
-        <variable display_value="Conditions">915990ab531000109e02ddeeff7b12f8</variable>
-    </sys_variable_value>
-    <sys_variable_value action="INSERT_OR_UPDATE">
-        <document>sys_atf_step</document>
-        <document_key>3c3ef25ced2dc93cd7ae4b0617e9f2ad</document_key>
-        <order />
-        <sys_class_name>sys_variable_value</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
         <sys_id>2a85b7c9b585e74f8382a88de92cea55</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>1</value>
-        <variable display_value="Enforce security">02fb0027531000109e02ddeeff7b120b</variable>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3c3ef25ced2dc93cd7ae4b0617e9f2ad</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>dfa640dc52da1a0c086076650c82d9c2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+
+    // WHY THIS STEP IS A SCRIPT AND NOT A NATIVE "Record Update" STEP.
+    //
+    // The obvious way to prove "the agent may not write an unassigned case" is a
+    // native Record Update step with Enforce security = 1 and assert type
+    // record_not_updated. That was tried and it CANNOT work here. Measured in the real
+    // ATF client test runner, that step failed with:
+    //
+    //   FAILURE: Unable to find record 'ad246e3efcb417cf87cc4d8eb2bc6df5' in table
+    //   'x_casemgmt_case'
+    //
+    // ATF's Record Update step must LOCATE the row before it can attempt a write and
+    // observe a denial, and the assigned-only READ ACL has already made that row
+    // invisible to the impersonated agent - which step 6 proves independently. Read
+    // denial therefore precedes write denial: the platform never reaches an
+    // "update refused" outcome for the step to assert on, and the step aborts instead.
+    // The protection is STRONGER than the native step can express, not weaker.
+    //
+    // A TRAP THIS STEP DELIBERATELY AVOIDS. A plain GlideRecord does NOT enforce ACLs.
+    // Measured on this instance while impersonating x_casemgmt_demo_agent: plain
+    // GlideRecord.get() on the unassigned row returns true and canWrite() returns
+    // false, yet update() still SUCCEEDS and leaves priority=High. A negative-write
+    // proof must therefore never be built on plain GlideRecord.update() - it would
+    // report a write the ACL layer was never asked about, and pass while the
+    // protection was broken. Plain GlideRecord is used below only to READ the stored
+    // value and to interrogate the platform's own per-record decisions.
+    //
+    // SCOPE NOTE (AAP Section 0.5.6). For x_casemgmt_case_agent the read scope and the
+    // write scope are the same set - "Assigned only" - so a case row that the agent can
+    // READ but must not WRITE does not exist by design. The record-level write refusal
+    // is consequently enforced at the read gate, which is what this step asserts. The
+    // separate case of a readable row with a forbidden FIELD (assigned_group,
+    // assigned_agent) is covered by ATF 05.
+    var UNASSIGNED = 'ad246e3efcb417cf87cc4d8eb2bc6df5';
+
+    // The identity is asserted FIRST. Every denial below is only meaningful as the agent:
+    // run as admin the same code would report canWrite=true and the secured write would
+    // succeed, so without this the step could pass an unimpersonated run while proving
+    // nothing. Measured: with step 2's Impersonate skipped, this assertion is what fails.
+    chk('impersonated user', 'x_casemgmt_demo_agent', gs.getUserName());
+    chkTrue('the caller holds x_casemgmt_case_agent', gs.hasRole('x_casemgmt_case_agent'));
+    chk('the caller does NOT hold x_casemgmt_case_manager', 'false',
+        String(gs.hasRole('x_casemgmt_case_manager')));
+
+    // Baseline, read with a plain GlideRecord because the secured API cannot see it.
+    var before = new GlideRecord('x_casemgmt_case');
+    chkTrue('the unassigned fixture exists to be attacked', before.get(UNASSIGNED));
+    var priorityBefore = before.getValue('priority');
+    chkTrue('the baseline priority was captured', String(priorityBefore || '').length &gt; 0);
+    chk('the fixture is genuinely unassigned to this agent - no assigned_agent',
+        '', String(before.getValue('assigned_agent') || ''));
+    chk('the fixture is genuinely unassigned to this agent - no assigned_group',
+        '', String(before.getValue('assigned_group') || ''));
+
+    // 1. The security-enforced API cannot even load the row.
+    var sec = new GlideRecordSecure('x_casemgmt_case');
+    chk('GlideRecordSecure.get cannot load the unassigned row', 'false',
+        String(sec.get(UNASSIGNED)));
+
+    // 2. Nor can a secured query iterate to it.
+    var reachable = 0;
+    var secQ = new GlideRecordSecure('x_casemgmt_case');
+    secQ.addQuery('sys_id', UNASSIGNED);
+    secQ.query();
+    while (secQ.next()) reachable++;
+    chk('a secured query reaches zero rows for the unassigned sys_id', '0', String(reachable));
+
+    // 3. The platform's own per-record decisions are all DENY.
+    var probe = new GlideRecord('x_casemgmt_case');
+    chkTrue('a plain GlideRecord can load the row, so the decisions below are real',
+        probe.get(UNASSIGNED));
+    chk('canRead is denied', 'false', String(probe.canRead()));
+    chk('canWrite is denied', 'false', String(probe.canWrite()));
+    chk('canDelete is denied', 'false', String(probe.canDelete()));
+
+    // 4. A GENUINE security-enforced write ATTEMPT. GlideRecordSecure is the only
+    //    scoped API that applies the write ACL, so the attempt is made through it and
+    //    its outcome asserted - rather than querying and inferring a refusal.
+    var attempted = 'no row reachable through the secured API';
+    var secW = new GlideRecordSecure('x_casemgmt_case');
+    secW.addQuery('sys_id', UNASSIGNED);
+    secW.query();
+    if (secW.next()) {
+        secW.setValue('priority', 'High');
+        attempted = 'update() returned [' + secW.update() + ']';
+    }
+    chk('the secured write attempt could not modify the unassigned row',
+        'no row reachable through the secured API', attempted);
+
+    // 5. And the stored row is byte-for-byte unchanged afterwards.
+    var after = new GlideRecord('x_casemgmt_case');
+    chkTrue('the row still exists after the refused write', after.get(UNASSIGNED));
+    chk('priority is unchanged after the refused write', priorityBefore,
+        after.getValue('priority'));
+
+    stepResult.setOutputMessage('agent write on an unassigned case refused: secured get=false, ' +
+        'secured query rows=' + reachable + ', canWrite=false, priority still [' +
+        after.getValue('priority') + '] :: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'agent write on an unassigned case is refused', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
     </sys_variable_value>
     <sys_atf_step action="INSERT_OR_UPDATE">
         <active>true</active>
@@ -1004,6 +1087,39 @@ Confirm the record was successfully updated</description>
     chkTrue('agent canWrite the group-assigned case', byGroup.canWrite());
     var theirs = new GlideRecordSecure('x_casemgmt_case');
     chk('agent cannot read a case assigned to nobody', 'false', String(theirs.get('ad246e3efcb417cf87cc4d8eb2bc6df5')));
+
+    // WRITE DENIAL ON AN UNASSIGNED ROW, asserted as a per-record decision and as a
+    // stored value. Step 8 genuinely attempts the update through GlideRecordSecure - the
+    // only scoped API that applies the write ACL - and asserts the row was not modified;
+    // this block proves WHY it cannot happen and that nothing changed underneath.
+    //
+    // Two earlier shapes of step 8 are recorded so neither is reintroduced. It began as a
+    // Record Query with assert type no_records_match_query, which passes whatever the write
+    // authorization is because it never attempted a write. It was then a native Record
+    // Update with assert type record_not_updated, which cannot work either: that step type
+    // must LOCATE the row before it can attempt the write, and the assigned-only read ACL
+    // has already hidden it, so the step aborts with "Unable to find record" instead of
+    // observing a denial - measured as a real suite failure before it was rebuilt.
+    //
+    // A plain GlideRecord is used deliberately: it loads the row WITHOUT applying the
+    // read ACL (measured on this release), which is the only way to interrogate a row
+    // the agent may not see. canRead/canWrite/canDelete on that loaded row are then the
+    // platform's own per-record ACL decisions for the impersonated identity, not a
+    // table-level guess. GlideRecordSecure cannot serve here because it refuses to load
+    // the row at all, which would leave write authorization untested.
+    var unassignedProbe = new GlideRecord('x_casemgmt_case');
+    chkTrue('the unassigned fixture still exists, so the denials below are about ACLs and not absence',
+        unassignedProbe.get('ad246e3efcb417cf87cc4d8eb2bc6df5'));
+    chk('agent canRead is FALSE for the unassigned case', 'false', String(unassignedProbe.canRead()));
+    chk('agent canWrite is FALSE for the unassigned case', 'false', String(unassignedProbe.canWrite()));
+    chk('agent canDelete is FALSE for the unassigned case', 'false', String(unassignedProbe.canDelete()));
+    chk('the unassigned case still holds its original priority - step 8 changed nothing',
+        'Medium', unassignedProbe.getValue('priority'));
+    // And the secured path cannot even reach the row to attempt a write.
+    var secureWrite = new GlideRecordSecure('x_casemgmt_case');
+    secureWrite.addQuery('sys_id', 'ad246e3efcb417cf87cc4d8eb2bc6df5');
+    secureWrite.query();
+    chk('a secured query cannot iterate to the unassigned row', 'false', String(secureWrite.next()));
     stepResult.setOutputMessage('agent capability matrix and assigned-only narrowing: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     return assertEqual({ name: 'agent capability matrix and assigned-only narrowing', shouldbe: '', value: fails.join(' | ') });
@@ -1153,22 +1269,69 @@ Confirm the record was successfully updated</description>
         }
     ];
 
-    var removed = 0;
+    // CLEANUP IS ASSERTED, NOT ASSUMED.
+    //
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology. It therefore passed even when every
+    // delete had
+    // silently failed, so fixtures could survive and contaminate later steps, later
+    // tests in the suite, and later runs (a stale pinned sys_id or a stale prefix row
+    // makes another test assert against the wrong record). What follows checks the
+    // outcome of each delete and then RE-QUERIES for residue, so a surviving row fails
+    // this step and is named in the failure message.
+    //
+    // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
+    // `subject` column to match on) is swept by pinned sys_id only - the same guard the
+    // delete loop uses - because that is the only key such a row is ever created with.
+    var removed = 0, failedDeletes = [];
     for (var d = FIX.length - 1; d &gt;= 0; d--) {
         var old = new GlideRecord(FIX[d].table);
-        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); removed++; }
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        }
     }
     for (var p = 0; p &lt; FIX.length; p++) {
         if (!FIX[p].prefix) continue;
         var extra = new GlideRecord(FIX[p].table);
         extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
         extra.query();
-        while (extra.next()) { extra.setWorkflow(false); extra.deleteRecord(); removed++; }
+        while (extra.next()) {
+            var extraId = extra.getUniqueValue();
+            extra.setWorkflow(false);
+            if (extra.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[p].table + ':' + extraId);
+        }
     }
-    stepResult.setOutputMessage('fixtures removed=' + removed);
-    chk('cleanup ran', 'true', 'true');
-    stepResult.setOutputMessage('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+    chk('every delete reported success', '', failedDeletes.join(' | '));
+
+    // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
+    // fixture that has one. Any row still present here is a real leak.
+    var residue = [];
+    for (var q = 0; q &lt; FIX.length; q++) {
+        var byId = new GlideRecord(FIX[q].table);
+        if (byId.get(FIX[q].sys_id))
+            residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
+        if (!FIX[q].prefix) continue;
+        var byPrefix = new GlideRecord(FIX[q].table);
+        byPrefix.addQuery('subject', 'STARTSWITH', FIX[q].prefix);
+        byPrefix.query();
+        while (byPrefix.next())
+            residue.push(FIX[q].table + ' ' + byPrefix.getUniqueValue() +
+                ' [' + byPrefix.getValue('subject') + '] survived');
+    }
+    chk('no fixture residue remains after cleanup', '', residue.join(' | '));
+
+    // setOutputMessage OVERWRITES rather than appends, so every reported
+    // line is accumulated and emitted once, at the end of the step.
+    var notes = [];
+    notes.push('fixtures removed=' + removed +
+        ' | deletes reporting failure=' + failedDeletes.length +
+        ' | residue rows=' + residue.length);
+    notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>

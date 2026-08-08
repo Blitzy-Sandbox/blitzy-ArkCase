@@ -63,7 +63,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>GET /api/x_casemgmt/case_status_lookup?number=&lt;valid&gt; must answer HTTP 200 with exactly the three whitelisted keys. The whitelist is asserted negatively as well: the body must not contain assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, sys_id. The call is made with no credentials at all.</description>
+        <description>GET /api/x_casemgmt/case_status_lookup?number=&lt;valid&gt; must answer HTTP 200 with exactly the three whitelisted keys. The whitelist is asserted negatively as well: the body must not contain assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, sys_id. The call is made with no credentials at all. Each returned value is compared to the stored value exactly - status, subject AND opened_date - so a response carrying a different case's data, a placeholder or a reformatted date fails. Because lookupCase() resolves the number with setLimit(1) and no orderBy, step 1 also guarantees the pinned number CASE9000019 is carried by exactly one row, so the lookup cannot resolve to a foreign record.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 19 - Portal contract: lookup of a valid number returns only status, subject, opened_date</name>
@@ -196,6 +196,29 @@
         var old = new GlideRecord(FIX[d].table);
         if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); }
     }
+
+    // PINNED-NUMBER UNIQUENESS. This test pins number=CASE9000019 so the later
+    // steps can drive the lookup with a known key. The endpoint resolves that key
+    // with addQuery('number', trimmed).setLimit(1) and NO orderBy - see lookupCase()
+    // in ../script_includes/x_casemgmt_CasePortalService.xml - so if a SECOND row
+    // ever carried the same number, which row the lookup returned would be
+    // non-deterministic: this test could then assert against a foreign record, or
+    // pass while the contract was genuinely broken. Deleting only FIX[0].sys_id
+    // above does not prevent that, because a stray carrier can have any sys_id
+    // (a partially-completed earlier run, a hand-made row, an import).
+    // So: every other row carrying the pinned number is removed here, whatever its
+    // sys_id, and uniqueness is asserted after the insert below.
+    var PINNED_NUMBER = FIX[0].fields.number;
+    var strayIds = [];
+    var stray = new GlideRecord('x_casemgmt_case');
+    stray.addQuery('number', PINNED_NUMBER);
+    stray.addQuery('sys_id', '!=', FIX[0].sys_id);
+    stray.query();
+    while (stray.next()) {
+        strayIds.push(stray.getUniqueValue());
+        stray.setWorkflow(false);
+        stray.deleteRecord();
+    }
     for (var f = 0; f &lt; FIX.length; f++) {
         var gr = new GlideRecord(FIX[f].table);
         gr.initialize();
@@ -204,8 +227,36 @@
         var newId = gr.insert();
         chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
     }
-    stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
+
+    // The pinned number must have SURVIVED the insert. `number` is auto-numbered, so
+    // an explicit value can only be trusted once it has been read back from the
+    // stored row - a business rule or the number generator overwriting it would
+    // otherwise silently redirect every later step to a different case.
+    var stored = new GlideRecord('x_casemgmt_case');
+    chkTrue('the fixture row is readable after insert', stored.get(FIX[0].sys_id));
+    chk('the pinned lookup number was stored verbatim', PINNED_NUMBER, stored.getValue('number'));
+
+    // Exactly ONE row may carry the pinned number, and it must be this fixture.
+    // Counted by iteration rather than getRowCount() so the assertion names the
+    // offending sys_id when it fails.
+    var carriers = [];
+    var carrier = new GlideRecord('x_casemgmt_case');
+    carrier.addQuery('number', PINNED_NUMBER);
+    carrier.query();
+    while (carrier.next()) carriers.push(carrier.getUniqueValue());
+    chk('exactly one case carries the pinned lookup number ' + PINNED_NUMBER, '1',
+        String(carriers.length));
+    chk('and the sole carrier of ' + PINNED_NUMBER + ' is this test\'s fixture',
+        FIX[0].sys_id, carriers.join(','));
+
+    // setOutputMessage OVERWRITES rather than appends, so every reported line is
+    // accumulated and emitted once, at the end of the step.
+    var notes = [];
+    notes.push('pre-existing rows carrying ' + PINNED_NUMBER + ' removed=' + strayIds.length +
+        (strayIds.length ? ' [' + strayIds.join(' ') + ']' : ''));
+    notes.push('fixture setup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>
@@ -327,7 +378,22 @@
     chk('the response carries EXACTLY the three whitelisted keys', 'opened_date,status,subject', keys.join(','));
     chk('status is the stored status', fixture.getValue('status'), String(body.status));
     chk('subject is the stored subject', fixture.getValue('subject'), String(body.subject));
-    chkTrue('opened_date is populated', String(body.opened_date || '').length &gt; 0);
+    // F7 - EXACT VALUE, not merely "populated". lookupCase() returns
+    // String(caseGr.getValue('opened_date') || '') - see
+    // ../script_includes/x_casemgmt_CasePortalService.xml - i.e. the RAW stored
+    // internal datetime, with no display-timezone conversion and no reformatting.
+    // Stored value and returned value are therefore directly comparable as strings
+    // and NO normalisation is applied to either side of the comparison below.
+    // A "populated" check would have passed on any non-empty string - another case's
+    // date, a placeholder, a display-formatted value - which is exactly what the
+    // portal contract in AAP Section 0.7.4 requires this test to exclude.
+    var storedOpened = fixture.getValue('opened_date');
+    chkTrue('the fixture has a stored opened_date to compare against',
+        String(storedOpened || '').length &gt; 0);
+    chk('opened_date is EXACTLY the stored opened_date, character for character',
+        storedOpened, String(body.opened_date));
+    chkTrue('the returned opened_date is an internal-format datetime (YYYY-MM-DD hh:mm:ss)',
+        /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/.test(String(body.opened_date)));
     var FORBIDDEN = ["assigned_group", "assigned_agent", "description", "closed_date", "requester_name", "requester_email", "sys_id"];
     for (var i = 0; i &lt; FORBIDDEN.length; i++) {
         chk('key ' + FORBIDDEN[i] + ' is absent from the parsed body', 'false',
@@ -337,9 +403,15 @@
     }
     chk('the assigned agent sys_id does not leak', '-1', String(res.body.indexOf(fixture.getValue('assigned_agent'))));
     chk('the case sys_id does not leak', '-1', String(res.body.indexOf(fixture.getUniqueValue())));
-    stepResult.setOutputMessage('anonymous 200 body: ' + res.body);
-    stepResult.setOutputMessage('anonymous lookup of a valid number and the field whitelist: checks=' + checks + ' failures=' + fails.length +
+    // setOutputMessage OVERWRITES rather than appends: emitted separately, the
+    // response-body evidence below was written and then silently discarded, so the
+    // run output never showed the payload these assertions were made against.
+    var notes = [];
+    notes.push('anonymous 200 body: ' + res.body);
+    notes.push('opened_date compared exactly: stored[' + storedOpened + '] returned[' + String(body.opened_date) + ']');
+    notes.push('anonymous lookup of a valid number and the field whitelist: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'anonymous lookup of a valid number and the field whitelist', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>
@@ -884,22 +956,69 @@
         }
     ];
 
-    var removed = 0;
+    // CLEANUP IS ASSERTED, NOT ASSUMED.
+    //
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology. It therefore passed even when every
+    // delete had
+    // silently failed, so fixtures could survive and contaminate later steps, later
+    // tests in the suite, and later runs (a stale pinned sys_id or a stale prefix row
+    // makes another test assert against the wrong record). What follows checks the
+    // outcome of each delete and then RE-QUERIES for residue, so a surviving row fails
+    // this step and is named in the failure message.
+    //
+    // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
+    // `subject` column to match on) is swept by pinned sys_id only - the same guard the
+    // delete loop uses - because that is the only key such a row is ever created with.
+    var removed = 0, failedDeletes = [];
     for (var d = FIX.length - 1; d &gt;= 0; d--) {
         var old = new GlideRecord(FIX[d].table);
-        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); removed++; }
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        }
     }
     for (var p = 0; p &lt; FIX.length; p++) {
         if (!FIX[p].prefix) continue;
         var extra = new GlideRecord(FIX[p].table);
         extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
         extra.query();
-        while (extra.next()) { extra.setWorkflow(false); extra.deleteRecord(); removed++; }
+        while (extra.next()) {
+            var extraId = extra.getUniqueValue();
+            extra.setWorkflow(false);
+            if (extra.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[p].table + ':' + extraId);
+        }
     }
-    stepResult.setOutputMessage('fixtures removed=' + removed);
-    chk('cleanup ran', 'true', 'true');
-    stepResult.setOutputMessage('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+    chk('every delete reported success', '', failedDeletes.join(' | '));
+
+    // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
+    // fixture that has one. Any row still present here is a real leak.
+    var residue = [];
+    for (var q = 0; q &lt; FIX.length; q++) {
+        var byId = new GlideRecord(FIX[q].table);
+        if (byId.get(FIX[q].sys_id))
+            residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
+        if (!FIX[q].prefix) continue;
+        var byPrefix = new GlideRecord(FIX[q].table);
+        byPrefix.addQuery('subject', 'STARTSWITH', FIX[q].prefix);
+        byPrefix.query();
+        while (byPrefix.next())
+            residue.push(FIX[q].table + ' ' + byPrefix.getUniqueValue() +
+                ' [' + byPrefix.getValue('subject') + '] survived');
+    }
+    chk('no fixture residue remains after cleanup', '', residue.join(' | '));
+
+    // setOutputMessage OVERWRITES rather than appends, so every reported
+    // line is accumulated and emitted once, at the end of the step.
+    var notes = [];
+    notes.push('fixtures removed=' + removed +
+        ' | deletes reporting failure=' + failedDeletes.length +
+        ' | residue rows=' + residue.length);
+    notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
     return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
 })(outputs, steps, params, stepResult, assertEqual);
 </value>

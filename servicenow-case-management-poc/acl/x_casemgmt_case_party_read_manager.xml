@@ -62,7 +62,7 @@
             - case_manager: Read=All            -> THIS FILE
             - case_agent:   Read=Assigned only  -> ../acl/x_casemgmt_case_party_read_agent_assigned.xml
                                                    (carries the row-level filter that
-                                                    dereferences current.case to apply
+                                                    dereferences current.getElement('case') to apply
                                                     the parent-case "Assigned only"
                                                     predicate via parent case's
                                                     assigned_agent and assigned_group)
@@ -214,9 +214,14 @@
       body (see, for contrast,
       ../acl/x_casemgmt_case_party_read_agent_assigned.xml where
       advanced=true and the script encodes the disjunctive ownership check
-      that dereferences current.case up to the parent case row to apply
-      `current.case.assigned_agent == gs.getUserID() ||
-      gs.getUser().isMemberOf(current.case.assigned_group)`).
+      that dereferences current.getElement('case') up to the parent case row to apply
+      `var p = current.getElement('case').getRefRecord();
+      p.assigned_agent == gs.getUserID() ||
+      gs.getUser().isMemberOf(p.assigned_group)` - reached with
+      getElement('case') because `case` is a JavaScript reserved word, so
+      the direct property form `current.case` does not compile under Rhino
+      ("missing name after . operator") and an ACL body that cannot compile
+      denies every row).
 
     Why this ACL is INDEPENDENT of the parent case's read ACL:
       ServiceNow ACL evaluation is per-table, not transitively inherited.
@@ -448,7 +453,7 @@
                                             vs x_casemgmt_case_agent
         - <advanced>      false             vs true (the agent ACL carries
                                               a scripted condition that
-                                              dereferences current.case to
+                                              dereferences current.getElement('case') to
                                               apply the parent-case
                                               "Assigned only" predicate;
                                               the manager ACL is
@@ -456,7 +461,7 @@
         - <condition>     empty             vs encoded query that asserts
                                               parent-case "Assigned only"
         - <script>        empty             vs server-side dereference of
-                                              current.case followed by
+                                              current.getElement('case') followed by
                                               disjunction of parent-case
                                               assigned_agent / assigned_group
                                               checks
