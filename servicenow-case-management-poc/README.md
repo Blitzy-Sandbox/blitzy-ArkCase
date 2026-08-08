@@ -178,7 +178,7 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 
 - **Update Set XML:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
 - **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation. **The URL resolves anonymously with no login wall, but both pages currently render blank** — see Current Status below.
-- **Dashboards:** Agent Workspace + Manager View records are in the package, but **they do not currently install** — the `pa_tab` table is absent on the verification instance and both dashboard records fail on commit. See Current Status below.
+- **Dashboards:** Agent Workspace + Manager View records are in the package and **do install**, but they **cannot render** — each composite block serializes its tab child as `<pa_tab>` while the table on the verification instance is `pa_tabs`, so the tab never lands and a dashboard with no tab shows no widgets. A one-element packaging defect; see Current Status below.
 - **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group. The packaged seed rows require one preparatory step before the seed script can populate them correctly — see Current Status below.
 
 ## Current Status
@@ -197,8 +197,13 @@ and the exported Update Set was re-imported through upload → preview → commi
   "Assigned only" narrowing and the field-level ACLs, the anonymous portal **REST endpoints** (201 / 200 / 404
   with the verbatim messages), the 8 reports, and the demo data.
 - **Not working:** the portal **pages** render blank (their Service Portal layout records were never authored);
-  the two dashboards cannot install here; the `case_agent` role's ACL conditions on the task and party tables
-  cannot compile, so they deny every row; and the case form has no related lists.
+  the two dashboards install but cannot render (their tab child is serialized as `pa_tab` while this release's
+  table is `pa_tabs`, so no tab is created); the `case_agent` role's ACL conditions on the task and party
+  tables cannot compile, so they deny every row; and the case form has no related lists.
+- **No regressions.** The 13 transition-logic assertions that passed before this pass were re-measured with the
+  same harness afterwards: **13 / 13 before, 13 / 13 after**, per assertion. The ATF suite runs on the
+  committed instance and scores 16 Success / 4 Failure over 20 tests, with every failure reported rather than
+  relaxed.
 
 **Read [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) before deploying.**
 Section 9.5 of that document is the step-by-step install procedure that actually works, Section 9.6 lists every
@@ -218,7 +223,7 @@ measured status of each of the seven validation gates is in
 
 > **These four steps are the AAP's deployment contract, reproduced as written. They are not sufficient on this
 > instance.** A commit alone leaves the three tables without physical storage and the 26 ACLs without their 27
-> role links, and step 3's dashboard check cannot pass because `pa_tab` is absent. Follow
+> role links, and step 3's dashboard check cannot pass because the dashboards' tab child names `pa_tab` instead of `pa_tabs`. Follow
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the procedure that
 > works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**,
 > commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to confirm

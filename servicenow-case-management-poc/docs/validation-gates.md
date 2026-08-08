@@ -45,7 +45,7 @@ than folded into a pass.
 | ACLs | ⚠️ **PASS on the parent table after remediation; FAIL on the child tables** | A clean commit gives 26 ACLs with **0 of 27** role links; after remediation, **27**. Parent-table matrix then correct by impersonation: manager 14/14 with Delete, agent 9/14 without Delete, viewer 14/14 read-only. Both halves of "Assigned only" proven, including group-only visibility and record-level denial by direct URL. **But** the agent's `case_task`/`case_party` read+write conditions cannot compile (`current.case`; `case` is a JS reserved word) and deny every row — caught by ATF 07. |
 | Portal — submission | ⚠️ **REST contract PASS · portal page FAIL** | Anonymous `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. The submit **page** renders blank (0 inputs, 0 buttons) because `sp/page` returns `containers: []` — the layout records were never authored. |
 | Portal — lookup | ⚠️ **REST contract PASS · portal page FAIL** | GET valid → exactly `{status, subject, opened_date}`, all seven internal fields absent from body and raw response. GET unknown → **404** with `No case found with that number.`, byte-identical to the required literal. The lookup **page** renders blank for the same reason. |
-| Dashboards | ❌ **FAIL** | Both `pa_dashboards` records **fail to commit**: the commit log carries two `Table 'pa_tab' does not exist` errors on every import. `pa_tab` is absent from this instance, so no visual render is possible. The 8 backing `sys_report` records do commit and are backed by populated tables. |
+| Dashboards | ❌ **FAIL** | Both `pa_dashboards` records **do commit** and are live, but each composite block serializes its tab child as `<pa_tab>` while this release's table is `pa_tabs` — so the commit log carries two `Table 'pa_tab' does not exist` errors on every import, `pa_m2m_dashboard_tabs` stays empty for both dashboards, and a dashboard with no tab renders no widgets. A one-element packaging defect in the deliverable, pre-existing; see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.6 E5 and §10.2 item 11. The 8 backing `sys_report` records do commit and are backed by populated tables. |
 | Update Set | ✅ **PASS** | **Before = 42 errors** on the populated instance; **after = 0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed`. Full progression 42 → 559 → 297 → 0 and its two root causes are in §9.2. |
 
 > **Net: 2 gates pass outright, 3 pass with a qualification, 1 fails.** The application logic is sound; the
@@ -53,6 +53,12 @@ than folded into a pass.
 > step-by-step install procedure that does work, and the residual manual footprint per defect, are in §9.5 of
 > the limitations register. One further AAP requirement outside these seven gates was also measured and fails:
 > §0.4.4's related lists for `case_task` and `case_party` were never authored.
+>
+> **Regression gate (outside the seven).** The 13 transition-logic assertions that were passing before this
+> pass were re-measured afterwards with the same harness, run verbatim: **13 / 13 before, 13 / 13 after**, per
+> assertion, with byte-identical expected and actual values — see §9.7 of the limitations register. The ATF
+> suite runs on the committed instance and scores **20 ran / 16 Success / 4 Failure / 0 Error / 0 Skipped**,
+> identically across three runs; every failure is reported rather than relaxed (§9.6 E-ATF, E-ATF15).
 
 ## Per-Gate Detail
 

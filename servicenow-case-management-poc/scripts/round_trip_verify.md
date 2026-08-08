@@ -240,8 +240,12 @@ Add these to any future round trip — each one caught a real defect that Phases
       confirm a form actually renders. **Result: ❌ both render blank** — `GET /api/now/sp/page` returns
       `containers: []`; the Service Portal layout records were never authored. Testing only the REST endpoints
       hides this completely.
-- [ ] **Dashboards commit, not just exist.** Read the commit log for dashboard errors. **Result: ❌ two
-      `Table 'pa_tab' does not exist` errors per import.**
+- [ ] **Dashboards commit *and* get a tab.** Read the commit log for dashboard errors, then confirm
+      `pa_m2m_dashboard_tabs` has a row for each dashboard. **Result: ⚠️ both `pa_dashboards` rows commit, but
+      two `Table 'pa_tab' does not exist` errors appear per import and `pa_m2m_dashboard_tabs` stays empty** —
+      each composite payload serializes its tab child as `<pa_tab>` while this release's table is `pa_tabs`, so
+      each dashboard installs with no tab and renders no widgets. Reading only "does the `pa_dashboards` record
+      exist" hides this.
 - [ ] **Reference display values resolve.** Check that the `Case` column is populated on the task and party
       lists. **Result: ❌ initially blank** — all three tables ship with `display=true` on nearly every column
       where ServiceNow permits exactly one.
@@ -252,6 +256,25 @@ Add these to any future round trip — each one caught a real defect that Phases
       *and* group-assigned cases and not others. **Result: ✅ 9 of 14 after the demo group membership was
       repaired** — but the agent's task/party ACL conditions deny every row because they dereference
       `current.case` and `case` is a JavaScript reserved word.
+
+### 5.6 Re-run the regression harness and the test suite, after the re-seed
+
+- [ ] Re-run the transition-logic regression harness **verbatim** — the same script that produced the
+      pre-change baseline, not a re-implementation of it — in scope `x_casemgmt` (the validator is
+      `access=package_private`, so a global caller cannot instantiate it), and read the single `U1ASSERT|` line
+      back out of `syslog`. Report the before and after counts and a per-assertion list.
+      **Result: 13 / 13 before, 13 / 13 after, zero regressions** — see
+      [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.7](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+      A re-implementation is not a substitute: one written for this pass probed a stricter code path than the
+      baseline and reported a failure that was not a regression at all, but a separate latent defect.
+- [ ] Re-run the ATF suite through the client runner at `/atf_test_runner.do?sysparm_nostack=true`
+      (`sn_atf.runner.enabled` must be `true`; `sn_atf.headless.enabled` cannot be enabled here, so a real
+      browser runner must be registered *before* launching the suite). Report per-test verdicts, not just the
+      suite status. **Result: 20 ran, 16 Success, 4 Failure, 0 Error, 0 Skipped, identical across three runs.**
+- [ ] Confirm the re-imported ATF records still **run**, not merely exist — the Defect-F failure mode applies
+      to any relationally-compiled construct. Check that no test has zero steps and no step has zero
+      parameters. **Result: 20 tests / 180 steps / 542 step-parameter rows, zero tests with no steps, zero
+      steps with no parameters.**
 
 ### 5.5 Working mechanics on this instance
 
@@ -287,6 +310,8 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 5. Phase 5 — The self-sufficiency assertions hold, **or** every deviation is recorded with the precise manual
    step required to close it. A round trip that reaches "Committed" while leaving the application unusable is
    **not** a pass; it is a pass on Gate 7 and a documented failure everywhere else.
+6. Phase 5.6 — The regression harness returns the same count after the round trip as before it, per
+   assertion, and any test-suite failure is reported rather than relaxed.
 
 > **Standing result as of this pass:** criteria 1, 2 and 3 hold. Criterion 4 holds for Workflow and (after
 > remediation) Data model and ACLs on the case table; it does **not** hold for Dashboards, for the portal pages,

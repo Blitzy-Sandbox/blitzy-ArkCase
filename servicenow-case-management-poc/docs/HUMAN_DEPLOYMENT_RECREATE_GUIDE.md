@@ -37,7 +37,7 @@
 > schema) and **9** (the 27 ACL role links) need the manual run.
 >
 > Three further things this guide does not yet cover, all measured on the clean install: the two dashboards
-> **fail to commit** (`pa_tab` does not exist on this instance); the portal **pages render blank** (their
+> **install but cannot render** (their tab child is serialized as `pa_tab`; this release's table is `pa_tabs`); the portal **pages render blank** (their
 > Service Portal layout records were never authored, so only the REST endpoints work); and each of the three
 > tables arrives with `display=true` on nearly every column, which makes every reference to a case render
 > blank until reduced to one display field per table.
