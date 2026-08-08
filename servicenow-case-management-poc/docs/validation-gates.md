@@ -29,6 +29,31 @@ The following table is preserved verbatim from AAP Section 0.7.3 and serves as t
 | Dashboards | Both dashboards render with synthetic data | All widgets display data; no broken report references |
 | Update Set | Scoped app exported | Update Set loads without errors on a fresh PDI instance |
 
+## Measured Status
+
+The table above is the frozen AAP criteria and is reproduced verbatim; it is deliberately left unaltered. The
+table below is the **measured outcome** of those criteria, taken on `https://dev379024.service-now.com` during
+the clean-instance round trip described in
+[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Every entry is an
+observation, not an expectation. Where a gate's outcome depends on an operational step, that is stated rather
+than folded into a pass.
+
+| Gate | Measured status | Evidence |
+| --- | --- | --- |
+| Data model | ⚠️ **PASS only after remediation** | A clean commit yields table metadata with **no physical storage** (REST 403, zero `sys_choice` rows, inserts fail with `invalid table name`). After the §9.5 remediation: 3 physical tables (21/14/13 columns), 24 choice rows, all 7 choice lists rendering their exact option labels, and the three list views rendering as real data grids with zero banners and zero console errors. |
+| Workflow | ✅ **PASS** | Independently re-verified after the round trip: clicking the real **Resolve** UI Action on a case with an open child task was blocked, no write occurred (`sys_mod_count` unchanged), and the form displayed `All tasks must be closed before resolving this case.` — codepoint-verified, 52 ASCII characters, terminating U+002E. Both prohibited-transition messages, the date stamping and the `pending_reason` clearing were re-measured and hold. |
+| ACLs | ⚠️ **PASS on the parent table after remediation; FAIL on the child tables** | A clean commit gives 26 ACLs with **0 of 27** role links; after remediation, **27**. Parent-table matrix then correct by impersonation: manager 14/14 with Delete, agent 9/14 without Delete, viewer 14/14 read-only. Both halves of "Assigned only" proven, including group-only visibility and record-level denial by direct URL. **But** the agent's `case_task`/`case_party` read+write conditions cannot compile (`current.case`; `case` is a JS reserved word) and deny every row — caught by ATF 07. |
+| Portal — submission | ⚠️ **REST contract PASS · portal page FAIL** | Anonymous `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. The submit **page** renders blank (0 inputs, 0 buttons) because `sp/page` returns `containers: []` — the layout records were never authored. |
+| Portal — lookup | ⚠️ **REST contract PASS · portal page FAIL** | GET valid → exactly `{status, subject, opened_date}`, all seven internal fields absent from body and raw response. GET unknown → **404** with `No case found with that number.`, byte-identical to the required literal. The lookup **page** renders blank for the same reason. |
+| Dashboards | ❌ **FAIL** | Both `pa_dashboards` records **fail to commit**: the commit log carries two `Table 'pa_tab' does not exist` errors on every import. `pa_tab` is absent from this instance, so no visual render is possible. The 8 backing `sys_report` records do commit and are backed by populated tables. |
+| Update Set | ✅ **PASS** | **Before = 42 errors** on the populated instance; **after = 0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed`. Full progression 42 → 559 → 297 → 0 and its two root causes are in §9.2. |
+
+> **Net: 2 gates pass outright, 3 pass with a qualification, 1 fails.** The application logic is sound; the
+> package is not self-installing and the portal UI and dashboards are not usable on this instance. The
+> step-by-step install procedure that does work, and the residual manual footprint per defect, are in §9.5 of
+> the limitations register. One further AAP requirement outside these seven gates was also measured and fails:
+> §0.4.4's related lists for `case_task` and `case_party` were never authored.
+
 ## Per-Gate Detail
 
 Each gate below follows the same shape: the verbatim Criterion and Pass Condition, a numbered Detailed Verification Procedure that a human verifier can execute on the PDI without any further design context, the Cross-Reference Document under `docs/` that defines the design contract this gate exercises, and a Failure Mode that explains what to do when the gate fails. Per AAP Section 0.7.2 Minimal-Change Clause: when any gate fails and the resolution would require adding a module, workflow, table, portal page, integration, or other artifact beyond the AAP-defined scope, **stop and report the specific gap — do not substitute an out-of-scope workaround.**
@@ -172,6 +197,16 @@ The scoped application is delivered as Done when every Gate above passes AND eve
 - Scoped application exported as a complete Update Set
 
 In addition, every Gate's Pass Condition (column 3 of the Seven Gates table above) MUST hold on a fresh PDI after the Update Set has been re-imported and committed. The exported Update Set XML file path and the portal URL MUST be delivered as final artifacts alongside confirmation that all seven validation gates passed (see [`deployment.md`](./deployment.md) Step 4: Deliver).
+
+> **Current standing against this Definition of Done.** It is **not** fully met, and the Measured Status table
+> above records exactly where. Against the success criteria reproduced in this section: cases can be created,
+> assigned, progressed through every state and closed **via the internal UI** but **not via the external
+> portal**, because the portal pages render blank; tasks and parties work and case resolution is correctly
+> blocked until all linked tasks are closed; ACLs are enforced as specified on the case table but **not** on
+> the task and party tables for the agent role; the **2 dashboards are not operational** on this instance; and
+> the scoped application **is** exported as a single complete Update Set that previews with zero errors. The
+> outstanding work is enumerated with effort estimates in
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
 ## Cross-References
 

@@ -16,11 +16,42 @@
 > - `docs/WORKFLOW_TRYOUT_GUIDE.md` — how to exercise the deployed application as the demo users.
 > - `docs/deployment.md` — the deliverable's original (idealized) export/preview/commit walkthrough.
 
+> ### ⚠️ Correction from the clean-instance round trip — read before following §5
+>
+> A genuine clean-slate re-import was performed after this guide was written, and it corrected one claim made in
+> several places below. Where §5 says a remediation is **"AUTOMATIC — no action required"** because the package
+> auto-executes `scripts/post_import_remediation.js` on commit, the measured behaviour is:
+>
+> - **The auto-execute trigger does fire.** It logs
+>   `X_CASEMGMT_REMEDIATION|BOOTSTRAP|fired|…|state=committed`.
+> - **It cannot succeed.** It reports `SUMMARY|verified=false|tables_built=0|acl_links_total=0|…|errors=121`,
+>   every error being `GlideTableDescriptor is not allowed in scoped applications` or
+>   `GlideSecurityManager is not allowed in scoped applications` — because the commit engine forces the
+>   dispatched record's `sys_scope` to the application, and those APIs are refused in scoped execution.
+>   Shipping the script as global in the package does not avoid this.
+>
+> So **treat every "AUTOMATIC — no action required" note in §5 as a manual step**: run
+> *System Definition → Fix Scripts → "x_casemgmt Post-Import Remediation" → Run Fix Script* with scope
+> **Global**, and confirm `…|SUMMARY|verified=true|…|errors=0`. Defects **E** (auto-numbering) and **7** (REST
+> `service_id`) genuinely need nothing — they are carried by the package artifacts. Defects **C** (physical
+> schema) and **9** (the 27 ACL role links) need the manual run.
+>
+> Three further things this guide does not yet cover, all measured on the clean install: the two dashboards
+> **fail to commit** (`pa_tab` does not exist on this instance); the portal **pages render blank** (their
+> Service Portal layout records were never authored, so only the REST endpoints work); and each of the three
+> tables arrives with `display=true` on nearly every column, which makes every reference to a case render
+> blank until reduced to one display field per table.
+>
+> The full step-by-step procedure that works end to end — including the second commit needed because dropping
+> `sys_db_object` cascades the ACLs away, and the demo-data preparation needed before
+> `scripts/seed_demo_data.js` can populate anything — is
+> **`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5**.
+
 ---
 
 ## 0. Outcome you should expect
 
-After completing this guide, on `https://dev364430.service-now.com` you will have:
+After completing this guide, on `https://dev379024.service-now.com` you will have:
 
 - Scoped application **`x_casemgmt` ("Case Management")** with a single scope/`sys_app` record (`sys_id 82b99028936f74320d74d6f88357a5af`).
 - **3 physical tables**: `x_casemgmt_case` (with auto-number `CASE0000001`), `x_casemgmt_case_task`, `x_casemgmt_case_party`, each with all dictionary fields and choice lists.
@@ -41,7 +72,7 @@ After completing this guide, on `https://dev364430.service-now.com` you will hav
 
 | Item | Value / Requirement |
 |---|---|
-| Target instance | `https://dev364430.service-now.com` (any PDI on **Zurich** or later) |
+| Target instance | `https://dev379024.service-now.com` (any PDI on **Zurich** or later) |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
 | Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` (UTF-8, no BOM, ~768 KB, 1 `sys_remote_update_set` + 148 `sys_update_xml`) |
@@ -52,7 +83,7 @@ After completing this guide, on `https://dev364430.service-now.com` you will hav
 The deployment uses HTTP Basic auth. Supply credentials via environment variables (never hard-code or echo the password):
 
 ```bash
-export SERVICENOW_INSTANCE_URL="https://dev364430.service-now.com"
+export SERVICENOW_INSTANCE_URL="https://dev379024.service-now.com"
 export SERVICENOW_USERNAME="admin"
 export SERVICENOW_PASSWORD="<the PDI admin password>"
 ```
@@ -123,7 +154,7 @@ session cookie, scrapes the `g_ck` CSRF token each call). The `SCOPE` argument i
 cat > /tmp/bg.sh <<'BG'
 #!/bin/bash
 SCRIPTFILE="$1"; SCOPE="${2:-global}"
-SN="https://dev364430.service-now.com"; CJ=/tmp/sn_cookies.txt
+SN="https://dev379024.service-now.com"; CJ=/tmp/sn_cookies.txt
 curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -o /tmp/bgform.html "$SN/sys.scripts.do"
 CK=$(grep -oE "g_ck['\"]?[ ]*=[ ]*['\"][^'\"]{32,}" /tmp/bgform.html | grep -oE "[A-Za-z0-9_+/=,-]{32,}" | tail -1)
 [ -z "$CK" ] && CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' /tmp/bgform.html | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//')
@@ -456,7 +487,7 @@ curl -s -H "Content-Type: application/json" -X POST \
 curl -s -w "\nlookup HTTP %{http_code}\n" "$SN/api/x_casemgmt/case_status_lookup?number=CASE9999999"
 ```
 
-Portal UI: `https://dev364430.service-now.com/x_casemgmt_case_portal` (submission + status-lookup pages).
+Portal UI: `https://dev379024.service-now.com/x_casemgmt_case_portal` (submission + status-lookup pages).
 
 > Remember to delete any smoke-test cases afterward so the demo dataset stays at exactly 10.
 
@@ -492,7 +523,7 @@ Expected (matches AAP §0.5.6): `MANAGER C/R/W/D = T/T/T/T`; `AGENT = T/F/F/F` (
 | Roles | `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer` |
 | Demo users | `x_casemgmt_demo_manager`, `x_casemgmt_demo_agent`, `x_casemgmt_demo_viewer` |
 | Demo group | `x_casemgmt_demo_team` (member: Demo Agent) |
-| Portal URL | `https://dev364430.service-now.com/x_casemgmt_case_portal` |
+| Portal URL | `https://dev379024.service-now.com/x_casemgmt_case_portal` |
 | REST submit | `POST /api/x_casemgmt/case_submit` |
 | REST lookup | `GET /api/x_casemgmt/case_status_lookup?number=<CASE…>` |
 | Dashboards | `x_casemgmt_agent_workspace`, `x_casemgmt_manager_view` (`pa_dashboards`) |

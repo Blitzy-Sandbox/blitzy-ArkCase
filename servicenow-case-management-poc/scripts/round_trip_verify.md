@@ -187,6 +187,95 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 - [ ] Open **System Update Sets → Retrieved Update Sets** list. Confirm the record is the most recently committed one.
 - [ ] Confirm the original Update Set XML file at `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is unchanged (the verification did not modify the source artifact).
 
+## Phase 5 — Self-Sufficiency Assertions
+
+Phases 1–4 establish that the package *imports*. Phase 5 establishes whether it imports **into a working
+application with no manual step**, which is the actual acceptance question. These assertions were executed on
+`https://dev379024.service-now.com` after an application-level clean slate; the outcome is recorded inline so a
+future verifier can tell a regression from a known state. The measured detail is in
+[`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+
+### 5.1 No manual step between preview and commit
+
+- [ ] Before committing, confirm the platform's own commit predicate: the retrieved Update Set is
+      `state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`. Nothing is dismissed or ignored by
+      hand. **Result: asserted and held.**
+- [ ] Record the **before** and **after** preview error counts as numbers.
+      **Result: before = 42 (populated instance), after = 0 errors / 0 warnings (clean slate).**
+- [ ] Perform no other action between upload, preview and commit — in particular do **not** run
+      `post_import_remediation.js` by hand at this point. The whole point is to observe what the package alone
+      produces. **Result: honoured.**
+
+### 5.2 Did the auto-execute trigger fire, and did it succeed?
+
+- [ ] Search `syslog` for the marker `X_CASEMGMT_REMEDIATION|` in the commit window and locate the single
+      `…|SUMMARY|verified=` line.
+- [ ] **Result: the trigger FIRED but did NOT succeed** — `verified=false`, `tables_built=0`,
+      `acl_links_total=0` of an expected 27, `errors=121`, all of them
+      `GlideTableDescriptor is not allowed in scoped applications` or
+      `GlideSecurityManager is not allowed in scoped applications`. Cause: the commit engine forces the
+      dispatched record's `sys_scope` to the application. Packaging the script as global does not avoid this.
+
+### 5.3 The four named functional criteria, measured from the package alone
+
+| Assertion | Expected | Measured on a clean install, package alone |
+|---|---|---|
+| **Tables visible** — 3 tables with their full column sets and all 7 choice lists | present and usable | ❌ metadata only, **no physical storage**; REST 403; **0** `sys_choice` rows |
+| **Auto-numbering working** — a new case matches `^CASE[0-9]{7}$` | matches | ❌ insert fails: `GlideRecord.setValue() - invalid table name: x_casemgmt_case` |
+| **REST endpoints 201 / 200 / 404** anonymously, with `Your case has been submitted` and `No case found with that number.` verbatim | 201 / 200 / 404 | ✅ **after the packaged operation payloads were corrected in this pass**; before that, 415 and 406 |
+| **RBAC matrix enforcing** — 12 cells per AAP §0.5.6, with 27 `sys_security_acl_role` links | 27 links | ❌ 26 ACLs, **0** role links (an ACL with no role, no condition and no script evaluates to *deny*) |
+
+- [ ] After the §9.5 remediation, re-run all four. **Result: tables 3/3 physical with 24 choice rows and all 7
+      choice lists rendering; a new case numbered `CASE0000448`; anonymous `201` `{"number":…,"message":"Your case
+      has been submitted"}` / `200` `{status, subject, opened_date}` only / `404` `No case found with that
+      number.` byte-identical; and the 12-cell matrix correct with `sys_security_acl_role = 27`.**
+- [ ] Record the difference between the pre-remediation and post-remediation results. **That difference *is* the
+      residual manual footprint**, and it must be disclosed rather than absorbed into a pass.
+
+### 5.4 Assertions this procedure previously omitted
+
+Add these to any future round trip — each one caught a real defect that Phases 1–4 do not detect:
+
+- [ ] **Portal pages, not just endpoints.** Open the submit and status-lookup pages as an anonymous visitor and
+      confirm a form actually renders. **Result: ❌ both render blank** — `GET /api/now/sp/page` returns
+      `containers: []`; the Service Portal layout records were never authored. Testing only the REST endpoints
+      hides this completely.
+- [ ] **Dashboards commit, not just exist.** Read the commit log for dashboard errors. **Result: ❌ two
+      `Table 'pa_tab' does not exist` errors per import.**
+- [ ] **Reference display values resolve.** Check that the `Case` column is populated on the task and party
+      lists. **Result: ❌ initially blank** — all three tables ship with `display=true` on nearly every column
+      where ServiceNow permits exactly one.
+- [ ] **Demo cases carry numbers.** Confirm `x_casemgmt_case.number` is non-empty on every seeded row.
+      **Result: ❌ empty on all 10** — the packaged `Case Record` payloads omit the `number` element, and
+      auto-numbering does not fire on an Update-Set data insert, so every by-number child reference dangles.
+- [ ] **Record-level ACL narrowing, both branches.** Verify by impersonation that the agent sees assigned cases
+      *and* group-assigned cases and not others. **Result: ✅ 9 of 14 after the demo group membership was
+      repaired** — but the agent's task/party ACL conditions deny every row because they dereference
+      `current.case` and `case` is a JavaScript reserved word.
+
+### 5.5 Working mechanics on this instance
+
+The REST sequence described in Phases 1–3 does not work here. What does:
+
+- **Upload** must be a multipart `POST /sys_upload.do` with the upload form's own `sysparm_ck`. A Table-API
+  `POST /api/now/table/sys_remote_update_set` with `Content-Type: application/xml` is rejected with HTTP 400
+  `Exception while reading request … Misshaped element`.
+- **Preview and commit** cannot be driven by `PATCH`ing `state` — the field is read-only over REST and the
+  change is silently reverted. Use `UpdateSetPreviewAjax` and
+  `com.glide.update.UpdateSetCommitAjaxProcessor` via `POST /xmlhttp.do`, or the UI actions. No browser is
+  required for either.
+- **Teardown** for a genuine clean slate cannot rely on `DELETE /api/now/table/sys_scope/{id}`: it returns
+  HTTP 500 `Transaction cancelled: maximum execution time exceeded`, removes the `sys_scope` row and leaves
+  every other artifact in place. Stage it explicitly instead (ATF results and `sys_variable_value` rows, then
+  flows/ACLs/scripts/portal/reports, then the three physical tables children-first, then roles/users/groups,
+  then the update-set bookkeeping and `sys_metadata_delete` tombstones).
+- **Purge the local capture between passes.** Deleting metadata while a local Update Set is in progress captures
+  canonically-named DELETE updates that collide with the package on the next preview. Purge only the local rows
+  whose names match the retrieved set, so unrelated work on a shared instance is untouched.
+- **Update names must be canonical.** The previewer indexes intra-set providers by `<table>_<sys_id>`. Human-
+  readable `<name>` values cause every intra-set cross-reference to report as missing on a clean instance (559
+  spurious errors here, with `missing_item_update` empty on all of them).
+
 ## Pass / Fail Decision
 
 ### Pass Criteria (All Must Hold)
@@ -195,6 +284,15 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 2. Phase 2 — Zero preview errors.
 3. Phase 3 — State = Committed.
 4. Phase 4 — All six functional gates re-verified on the verification PDI.
+5. Phase 5 — The self-sufficiency assertions hold, **or** every deviation is recorded with the precise manual
+   step required to close it. A round trip that reaches "Committed" while leaving the application unusable is
+   **not** a pass; it is a pass on Gate 7 and a documented failure everywhere else.
+
+> **Standing result as of this pass:** criteria 1, 2 and 3 hold. Criterion 4 holds for Workflow and (after
+> remediation) Data model and ACLs on the case table; it does **not** hold for Dashboards, for the portal pages,
+> or for the agent's access to the task and party tables. Criterion 5 is met in the second sense — the package is
+> not self-sufficient, and the footprint is fully documented in
+> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
 ### Fail Criteria (Any One Triggers Fail)
 

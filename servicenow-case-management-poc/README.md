@@ -177,9 +177,37 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 ## Deliverables
 
 - **Update Set XML:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
-- **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation.
-- **Dashboards:** Agent Workspace + Manager View (visible in the PDI under Performance Analytics → Dashboards after commit).
-- **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group.
+- **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation. **The URL resolves anonymously with no login wall, but both pages currently render blank** — see Current Status below.
+- **Dashboards:** Agent Workspace + Manager View records are in the package, but **they do not currently install** — the `pa_tab` table is absent on the verification instance and both dashboard records fail on commit. See Current Status below.
+- **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group. The packaged seed rows require one preparatory step before the seed script can populate them correctly — see Current Status below.
+
+## Current Status
+
+A clean-instance round trip was performed on `https://dev379024.service-now.com`: the application was torn down
+and the exported Update Set was re-imported through upload → preview → commit. The measured outcome:
+
+- **The Update Set previews with zero errors** (before the teardown it reported 42 on a populated instance; on a
+  genuine clean slate it reports **0 errors and 0 warnings**) and commits successfully.
+- **It is not self-installing.** Two defects need one manual remediation run after commit: the physical table
+  schema, and the 27 ACL role-link records. The package ships the automation for both and the auto-execute
+  trigger demonstrably fires, but it cannot complete — the commit engine rewrites the dispatched record's scope
+  to the application, where the APIs it needs are refused.
+- **Working:** the three-table data model, auto-numbering (`CASE0000452`-format), the full state machine with
+  blocking form errors for both case types, the role × CRUD matrix on the case table including record-level
+  "Assigned only" narrowing and the field-level ACLs, the anonymous portal **REST endpoints** (201 / 200 / 404
+  with the verbatim messages), the 8 reports, and the demo data.
+- **Not working:** the portal **pages** render blank (their Service Portal layout records were never authored);
+  the two dashboards cannot install here; the `case_agent` role's ACL conditions on the task and party tables
+  cannot compile, so they deny every row; and the case form has no related lists.
+
+**Read [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) before deploying.**
+Section 9.5 of that document is the step-by-step install procedure that actually works, Section 9.6 lists every
+known defect with its root cause, and Section 10 gives the recommended next steps with effort estimates. The
+measured status of each of the seven validation gates is in
+[`docs/validation-gates.md`](docs/validation-gates.md#measured-status).
+
+> **Instance note.** The reachable verification instance is `https://dev379024.service-now.com`. The
+> `dev364430` host named in some older documentation in this repository is stale and returns HTTP 401.
 
 ## Install & Deployment
 
@@ -188,11 +216,20 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 3. **Confirm deployed state:** After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or the equivalent portal URL chosen at portal-record creation time — for this implementation the actual portal slug is `x_casemgmt_case_portal`, see [`docs/portal-pages.md`](docs/portal-pages.md)); both dashboards accessible to users with correct roles; synthetic demo data visible in case list.
 4. **Deliver:** Provide the exported Update Set XML file path and the portal URL as final deliverables alongside confirmation that all validation gates passed.
 
+> **These four steps are the AAP's deployment contract, reproduced as written. They are not sufficient on this
+> instance.** A commit alone leaves the three tables without physical storage and the 26 ACLs without their 27
+> role links, and step 3's dashboard check cannot pass because `pa_tab` is absent. Follow
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the procedure that
+> works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**,
+> commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to confirm
+> `verified=true` with 27 role links, reduce each table to a single display field, then delete the packaged
+> number-less seed rows and run `scripts/seed_demo_data.js` in scope.
+
 Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification procedure in `scripts/round_trip_verify.md`.
 
 ## Validation Gates
 
-Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery.
+Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — 2 pass outright, 3 pass with a qualification, 1 fails — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status).
 
 | Gate | Criterion | Pass Condition |
 | --- | --- | --- |

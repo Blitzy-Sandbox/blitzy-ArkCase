@@ -14,7 +14,7 @@ The following prerequisites MUST hold before starting the export step. They alig
 - Validation Gates 1–6 have all passed on the source PDI (see [`validation-gates.md`](./validation-gates.md)).
 - All seed data has been committed via the seed script in [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
 - Both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
-- Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references.
+- Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references. **Known failure on the verification instance:** both `pa_dashboards` records fail on commit with `Table 'pa_tab' does not exist`, so this item cannot currently be checked there. The 8 backing `sys_report` records do commit and are backed by populated tables. See [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.6](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 - Portal pages submit + lookup correctly on the source PDI: the submission page returns an auto-generated case number in `CASE0000001` format; the lookup page returns `status`/`subject`/`opened_date` for valid case numbers and the verbatim text `"No case found with that number."` for invalid ones.
 - No hard-coded `sys_id` literals exist in any Update Set artifact. Search via Studio → Find: regex `[a-f0-9]{32}` across the scoped application; zero matches inside flow scripts, ACL conditions, business rules, script includes, scripted REST handlers, UI policies, UI actions, and seed records.
 - All artifacts are in scope `x_casemgmt` (no global-scope writes). Verify by filtering `sys_app=x_casemgmt Case Management` on every record type listed in the [Step 1](#step-1-export-the-update-set) artifact inventory.
@@ -89,6 +89,16 @@ For the comprehensive manual round-trip verification procedure, see [`../scripts
 ## Step 3: Confirm Deployed State
 
 Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; Both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); Both dashboards accessible to users with correct roles; Synthetic demo data visible in case list."
+
+> **This walkthrough is the deliverable's idealized path and a commit alone does not reach it.** A clean-instance
+> round trip established that after commit the three tables exist as metadata with **no physical storage**, the
+> 26 ACLs have **0 of 27** role links, the dashboards fail to commit, and the portal pages render blank. The
+> package ships automation for the first two and it demonstrably fires, but it cannot complete because the
+> commit engine rewrites its scope. Use
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) as the authoritative
+> install procedure and treat the sub-steps below as the verification checklist to run *afterwards*. Note also
+> that this instance requires the tables to be rebuilt and the Update Set committed a **second** time, because
+> dropping `sys_db_object` cascades the ACLs away.
 
 ### Detailed Sub-Procedure
 
