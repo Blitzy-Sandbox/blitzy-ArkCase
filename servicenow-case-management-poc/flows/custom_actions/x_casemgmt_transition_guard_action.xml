@@ -12,8 +12,10 @@
 
     DECLARED INPUTS
         case_sys_id     String, mandatory - sys_id of the x_casemgmt_case row under test
-        target_status   String, mandatory - the status being moved to; one of
-                        Open, In Progress, Resolved, Closed
+        target_status   String, mandatory - the status being moved to; exactly one of
+                        Open, In Progress, Pending, Resolved, Closed. Any other value -
+                        including an empty string or a mis-cased variant such as
+                        'in progress' - is REFUSED, not permitted (see FAIL-CLOSED below).
 
     DECLARED OUTPUTS
         blocked         String - 'true' when the transition must be refused, else 'false'
@@ -25,8 +27,37 @@
         on target_status to canTransitionToOpen / canTransitionToInProgress /
         canTransitionToResolved / canTransitionToClosed, each of which returns the shared
         {ok, error} contract that the six UI Actions and the Business Rules also consume.
+        'Pending' is dispatched to an explicit allow branch because AAP Section 0.5.5 lists
+        "None" as the required condition for In Progress -&gt; Pending; it is permitted by a
+        deliberate decision rather than by falling through a default.
         A case_sys_id that resolves to no row yields blocked = true with the message
         'Case record is missing.' so that a bad reference fails closed rather than open.
+
+    FAIL-CLOSED DISPATCH
+        The verdict variable is declared WITHOUT an optimistic initial value and every
+        branch, including a terminal else, assigns it. An unrecognised target_status
+        therefore returns blocked = 'true' with 'Unsupported target status.' instead of
+        silently authorising the transition. The five subflows under ../sub_flows/ pass
+        fixed literals and the order-250 Business Rule dispatches through a whitelist map,
+        so no shipped caller can reach that branch; it exists so a mis-wired or future
+        caller is DIAGNOSED rather than allowed. 'Unsupported target status.' is an
+        internal diagnostic, not one of the four verbatim user-facing messages fixed by
+        AAP Section 0.7.4, none of which are altered here.
+
+        'Draft' is refused by that same branch, deliberately: this action owns only forward
+        preconditions. The Any -&gt; Draft prohibition, and its verbatim message
+        'Cases cannot be returned to Draft.', belong to the order-200 Business Rule
+        ../../business_rules/x_casemgmt_block_draft_backtransition.xml, and the Closed -&gt; *
+        prohibition to the order-100 rule; neither is ever routed through here.
+
+        target_status remains a String rather than a platform Choice input. The input model
+        belongs to the published Action snapshot 3a8ccfe593ea0710830ef82bdd03d680, which all
+        five subflows pin in sys_hub_action_instance_v2.action_type / .compiled_snapshot;
+        re-authoring the input model mints a new snapshot id and would leave those five
+        packaged subflows referencing a snapshot this package does not carry. A Choice list
+        would in any case be an authoring-time affordance only - ServiceNow does not
+        validate choice values for flow or scripted inputs at run time - so the terminal
+        else above is the actual enforcement.
 
         The verbatim messages the validator returns, and which this action passes through
         unchanged, are:
@@ -54,6 +85,19 @@
         applied; every element, attribute and field value is byte-identical to the
         platform's output and all CDATA sections are preserved verbatim.
 
+        ONE SUBSEQUENT EDIT, AND HOW IT WAS MADE. The script step body was later changed
+        to the fail-closed dispatch described above. The graph was NOT re-authored: the
+        script lives in two sys_variable_value rows - 0f3b876593ea0710830ef82bdd03d63a on
+        the draft step instance and 178ccfe593ea0710830ef82bdd03d6ec on the published
+        snapshot step instance - and the identical body was written to BOTH on the instance
+        and then re-captured here, so the two copies remain byte-identical to each other
+        and to the live rows. Publishing through Action Designer was deliberately avoided
+        because it mints a new snapshot id and the five subflows pin the current one. After
+        the write, forcing an update of the snapshot and definition rows invalidated the
+        snapshot-keyed plan cache; the platform then recompiled sys_hub_action_plan by
+        itself and the new body was confirmed executing on both the direct action path and
+        the subflow path. No other element of the graph was touched.
+
         Flow Designer stores an action as a relational graph spread over
         sys_hub_action_type_definition, sys_hub_action_type_snapshot, sys_hub_step_instance,
         sys_hub_action_input, sys_hub_action_output and the compiled action plan.
@@ -67,6 +111,14 @@
         'Action is successfully published.' Its script path was then exercised through the
         five subflows: each run produced a completed sys_flow_context row and returned the
         expected blocked / error_message pair, including the verbatim task-closure message.
+
+        Re-verified after the fail-closed edit, through
+        sn_fd.FlowAPI.getRunner().action('x_casemgmt.case_transition_guard').inForeground():
+        target_status 'Bogus', '' and 'in progress' each returned
+        blocked='true' with 'Unsupported target status.'; 'Pending' returned blocked='false';
+        'Resolved' on a case with an open child task returned blocked='true' with
+        'All tasks must be closed before resolving this case.' The same verdicts were
+        reproduced through the five subflows, each producing a COMPLETE sys_flow_context row.
 -->
 <record_update sys_domain="global" table="sys_hub_action_type_definition">
     <sys_hub_action_type_definition action="INSERT_OR_UPDATE">
@@ -230,13 +282,15 @@
         <value>(function execute(inputs, outputs) {&#13;
 var v = new x_casemgmt.CaseTransitionValidator();&#13;
 var g = new GlideRecord('x_casemgmt_case');&#13;
-var r = { ok: true };&#13;
+var r;&#13;
 if (g.get(String(inputs.case_sys_id))) {&#13;
 var t = String(inputs.target_status);&#13;
 if (t == 'Open') { r = v.canTransitionToOpen(g); }&#13;
 else if (t == 'In Progress') { r = v.canTransitionToInProgress(g); }&#13;
 else if (t == 'Resolved') { r = v.canTransitionToResolved(g); }&#13;
 else if (t == 'Closed') { r = v.canTransitionToClosed(g, gs.getUserID()); }&#13;
+else if (t == 'Pending') { r = { ok: true }; }&#13;
+else { r = { ok: false, error: 'Unsupported target status.' }; }&#13;
 } else {&#13;
 r = { ok: false, error: 'Case record is missing.' };&#13;
 }&#13;
@@ -1545,13 +1599,15 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <value>(function execute(inputs, outputs) {&#13;
 var v = new x_casemgmt.CaseTransitionValidator();&#13;
 var g = new GlideRecord('x_casemgmt_case');&#13;
-var r = { ok: true };&#13;
+var r;&#13;
 if (g.get(String(inputs.case_sys_id))) {&#13;
 var t = String(inputs.target_status);&#13;
 if (t == 'Open') { r = v.canTransitionToOpen(g); }&#13;
 else if (t == 'In Progress') { r = v.canTransitionToInProgress(g); }&#13;
 else if (t == 'Resolved') { r = v.canTransitionToResolved(g); }&#13;
 else if (t == 'Closed') { r = v.canTransitionToClosed(g, gs.getUserID()); }&#13;
+else if (t == 'Pending') { r = { ok: true }; }&#13;
+else { r = { ok: false, error: 'Unsupported target status.' }; }&#13;
 } else {&#13;
 r = { ok: false, error: 'Case record is missing.' };&#13;
 }&#13;

@@ -52,6 +52,19 @@
         cleared. `Draft` is deliberately absent from this rule's dispatch map
         because order 200 already owns it.
 
+    ORDER ALONE IS NOT A SHORT CIRCUIT - WHY THE ABORT-STATE GUARD EXISTS:
+        `current.setAbortAction(true)` cancels the WRITE. It does NOT stop the
+        remaining rules in the before-update chain: ServiceNow continues to run
+        them and exposes the pending-abort state through
+        `current.isActionAborted()`. Ordering therefore decides only WHOSE
+        message is added first, not who runs. Without an explicit check, a
+        Closed -&gt; * attempt already rejected at order 100 would still reach this
+        rule and pay the full 8-10 second synchronous subflow execution before
+        adding a second, redundant diagnosis to a save that was never going to
+        happen. This rule therefore returns immediately when the action is
+        already aborted, and orders 300 / 400 / 500 carry the same guard so that
+        no later rule adds a message to, or mutates a field on, a rejected save.
+
         Note on double messaging: order 300 re-validates agent membership only
         when `assigned_agent` or `assigned_group` actually changed in the save, so
         a status-only transition never produces two messages for the same fault.
@@ -96,9 +109,30 @@
     scope-qualified internal names, the role by its name, and the case by the
     runtime sys_id of the record being saved.
 
-    SCOPE BINDING: &lt;sys_scope&gt; and &lt;sys_package&gt; carry the scope NAME
-    `x_casemgmt`, matching every other artifact in this repository; the Update Set
-    wrapper resolves it to the application sys_id at import time.
+    SCOPE BINDING, AND WHY &lt;sys_scope&gt; CARRIES AN ID WHILE &lt;sys_package&gt; CARRIES A NAME:
+        &lt;sys_package&gt; is serialized by NAME with a `source` attribute, which is the
+        platform's own form and which the Update Set loader resolves by source.
+        &lt;sys_scope&gt; is serialized as the application record's sys_id, because the
+        loader resolves that column by sys_id ONLY. This was measured on the live
+        instance rather than assumed: a throwaway Update Set carrying the same
+        Business Rule three ways - &lt;sys_scope&gt;x_casemgmt&lt;/sys_scope&gt;, the same with
+        source="x_casemgmt", and the same with display_value - produced the preview
+        error "Could not find a record in sys_scope for column sys_scope referenced
+        in this update" for every by-name variant, and no problem at all for the
+        sys_id variant.
+
+        The sys_id form is nonetheless PORTABLE, which is the point of the rule in
+        AAP Section 0.7.2: the application record itself ships inside this package
+        (payload sys_app_82b99028936f74320d74d6f88357a5af) with that exact sys_id,
+        so on a fresh PDI the scope row is created first and every scoped record's
+        &lt;sys_scope&gt; resolves to it. Nothing is bound to an instance-specific id.
+        This value is a serialized reference field, not a runtime lookup: this
+        rule's executable script contains no sys_id literal and resolves the
+        validator, the subflows and the role by name.
+
+        This element is byte-identical to the corresponding element in the embedded
+        payload inside ../update-set/x_casemgmt_case_management_update_set.xml, so
+        the standalone artifact and the packaged record are the same record.
 -->
 <record_update table="sys_script">
     <sys_script action="INSERT_OR_UPDATE">
@@ -147,6 +181,23 @@
     // (subject, description, priority, assignment) are not this rule's
     // concern and are left to the other before-update rules.
     if (previousStatus === proposedStatus) {
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // Stop if an earlier rule in the chain has already rejected this save.
+    //
+    // setAbortAction(true) cancels the WRITE, not the remaining before-update
+    // rules - the platform keeps running them and reports the pending abort
+    // through current.isActionAborted(). Order 100
+    // (x_casemgmt_block_terminal_closed, Closed -&gt; *) and order 200
+    // (x_casemgmt_block_draft_backtransition, Any -&gt; Draft) both run first and
+    // both abort with their own verbatim message. Returning here means an
+    // already-rejected transition does not pay the 8-10 second synchronous
+    // subflow execution below, and does not collect a second diagnosis for a
+    // save that will never be persisted.
+    // ------------------------------------------------------------------
+    if (current.isActionAborted()) {
         return;
     }
 
@@ -258,9 +309,9 @@
         <sys_mod_count>0</sys_mod_count>
         <sys_name>x_casemgmt_enforce_forward_transitions</sys_name>
         <sys_overrides/>
-        <sys_package>x_casemgmt</sys_package>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope>x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_x_casemgmt_enforce_forward_transitions</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

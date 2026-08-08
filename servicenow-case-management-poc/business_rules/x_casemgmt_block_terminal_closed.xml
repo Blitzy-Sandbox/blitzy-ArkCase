@@ -19,16 +19,22 @@
         Order=100 makes this the FIRST/HIGHEST-PRIORITY before-update rule
         in the entire scoped application. Once a case is Closed, ANY
         attempt to modify it (status change, description edit, agent
-        reassignment, priority change, etc.) is short-circuited at this
-        rule's execution point. Subsequent before-update rules
-        (block_draft_backtransition at order=200,
+        reassignment, priority change, etc.) is rejected at this rule's
+        execution point, and this rule's verbatim message is therefore the
+        first one the user reads.
+
+        Being first does NOT stop the rest of the chain.
+        setAbortAction(true) cancels the WRITE; the platform keeps running
+        the remaining before-update rules and reports the pending abort only
+        through current.isActionAborted(). Each of the downstream rules
+        (enforce_forward_transitions at order=250,
         validate_assigned_agent_membership at order=300,
-        clear_pending_reason_on_inprogress at order=400,
-        set_closed_date at order=500) never run when this rule aborts
-        the action - the platform short-circuits the BR pipeline on
-        setAbortAction(true). Running first is intentional: it is the
-        cheapest path to reject an invalid update, and skipping the
-        downstream rules saves database queries and CPU.
+        clear_pending_reason_on_inprogress at order=400, set_closed_date at
+        order=500) therefore checks that state itself and returns, which is
+        what keeps a rejected save free of second messages, phantom field
+        values and the order-250 synchronous subflow execution. Running
+        first is still intentional: it is the cheapest path to reject an
+        invalid update and it owns the message the user sees.
 
     BEHAVIOR:
         - Trigger          : BEFORE UPDATE only on the `x_casemgmt_case` table
@@ -339,7 +345,7 @@
         <client_callable>false</client_callable>
         <collection>x_casemgmt_case</collection>
         <condition/>
-        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; runs FIRST so all other guards/housekeeping rules (block_draft_backtransition at 200, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) are short-circuited if the case is already Closed. The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. Script Include's validateNoBacktransition returns {ok: true} for the no-op Closed -&gt; Closed case (status field unchanged), so non-status edits to a Closed row pass through; only actual transitions out of Closed are blocked. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
+        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; it runs FIRST so that its verbatim message is the one surfaced when the case is already Closed. setAbortAction(true) cancels the write but not the chain - the later rules (block_draft_backtransition at 200, enforce_forward_transitions at 250, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) still run and each returns early on current.isActionAborted(). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. Script Include's validateNoBacktransition returns {ok: true} for the no-op Closed -&gt; Closed case (status field unchanged), so non-status edits to a Closed row pass through; only actual transitions out of Closed are blocked. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
@@ -366,13 +372,15 @@
     // result.error and never inlines it.
     //
     // Order=100 makes this the FIRST/HIGHEST-PRIORITY before-update rule
-    // in this scoped application. Subsequent rules
-    // (block_draft_backtransition at 200, validate_assigned_agent_membership
-    // at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at
-    // 500) are short-circuited when this rule aborts via setAbortAction(true).
-    // Running first is intentional: it is the cheapest path to reject an
-    // invalid update, and skipping the downstream rules saves database
-    // queries and CPU.
+    // in this scoped application, so its verbatim message is the first one
+    // the user reads. It does not stop the rest of the chain:
+    // setAbortAction(true) cancels the WRITE, and the platform keeps running
+    // the remaining before-update rules (enforce_forward_transitions at 250,
+    // validate_assigned_agent_membership at 300,
+    // clear_pending_reason_on_inprogress at 400, set_closed_date at 500),
+    // each of which checks current.isActionAborted() itself and returns.
+    // Running first is still intentional: it is the cheapest path to reject
+    // an invalid update.
     //
     // Delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition()
     // which returns { ok: true } when the transition is allowed, or

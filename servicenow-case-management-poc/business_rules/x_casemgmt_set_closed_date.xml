@@ -172,17 +172,19 @@
             5) x_casemgmt_set_closed_date.xml                (order=500, LAST)
 
         Running LAST is critical because:
-          * If x_casemgmt_block_terminal_closed (order=100) aborts the
-            update because the previous.status was already Closed, this
-            rule MUST be skipped - we never want to stamp closed_date on
-            a transition that the platform is about to reject. ServiceNow
-            short-circuits the BR pipeline on abort, so a higher order
-            ensures we run only after all guards have passed.
-          * If x_casemgmt_block_draft_backtransition (order=200) aborts
-            the update because current.status == 'Draft', this rule MUST
-            be skipped (the transition won't happen, so no close
-            timestamp should be stamped).
-          * Symmetric reasoning applies to orders 300 and 400.
+          * closed_date must not be stamped on a save that an earlier rule
+            has already rejected - x_casemgmt_block_terminal_closed
+            (order=100), x_casemgmt_block_draft_backtransition (order=200),
+            x_casemgmt_enforce_forward_transitions (order=250, e.g. a close
+            attempted by a non-manager) or
+            x_casemgmt_validate_assigned_agent_membership (order=300).
+            ORDER ALONE DOES NOT ACHIEVE THAT. setAbortAction(true) cancels
+            the WRITE; ServiceNow continues running every remaining
+            before-update rule and reports the pending abort only through
+            current.isActionAborted(). This rule therefore checks that
+            explicitly before stamping. That check is what removed the
+            phantom Closed Date a denied close used to leave on the
+            redisplayed form.
           * After all guards pass and the platform is committed to the
             transition, this rule fires last and stamps the close
             timestamp as the final step of the before-update phase,
@@ -344,13 +346,22 @@
     // scripted REST, GlideRecord scripts, bulk imports), the flow catches
     // interactive transitions through the form/UI.
     //
-    // Order=500 ensures this rule runs LAST among before-update rules; if
-    // any earlier guard aborted the action (block_terminal_closed at
-    // order=100, block_draft_backtransition at order=200,
+    // Order=500 makes this the LAST before-update rule on the table
+    // (block_terminal_closed at order=100, block_draft_backtransition at
+    // order=200, enforce_forward_transitions at order=250,
     // validate_assigned_agent_membership at order=300,
-    // clear_pending_reason_on_inprogress at order=400), this BR is skipped.
-    // We never stamp closed_date on a transition that's about to be
-    // rejected.
+    // clear_pending_reason_on_inprogress at order=400 all run first).
+    //
+    // Running last is NOT the same as being skipped when an earlier rule
+    // rejects the save. setAbortAction(true) cancels the WRITE; the platform
+    // still runs this rule, and only current.isActionAborted() reveals the
+    // pending abort. That is exactly how a denied Resolved -> Closed
+    // previously produced a phantom Closed Date on the redisplayed form: the
+    // order-250 rule had refused the transition, this rule ran anyway and
+    // stamped the in-memory record, and the user saw a closed date on a case
+    // the database still held as Resolved. The explicit guard below closes
+    // that gap - closed_date is never stamped on a transition that is about
+    // to be rejected.
     //
     // Defensive previous-null guard: the `previous` GlideRecord is null in
     // certain async/system contexts. If there is no previous state, no
@@ -366,6 +377,15 @@
     // labels ARE the stored values - ServiceNow Choice fields persist
     // the LABEL string by default, not an integer ID.
     if (prevStatus === 'Resolved' && newStatus === 'Closed') {
+        // Do not stamp a rejected save. The order-250 rule refuses a close
+        // attempted by a non-manager with "Only case managers can close
+        // cases." and calls setAbortAction(true); the platform still runs
+        // this rule, so without this check the redisplayed form would show a
+        // Closed Date for a case that remains Resolved in the database.
+        if (current.isActionAborted()) {
+            return;
+        }
+
         // Defensive .nil() guard: respect pre-set values from the
         // Flow Designer subflow (which fires in the same transaction
         // for interactive transitions and may have already stamped

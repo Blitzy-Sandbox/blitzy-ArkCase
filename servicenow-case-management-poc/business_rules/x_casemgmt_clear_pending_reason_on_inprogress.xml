@@ -93,18 +93,20 @@
             5) x_casemgmt_set_closed_date.xml               (order=500, LAST)
 
         Running at order=400 is critical because:
-          * If x_casemgmt_block_terminal_closed (order=100) aborts the
-            update because previous.status was already Closed, this rule
-            MUST be skipped - we never want to clear pending_reason on a
-            transition that the platform is about to reject. The platform
-            short-circuits the BR pipeline on abort, so a higher order
-            ensures we run only after that guard has passed.
-          * If x_casemgmt_block_draft_backtransition (order=200) aborts
-            the update because current.status == 'Draft', this rule MUST
-            be skipped (the transition won't happen, so no field clear).
-          * If x_casemgmt_validate_assigned_agent_membership (order=300)
-            aborts the update because the assigned_agent is not a member
-            of the assigned_group, this rule MUST be skipped.
+          * The clear must not happen on a save that an earlier rule has
+            already rejected - x_casemgmt_block_terminal_closed (order=100,
+            previous.status already Closed), x_casemgmt_block_draft_-
+            backtransition (order=200, current.status == 'Draft'),
+            x_casemgmt_enforce_forward_transitions (order=250, an unmet
+            forward precondition) or x_casemgmt_validate_assigned_agent_-
+            membership (order=300, agent not in group).
+            ORDER ALONE DOES NOT ACHIEVE THAT. setAbortAction(true) cancels
+            the WRITE; the platform continues running every remaining
+            before-update rule and reports the pending abort only through
+            current.isActionAborted(). This rule therefore checks that
+            explicitly before clearing the field. Without the check, a
+            rejected Pending -&gt; In Progress would redisplay an empty
+            Pending Reason for a case that still holds one in the database.
           * After all guards pass and the platform is committed to the
             transition, this rule fires and clears the now-stale
             pending_reason. The subsequent x_casemgmt_set_closed_date
@@ -280,15 +282,21 @@
     // a discrete Pending sub-state with a typed reason code; this is
     // target-side-only behavior introduced by the AAP design.
     //
-    // Order=400 ensures this rule runs AFTER all transition guards
+    // Order=400 places this rule after the transition guards
     // (block_terminal_closed at order=100, block_draft_backtransition at
-    // order=200, validate_assigned_agent_membership at order=300) have
-    // approved the transition, and BEFORE set_closed_date (order=500)
-    // which handles the Resolved -> Closed side-effect. If any earlier
-    // guard aborts the action, this rule is skipped (the platform
-    // short-circuits the BR pipeline on abort) - which is correct,
-    // because we never want to clear pending_reason on a transition
-    // that's about to be rejected.
+    // order=200, enforce_forward_transitions at order=250,
+    // validate_assigned_agent_membership at order=300) and before
+    // set_closed_date (order=500), which handles the Resolved -> Closed
+    // side-effect.
+    //
+    // Order alone does NOT skip this rule when an earlier guard rejects the
+    // save: setAbortAction(true) cancels the WRITE, and the platform keeps
+    // running the rest of the before-update chain, reporting the pending
+    // abort through current.isActionAborted(). The explicit guard below is
+    // what prevents pending_reason from being cleared on the in-memory record
+    // of a transition that is about to be rejected - without it the
+    // redisplayed form would show an empty Pending Reason for a case that
+    // still holds one in the database.
     //
     // Defensive previous-null guard: the `previous` GlideRecord is null
     // in certain async/system contexts. If there is no previous state,
@@ -308,6 +316,15 @@
     // silently never match and the rule would never fire - a critical
     // correctness concern that is encoded by these exact string literals.
     if (prevStatus === 'Pending' && newStatus === 'In Progress') {
+        // Do not mutate a rejected save. An earlier before-update rule may
+        // have called setAbortAction(true); the platform still runs this rule
+        // and only current.isActionAborted() reveals that state. Clearing the
+        // field here would leave the redisplayed form contradicting the
+        // database.
+        if (current.isActionAborted()) {
+            return;
+        }
+
         // The empty-string assignment is the canonical ServiceNow pattern
         // for clearing a Choice field's value. Per
         // ../dictionary/x_casemgmt_case_pending_reason.xml the field is

@@ -345,17 +345,19 @@
     // query here would create a second source of truth and risk the two
     // implementations diverging on edge cases.
     //
-    // Order=300 places this rule THIRD in the before-rule chain on
-    // x_casemgmt_case, after block_terminal_closed (order=100, blocks any
-    // edit to a Closed case) and block_draft_backtransition (order=200,
-    // blocks any rewind to Draft). The chain order is a deliberate
-    // performance optimization: invalid transitions short-circuit at the
-    // earlier orders via setAbortAction(true) and we never reach this rule's
-    // GlideRecord query for them. Cases that survive to order=300 have a
-    // legitimate forward-transition or non-status edit, so the membership
-    // check is appropriate. Subsequent rules
-    // (clear_pending_reason_on_inprogress at order=400, set_closed_date at
-    // order=500) are short-circuited if THIS rule aborts.
+    // Order=300 places this rule in the before-rule chain on x_casemgmt_case
+    // after block_terminal_closed (order=100, blocks any edit to a Closed
+    // case), block_draft_backtransition (order=200, blocks any rewind to
+    // Draft) and enforce_forward_transitions (order=250, enforces the forward
+    // preconditions).
+    //
+    // Order alone is NOT a short circuit. setAbortAction(true) cancels the
+    // WRITE; the platform still runs every remaining before-update rule and
+    // reports the pending abort through current.isActionAborted(). Ordering
+    // therefore decides only whose message is added first. The explicit
+    // abort-state guard below is what keeps this rule from adding a second
+    // message to a save that an earlier rule already rejected - and the same
+    // guard is present in the order-400 and order-500 rules.
     //
     // ArkCase source-side analog: there was no direct equivalent at the JPA
     // entity layer in
@@ -426,6 +428,18 @@
     var agentChanged = !previous || String(previous.assigned_agent) !== agent;
     var groupChanged = !previous || String(previous.assigned_group) !== group;
     if (!agentChanged && !groupChanged) {
+        return;
+    }
+
+    // Skip if an earlier rule in the chain has already rejected this save.
+    // The platform continues running before-update rules after
+    // setAbortAction(true) and exposes the pending abort through
+    // current.isActionAborted(). Returning here keeps a rejected transition
+    // (for example Closed -> * refused at order 100, or a forward
+    // precondition refused at order 250) from collecting a second, unrelated
+    // membership message on top of the message the user needs to read, and
+    // avoids a sys_user_grmember query for a row that will never be written.
+    if (current.isActionAborted()) {
         return;
     }
 

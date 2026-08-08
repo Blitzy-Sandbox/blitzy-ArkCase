@@ -430,15 +430,32 @@ for the dead shells.
 
 1. **Every blocked save renders two banners** — the specific rule message *and* ServiceNow's stock
    `Invalid update`. This is normal `setAbortAction(true)` behavior and is what a user sees.
-2. **The redisplayed form echoes the rejected value.** After an aborted save the classic form shows the value
-   the user submitted, and in assertion iii it also showed a populated `Closed Date`, because the order-500
-   rule still ran against the in-memory record. Both are phantom: a reload and a database read show the case
+2. **The redisplayed form echoes the rejected value.** After an aborted save the classic form shows the
+   `Status` value the user submitted. That is ServiceNow's own abort semantics for the classic form and is
+   not something the application controls. It is phantom: a reload and a database read show the case
    unchanged. Only a reload or a REST read proves persistence — reading status from the post-save frame
    produces a false "allowed" result.
+
+   **A second phantom, `Closed Date`, existed and has been fixed.** As first measured, a close denied to a
+   non-manager also redisplayed a populated `Closed Date`, because `setAbortAction(true)` cancels the *write*
+   but does **not** stop the rest of the before-update chain — the platform keeps running it and exposes the
+   pending abort only through `current.isActionAborted()`. The order-500 rule therefore still stamped the
+   in-memory record. All four rules that add a message or mutate a field after the guards — order 250
+   `enforce_forward_transitions`, order 300 `validate_assigned_agent_membership`, order 400
+   `clear_pending_reason_on_inprogress` and order 500 `set_closed_date` — now check
+   `current.isActionAborted()` first and return. A rejected save consequently gets no `closed_date`, keeps its
+   `pending_reason`, collects no second unrelated message, and does not pay the synchronous subflow execution.
+   Only the `Status` echo in caveat 2 remains, because it is the platform's behavior rather than the
+   application's.
 3. **An aborted save returns HTTP 302, exactly like a successful one**, so HTTP status cannot be used to
    detect a block. The reliable in-page signal is `#output_messages` losing its `outputmsg_hide` class.
 
-Saves take roughly 8–10 seconds to settle, because order 250 executes a Flow Designer subflow synchronously.
+Saves that reach order 250 take roughly 8–10 seconds to settle, because that rule executes a Flow Designer
+subflow synchronously. A transition already rejected at order 100 or 200 no longer pays that cost: measured
+server-side, `Closed → In Progress` now aborts in **35 ms** and `In Progress → Draft` in **4 ms**, and
+`sys_flow_context` shows no subflow dispatch for either, whereas the transitions that do reach the guard
+(`Pending → In Progress`, `Resolved → Closed`) still produce their `source_table = sys_script` subflow
+contexts.
 
 ### 3.5 What is in the package now
 
@@ -1199,10 +1216,17 @@ the harness at the end; the demo data is never mutated. It contains no `sys_id` 
 resolve by `user_name`/`name`, and the deliberately-unresolvable identity in A9 is generated at run time with
 `gs.generateGUID()`.
 
+**The harness is now a repository artifact**, at
+[`../scripts/transition_logic_regression_assertions.js`](../scripts/transition_logic_regression_assertions.js), so
+this gate is reproducible without recovering the script again. Its assertion bodies are byte-identical to the run
+that produced the figures below; only its header was expanded with instructions for running it from
+**System Definition > Scripts - Background** with the scope selector set to `x_casemgmt`.
+
 | Run | Timestamp | Result |
 |---|---|---|
 | **BEFORE** — captured before any change in this pass | 2026-08-07 01:23:03 | `TOTAL=13 PASSED=13 FAILED=0` |
 | **AFTER** — all changes in place, after the clean-instance round trip and the re-seed | 2026-08-08 09:18:43 | `TOTAL=13 PASSED=13 FAILED=0` |
+| **AFTER the abort-state-coordination / fail-closed-guard / scope-normalisation pass** — same harness, re-run verbatim | 2026-08-08 11:27:44 | `TOTAL=13 PASSED=13 FAILED=0` (cleanup `tasks=4 cases=7`) |
 
 Per assertion, with byte-identical expected and actual values on every one:
 

@@ -28,11 +28,15 @@
         - "no transitions out of Closed at ALL") is checked FIRST at
         order=100. Once a case is verified as not-Closed, this rule fires
         at order=200 to catch the more specific "Any -&gt; Draft" prohibition.
-        Subsequent before-update rules (validate_assigned_agent_membership
-        at order=300, clear_pending_reason_on_inprogress at order=400,
-        set_closed_date at order=500) never run when this rule aborts
-        the action via setAbortAction(true) - the platform short-circuits
-        the BR pipeline on abort.
+        Subsequent before-update rules (enforce_forward_transitions at
+        order=250, validate_assigned_agent_membership at order=300,
+        clear_pending_reason_on_inprogress at order=400, set_closed_date at
+        order=500) still RUN when this rule aborts the action:
+        setAbortAction(true) cancels the WRITE, not the chain. The platform
+        reports the pending abort only through current.isActionAborted(),
+        which each of those rules checks itself before adding a message or
+        mutating a field - so this rule's verbatim message is the only one
+        the user reads and no phantom field value survives on the form.
 
     BEHAVIOR:
         - Trigger          : BEFORE UPDATE only on the `x_casemgmt_case` table
@@ -353,7 +357,7 @@
         <client_callable>false</client_callable>
         <collection>x_casemgmt_case</collection>
         <condition/>
-        <description>Before-update guard on x_casemgmt_case: blocks any transition from a non-Draft status back to Draft. When current.status === 'Draft' AND previous.status !== 'Draft' AND previous.status !== '', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Cases cannot be returned to Draft.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 7: 'Any -&gt; Draft: PROHIBITED') and 0.7.4 (verbatim error message - non-negotiable). Order=200 is the SECOND-HIGHEST priority before-update rule in this scoped application; runs AFTER block_terminal_closed (order=100) so terminal-Closed cases short-circuit before this guard, and BEFORE all subsequent housekeeping rules (validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because Draft is the legitimate initial status (per dictionary default_value); only the BACK-transition from a non-Draft state is forbidden. Defensive previous-null guard handles async/system contexts where previous can be null. Skip-if-no-change guard (prevStatus === newStatus) avoids unnecessary Script Include instantiation on non-status-changing updates. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
+        <description>Before-update guard on x_casemgmt_case: blocks any transition from a non-Draft status back to Draft. When current.status === 'Draft' AND previous.status !== 'Draft' AND previous.status !== '', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Cases cannot be returned to Draft.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 7: 'Any -&gt; Draft: PROHIBITED') and 0.7.4 (verbatim error message - non-negotiable). Order=200 is the SECOND-HIGHEST priority before-update rule in this scoped application; it runs AFTER block_terminal_closed (order=100), whose message wins for an already-Closed case, and BEFORE enforce_forward_transitions (250), validate_assigned_agent_membership (300), clear_pending_reason_on_inprogress (400) and set_closed_date (500). Those later rules still execute after an abort - setAbortAction(true) cancels the write, not the chain - and each returns early on current.isActionAborted(). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because Draft is the legitimate initial status (per dictionary default_value); only the BACK-transition from a non-Draft state is forbidden. Defensive previous-null guard handles async/system contexts where previous can be null. Skip-if-no-change guard (prevStatus === newStatus) avoids unnecessary Script Include instantiation on non-status-changing updates. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
@@ -384,9 +388,12 @@
     // the more aggressive Closed-terminal prohibition; once that rule has
     // confirmed the case is not Closed, this rule fires at order=200 to
     // catch the more specific Any->Draft case. Subsequent rules
-    // (validate_assigned_agent_membership at 300,
+    // (enforce_forward_transitions at 250,
+    // validate_assigned_agent_membership at 300,
     // clear_pending_reason_on_inprogress at 400, set_closed_date at 500)
-    // are short-circuited when this rule aborts via setAbortAction(true).
+    // still RUN when this rule aborts - setAbortAction(true) cancels the
+    // WRITE, not the chain - and each of them returns early on
+    // current.isActionAborted(), so only this rule's message is surfaced.
     //
     // Delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition()
     // which returns { ok: true } when the transition is allowed, or
