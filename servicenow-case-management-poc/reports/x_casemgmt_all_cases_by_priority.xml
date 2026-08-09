@@ -215,7 +215,7 @@
         bind THIS record to the same scoped-app row that the parent
         sys_app record (../app/sys_app/x_casemgmt_case_management.xml)
         publishes via the sys_scope record at
-        ../app/sys_scope/x_casemgmt.xml (where <name>x_casemgmt</name>
+        ../app/sys_app/x_casemgmt_case_management.xml (where <name>x_casemgmt</name>
         and <source>x_casemgmt</source>). Cross-file consistency: the
         sibling reports (x_casemgmt_all_cases_by_status.xml,
         x_casemgmt_all_cases_by_type.xml,
@@ -257,8 +257,9 @@
     CROSS-DEPENDENCY GRAPH
     ======================
     DEPENDS ON (must load earlier in the Update Set):
-      - ../app/sys_app/x_casemgmt_case_management.xml
-      - ../app/sys_scope/x_casemgmt.xml
+      - ../app/sys_app/x_casemgmt_case_management.xml (the scoped application
+        record - the sole scope authority in this package, so <sys_scope> and
+        <sys_package> both resolve against it)
       - ../tables/x_casemgmt_case.xml                  (parent table)
       - ../dictionary/x_casemgmt_case_priority.xml
             (defines the Choice field used in <group_by>;

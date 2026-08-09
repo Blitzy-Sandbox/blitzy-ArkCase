@@ -23,13 +23,17 @@
 >
 > - **Defects E (auto-numbering) and 7 (REST `service_id`) genuinely need nothing.** They are carried by the
 >   package artifacts. Their sections are verification only.
-> - **Defects C (physical schema) and 9 (the 27 ACL role links) require manual steps every time.** The package
->   ships automation for both, and that automation **fires and then fails** with
->   `SUMMARY|verified=false|…|errors=121` — every error being `GlideTableDescriptor is not allowed in scoped
->   applications` or `GlideSecurityManager is not allowed in scoped applications`, because the commit engine
->   forces the dispatched record's `sys_scope` to the application and those APIs are refused in scoped
->   execution. Shipping the script as global does not avoid this, so the bootstrap trigger is shipped
->   **`active=false`**.
+> - **Defects C (physical schema) and 9 (the 27 ACL role links) require manual steps every time.** **Nothing in
+>   the package fires on its own** — it contains no auto-execute record of any kind. An earlier revision shipped
+>   a global Business Rule (`x_casemgmt Post-Import Bootstrap`) that dispatched the remediation on commit; it
+>   **fired and then failed** with `SUMMARY|verified=false|…|errors=121`, every error being
+>   `GlideTableDescriptor is not allowed in scoped applications` or `GlideSecurityManager is not allowed in
+>   scoped applications`, because the commit engine forces the dispatched record's `sys_scope` to the
+>   application and those APIs are refused in scoped execution. Shipping the script as global does not avoid
+>   that. **The rule has since been removed from the package** — it could never succeed, and its condition
+>   matched the commit of *any* retrieved Update Set, so it would have dispatched privileged, partly
+>   destructive remediation onto unrelated deployments. The remediation body still ships, as the Fix Script
+>   `x_casemgmt Post-Import Remediation`, but a Fix Script does not self-run. **You must run it yourself.**
 > - **Running the Fix Script from the UI does not work either** — *System Definition → Fix Scripts → Run Fix
 >   Script* executes that record in the **application** scope and fails identically. The only route measured to
 >   work is *System Definition → **Scripts - Background*** with **"In scope" = Global**.
@@ -39,10 +43,13 @@
 > - **The demo data needs preparation.** The packaged seed rows must be deleted before
 >   `scripts/seed_demo_data.js` can populate anything.
 >
-> Two things this guide does not cover, both measured on the clean install and both independent of packaging:
-> the two dashboards **install but cannot render** (their tab child is serialized as `pa_tab`; this release's
-> table is `pa_tabs`), and the portal **pages render blank** (their Service Portal layout records were never
-> authored, so only the REST endpoints work).
+> Three things this guide cannot remediate, all measured and all packaging defects rather than instance
+> problems: the two dashboards **install but render 0 tabs and 0 widgets** (each names three child tables this
+> release does not have — `pa_tab`, `pa_dashboard_widgets` and `pa_dashboard_role`), the portal **pages render
+> blank** (their Service Portal layout records were never authored, so only the REST endpoints work), and the
+> case form has **no related lists** (no `sys_ui_related_list` row exists for the scope). Separately, all 8
+> reports commit with an empty `group_by`. Fixing any of these means changing the artifacts and re-exporting,
+> not adjusting the install.
 >
 > The same procedure with its measured evidence, per defect, is
 > **[`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step)**.
@@ -61,14 +68,22 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 - **3 physical tables**: `x_casemgmt_case` (with auto-number `CASE0000001`), `x_casemgmt_case_task`, `x_casemgmt_case_party`, each with all dictionary fields and choice lists.
 - **3 roles**: `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`.
 - **26 ACLs + 27 role-link records** enforcing the role × CRUD matrix (manager full / agent assigned-only / viewer read-only).
-- **6 business rules**, **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards**, **1 Experience/Service Portal** with 2 pages and 3 widgets, **1 UI policy**, and **number counters**.
-- **10 demo cases** (`CASE0000013`–`CASE0000022`, all six statuses, both case types), demo tasks, demo parties, and 3 demo users (one per role).
+- **7 business rules** — in execution order: `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)** — the one that runs the transition subflow and raises the blocking form error — `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), and `set_closed_date` (500), the only writer of `closed_date`.
+- **7 Flow Designer flows** — 2 parent flows (`general_inquiry_state_machine`, `complaint_state_machine`) and 5 subflows (`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`) — plus **1 Custom Action** (`x_casemgmt_transition_guard_action`) and **1 shared flow logic block**.
+- **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards**, **1 Experience/Service Portal** with 2 pages and 3 widgets, **1 UI policy**, **6 UI Actions**, and **number counters**.
+- **1 Fix Script** (`x_casemgmt Post-Import Remediation`) carrying the post-import remediation body. It does not run by itself.
+- **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **Do not expect specific case numbers.** Numbers are allocated by the instance counter when the seed script runs, so they differ on every install; the numbers `CASE0000013`–`CASE0000022` quoted in older revisions of this guide were simply what one particular run produced. On the verification instance the counter has since moved well past them (a case created during testing was numbered `CASE0000590`), and the current census is 11 cases, 10 tasks and 8 parties. Identify demo records by `subject`, `status` and `type`, never by number.
 
-> **Known functional limitation that survives this procedure:** the 7 Flow Designer flows deploy as
-> non-functional "dead shells" (see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`, Defect F). Prohibited-transition
-> guards, side-effects, the portal, and ACLs all work via Business Rules / Script Includes / scripted REST.
-> The forward-transition *precondition* guards that live only in the flows are **not enforced at runtime**.
-> This guide cannot remediate that without authoring new flow logic.
+> **The flows work — an earlier revision of this guide said they did not, and that is now out of date.** All
+> **7 flows are `active=true` and `status=published`** on the verification instance (last measured directly
+> against `sys_hub_flow`), and every forward-transition precondition **is** enforced at runtime. The
+> enforcement path is worth knowing before you troubleshoot anything: the before-update Business Rule
+> `x_casemgmt_enforce_forward_transitions` (**order 250**) invokes the matching subflow through the Flow API,
+> receives an `{ok, error}` verdict, and on a refusal calls `gs.addErrorMessage()` and `setAbortAction(true)` —
+> which is what puts the blocking message on the form and prevents the write. The flows hold the decision
+> logic; the Business Rule is what makes it blocking. The earlier "dead shells" state (Defect F in
+> `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`) was a real observation on a previous revision and is recorded there as
+> history.
 
 ---
 
@@ -76,10 +91,10 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 
 | Item | Value / Requirement |
 |---|---|
-| Target instance | `https://dev379024.service-now.com` (any PDI on **Zurich** or later) |
+| Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` (UTF-8, no BOM, ~768 KB, 1 `sys_remote_update_set` + 148 `sys_update_xml`) |
+| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,594,744 bytes (≈3.43 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`. Verify the digest before uploading. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -277,24 +292,67 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > Post-Import Remediation" → Run Fix Script* executes that record **in the application scope** for the same
 > reason, and fails the same way. The only route measured to work is a background script in scope **Global**.
 >
-> ### The required sequence, in the order it must be performed
+> ### THE PRIMARY PROCEDURE — seven numbered steps, and the only one you should follow
 >
-> Do these four steps in order after the commit. Steps 1-3 come from
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step),
-> where each is recorded with its measured evidence.
+> This is the single authoritative sequence. It is the procedure that was measured to work, it is what
+> `scripts/post_import_remediation.js` documents in its own header ("step 4 and again step 6 of
+> HUMAN_DEPLOYMENT_RECREATE_GUIDE section 5"), and it **does not delete anything by hand**. A destructive
+> alternative exists and is described afterwards as a clearly-labelled fallback; **do not start with it.**
 >
-> | # | Step | Detail | Section |
+> | # | Step | What to do | Where |
 > |---|---|---|---|
-> | 1 | **Force the table rebuild** | Set the session application picker to **x_casemgmt Case Management** (user preference `apps.current_app`), then **REST-DELETE the three `sys_db_object` rows children-first**: `x_casemgmt_case_task`, `x_casemgmt_case_party`, `x_casemgmt_case`. Some return HTTP 500 *maximum execution time exceeded* but **do** succeed — verify by re-querying, not by the status code. Then run the remediation in scope **Global** | §5a |
-> | 2 | **Commit the same Update Set a second time** | Deleting those three rows **cascades away all 26 ACLs**, the seed rows, the demo users and the role grants. Re-upload → preview → commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems because the tables now exist but are empty — set those to `status=ignored`. **Never ignore a collision problem** | §4 again |
-> | 3 | **Run the remediation in Global again** | This is the pass that creates the 27 `sys_security_acl_role` links and flushes the security cache. Without it, 26 ACLs exist with **0** role links, and on this high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
-> | 4 | **Repair the demo data** | Delete the 10 number-less `Demo case …` rows, their orphan tasks and parties, and the dangling `sys_user_grmember` row, then run `scripts/seed_demo_data.js` **in scope** | §5g |
+> | 1 | **Upload** | *System Update Sets → Retrieved Update Sets → Import Update Set from XML*, select the deliverable XML. Check the SHA-256 first (§1) | §4 |
+> | 2 | **Preview** | Run Preview to completion. On a genuinely clean instance the expected result is **0 errors and 0 warnings**. Resolve any error; do **not** ignore a collision | §4 |
+> | 3 | **Commit** | Commit to `state=committed` | §4 |
+> | 4 | **Run the remediation in scope `Global`** — *first pass* | *System Definition → **Scripts - Background***, set **"In scope" = Global**, paste `scripts/post_import_remediation.js`, run. This pass builds the three tables' physical storage, their fields and their choice lists. It does the `sys_db_object` work itself; **you do not delete anything and you do not touch the application picker** | §5a |
+> | 5 | **Commit the same Update Set a second time** | The rebuild in step 4 **cascades away all 26 ACLs**, the seed rows, the demo users and the role grants; a second commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports ~25 `sys_dictionary` collisions from the rows step 4 wrote moments earlier; accepting the remote is correct **for `sys_dictionary` only**, because the package now carries the corrected `display` and `defaultsort` values itself. **Never ignore a collision on any other table** | §4 again |
+> | 6 | **Run the remediation in scope `Global`** — *second pass* | Same invocation as step 4. This is the pass that creates the **27** `sys_security_acl_role` links and flushes the security cache. Without it you have 26 ACLs with **0** role links, and on a high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
+> | 7 | **Repair the demo data** | Delete the 10 number-less `Demo case …` rows, their orphan tasks and parties, and the dangling `sys_user_grmember` row, then run `scripts/seed_demo_data.js` **in scope** (not Global) | §5g |
 >
 > Run the remediation like this — **in `global`, never in scope**:
 >
 > ```bash
 > /tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
 > ```
+>
+> **Steps 4 and 6 are the same command run twice.** That is deliberate, not a typo: the script is idempotent, and
+> the two passes are separated by a commit because the commit is what restores the records the rebuild removed.
+>
+> ### The destructive route is a FALLBACK — preconditions and stop conditions
+>
+> > **⚠️ Do not perform this unless step 4 has actually failed.** It hand-deletes schema rows, and on a shared or
+> > populated instance it can destroy work that is not yours. An earlier revision of this guide presented it as
+> > step 1 of the normal procedure; that was wrong, and the one-command route in step 4 supersedes it.
+>
+> **Preconditions — all four must hold before you begin:**
+>
+> 1. Step 4 has been run and its `SUMMARY` line reports `verified=false` **with `tables_built=0`** — that is, the
+>    script could not build the tables at all. A `verified=false` for any other reason is not grounds for this.
+> 2. You have read the script's own output and confirmed it did **not** stop for its fail-closed reason. The
+>    script refuses to rebuild a table whose storage state it cannot positively determine; if that is why it
+>    stopped, deleting the rows by hand removes exactly the safety check that fired.
+> 3. The instance is yours to break — a personal PDI with no other application and no other agent working in it.
+> 4. You have a current export of anything on the instance you care about.
+>
+> **The fallback itself:** set the session application picker to **x_casemgmt Case Management** (user preference
+> `apps.current_app`), then REST-DELETE the three `sys_db_object` rows **children first** —
+> `x_casemgmt_case_task`, `x_casemgmt_case_party`, `x_casemgmt_case` — then run the remediation in **Global**,
+> then continue at step 5 of the primary procedure. Some deletes return HTTP 500 *maximum execution time
+> exceeded* and nevertheless succeed; verify by re-querying the row, never by the status code.
+>
+> **Stop immediately, and do not continue, if any of these occur:**
+>
+> - A delete returns HTTP 403 or *cross-scope* — the picker is not set, and forcing it another way is not the fix.
+> - Re-querying shows the row still present after two attempts — something is holding it; diagnose, do not retry
+>   in a loop.
+> - Any table **outside** `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party` appears in a delete
+>   URL. Deleting a `sys_db_object` row cascades; the wrong row is unrecoverable without a clone-back.
+> - The subsequent remediation run reports `errors>0` on anything other than the two known
+>   `not allowed in scoped applications` messages.
+>
+> In every one of those cases the correct next move is to stop and read
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step),
+> which records each step with its measured evidence.
 >
 > **Why `global` is mandatory.** `sys_db_object`, `sys_dictionary`, `sys_choice`, `sys_number`,
 > `sys_ws_definition`, `sys_security_acl` and `sys_security_acl_role` are all global tables with cross-scope
@@ -332,7 +390,7 @@ hard-coded `sys_id`.**
 
 ### 5a. Materialize `x_casemgmt_case_task` & `x_casemgmt_case_party` tables + all choices  *(Defect C)*
 
-**MANDATORY MANUAL STEP — this is step 1 of the required sequence above.** The package ships the automation but
+**MANDATORY MANUAL STEP — this is step 4 of the primary procedure above.** The package ships the automation but
 it cannot complete (see the preamble). You must do this yourself — and it is **one command**:
 
 ```bash
@@ -346,11 +404,11 @@ db_object_rows_removed=1|residue=0|reusing_sys_id=yes` per table, then the platf
 then `built|signals=GlideTableDescriptor.isValid=yes,GlideRecord.isValid=yes,TableUtils.tableExists=yes` — ending
 `tables_built=3, fields_created=25, choices_created=24, counters_written=3`.
 
-> **Then go straight to step 2 — commit the Update Set a second time.** Rebuilding the tables **cascades away all
+> **Then go straight to step 5 — commit the Update Set a second time.** Rebuilding the tables **cascades away all
 > 26 ACLs**, the seed rows, the demo users and the role grants, so this run necessarily ends
 > `verified=false … errors=6`, every error being the ACL check (`found 0 x_casemgmt ACLs, expected 26`, and one per
 > role). **That is the expected outcome of step 1, not a failure** — the script is fail-closed and refuses to
-> report success with zero role links. `verified=true` arrives at step 3.
+> report success with zero role links. `verified=true` arrives at step 6.
 
 **Fallback, only if the run reports `db_object_rows_removed=0` or a `tables_indeterminate` count above zero:** set
 the session application picker to **x_casemgmt Case Management** (user preference `apps.current_app`) and
@@ -485,7 +543,7 @@ returns HTTP 404 `{"error":"No case found with that number."}` for an unknown nu
 
 ### 5f. ACL → role link records (27)  *(Defect 9)*
 
-**MANDATORY MANUAL STEP — this is step 3 of the required sequence at the top of §5.** Run the remediation in
+**MANDATORY MANUAL STEP — this is step 6 of the primary procedure at the top of §5.** Run the remediation in
 scope **Global** *after* the second commit:
 
 ```bash
@@ -548,8 +606,15 @@ Run the deliverable's own seed script **in scope** (`scripts/seed_demo_data.js`)
 parties (Person + Organization mix). It resolves all references by `user_name` / `name` / `number`.
 
 ```bash
+# This is step 7 of the primary procedure. Note the scope argument: seeding runs IN SCOPE,
+# unlike the remediation, which must run in Global.
 /tmp/bg.sh servicenow-case-management-poc/scripts/seed_demo_data.js 82b99028936f74320d74d6f88357a5af
 ```
+
+Delete the 10 number-less packaged `Demo case …` rows, their orphan tasks and parties, and the dangling
+`sys_user_grmember` row **before** running it: `ensureCase()` keys on `subject`, so the number-less rows match and
+the script leaves them as they are. The case numbers it allocates come from the instance counter and will not
+match any numbers quoted in this guide.
 
 ---
 
@@ -574,8 +639,9 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 >   write column would let un-ACL'd global code mutate cases. Run anything that writes application data **in
 >   scope** (`sys_scope = x_casemgmt`).
 >
-> **Verify them from inside the application scope instead** (*Scripts - Background*, "In scope" =
-> **x_casemgmt Case Management**), which reads them correctly:
+> **A row-count check from inside the application scope is still worth running**, because it proves the tables
+> hold data and not merely that they answer (*Scripts - Background*, "In scope" =
+> **x_casemgmt Case Management**):
 >
 > ```javascript
 > // In scope = x_casemgmt Case Management
@@ -588,8 +654,8 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 > ```
 >
 > Read the results back from `syslog` (message starts with `GATE1`). A healthy install reports non-zero rows for
-> all three. This is a **pre-existing** condition of the deliverable, not a step you can fix here; it is recorded
-> in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §9.6 E9.
+> all three; the verification instance last reported 11 / 10 / 8. This is an additional confirmation, not a
+> workaround for the old HTTP 403 — that condition is fixed.
 
 The role and scope checks below **do** work over REST, because those are global tables:
 
@@ -601,7 +667,23 @@ for r in x_casemgmt_case_manager x_casemgmt_case_agent x_casemgmt_case_viewer; d
 done
 curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
   "$SN/api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=scope,sys_id"
+
+# The single most informative post-install check: the ACL role links must number EXACTLY 27.
+# 0 means step 6 has not run; anything other than 27 means it has not converged.
+curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+  "$SN/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
+
+# Corroborating counts: 26 ACLs, 7 case Business Rules, and 7 flows all active AND published.
+curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+  "$SN/api/now/table/sys_security_acl?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=name,operation&sysparm_limit=50"
+curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+  "$SN/api/now/table/sys_hub_flow?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=internal_name,active,status&sysparm_limit=20"
 ```
+
+Expected from the last call: seven rows — `general_inquiry_state_machine`, `complaint_state_machine`,
+`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`,
+`validate_resolved_transition`, `validate_closed_transition` — every one `active=true` **and**
+`status=published`. A flow in `draft` enforces nothing.
 
 ### 6.2 Portal endpoints (anonymous path is the real test)
 
@@ -615,9 +697,17 @@ curl -s -H "Content-Type: application/json" -X POST \
 curl -s -w "\nlookup HTTP %{http_code}\n" "$SN/api/x_casemgmt/case_status_lookup?number=CASE9999999"
 ```
 
-Portal UI: `https://dev379024.service-now.com/x_casemgmt_case_portal` (submission + status-lookup pages).
+Portal UI: `https://dev379024.service-now.com/x_casemgmt_case_portal`.
 
-> Remember to delete any smoke-test cases afterward so the demo dataset stays at exactly 10.
+> **The two portal pages render blank — do not treat that as an install error you have caused.** All three
+> routes answer HTTP 200 with no login wall, but the page API returns **`containers: []`** and the pages contain
+> 0 inputs and 0 buttons. Their Service Portal layout records were never authored, which is a packaging defect
+> (an out-of-box page on the same portal renders normally, so the portal and the anonymous path are both fine).
+> The `curl` checks above are therefore the real and only test of the portal contract on this package.
+
+> Remember to delete any smoke-test cases afterward so the demo dataset does not drift. Note that the current
+> census on the verification instance is 11 cases, 10 tasks and 8 parties — 11 rather than 10 because a
+> smoke-test case was left in place as evidence.
 
 ### 6.3 ACL matrix (impersonation `canX` probe — run **global**)
 
@@ -643,6 +733,30 @@ Expected (matches AAP §0.5.6): `MANAGER C/R/W/D = T/T/T/T`; `AGENT = T/F/F/F` (
 
 ---
 
+### 6.4 Run the automated test suite (the strongest single check)
+
+The application ships a 20-test ATF suite that asserts the data model, the whole role × CRUD matrix, every row of
+the transition matrix including the three verbatim blocking messages, and the three portal REST contracts. Running
+it is the fastest way to know the install is sound.
+
+- **Prerequisite, and it is not in the Update Set:** set `sn_atf.runner.enabled = true` (*sys_properties*). It is
+  an instance test-harness setting, deliberately not captured — importing an application should not silently
+  enable test execution on someone's instance. Expect the platform to also flip `sn_atf.schedule.enabled` to
+  `true` as a side effect; that is its own business rule, not a choice.
+- **A browser-attached client runner is required here.** `sn_atf.headless.enabled` is `false` on this instance and
+  could not be enabled, so open `/atf_test_runner.do?sysparm_nostack=true` in a second tab **before** launching
+  the suite and select it under "Pick a Browser". Three of the tests drive a real form.
+- **Run steps 4-7 of the primary procedure first.** Without physical tables and the 27 ACL role links, the suite
+  fails wholesale and tells you nothing about the application.
+- **Expected result: 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180 step results Success**, in
+  roughly 4 minutes, leaving no test records behind. That is the measured verdict of run **`TES0001015`**. An
+  earlier run scored 16 / 4; those four failures were the child-table ACL condition and the three form-level
+  assertions, both since fixed, so a 16 / 4 today means something in the install is incomplete rather than the
+  suite being wrong.
+
+[`ATF_MANUAL_TEST_PLAN.md`](./ATF_MANUAL_TEST_PLAN.md) documents what each test asserts and how to rebuild the
+suite by hand if an instance refuses the serialized records.
+
 ## 7. Quick reference — key identifiers
 
 | Artifact | Identifier |
@@ -665,9 +779,13 @@ Expected (matches AAP §0.5.6): `MANAGER C/R/W/D = T/T/T/T`; `AGENT = T/F/F/F` (
 |---|---|---|
 | `bg.sh` prints `NO_CK` | UI session expired/destroyed | Re-run **Section 3** (form login); `sys_action=sysverb_login` is required |
 | `sys.scripts.do` returns empty body | Basic-auth-only session (no UI session) | Re-run **Section 3** |
-| Preview shows `sys_scope` name-resolution errors | Importing uncorrected XML (Defects A/B) | Use the corrected deliverable XML (single scope record; `application` encoded as scope sys_id) |
-| `case_task` / `case_party` not visible after commit | Commit does not DDL new tables (Defect C) | Run **5a** (direct-build) |
-| New cases get no `CASE…` number | Auto-numbering not firing on direct-built table (Defect E) | Run **5b** |
-| All REST calls return HTTP 400 | `service_id` empty (Defect 7) | Run **5d** |
-| Manager/agent/viewer denied everything | ACL role-links missing (Defect 9) | Run **5f**, then flush security cache |
-| Resolve allowed with open tasks | Flow guards are dead shells (Defect F) | Not remediable here — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` |
+| Preview shows `sys_scope` name-resolution errors | The XML being imported is not the deliverable, or has been edited | Re-download the deliverable and check its SHA-256 against §1. The package carries exactly one application record (`app/sys_app/x_casemgmt_case_management.xml`) and no standalone `sys_scope` artifact — the platform derives the scope from it |
+| `case_task` / `case_party` not visible after commit | Commit does not DDL new tables (Defect C) | Run **5a** — that is step 4 of the primary procedure, not an exception |
+| New cases get no `CASE…` number, or get `CASE1` instead of `CASE0000001` | **Package integrity, not the platform.** Both halves of auto-numbering ship in the package: `default_value = javascript:global.getNextObjNumberPadded();` on the `number` dictionary entry (the `global.` qualifier is mandatory for a scoped table) and `maximum_digits = 7` on the counter | Verify those two values landed, then re-run the remediation in Global — §5b re-asserts both. If they are absent from the *artifacts*, the package is wrong and no amount of instance work fixes it |
+| All REST calls return HTTP 400 | **Package integrity:** `sys_ws_definition.service_id` is the URL path segment and it is empty | The package carries both `service_id` values; verify they committed, then re-run the remediation — §5d re-asserts them. Also confirm the base path is `/api/x_casemgmt/…` |
+| Anonymous REST call returns 401 rather than 201/200/404 | The endpoint's anonymous access flag did not land, or you are hitting the **Table** API instead of the scripted REST path | Only `/api/x_casemgmt/case_submit` and `/api/x_casemgmt/case_status_lookup` are anonymous. The Table API is *not* anonymous and rejecting it is correct behaviour, not a defect |
+| Manager/agent/viewer denied everything | ACL role-links missing (Defect 9) | Run **5f** — step 6 of the primary procedure — then confirm **exactly 27** links, distributed manager 14 / agent 10 / viewer 3 |
+| Resolve allowed with open tasks, or any precondition not blocking | **Check the enforcement chain, in this order.** (1) Are the 7 flows `active=true` and `status=published`? They were measured so; a Draft flow enforces nothing. (2) Is the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** present and active? It is the component that calls the subflow and then issues `gs.addErrorMessage()` + `setAbortAction(true)` — **without it the flows still run but nothing blocks**. (3) Is `CaseTransitionValidator` present? The rule and the flows both call it | The earlier "flow guards are dead shells" (Defect F) diagnosis applied to a previous revision and no longer describes this package — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` for that history |
+| Dashboards open but show no widgets | Packaging: three child table names that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) | Not remediable by installing differently. Fix the artifacts and re-export |
+| A chart is grouped by the wrong field | Packaging: all 8 `sys_report` rows commit with an empty `group_by` | Same — fix `reports/*.xml` and re-export |
+| Portal pages are blank | Packaging: the Service Portal layout records (container / row / column / instance) were never authored | Same. The REST endpoints work and can be used to demonstrate the contract |

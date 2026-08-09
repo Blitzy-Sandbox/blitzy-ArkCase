@@ -238,8 +238,9 @@
     CROSS-DEPENDENCY GRAPH
     ======================
     DEPENDS ON (must load earlier in the Update Set):
-      - ../app/sys_app/x_casemgmt_case_management.xml
-      - ../app/sys_scope/x_casemgmt.xml
+      - ../app/sys_app/x_casemgmt_case_management.xml (the scoped application
+        record - the sole scope authority in this package, so <sys_scope> and
+        <sys_package> both resolve against it)
       - ../tables/x_casemgmt_case.xml                  (parent table)
       - ../dictionary/x_casemgmt_case_assigned_agent.xml
             (defines the reference field used in the user-equality

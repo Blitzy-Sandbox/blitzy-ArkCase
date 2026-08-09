@@ -82,7 +82,7 @@
           at apply time. The text-node value is the same lookup key.
         - The <sys_scope> and <sys_package> fields resolve by
           display_value / source attribute lookup against the scoped
-          application's sys_scope record (../../app/sys_scope/x_casemgmt.xml,
+          application's sys_scope record (../../app/sys_app/x_casemgmt_case_management.xml,
           where <source>x_casemgmt</source>). The text-node value
           "x_casemgmt" is the scope's source key — the canonical project
           convention used by every other scoped artifact in the Update Set.
@@ -90,7 +90,7 @@
       Rule 3 — Scope Binding:
         <sys_scope> binds this assignment record to the scoped application
         whose source attribute is "x_casemgmt" (defined in
-        ../../app/sys_scope/x_casemgmt.xml). The display_value attribute is
+        ../../app/sys_app/x_casemgmt_case_management.xml). The display_value attribute is
         "Case Management" — the human-readable scoped-app name. The
         <sys_package> follows the same pattern with the source attribute
         pointing at the scope source name. Although sys_user_has_role is
@@ -153,9 +153,9 @@
     Cross-dependencies (per AAP Section 0.5.2):
 
       This grant DEPENDS ON (must be loaded BEFORE this record):
-        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped app)
-        - ../../app/sys_scope/x_casemgmt.xml (scope record - resolves
-          sys_scope and sys_package source="x_casemgmt")
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
         - ../users/sys_user_x_casemgmt_demo_viewer.xml (the demo viewer
           user — resolves <user> by user_name lookup)
         - ../../roles/sys_user_role_x_casemgmt_case_viewer.xml (the scoped

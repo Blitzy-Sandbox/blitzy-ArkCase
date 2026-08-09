@@ -171,7 +171,7 @@
         collision.
         The <sys_scope> and <sys_package> reference fields resolve by
         display_value/source attributes against the scoped application's
-        sys_scope record (../../app/sys_scope/x_casemgmt.xml whose
+        sys_scope record (../../app/sys_app/x_casemgmt_case_management.xml whose
         <source> field equals "x_casemgmt") — NOT by hardcoded sys_id
         literals.
         NO <manager>, <department>, <location>, <company> reference
@@ -190,7 +190,7 @@
       Rule 4 — Scope binding:
         <sys_scope> binds this user record to the scoped application
         whose sys_scope.source is `x_casemgmt` (defined in
-        ../../app/sys_scope/x_casemgmt.xml). The display_value attribute
+        ../../app/sys_app/x_casemgmt_case_management.xml). The display_value attribute
         is "Case Management" (matching the sys_app's short_description /
         the human-readable name of the application). The <sys_package>
         follows the same pattern with the source attribute pointing at

@@ -192,7 +192,7 @@
     across re-imports onto fresh PDIs.
 
     Cross-reference targets used by this file:
-      - <sys_scope>x_casemgmt</sys_scope>             -> ../app/sys_scope/x_casemgmt.xml
+      - <sys_scope>x_casemgmt</sys_scope>             -> ../app/sys_app/x_casemgmt_case_management.xml
       - <sys_package source="x_casemgmt">x_casemgmt</> -> ../app/sys_app/x_casemgmt_case_management.xml
       - <canvas_id>x_casemgmt_agent_workspace_canvas</> -> record [1] in this file
       - <dashboard>x_casemgmt_agent_workspace</>      -> record [2] in this file

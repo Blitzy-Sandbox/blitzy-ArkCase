@@ -177,8 +177,9 @@
                                                         (field this rule reads via
                                                          current.assigned_group and
                                                          previous.assigned_group)
-            - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
-            - ../app/sys_scope/x_casemgmt.xml           (scope record)
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
             - ../script_includes/x_casemgmt_CaseTransitionValidator.xml
               (CRITICAL - this BR calls
                new x_casemgmt.CaseTransitionValidator().isAgentInGroup();

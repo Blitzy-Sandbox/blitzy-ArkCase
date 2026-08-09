@@ -183,10 +183,12 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       This record MUST load AFTER:
-        - ../app/sys_scope/x_casemgmt.xml (scope record - must exist
-          before any scoped record can resolve <sys_scope>)
-        - ../app/sys_app/x_casemgmt_case_management.xml (application
-          record - <sys_package> resolves by source name to this)
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - it is both the scope authority this
+          package ships and the target that <sys_scope> and <sys_package>
+          resolve to by source name, so it must exist before any scoped
+          record. There is no standalone sys_scope artifact: it was
+          removed as Defect A)
         - ../tables/x_casemgmt_case_party.xml (target table - <table>
           element references it by name; the parent table record carries
           the <number_ref> that binds to THIS record)

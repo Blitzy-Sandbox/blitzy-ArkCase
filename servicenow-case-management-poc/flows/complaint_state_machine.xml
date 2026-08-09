@@ -50,7 +50,7 @@
         Flow Designer's own loader (GET /api/now/processflow/flow/<sys_id>) returns HTTP 200
         with errorCode 0 for this record, and the graph counts it reports match the
         structure below. The state-machine gates these flows enforce were exercised on the
-        live case form for both case types; see ../../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md
+        live case form for both case types; see ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md
         section 3 for the recorded results.
 -->
 <record_update sys_domain="global" table="sys_hub_flow">
@@ -66,7 +66,7 @@
         <category/>
         <copied_from>082bd325936e0710830ef82bdd03d60b</copied_from>
         <copied_from_name>General Inquiry State Machine</copied_from_name>
-        <description>Parent state-machine flow for cases of type General Inquiry. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
+        <description>Parent state-machine flow for cases of type Complaint. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
         <display_name_after_preview/>
         <flow_priority>MEDIUM</flow_priority>
         <generation_source/>
@@ -649,7 +649,7 @@
         <category/>
         <copied_from>082bd325936e0710830ef82bdd03d60b</copied_from>
         <copied_from_name/>
-        <description>Parent state-machine flow for cases of type General Inquiry. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
+        <description>Parent state-machine flow for cases of type Complaint. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
         <flow_priority>MEDIUM</flow_priority>
         <internal_name>complaint_state_machine</internal_name>
         <label_cache>[{"name":"Updated_1.current.sys_id","label":"Trigger - Record Updated➛Case Record➛Sys ID","reference":"","reference_display":"Sys ID","type":"GUID","base_type":"GUID","parent_table_name":"x_casemgmt_case","column_name":"sys_id","usedInstances":{"ec901317-eaed-48cd-8d42-3128ab994d57":["case_sys_id"],"b9adfeda-4209-4bf0-90c7-1a957bb2eb69":["case_sys_id"],"3d451134-fd04-4128-8ffa-bd9da6a93b96":["case_sys_id"],"d80a88f5-20f8-49b2-a53d-9e9800fd54da":["case_sys_id"],"39749dac-77f6-4f0f-9d2a-1348771728fc":["case_sys_id"]}}]</label_cache>

@@ -174,7 +174,7 @@
           sys_update_name = sys_ws_definition_x_casemgmt_case_submit).
         - <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
           resolves against the scope record's <name>x_casemgmt</name>
-          (per ../../app/sys_scope/x_casemgmt.xml).
+          (per ../../app/sys_app/x_casemgmt_case_management.xml).
         - <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
           resolves against the application record's name (per
           ../../app/sys_app/x_casemgmt_case_management.xml).
@@ -266,8 +266,9 @@
         - ../../business_rules/x_casemgmt_set_opened_date.xml
           (transitively, since this BR stamps opened_date during the
           Script Include's insert pipeline)
-        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped app)
-        - ../../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
 
       THIS operation record MUST be loaded BEFORE:
         - ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml

@@ -22,25 +22,34 @@
     Critical behaviors that depend on this field (AAP Sections 0.4.3, 0.4.4,
     0.5.6, 0.5.7):
 
-      1. RELATED-LIST RENDERING ON THE CASE FORM
-         (parent table ../tables/x_casemgmt_case.xml automatic form layout
-          per AAP Section 0.4.4 "Internal user UI" requirements)
-         When a user opens a case record, ServiceNow's auto-generated form
-         layout includes a Related List for x_casemgmt_case_party filtered
-         by `case = current.sys_id`. AAP Section 0.4.4 explicitly requires:
-         "configures Related Lists on the case form for both `case_task`
-         (parent = current case) and `case_party` (parent = current case)".
-         This relationship is materialized SOLELY through this dictionary
-         entry's `<reference>` element pointing at `x_casemgmt_case` - the
-         platform's reverse-relationship engine inspects every reference
-         field on every child table and synthesizes an inbound related
-         list on the parent. Without `<reference>x_casemgmt_case</reference>`
-         set here, the case form would have no Related List of parties,
-         and the AAP-mandated case-people / case-organizations rendering
-         (semantic-equivalent of ArkCase's Cases.PeopleController and
-         Cases.OrganizationsController AngularJS controllers in
-         acm-standard-applications/arkcase/src/main/webapp/resources/
-         modules/cases/services/) would have no data source.
+      1. RELATED-LIST ELIGIBILITY ON THE CASE FORM - NECESSARY, NOT
+         SUFFICIENT, AND CURRENTLY NOT SATISFIED
+         (AAP Section 0.4.4 "Internal user UI" requirement: "configures
+          Related Lists on the case form for both `case_task` (parent =
+          current case) and `case_party` (parent = current case)")
+         This entry's `<reference>x_casemgmt_case</reference>` element is
+         what makes a parties related list POSSIBLE: it registers the
+         inbound relationship the platform offers when a form's related
+         lists are configured. It does NOT by itself put a related list on
+         the case form. A related list appears only when the parent form's
+         related-list configuration (`sys_ui_related_list` plus its
+         `sys_ui_related_list_entry` rows) names it, and THAT
+         CONFIGURATION WAS NEVER AUTHORED for this POC.
+         Measured on the verification instance: `sys_ui_related_list` holds
+         zero rows for `x_casemgmt_case` (and zero for any `x_casemgmt`
+         table) against 1545 rows instance-wide, and on a real case record
+         the form's `#related_lists_wrapper` element renders at a bounding
+         height of 0 CSS pixels with class `tabs_disabled` and no tabs - so
+         a user cannot see a case's parties from the case form even though
+         the party rows exist. The AAP-mandated case-people /
+         case-organizations rendering (semantic-equivalent of ArkCase's
+         Cases.PeopleController and Cases.OrganizationsController AngularJS
+         controllers under acm-standard-applications/arkcase) is therefore
+         an open gap, tracked in
+         ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md. Removing
+         `<reference>` here would make the gap unfixable; keeping it means
+         the gap closes as soon as the related-list configuration is
+         authored and captured.
 
       2. ACL "ASSIGNED ONLY" CASCADE FOR CASE_AGENT
          (../acl/x_casemgmt_case_party_*.xml)
@@ -442,7 +451,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Case</column_label>
-        <comments>Mandatory reference to the parent case (x_casemgmt_case). The single most important field on the x_casemgmt_case_party table - it ties every party row (Person or Organization) back to its parent case. Replaces ArkCase PersonAssociation.parentId/parentType/parentTitle polymorphic parent linkage (and the equivalent on PersonOrganizationAssociation); in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Powers the case-form Related List rendering (AAP Section 0.4.4) so that case parties show under the case form. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_party via dot-walk current.case.assigned_agent / current.case.assigned_group (AAP Section 0.5.6). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child parties (POC-safe default; manual cleanup required). Seed data resolves the parent-case sys_id by lookup of x_casemgmt_case.number via ../scripts/seed_demo_data.js (no hardcoded sys_ids, per AAP Section 0.7.2).</comments>
+        <comments>Mandatory reference to the parent case (x_casemgmt_case). The single most important field on the x_casemgmt_case_party table - it ties every party row (Person or Organization) back to its parent case. Replaces ArkCase PersonAssociation.parentId/parentType/parentTitle polymorphic parent linkage (and the equivalent on PersonOrganizationAssociation); in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Makes a case-form Related List of parties POSSIBLE (AAP Section 0.4.4) but does not create one: no sys_ui_related_list configuration was authored for x_casemgmt_case, so no parties related list renders on the case form today. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_party via the accessor current.getElement('case') to reach the parent case's assigned_agent / assigned_group (a literal current.case dot-walk cannot compile - 'case' is a JavaScript reserved word) (AAP Section 0.5.6). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child parties (POC-safe default; manual cleanup required). Seed data resolves the parent-case sys_id by lookup of x_casemgmt_case.number via ../scripts/seed_demo_data.js (no hardcoded sys_ids, per AAP Section 0.7.2).</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>

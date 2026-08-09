@@ -1027,7 +1027,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Closed Date</column_label>
-        <comments>DateTime auto-set when status transitions Resolved-&gt;Closed via ../business_rules/x_casemgmt_set_closed_date.xml and ../flows/sub_flows/validate_closed_transition.xml. Read-only from user perspective. Used by ../reports/x_casemgmt_avg_time_to_close.xml. Replaces ArkCase CaseFile.closed (Date with @Temporal(TIMESTAMP)).</comments>
+        <comments>DateTime stamped on the Resolved-&gt;Closed transition by exactly one writer: the order-500 before-update business rule ../business_rules/x_casemgmt_set_closed_date.xml. The guard subflow ../flows/sub_flows/validate_closed_transition.xml writes nothing - it returns a verdict that the order-250 business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml turns into an abort. Read-only from user perspective. Used by ../reports/x_casemgmt_avg_time_to_close.xml. Replaces ArkCase CaseFile.closed (Date with @Temporal(TIMESTAMP)).</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -1482,7 +1482,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Pending Reason</column_label>
-        <comments>Internal supporting Choice field set by flows/sub_flows/validate_pending_transition.xml when status transitions to Pending; cleared by business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml on Pending-&gt;In Progress. Values: Awaiting Info, Awaiting Third Party, Other.</comments>
+        <comments>Internal supporting Choice field supplied by the "Set Pending" UI Action ui_action/x_casemgmt_case_set_pending.xml, which prompts for the reason and writes it on the In Progress-&gt;Pending transition; cleared by business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml on Pending-&gt;In Progress. The guard subflow flows/sub_flows/validate_pending_transition.xml has no precondition for this transition and writes nothing. Values: Awaiting Info, Awaiting Third Party, Other.</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -1664,7 +1664,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Case</column_label>
-        <comments>Mandatory reference to the parent case (x_casemgmt_case). Queried by the case state-machine flow's "all tasks closed" guard for the In Progress -&gt; Resolved transition (../flows/sub_flows/validate_resolved_transition.xml, ../script_includes/x_casemgmt_CaseTransitionValidator.xml) via addQuery('case', current.sys_id).addQuery('status', '!=', 'Closed') - if any rows are returned the flow throws the literal blocking error "All tasks must be closed before resolving this case." (AAP Section 0.7.4 verbatim). Replaces ArkCase AcmTask.attachedToObjectId/attachedToObjectType polymorphic parent linkage; in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_task via dot-walk current.case.assigned_agent / current.case.assigned_group. Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child tasks (POC-safe default; manual cleanup required).</comments>
+        <comments>Mandatory reference to the parent case (x_casemgmt_case). Queried by the "all tasks closed" guard subflow for the In Progress -&gt; Resolved transition (../flows/sub_flows/validate_resolved_transition.xml, which delegates to ../script_includes/x_casemgmt_CaseTransitionValidator.xml) via addQuery('case', current.sys_id).addQuery('status', '!=', 'Closed') - if any rows are returned the subflow returns a not-ok verdict carrying the literal text "All tasks must be closed before resolving this case." (AAP Section 0.7.4 verbatim), and the order-250 before-update business rule business_rules/x_casemgmt_enforce_forward_transitions.xml turns that verdict into gs.addErrorMessage() + setAbortAction(true) so the message appears on the form and the save is blocked. Replaces ArkCase AcmTask.attachedToObjectId/attachedToObjectType polymorphic parent linkage; in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_task via the accessor current.getElement('case') to reach the parent case's assigned_agent / assigned_group (a literal current.case dot-walk cannot compile - 'case' is a JavaScript reserved word). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child tasks (POC-safe default; manual cleanup required).</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -2210,7 +2210,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Case</column_label>
-        <comments>Mandatory reference to the parent case (x_casemgmt_case). The single most important field on the x_casemgmt_case_party table - it ties every party row (Person or Organization) back to its parent case. Replaces ArkCase PersonAssociation.parentId/parentType/parentTitle polymorphic parent linkage (and the equivalent on PersonOrganizationAssociation); in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Powers the case-form Related List rendering (AAP Section 0.4.4) so that case parties show under the case form. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_party via dot-walk current.case.assigned_agent / current.case.assigned_group (AAP Section 0.5.6). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child parties (POC-safe default; manual cleanup required). Seed data resolves the parent-case sys_id by lookup of x_casemgmt_case.number via ../scripts/seed_demo_data.js (no hardcoded sys_ids, per AAP Section 0.7.2).</comments>
+        <comments>Mandatory reference to the parent case (x_casemgmt_case). The single most important field on the x_casemgmt_case_party table - it ties every party row (Person or Organization) back to its parent case. Replaces ArkCase PersonAssociation.parentId/parentType/parentTitle polymorphic parent linkage (and the equivalent on PersonOrganizationAssociation); in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Makes a case-form Related List of parties POSSIBLE (AAP Section 0.4.4) but does not create one: no sys_ui_related_list configuration was authored for x_casemgmt_case, so no parties related list renders on the case form today. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_party via the accessor current.getElement('case') to reach the parent case's assigned_agent / assigned_group (a literal current.case dot-walk cannot compile - 'case' is a JavaScript reserved word) (AAP Section 0.5.6). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child parties (POC-safe default; manual cleanup required). Seed data resolves the parent-case sys_id by lookup of x_casemgmt_case.number via ../scripts/seed_demo_data.js (no hardcoded sys_ids, per AAP Section 0.7.2).</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -14329,7 +14329,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <category/>
         <copied_from>082bd325936e0710830ef82bdd03d60b</copied_from>
         <copied_from_name>General Inquiry State Machine</copied_from_name>
-        <description>Parent state-machine flow for cases of type General Inquiry. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
+        <description>Parent state-machine flow for cases of type Complaint. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
         <display_name_after_preview/>
         <flow_priority>MEDIUM</flow_priority>
         <generation_source/>
@@ -14912,7 +14912,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <category/>
         <copied_from>082bd325936e0710830ef82bdd03d60b</copied_from>
         <copied_from_name/>
-        <description>Parent state-machine flow for cases of type General Inquiry. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
+        <description>Parent state-machine flow for cases of type Complaint. Triggered when x_casemgmt_case is updated and status changes; invokes the shared validation subflows, which delegate to x_casemgmt.CaseTransitionValidator.</description>
         <flow_priority>MEDIUM</flow_priority>
         <internal_name>complaint_state_machine</internal_name>
         <label_cache>[{"name":"Updated_1.current.sys_id","label":"Trigger - Record Updated➛Case Record➛Sys ID","reference":"","reference_display":"Sys ID","type":"GUID","base_type":"GUID","parent_table_name":"x_casemgmt_case","column_name":"sys_id","usedInstances":{"ec901317-eaed-48cd-8d42-3128ab994d57":["case_sys_id"],"b9adfeda-4209-4bf0-90c7-1a957bb2eb69":["case_sys_id"],"3d451134-fd04-4128-8ffa-bd9da6a93b96":["case_sys_id"],"d80a88f5-20f8-49b2-a53d-9e9800fd54da":["case_sys_id"],"39749dac-77f6-4f0f-9d2a-1348771728fc":["case_sys_id"]}}]</label_cache>
@@ -19822,7 +19822,7 @@ function serverSetPending() {
  *      `errors=121`, all 121 being those two SecurityExceptions.
  *
  *   AN AUTO-EXECUTE TRIGGER WAS BUILT AND HAS BEEN REMOVED. An earlier revision
- *   also shipped scripts/sys_script_x_casemgmt_post_import_bootstrap.xml - a
+ *   also shipped a sys_script_x_casemgmt_post_import_bootstrap.xml artifact - a
  *   global after-update Business Rule on `sys_remote_update_set`, condition
  *   `current.state.changesTo('committed')`, which resolved the Fix Script by name
  *   and dispatched it with `GlideScopedEvaluator`. It was measured FIRING

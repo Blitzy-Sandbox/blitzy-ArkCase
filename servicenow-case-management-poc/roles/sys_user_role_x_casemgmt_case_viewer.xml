@@ -92,7 +92,7 @@
 
     Update Set ordering (AAP Section 0.5.2):
       - The scope record (../app/sys_app/x_casemgmt_case_management.xml and
-        ../app/sys_scope/x_casemgmt.xml) MUST be loaded BEFORE this role
+        ../app/sys_app/x_casemgmt_case_management.xml) MUST be loaded BEFORE this role
         record (since `sys_scope` and `sys_package` reference the scope by
         source attribute).
       - This role record MUST be loaded BEFORE all ACLs in ../acl/ that

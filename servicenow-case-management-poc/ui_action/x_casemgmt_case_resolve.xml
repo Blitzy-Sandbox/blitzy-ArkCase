@@ -427,10 +427,9 @@
               (the manager role referenced by <roles> and condition)
             - ../roles/sys_user_role_x_casemgmt_case_agent.xml
               (the agent role referenced by <roles> and condition)
-            - ../app/sys_app/x_casemgmt_case_management.xml
-              (the scoped application)
-            - ../app/sys_scope/x_casemgmt.xml
-              (the scope record)
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
 
         And BEFORE:
             - ../seed-data/cases/x_casemgmt_case_demo_05.xml

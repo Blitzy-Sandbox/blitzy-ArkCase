@@ -97,18 +97,25 @@
         empty `pending_reason`. Only the Pending status implies a populated
         value, and that conditionality is enforced not by the dictionary
         but by:
-          * ../flows/sub_flows/validate_pending_transition.xml (sets the
-            field as part of the In Progress -> Pending transition flow,
-            which is the ONLY pathway by which a case can enter Pending),
+          * ../ui_action/x_casemgmt_case_set_pending.xml (the "Set Pending"
+            UI Action - the ONLY pathway by which a case enters Pending. It
+            prompts the operator for one of the three allowed Choice labels,
+            writes it with `g_form.setValue('pending_reason', reason)`, and
+            its server-side half re-validates the submitted value before the
+            save completes. This UI Action is the sole supplier of the
+            value),
           * ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress
             .xml (clears the field on Pending -> In Progress transition).
         Per AAP Section 0.5.5 the In Progress -> Pending transition has
-        no required-condition gate ("None; sets pending_reason"), but the
-        flow itself prompts the user for the reason before completing the
-        transition; the prompted value is then written to this column.
-        The mandatory=false dictionary configuration is what allows the
-        column to remain empty for all other statuses without violating
-        platform-level validation on insert/update.
+        no required-condition gate ("None; sets pending_reason"), and the
+        delivered implementation matches that exactly:
+        ../flows/sub_flows/validate_pending_transition.xml is a guard
+        subflow with NO precondition to evaluate and it does NOT prompt for
+        or write this column - it simply returns an ok verdict. Capturing
+        the reason is a side effect of the UI Action, not a gate enforced by
+        the flow. The mandatory=false dictionary configuration is what
+        allows the column to remain empty for all other statuses without
+        violating platform-level validation on insert/update.
       - read_only=false: an internal user (case_manager or assigned
         case_agent under AAP Section 0.5.6 "Assigned only" condition)
         editing a Pending case may correct an erroneous reason or update
@@ -205,7 +212,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Pending Reason</column_label>
-        <comments>Internal supporting Choice field set by flows/sub_flows/validate_pending_transition.xml when status transitions to Pending; cleared by business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml on Pending-&gt;In Progress. Values: Awaiting Info, Awaiting Third Party, Other.</comments>
+        <comments>Internal supporting Choice field supplied by the "Set Pending" UI Action ui_action/x_casemgmt_case_set_pending.xml, which prompts for the reason and writes it on the In Progress-&gt;Pending transition; cleared by business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml on Pending-&gt;In Progress. The guard subflow flows/sub_flows/validate_pending_transition.xml has no precondition for this transition and writes nothing. Values: Awaiting Info, Awaiting Third Party, Other.</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>

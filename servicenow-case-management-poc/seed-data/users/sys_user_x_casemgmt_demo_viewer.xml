@@ -104,7 +104,7 @@
       Rule 4 — Scope binding:
         <sys_scope> binds this user record to the scoped application
         whose sys_scope.source is `x_casemgmt` (defined in
-        ../../app/sys_scope/x_casemgmt.xml). The display_value attribute
+        ../../app/sys_app/x_casemgmt_case_management.xml). The display_value attribute
         is "Case Management". The <sys_package> follows the same pattern
         with the source attribute pointing at the scope source name.
         This matches the convention used by every other scoped artifact

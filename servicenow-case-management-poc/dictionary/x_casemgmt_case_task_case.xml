@@ -45,22 +45,28 @@
          resolve correctly when the parent case's sys_id is passed as
          the right-hand-side filter value.
 
-      2. RELATED-LIST RENDERING ON THE CASE FORM
-         (parent table ../tables/x_casemgmt_case.xml automatic form layout
-          per AAP Section 0.4.4 "Internal user UI" requirements)
-         When a user opens a case record, ServiceNow's auto-generated
-         form layout includes a Related List for x_casemgmt_case_task
-         filtered by `case = current.sys_id`. This relationship is
-         materialized SOLELY through this dictionary entry's `<reference>`
-         element pointing at `x_casemgmt_case` - the platform's reverse-
-         relationship engine inspects every reference field on every
-         child table and synthesizes an inbound related list on the
-         parent. Without `<reference>x_casemgmt_case</reference>` set
-         here, the case form would have no Related List of tasks, and
-         the AAP Section 0.4.4 internal-UI requirement ("configures
-         Related Lists on the case form for both `case_task` (parent =
-         current case) and `case_party` (parent = current case)") would
-         fail.
+      2. RELATED-LIST ELIGIBILITY ON THE CASE FORM - NECESSARY, NOT
+         SUFFICIENT, AND CURRENTLY NOT SATISFIED
+         (AAP Section 0.4.4 "Internal user UI" requirement: "configures
+          Related Lists on the case form for both `case_task` (parent =
+          current case) and `case_party` (parent = current case)")
+         This entry's `<reference>x_casemgmt_case</reference>` element
+         registers the inbound relationship that makes a tasks related
+         list POSSIBLE on the case form. It does NOT create one. A related
+         list renders only when the parent form's related-list
+         configuration (`sys_ui_related_list` plus its
+         `sys_ui_related_list_entry` rows) names it, and THAT
+         CONFIGURATION WAS NEVER AUTHORED for this POC.
+         Measured on the verification instance: `sys_ui_related_list` holds
+         zero rows for `x_casemgmt_case` (and zero for any `x_casemgmt`
+         table) against 1545 rows instance-wide, and on a real case record
+         the form's `#related_lists_wrapper` renders at a bounding height
+         of 0 CSS pixels with class `tabs_disabled` and no tabs - so a user
+         cannot see a case's tasks from the case form even though the task
+         rows exist. This is an open gap tracked in
+         ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md; keeping `<reference>`
+         here is what allows it to be closed by authoring and capturing the
+         related-list configuration.
 
       3. ACL "ASSIGNED ONLY" CASCADE FOR CASE_AGENT
          (../acl/x_casemgmt_case_task_*.xml)
@@ -228,12 +234,13 @@
         bulk-import of headless tasks, etc.), so a hard mandatory flag
         produces zero false-positive rejections.
       - read_only=false: case_manager and case_agent both edit this
-        field directly when creating tasks under a case. The
-        auto-generated New Task form on the case's Related List
-        pre-populates the `case` reference with the parent case's
-        sys_id, but the field remains user-editable in case the user
-        opens the standalone task list and chooses to associate the
-        new task with a different case. Field-level write access is
+        field directly when creating tasks under a case. Once a related
+        list is configured on the case form (see item 2 above - not
+        authored today), its New button pre-populates the `case`
+        reference with the parent case's sys_id; until then the field is
+        populated by the user from the standalone task list. Either way
+        the field remains user-editable, so a task can be associated
+        with a different case. Field-level write access is
         governed by the table-level ACLs at
         ../acl/x_casemgmt_case_task_*.xml (no separate field-level ACL
         is needed for `case` since AAP Section 0.5.6 enumerates the
@@ -369,8 +376,14 @@
             "all tasks closed" gate; the subflow performs:
                 addQuery('case', current.sys_id)
                   .addQuery('status', '!=', 'Closed')
-            and throws "All tasks must be closed before resolving this
-            case." if any rows are returned)
+            and, if any rows are returned, RETURNS A NOT-OK VERDICT whose
+            error text is "All tasks must be closed before resolving this
+            case." The subflow does not surface that text itself: the
+            order-250 before-update business rule
+            ../business_rules/x_casemgmt_enforce_forward_transitions.xml
+            runs the subflow synchronously and turns a not-ok verdict into
+            gs.addErrorMessage() + setAbortAction(true), which is what makes
+            the message appear on the form and blocks the save)
           * ../flows/general_inquiry_state_machine.xml (the parent flow
             for type=General Inquiry that calls
             validate_resolved_transition)
@@ -412,7 +425,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Case</column_label>
-        <comments>Mandatory reference to the parent case (x_casemgmt_case). Queried by the case state-machine flow's "all tasks closed" guard for the In Progress -&gt; Resolved transition (../flows/sub_flows/validate_resolved_transition.xml, ../script_includes/x_casemgmt_CaseTransitionValidator.xml) via addQuery('case', current.sys_id).addQuery('status', '!=', 'Closed') - if any rows are returned the flow throws the literal blocking error "All tasks must be closed before resolving this case." (AAP Section 0.7.4 verbatim). Replaces ArkCase AcmTask.attachedToObjectId/attachedToObjectType polymorphic parent linkage; in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_task via dot-walk current.case.assigned_agent / current.case.assigned_group. Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child tasks (POC-safe default; manual cleanup required).</comments>
+        <comments>Mandatory reference to the parent case (x_casemgmt_case). Queried by the "all tasks closed" guard subflow for the In Progress -&gt; Resolved transition (../flows/sub_flows/validate_resolved_transition.xml, which delegates to ../script_includes/x_casemgmt_CaseTransitionValidator.xml) via addQuery('case', current.sys_id).addQuery('status', '!=', 'Closed') - if any rows are returned the subflow returns a not-ok verdict carrying the literal text "All tasks must be closed before resolving this case." (AAP Section 0.7.4 verbatim), and the order-250 before-update business rule business_rules/x_casemgmt_enforce_forward_transitions.xml turns that verdict into gs.addErrorMessage() + setAbortAction(true) so the message appears on the form and the save is blocked. Replaces ArkCase AcmTask.attachedToObjectId/attachedToObjectType polymorphic parent linkage; in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_task via the accessor current.getElement('case') to reach the parent case's assigned_agent / assigned_group (a literal current.case dot-walk cannot compile - 'case' is a JavaScript reserved word). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child tasks (POC-safe default; manual cleanup required).</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>

@@ -6,6 +6,15 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
+> **Status of the zero-preview-error requirement stated above.** It has been met — on an **earlier 916-block
+> revision** of the deliverable (3,448,009 bytes, SHA-256 `32a064d6…`), which uploaded, previewed with **0 errors
+> and 0 warnings** on a genuine clean slate, and committed. **The bytes that currently ship are different** —
+> 913 blocks, **3,594,744 bytes**, SHA-256
+> `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7` — and this procedure has **not** been run
+> against them. Running it, and recording the preview problem count, is the first open item in
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10.0](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Verify the digest before
+> you upload, so you know which artifact you are testing.
+
 ## Pre-Deployment Checklist
 
 The following prerequisites MUST hold before starting the export step. They align with AAP Section 0.7.2 (Pre-build instance verification) and Section 0.7.1 (Round-trip-verify rule). If any item below is unchecked, do NOT proceed — resolve the underlying issue first, then re-run this checklist.
@@ -13,11 +22,11 @@ The following prerequisites MUST hold before starting the export step. They alig
 - Source PDI is accessible and admin login succeeds at `[instance URL]`. If login fails, stop and report — do not proceed.
 - Validation Gates 1–6 have all passed on the source PDI (see [`validation-gates.md`](./validation-gates.md)).
 - All seed data has been committed via the seed script in [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
-- Both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
-- Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references. **Known failure on the verification instance:** both `pa_dashboards` records commit, but the tab child inside each composite block is serialized as `<pa_tab>` while the table on this release is `pa_tabs`, so the commit log carries two `Table 'pa_tab' does not exist` errors, no `pa_m2m_dashboard_tabs` row is created and neither dashboard can render. This item therefore cannot be checked there until the element is renamed. The 8 backing `sys_report` records do commit and are backed by populated tables. See [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.6](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
-- Portal pages submit + lookup correctly on the source PDI: the submission page returns an auto-generated case number in `CASE0000001` format; the lookup page returns `status`/`subject`/`opened_date` for valid case numbers and the verbatim text `"No case found with that number."` for invalid ones.
+- All 7 Flow Designer flows are **Active** *and* **Published** (not Draft) — the 2 parent flows `general_inquiry_state_machine` and `complaint_state_machine` and the 5 `validate_*_transition` subflows. Confirm both columns: a flow that is active but unpublished does not enforce. Equally important, confirm the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** is present and active — it is what converts a subflow's refusal into a blocking form error, and without it the flows run but nothing blocks.
+- Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references. **This item cannot be checked on the verification instance and is a known failure.** Both `pa_dashboards` records commit and open, but each renders **0 tabs and 0 widgets** with the platform's empty state, "Add widgets using the widget picker." Each composite block names **three child tables that do not exist on this release** — `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8 widget placements and the role grants are dropped on commit. Renaming one element is **not** sufficient; supplying a tab was tested and the dashboards stayed blank. Separately, all 8 `sys_report` records commit with an **empty `group_by`** although the artifacts specify one, so the charts would not aggregate as designed even once placed. See [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5 and §0.6](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+- Portal submission and lookup behave correctly on the source PDI. **On the verification instance this holds at the REST layer only, and the two portal pages render blank** (the page API returns `containers: []`; their Service Portal layout records were never authored). Verify the contract with the endpoints directly: anonymous `POST /api/x_casemgmt/case_submit` returns **201** with an auto-generated number in `CASE0000001` format, `GET /api/x_casemgmt/case_status_lookup?number=<valid>` returns exactly `status` / `subject` / `opened_date`, and an unknown number returns **404** with the verbatim text `No case found with that number.`
 - No hard-coded `sys_id` literals exist in any Update Set artifact. Search via Studio → Find: regex `[a-f0-9]{32}` across the scoped application; zero matches inside flow scripts, ACL conditions, business rules, script includes, scripted REST handlers, UI policies, UI actions, and seed records.
-- All artifacts are in scope `x_casemgmt` (no global-scope writes). Verify by filtering `sys_app=x_casemgmt Case Management` on every record type listed in the [Step 1](#step-1-export-the-update-set) artifact inventory.
+- All artifacts are in scope `x_casemgmt`, with **exactly one disclosed and approved exception** — the installer Fix Script `x_casemgmt Post-Import Remediation`, which is authored **global** because the `GlideTableDescriptor` and `GlideSecurityManager` calls it needs are refused in scoped execution. See the Rules Compliance note at the end of this document for the full rationale. Verify by filtering `sys_app=x_casemgmt Case Management` on every record type listed in the [Step 1](#step-1-export-the-update-set) artifact inventory; the Fix Script is the only record expected to differ, and global tables must show **data** inserts only, never schema changes.
 - The current Update Set (top-right Update Set picker) is the scoped application Update Set, not the Default or another in-flight set. All in-progress edits since the last export must be on this Update Set.
 - The browser is signed in as an admin user on the source PDI, with permission to mark Update Sets Complete and to export them.
 
@@ -31,15 +40,19 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
 2. Locate the Update Set whose application matches the scoped application (filter `Application = x_casemgmt Case Management`). If multiple Update Sets exist for this application, identify the one containing every artifact enumerated below — there should be exactly one.
 3. Confirm the Update Set contains the expected artifacts. The inventory below mirrors the directory layout in AAP Section 0.4.1 and the file-by-file transformation map in AAP Section 0.5.1. A missing artifact at this stage means the export will fail Step 2 (preview).
 
-   - **1 sys_app + 1 sys_scope record** — the scoped-application metadata records.
+   - **1 sys_app record** — `app/sys_app/x_casemgmt_case_management.xml`. There is deliberately **no standalone `sys_scope` artifact**: the platform derives the `sys_scope` row from the application record on commit, so shipping one would duplicate it. Earlier revisions of this inventory listed "1 sys_app + 1 sys_scope"; that artifact was removed.
    - **3 sys_db_object table records** — `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
    - **All sys_dictionary records for the 25 fields total (14 + 6 + 5)** — covering every field on every custom table per [`data-model.md`](./data-model.md). The case table contributes 12 user-prompt fields plus a `pending_reason` choice field plus a `duration_to_close` virtual Function Field (14 total); the case_task table contributes 6 fields; the case_party table contributes 5 fields.
    - **All sys_choice records for every Choice field** — `case.type`, `case.status`, `case.priority`, `case.pending_reason`, `case_task.type`, `case_task.status`, `case_party.party_type`.
    - **3 sys_user_role records** — `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`.
    - **All sys_security_acl records** — one per role × table × CRUD combination plus field-level ACLs on `assigned_group` and `assigned_agent` and parallel ACLs on `case_task` and `case_party`. See [`acl-matrix.md`](./acl-matrix.md) for the full inventory.
-   - **2 sys_hub_flow records + their subflows** — `general_inquiry_state_machine`, `complaint_state_machine`, plus `validate_open_transition`, `validate_inprogress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition` under `flows/sub_flows/`.
+   - **7 sys_hub_flow records** — the 2 parent flows `general_inquiry_state_machine` and `complaint_state_machine`, plus the 5 subflows `validate_open_transition`, `validate_inprogress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition` under `flows/sub_flows/`. (Note: the fourth subflow's **instance** internal name is `validate_in_progress_transition`, with underscores, while the repository file is `validate_inprogress_transition.xml`.)
+   - **1 Custom Action + 1 shared flow logic block** — `flows/custom_actions/x_casemgmt_transition_guard_action.xml` (`sys_hub_action_type_base`), which returns the transition verdict to a flow, and `flows/sub_flows/shared_flow_logic_block.xml` (`sys_hub_flow_block`), the shared logic block the five subflows reuse.
    - **2 Script Includes** — `x_casemgmt_CaseTransitionValidator` and `x_casemgmt_CasePortalService`.
-   - **6 Business Rules** — `block_draft_backtransition`, `block_terminal_closed`, `set_opened_date`, `set_closed_date`, `validate_assigned_agent_membership`, `clear_pending_reason_on_inprogress`.
+   - **7 Business Rules**, in execution order — `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)**, `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), `set_closed_date` (500). The order-250 rule is the one that invokes the transition subflow and turns its verdict into a blocking form error; the order-500 rule is the only writer of `closed_date`. Earlier revisions of this inventory listed six and omitted `enforce_forward_transitions`.
+   - **6 UI Actions** — the state-transition buttons under `ui_action/`.
+   - **1 Fix Script** — `x_casemgmt Post-Import Remediation`, carrying the post-import remediation body verbatim. It is authored **global** by design (see the note in Step 2) and **does not execute by itself**.
+   - **761 ATF records** — 20 test definitions, 180 test steps, 540 step inputs (539 `sys_variable_value` + 1 variable value), 1 test suite and 20 suite-member links. This is by far the largest part of the package: 761 of its 913 blocks.
    - **1 UI Policy** — `case_party_conditional_fields` (shows `person` when `party_type=Person`; shows `organization` when `party_type=Organization`).
    - **1 sp_portal record + 2 pages + 3 widgets + 2 sys_ws_definition records** — the Experience Portal record, the case-submit and case-status pages, the submission/lookup/confirmation widgets, and the two scripted REST endpoints (`/api/x_casemgmt/case_submit`, `/api/x_casemgmt/case_status_lookup`).
    - **2 pa_dashboards records + 8 sys_report records** — Agent Workspace, Manager View, plus the eight reports enumerated in [`dashboards.md`](./dashboards.md).
@@ -92,13 +105,31 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
 
 > **This walkthrough is the deliverable's idealized path and a commit alone does not reach it.** A clean-instance
 > round trip established that after commit the three tables exist as metadata with **no physical storage**, the
-> 26 ACLs have **0 of 27** role links, the dashboards fail to commit, and the portal pages render blank. The
-> package ships automation for the first two and it demonstrably fires, but it cannot complete because the
-> commit engine rewrites its scope. Use
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) as the authoritative
-> install procedure and treat the sub-steps below as the verification checklist to run *afterwards*. Note also
-> that this instance requires the tables to be rebuilt and the Update Set committed a **second** time, because
-> dropping `sys_db_object` cascades the ACLs away.
+> 26 ACLs have **0 of 27** role links, the dashboards' child records do not commit, and the portal pages render
+> blank.
+>
+> **Nothing in the current package fires on its own.** It contains **no auto-execute record of any kind** — no
+> Business Rule, no scheduled job, no trigger. The remediation body ships as the Fix Script `x_casemgmt
+> Post-Import Remediation`, and a Fix Script does not self-run; running it from the Fix Script UI executes it in
+> the application scope and fails. An earlier revision did ship an auto-execute Business Rule, and it was
+> measured firing and then failing (121 errors, all `GlideTableDescriptor`/`GlideSecurityManager is not allowed
+> in scoped applications`) because the commit engine rewrites the dispatched record's scope; it has been removed,
+> also because its condition matched the commit of *any* retrieved Update Set. **An operator must run the
+> remediation by hand, in scope Global.**
+>
+> Use [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) — its seven-step primary
+> procedure — as the authoritative install procedure, with
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the per-defect
+> evidence, and treat the sub-steps below as the verification checklist to run *afterwards*. Note also that the
+> install requires the Update Set to be committed a **second** time, because rebuilding the tables cascades the
+> ACLs away.
+>
+> **Three of the sub-steps below cannot pass on the verification instance, and that is expected:** step 5 (the
+> portal pages render blank — use the REST endpoints instead, steps 6-8 in `curl` form), steps 9-10 (both
+> dashboards render 0 tabs and 0 widgets), and the related-lists clause of step 11 (no `sys_ui_related_list` row
+> exists for the scope, and the form's related-lists wrapper measures 0 pixels tall). Each is a packaging defect
+> recorded in `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5-§0.6, not something a different install sequence
+> fixes.
 
 ### Detailed Sub-Procedure
 
@@ -107,10 +138,10 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
    - `x_casemgmt_case`
    - `x_casemgmt_case_task`
    - `x_casemgmt_case_party`
-3. Open **Flow Designer** (Now Platform → All → Process Automation → Flow Designer). Filter by application `x_casemgmt Case Management`. Confirm both flows show **Active** state (not Draft):
+3. Open **Flow Designer** (Now Platform → All → Process Automation → Flow Designer). Filter by **application `x_casemgmt Case Management`** — filtering by a name pattern such as `x_casemgmt_*state_machine` matches nothing, because flow names carry no scope prefix. Confirm both parent flows are **Active** *and* **Published** (not Draft):
    - `general_inquiry_state_machine`
    - `complaint_state_machine`
-   Subflows under `flows/sub_flows/` should also be Active.
+   All five subflows must also be Active and Published: `validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`. Then confirm the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** is present and active — the flows decide, but that rule is what blocks the write and puts the message on the form.
 4. Open the Experience Portal at `[instance URL]/x_casemgmt_case_portal`. The slug `x_casemgmt_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml); the AAP verbatim wording quoted in the section above uses the generic placeholder `x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"). Open the URL in a private/incognito browser window so that no admin session interferes — both pages must work anonymously.
 5. Confirm both pages render anonymously:
    - The case submission page (5 input fields: subject, type, description, requester_name, requester_email).

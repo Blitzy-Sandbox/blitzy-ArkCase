@@ -246,7 +246,7 @@
  *      `errors=121`, all 121 being those two SecurityExceptions.
  *
  *   AN AUTO-EXECUTE TRIGGER WAS BUILT AND HAS BEEN REMOVED. An earlier revision
- *   also shipped scripts/sys_script_x_casemgmt_post_import_bootstrap.xml - a
+ *   also shipped a sys_script_x_casemgmt_post_import_bootstrap.xml artifact - a
  *   global after-update Business Rule on `sys_remote_update_set`, condition
  *   `current.state.changesTo('committed')`, which resolved the Fix Script by name
  *   and dispatched it with `GlideScopedEvaluator`. It was measured FIRING

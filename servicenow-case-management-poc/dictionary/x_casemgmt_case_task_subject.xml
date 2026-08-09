@@ -191,10 +191,11 @@
             `<name>x_casemgmt_case_task</name>` element below references
             the table by name, and the table must exist before any of
             its dictionary entries can be attached)
-          * ../app/sys_app/x_casemgmt_case_management.xml and
-            ../app/sys_scope/x_casemgmt.xml (scoped application records;
-            <sys_scope> and <sys_package> resolve against them by source
-            name)
+          * ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+            application record, and the sole scope authority in this
+            package - the standalone sys_scope artifact was removed as
+            Defect A; <sys_scope> and <sys_package> resolve against it by
+            source name)
       - This record MUST load BEFORE:
           * ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml (synthetic
             demo tasks per AAP Section 0.7.4 must populate this mandatory

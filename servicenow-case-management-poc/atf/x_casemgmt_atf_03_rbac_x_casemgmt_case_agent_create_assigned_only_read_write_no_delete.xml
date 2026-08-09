@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definitions for the ATF test
     `ATF 03 - RBAC: x_casemgmt_case_agent create, ASSIGNED-ONLY read/write, no delete`
-    its 11 ordered `sys_atf_step` children and the 36 `sys_variable_value`
+    its 11 ordered `sys_atf_step` children and the 34 `sys_variable_value`
     rows that carry those steps' input values, inside the scoped application
     `x_casemgmt`.
 

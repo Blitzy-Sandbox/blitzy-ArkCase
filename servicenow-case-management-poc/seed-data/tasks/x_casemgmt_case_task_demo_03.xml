@@ -418,7 +418,7 @@
       Rule 6 - Scope binding:
         <sys_scope>   binds this task row to the scoped application
                       via the scope source name "x_casemgmt" defined
-                      in ../../app/sys_scope/x_casemgmt.xml at
+                      in ../../app/sys_app/x_casemgmt_case_management.xml at
                       <source>x_casemgmt</source>; the display_value
                       "Case Management" matches the sys_app's human-
                       readable name.

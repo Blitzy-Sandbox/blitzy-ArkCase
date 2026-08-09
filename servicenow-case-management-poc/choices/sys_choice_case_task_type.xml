@@ -200,10 +200,9 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application
-          record; the sys_package source target)
-        - ../app/sys_scope/x_casemgmt.xml (scope record; the sys_scope
-          target)
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
         - ../tables/x_casemgmt_case_task.xml (parent table; the type
           field's host)
         - ../dictionary/x_casemgmt_case_task_type.xml (parent dictionary

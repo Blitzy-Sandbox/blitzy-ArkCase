@@ -16,20 +16,39 @@ Before starting this procedure, all of the following MUST hold. If ANY prerequis
 - On the **source PDI**, all of Validation Gates 1–6 have passed (per [`../docs/validation-gates.md`](../docs/validation-gates.md)).
 - On the **source PDI**, both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
 - On the **source PDI**, all 10+ demo cases are visible in the case list spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), per AAP Section 0.7.4 minimum demo-data thresholds.
-- The seed data was committed via [`./seed_demo_data.js`](./seed_demo_data.js) and is captured in the same Update Set OR is packaged as a Fix Script in the Update Set so that seed data is generated on import. Document which approach was used so the verifier knows whether seed data is expected to appear automatically post-commit or whether the seed script must be re-run on the verification PDI after commit.
-- A **fresh, separate PDI** is available with an admin account ready (the verification PDI must NOT be the same instance as the source PDI). Re-importing on the source PDI does not exercise the portability gate and is not a valid round-trip-verify.
+- The seed data situation is understood before you start: the packaged seed rows commit as **data**, and they arrive with `number` empty on all 10 demo cases. **No seed data is generated automatically on import** — a Fix Script in an Update Set is installed, not executed. The verifier must delete the number-less rows and re-run [`./seed_demo_data.js`](./seed_demo_data.js) in scope on the verification PDI (Phase 4).
+- A **fresh, separate PDI** is available with an admin account ready (the verification PDI must NOT be the same instance as the source PDI). Re-importing on the source PDI does not exercise the portability gate as strongly.
+
+  > **What was actually done, and why.** A second PDI was not available for this build, so the round trip was
+  > performed on `dev379024` after an **application-level clean slate**: every `x_casemgmt` artifact and every
+  > row in the three scoped tables was removed, so the import genuinely created the application from nothing
+  > rather than updating it. This is the AAP-approved substitute for a second instance (override C6) and it is
+  > what produced the 0-error / 0-warning preview. It is weaker than a genuinely fresh PDI in one specific
+  > respect: it cannot detect a dependency on a **global** record that the application needs but does not carry
+  > — a global record left behind by earlier work would still be present. The three global tables the
+  > application touches (`sys_user`, `sys_user_group`, `core_company`) receive data inserts from the package
+  > itself, which limits the exposure, but it is not zero. If you have a second PDI, use it.
 - Admin login to the verification PDI succeeds (URL + admin username + admin password verified). Per AAP Section 0.7.2 Pre-build instance verification: if login fails, **stop and report — do not proceed**.
 - Network connectivity allows the operator to upload an XML file of approximately 0.5–5 MB to the verification PDI without timeout.
 - The operator has access to the source PDI for re-export in the event a preview error is discovered.
 
 ## Procedure Outline
 
-The procedure has **four phases**. Each phase has a numbered checklist. Failure at any phase requires returning to the source PDI and re-exporting; do not attempt to patch the verification PDI directly.
+The procedure has **six phases**. Each phase has a numbered checklist. Failure at any phase requires returning to the source PDI and re-exporting; do not attempt to patch the verification PDI directly.
 
 1. **Upload** the Update Set XML to the verification PDI.
 2. **Preview** the Update Set and verify zero errors.
 3. **Commit** the Update Set after a clean preview.
-4. **Re-verify** all six functional gates (Gates 1–6) on the verification PDI.
+4. **Remediate** — run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed. This phase is **mandatory**: a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md).
+5. **Re-verify** all six functional gates (Gates 1–6) on the verification PDI.
+6. **Assert self-sufficiency** — record, explicitly, everything the package did *not* do for itself.
+
+> **On the approved global exception.** Phase 4 runs an installer script in the **global** scope, and the
+> package carries that script as a global-scoped Fix Script. That is the single disclosed exception to the
+> scoped-namespace rule: `GlideTableDescriptor` and `GlideSecurityManager` are refused in scoped execution, and
+> both are required to create physical storage and flush the security cache. It is installer wiring rather than
+> application configuration, and the commit engine rewrites the record into `x_casemgmt` regardless. No other
+> record in the package is global-scoped, and no out-of-the-box table receives a schema change.
 
 ## Phase 1 — Upload the Update Set XML
 
@@ -52,7 +71,7 @@ The procedure has **four phases**. Each phase has a numbered checklist. Failure 
 ### If Phase 1 Fails
 
 - **Upload-time error "Invalid XML"** → the XML file is corrupt; re-export from the source PDI.
-- **Upload completes but State = Failed** → the XML references a missing parent record (e.g., scope record); verify the source Update Set captured `sys_app/x_casemgmt_case_management.xml` and `sys_scope/x_casemgmt.xml`.
+- **Upload completes but State = Failed** → the XML references a missing parent record (e.g., scope record); verify the source Update Set captured `../app/sys_app/x_casemgmt_case_management.xml` (this package ships no standalone `sys_scope` record - it was removed as Defect A, so the `sys_app` row is the sole scope authority).
 - **Upload completes but Application field is empty** → the scope record was not captured; re-export from the source PDI with the scope record explicitly added to the Update Set.
 
 ## Phase 2 — Preview the Update Set
@@ -89,7 +108,7 @@ The most frequent failure mode in this gate is **hard-coded `sys_id` references*
 | `"Has been changed by ... in the target instance"` | A global-scope record was modified, violating the "no global-scope writes" constraint (AAP Section 0.7.1). | Identify the global record on the source PDI and revert the change; the scoped application MUST live entirely in `x_casemgmt` namespace. |
 | `"Skipped — newer version in target"` | The verification PDI already had this record (e.g., a re-run of the same Update Set). | Acceptable on re-runs; reset the verification PDI for a clean test if rigor is required. |
 | `"Choices missing for field ..."` | A `sys_choice` record was not captured in the Update Set. | On the source PDI, add the missing choice record to the Update Set via the Customer Updates list; re-export. |
-| `"Cannot find application ..."` | The `sys_app/x_casemgmt_case_management.xml` record was not the first record in the Update Set. | Verify the scope record is present and correctly identified; the scope record MUST come before all other records (per AAP Section 0.5.2 dependency-ordering). |
+| `"Cannot find application ..."` | The `../app/sys_app/x_casemgmt_case_management.xml` record was not the first record in the Update Set. | Verify the scope record is present and correctly identified; the scope record MUST come before all other records (per AAP Section 0.5.2 dependency-ordering). |
 
 ### If Phase 2 Fails
 
@@ -123,11 +142,43 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 - Use the **Back out** action on the Retrieved Update Set record to reverse the commit.
 - Return to the source PDI to investigate; this typically indicates a deeper integrity issue not caught by preview.
 
-## Phase 4 — Re-Verify Gates 1–6 on the Verification PDI
+## Phase 4 — Post-Import Remediation (mandatory)
+
+A successful commit does **not** produce a working application, and nothing in the package runs by itself. This
+phase is required on every install. It is the same seven-step primary procedure documented in
+[`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), reduced here to
+the checklist a round-trip verifier needs.
+
+- [ ] Run `scripts/post_import_remediation.js` from **System Definition → Scripts - Background** with
+      **"In scope" = Global**. Not the Fix Script UI — that executes in the application scope and fails.
+- [ ] Expect this first pass to end `verified=false … errors=6`, every error being the ACL check
+      (`found 0 x_casemgmt ACLs, expected 26`). **That is the correct outcome of the first pass**, because
+      rebuilding the tables cascades the ACLs away. The script is fail-closed and refuses to report success with
+      zero role links.
+- [ ] Confirm the tables were built: `tables_built=3`, `fields_created=25`, `choices_created=24`,
+      `counters_written=3`.
+- [ ] **Upload → preview → commit the same Update Set a second time.** This preview reports about 21
+      `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization`
+      problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports
+      about 25 `sys_dictionary` collisions from the rows the remediation just wrote; accepting the remote is
+      correct **for `sys_dictionary` only**. Never ignore a collision on any other table.
+- [ ] Run the remediation in **Global** again. This is the pass that must report `verified=true`, `errors=0`,
+      `acl_links_created=27`, `acl_links_total=27`, `acl_links_expected=27`, `security_cache_flushed=true`.
+- [ ] Confirm independently of the log that **exactly 27** `sys_security_acl_role` rows exist in the scope,
+      distributed manager 14 / agent 10 / viewer 3. A number other than 27 means it has not converged; the script
+      removes surplus links as well as creating missing ones.
+- [ ] Delete the 10 number-less packaged `Demo case …` rows, their orphan tasks and parties, and the dangling
+      `sys_user_grmember` row; then run `scripts/seed_demo_data.js` **in scope `x_casemgmt`** (not Global).
+- [ ] Record every command you ran here. **This is the residual manual footprint**, and it must appear in the
+      round-trip report rather than being absorbed into a pass.
+
+## Phase 5 — Re-Verify Gates 1–6 on the Verification PDI
 
 The Update Set is committed but not yet **delivered**. The final step is to re-run each functional gate on the verification PDI to confirm the application behaves identically to the source PDI. This catches any subtle deployment differences (missing seed data, broken references, role assignment gaps).
 
-If the seed data was packaged as a Fix Script inside the Update Set, the Fix Script will have already executed during commit and the demo cases/tasks/parties/users/groups should already be present. If the seed data was NOT packaged into the Update Set, run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script before proceeding with the gate re-verification below.
+**A Fix Script inside an Update Set does not execute on commit.** Committing a Fix Script installs the record and nothing more — the platform does not run it, and neither does anything else in this package, which contains **no auto-execute record of any kind**. So no seed data appears by itself: run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script **in scope `x_casemgmt`**, after Phase 4's remediation, before re-verifying the gates below. Delete the 10 number-less packaged `Demo case …` rows first, or the script will match them by `subject` and leave them unnumbered.
+
+The package's one Fix Script, `x_casemgmt Post-Import Remediation`, is subject to the same rule and to one more: running it from *System Definition → Fix Scripts → Run Fix Script* executes it **in the application scope**, where the privileged calls it needs are refused. Run its source, `post_import_remediation.js`, from *Scripts - Background* with **"In scope" = Global** instead.
 
 ### Gate 1 — Data Model (Re-Verify)
 
@@ -168,8 +219,8 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 ### Gate 5 — Portal Lookup (Re-Verify)
 
 - [ ] Log out. Open the portal lookup page in an incognito browser window.
-- [ ] Enter the case number from the Gate 4 test. Confirm the result panel shows ONLY: `number`, `status`, `subject`, `opened_date`.
-- [ ] Confirm NO internal fields are exposed (no `description`, no `priority`, no `closed_date`, no `assigned_*`, no `requester_*`, no `pending_reason`, no `sys_*` audit fields) per [`../docs/portal-pages.md`](../docs/portal-pages.md).
+- [ ] Enter the case number from the Gate 4 test. Confirm the response carries **ONLY these three fields: `status`, `subject`, `opened_date`.** `number` is **not** among them — AAP §0.7.4 limits the lookup output to those three, and the endpoint was measured returning exactly `{status, subject, opened_date}` and nothing else. (An earlier revision of this line listed `number` as a fourth permitted field; that was wrong. The caller already knows the number, having just typed it.)
+- [ ] Confirm NO other field is exposed — no `number`, no `description`, no `priority`, no `closed_date`, no `assigned_*`, no `requester_*`, no `pending_reason`, no `sys_*` audit field — per [`../docs/portal-pages.md`](../docs/portal-pages.md). Check the **raw** response body, not just the rendered panel: the measured contract is three keys exactly.
 - [ ] Enter an invalid case number `CASE9999999`. Confirm the literal text `"No case found with that number."` (verbatim) is displayed.
 
 ### Gate 6 — Dashboards (Re-Verify)
@@ -187,15 +238,15 @@ If the seed data was packaged as a Fix Script inside the Update Set, the Fix Scr
 - [ ] Open **System Update Sets → Retrieved Update Sets** list. Confirm the record is the most recently committed one.
 - [ ] Confirm the original Update Set XML file at `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is unchanged (the verification did not modify the source artifact).
 
-## Phase 5 — Self-Sufficiency Assertions
+## Phase 6 — Self-Sufficiency Assertions
 
-Phases 1–4 establish that the package *imports*. Phase 5 establishes whether it imports **into a working
+Phases 1–5 establish that the package *imports* and installs. Phase 6 establishes whether it imports **into a working
 application with no manual step**, which is the actual acceptance question. These assertions were executed on
 `https://dev379024.service-now.com` after an application-level clean slate; the outcome is recorded inline so a
 future verifier can tell a regression from a known state. The measured detail is in
 [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
-### 5.1 No manual step between preview and commit
+### 6.1 No manual step between preview and commit
 
 - [ ] Before committing, confirm the platform's own commit predicate: the retrieved Update Set is
       `state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`. Nothing is dismissed or ignored by
@@ -206,24 +257,33 @@ future verifier can tell a regression from a known state. The measured detail is
       `post_import_remediation.js` by hand at this point. The whole point is to observe what the package alone
       produces. **Result: honoured.**
 
-### 5.2 Did the auto-execute trigger fire, and did it succeed?
+### 6.2 Confirm that nothing ran by itself
 
-- [ ] Search `syslog` for the marker `X_CASEMGMT_REMEDIATION|` in the commit window and locate the single
-      `…|SUMMARY|verified=` line.
-- [ ] **Result, when the trigger was shipped `active=true`: it FIRED but did NOT succeed** — `verified=false`,
-      `tables_built=0`, `acl_links_total=0` of an expected 27, `errors=121`, all of them
-      `GlideTableDescriptor is not allowed in scoped applications` or
-      `GlideSecurityManager is not allowed in scoped applications`. Cause: the commit engine forces the
-      dispatched record's `sys_scope` to the application. Packaging the script as global does not avoid this.
-- [ ] **Expected result for the CURRENT package: no `X_CASEMGMT_REMEDIATION|` marker rows at all.** The trigger
-      is now shipped **`active=false`** precisely because a rule that fires, logs `verified=false` and changes
-      nothing invites an operator to believe the remediation ran. So on a round trip of the current bytes the
-      correct observation is **silence** — zero `BOOTSTRAP|fired` lines and zero `SUMMARY` lines until a human
-      runs the script from *Scripts - Background* with **"In scope" = Global**. Finding no marker rows here is a
-      **pass**, not a regression; finding a `SUMMARY|verified=false|…|errors=121` line would mean the rule was
-      activated on the instance, contrary to what the package ships.
+**The current package contains no auto-execute record of any kind** — no Business Rule, no scheduled job, no
+trigger — so on a round trip of the current bytes the correct observation is **silence**. Fix Scripts do not
+self-run either: the one the package carries (`x_casemgmt Post-Import Remediation`) is installed by the commit and
+then sits there.
 
-### 5.3 The four named functional criteria, measured from the package alone
+- [ ] Search `syslog` for the marker `X_CASEMGMT_REMEDIATION|` across the commit window.
+- [ ] **Expected result: no marker rows at all** — zero `BOOTSTRAP|fired` lines and zero `SUMMARY` lines, until a
+      human runs `post_import_remediation.js` from *Scripts - Background* with **"In scope" = Global**. Finding
+      nothing here is a **pass**, and it is what makes Phase 4 mandatory rather than optional.
+- [ ] If you *do* find a `SUMMARY|verified=false|…|errors=121` line, the instance is carrying a legacy copy of
+      the removed bootstrap rule from earlier work. Treat an `active=true` copy as a hazard, not as evidence that
+      the remediation ran: it changes nothing and it invites the belief that it did. The remediation deactivates
+      such a copy when it next converges.
+
+**History, for context on why this is the design.** An earlier revision shipped an after-update Business Rule
+`x_casemgmt Post-Import Bootstrap` on `sys_remote_update_set` that dispatched the remediation on commit. It was
+measured **firing and then failing**: `verified=false`, `tables_built=0`, `acl_links_total=0` of an expected 27,
+`errors=121`, every error being `GlideTableDescriptor is not allowed in scoped applications` or
+`GlideSecurityManager is not allowed in scoped applications`, because the commit engine forces the dispatched
+record's `sys_scope` to the application. Packaging the script as global does not avoid that. It was **removed**
+for that reason and for a second, more serious one: its condition matched the commit of *any* retrieved Update
+Set, not only this application's, so an active copy would dispatch privileged, partly destructive remediation
+onto unrelated deployments.
+
+### 6.3 The four named functional criteria, measured from the package alone
 
 | Assertion | Expected | Measured on a clean install, package alone |
 |---|---|---|
@@ -239,7 +299,7 @@ future verifier can tell a regression from a known state. The measured detail is
 - [ ] Record the difference between the pre-remediation and post-remediation results. **That difference *is* the
       residual manual footprint**, and it must be disclosed rather than absorbed into a pass.
 
-### 5.4 Assertions this procedure previously omitted
+### 6.4 Assertions this procedure previously omitted
 
 Add these to any future round trip — each one caught a real defect that Phases 1–4 do not detect:
 
@@ -247,43 +307,31 @@ Add these to any future round trip — each one caught a real defect that Phases
       confirm a form actually renders. **Result: ❌ both render blank** — `GET /api/now/sp/page` returns
       `containers: []`; the Service Portal layout records were never authored. Testing only the REST endpoints
       hides this completely.
-- [ ] **Dashboards commit *and* get a tab.** Read the commit log for dashboard errors, then confirm
-      `pa_m2m_dashboard_tabs` has a row for each dashboard. **Result: ⚠️ both `pa_dashboards` rows commit, but
-      two `Table 'pa_tab' does not exist` errors appear per import and `pa_m2m_dashboard_tabs` stays empty** —
-      each composite payload serializes its tab child as `<pa_tab>` while this release's table is `pa_tabs`, so
-      each dashboard installs with no tab and renders no widgets. Reading only "does the `pa_dashboards` record
-      exist" hides this.
+- [ ] **Dashboards actually render.** Do not stop at "does the `pa_dashboards` record exist" — open both
+      dashboards and count the tabs and widgets on screen. **Result: ❌ both render 0 tabs and 0 widgets**, with
+      the platform's empty state, "Add widgets using the widget picker.", and 0 console errors. Each composite
+      payload names **three child tables that do not exist on this release**: `pa_tab` (real name `pa_tabs`),
+      `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role`. So the tab, all 8 widget placements and the
+      role grants are dropped on commit. **Supplying a tab is not the fix** — the platform auto-created one empty
+      `pa_tabs` row per dashboard on first view and both stayed blank. Also check the reports themselves: all 8
+      `sys_report` rows commit with an **empty `group_by`** although the artifacts specify one.
 - [ ] **Reference display values resolve.** Check that the `Case` column is populated on the task and party
-      lists. **Result: ❌ initially blank** — all three tables ship with `display=true` on nearly every column
-      where ServiceNow permits exactly one.
+      lists. **Result: ✅ FIXED and now carried by the package.** Originally all three tables shipped with
+      `display=true` on nearly every column where ServiceNow permits exactly one, so every reference to a case
+      rendered blank. The package now ships exactly one display field per table (`x_casemgmt_case` → `number`,
+      `x_casemgmt_case_task` → `subject`, `x_casemgmt_case_party` → `role_label`), the remediation reconciles the
+      flag after its field loop, and it fails the run if more than one display field survives. Keep this
+      assertion — it is cheap and it is how the defect was caught.
 - [ ] **Demo cases carry numbers.** Confirm `x_casemgmt_case.number` is non-empty on every seeded row.
       **Result: ❌ empty on all 10** — the packaged `Case Record` payloads omit the `number` element, and
       auto-numbering does not fire on an Update-Set data insert, so every by-number child reference dangles.
 - [ ] **Record-level ACL narrowing, both branches.** Verify by impersonation that the agent sees assigned cases
       *and* group-assigned cases and not others. **Result: ✅ 9 of 14 after the demo group membership was
-      repaired** — but the agent's task/party ACL conditions deny every row because they dereference
-      `current.case` and `case` is a JavaScript reserved word.
+      repaired.** The child-table half of this is also **fixed**: the agent's `case_task` / `case_party`
+      conditions used to dereference `current.case` — `case` being a JavaScript reserved word — and therefore
+      denied every row. The mirror now enforces correctly, and ATF 06 and ATF 07 both pass.
 
-### 5.6 Re-run the regression harness and the test suite, after the re-seed
-
-- [ ] Re-run the transition-logic regression harness **verbatim** — the same script that produced the
-      pre-change baseline, not a re-implementation of it — in scope `x_casemgmt` (the validator is
-      `access=package_private`, so a global caller cannot instantiate it), and read the single `U1ASSERT|` line
-      back out of `syslog`. Report the before and after counts and a per-assertion list.
-      **Result: 13 / 13 before, 13 / 13 after, zero regressions** — see
-      [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.7](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
-      A re-implementation is not a substitute: one written for this pass probed a stricter code path than the
-      baseline and reported a failure that was not a regression at all, but a separate latent defect.
-- [ ] Re-run the ATF suite through the client runner at `/atf_test_runner.do?sysparm_nostack=true`
-      (`sn_atf.runner.enabled` must be `true`; `sn_atf.headless.enabled` cannot be enabled here, so a real
-      browser runner must be registered *before* launching the suite). Report per-test verdicts, not just the
-      suite status. **Result: 20 ran, 16 Success, 4 Failure, 0 Error, 0 Skipped, identical across three runs.**
-- [ ] Confirm the re-imported ATF records still **run**, not merely exist — the Defect-F failure mode applies
-      to any relationally-compiled construct. Check that no test has zero steps and no step has zero
-      parameters. **Result: 20 tests / 180 steps / 542 step-parameter rows, zero tests with no steps, zero
-      steps with no parameters.**
-
-### 5.5 Working mechanics on this instance
+### 6.5 Working mechanics on this instance
 
 The REST sequence described in Phases 1–3 does not work here. What does:
 
@@ -306,6 +354,33 @@ The REST sequence described in Phases 1–3 does not work here. What does:
   readable `<name>` values cause every intra-set cross-reference to report as missing on a clean instance (559
   spurious errors here, with `missing_item_update` empty on all of them).
 
+### 6.6 Re-run the regression harness and the test suite, after the re-seed
+
+- [ ] Re-run the transition-logic regression harness **verbatim** — the same script that produced the
+      pre-change baseline, not a re-implementation of it — in scope `x_casemgmt` (the validator is
+      `access=package_private`, so a global caller cannot instantiate it), and read the single `U1ASSERT|` line
+      back out of `syslog`. Report the before and after counts and a per-assertion list.
+      **Result: 13 / 13 before, 13 / 13 after, zero regressions** — see
+      [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.7](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+      A re-implementation is not a substitute: one written for this pass probed a stricter code path than the
+      baseline and reported a failure that was not a regression at all, but a separate latent defect.
+- [ ] Re-run the ATF suite through the client runner at `/atf_test_runner.do?sysparm_nostack=true`
+      (`sn_atf.runner.enabled` must be `true`; `sn_atf.headless.enabled` cannot be enabled here, so a real
+      browser runner must be registered *before* launching the suite). Report per-test verdicts, not just the
+      suite status. **Result: the final run, `TES0001015`, scored 20 ran / 20 Success / 0 Failure / 0 Error /
+      0 Skipped, with 180 of 180 step results Success, in about 4 minutes, leaving no test residue.** An earlier
+      run scored 16 Success / 4 Failure across three identical runs; those four failures were the child-table ACL
+      condition (ATF 07) and the three form-level assertions (ATF 15-17), both root causes since fixed, and that
+      result is history rather than status. The suite serializes to **761** of the package's 913 blocks —
+      20 tests, 180 steps, **540** step inputs, 1 suite and 20 suite-member links.
+- [ ] Confirm the re-imported ATF records still **run**, not merely exist — the Defect-F failure mode applies
+      to any relationally-compiled construct. Check that no test has zero steps and no step has zero
+      parameters. **Result: 20 tests / 180 steps / step-parameter rows matching the package exactly, zero tests
+      with no steps, zero steps with no parameters.** The count is **540** on the current package (539
+      `sys_variable_value` rows plus 1 variable value); the figure of 542 recorded here previously was measured
+      before ATF 03 step 8 was rebuilt, when five native-step inputs were replaced by the two a script step
+      takes.
+
 ## Pass / Fail Decision
 
 ### Pass Criteria (All Must Hold)
@@ -313,25 +388,36 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 1. Phase 1 — State = Loaded.
 2. Phase 2 — Zero preview errors.
 3. Phase 3 — State = Committed.
-4. Phase 4 — All six functional gates re-verified on the verification PDI.
-5. Phase 5 — The self-sufficiency assertions hold, **or** every deviation is recorded with the precise manual
+4. Phase 4 — The remediation reports `verified=true`, `errors=0` and **exactly 27** ACL role links, and the demo
+   data seeds cleanly.
+5. Phase 5 — All six functional gates re-verified on the verification PDI.
+6. The self-sufficiency assertions in §6.1-§6.4 hold, **or** every deviation is recorded with the precise manual
    step required to close it. A round trip that reaches "Committed" while leaving the application unusable is
    **not** a pass; it is a pass on Gate 7 and a documented failure everywhere else.
-6. Phase 5.6 — The regression harness returns the same count after the round trip as before it, per
-   assertion, and any test-suite failure is reported rather than relaxed.
+7. §6.6 — The regression harness returns the same count after the round trip as before it, per assertion, and any
+   test-suite failure is reported rather than relaxed.
 
-> **Standing result as of this pass:** criteria 1, 2 and 3 hold. Criterion 4 holds for Workflow and (after
-> remediation) Data model and ACLs on the case table; it does **not** hold for Dashboards, for the portal pages,
-> or for the agent's access to the task and party tables. Criterion 5 is met in the second sense — the package is
+> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold **for the 916-block `32a064d6…`
+> revision**, which is the artifact this round trip was performed on. **The bytes that currently ship — 913
+> blocks, 3,594,744 bytes, SHA-256 `b5b624ab…` — have not been through Phases 1-3 at all**, so criteria 1-3 are
+> open on them; closing that is the first item in
+> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10.0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Criterion 4
+> holds: `verified=true` with 27 of 27 links, after two remediation runs separated by a second commit.
+> Criterion 5 holds for Workflow, and for Data model and ACLs **on all three tables** after remediation; it does
+> **not** hold for Dashboards or for the portal pages. Criterion 6 is met in the second sense — the package is
 > not self-sufficient, and the footprint is fully documented in
-> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Criterion 7
+> holds: 13 / 13 before and after, and the final ATF suite `TES0001015` scored 20 / 20.
 
 ### Fail Criteria (Any One Triggers Fail)
 
 1. Any error in Phase 1 upload.
 2. ANY non-zero error count in Phase 2 preview.
 3. Any error in Phase 3 commit.
-4. ANY of Gates 1–6 fails to re-verify on the verification PDI.
+4. ANY of Gates 1–6 fails to re-verify on the verification PDI **for a reason other than the three disclosed
+   packaging defects** (blank portal pages, non-rendering dashboards, absent related lists). Those three are
+   already-known failures with recorded root causes; re-discovering them is not a new fail, but silently counting
+   them as passes is prohibited.
 
 ### On Fail
 
@@ -346,9 +432,9 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 ## Constraints
 
 - **Round-trip-verify is non-negotiable.** Zero preview errors required before commit.
-- **Two PDI rule.** The source PDI and the verification PDI MUST be different instances. Re-importing on the source PDI is not a valid round-trip-verify.
+- **Two PDI rule.** The source PDI and the verification PDI SHOULD be different instances. Where a second instance is genuinely unavailable, the AAP-approved substitute (override C6) is an **application-level clean slate** on the source instance: remove every `x_casemgmt` artifact and every row in the three scoped tables first, so the import creates the application from nothing. That is what was done here. Record which route you used — the clean-slate route cannot detect a dependency on a leftover **global** record, and that limitation must be stated rather than absorbed into a pass.
 - **No hard-coded `sys_id`s.** The most common cause of preview failures is `sys_id` literals that resolve on the source PDI but not the verification PDI. Every cross-reference in the Update Set MUST resolve via `GlideRecord` lookup by a stable human-readable key (`name`, `user_name`, `number`, `role_label`).
-- **Scoped-namespace exclusivity.** All artifacts MUST be in the `x_casemgmt` scope. Global-scope writes will trigger commit-time integrity violations and are prohibited per AAP Section 0.3.2.
+- **Scoped-namespace exclusivity.** All artifacts MUST be in the `x_casemgmt` scope, with **one disclosed and approved exception**: the installer Fix Script `x_casemgmt Post-Import Remediation`, authored global because `GlideTableDescriptor` and `GlideSecurityManager` are refused in scoped execution. Any *other* global-scope write is prohibited per AAP Section 0.3.2. Global tables receive **data** inserts only — never schema changes.
 - **Email-disabled.** Even though email is disabled on PDIs, the Update Set MUST NOT include any SMTP / notification rule / email template configuration.
 - **No Store dependencies.** The verification PDI must be a clean PDI with no extra Store apps installed; if the Update Set required a Store app to commit, that is an out-of-scope workaround and is rejected.
 - **No PII.** All synthetic test submissions made during Phase 4 Gate 4 MUST use fabricated synthetic values. Do not enter real names, email addresses, phone numbers, or organization names.

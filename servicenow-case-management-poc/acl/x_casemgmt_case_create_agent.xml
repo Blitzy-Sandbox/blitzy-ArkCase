@@ -222,9 +222,9 @@
 
     Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
       MUST be loaded AFTER:
-        - ../app/sys_app/x_casemgmt_case_management.xml (scoped app record)
-        - ../app/sys_scope/x_casemgmt.xml (scope record - resolves
-          sys_scope and sys_package source="x_casemgmt")
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
         - ../tables/x_casemgmt_case.xml (resolves <name>x_casemgmt_case</name>)
         - ../roles/sys_user_role_x_casemgmt_case_agent.xml (resolves
           <roles>x_casemgmt_case_agent</roles> by role name)

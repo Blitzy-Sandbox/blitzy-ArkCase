@@ -300,12 +300,13 @@
             by name and the platform refuses to materialize a
             sys_dictionary row whose `name` refers to a non-existent
             table).
-          * ../app/sys_app/x_casemgmt_case_management.xml and
-            ../app/sys_scope/x_casemgmt.xml (the scoped-application
-            and scope records, since `<sys_scope>` and `<sys_package>`
-            resolve via `source` attribute lookup against the scope
-            source name `x_casemgmt` - both records
-            must exist before this dictionary entry can resolve them).
+          * ../app/sys_app/x_casemgmt_case_management.xml (the
+            scoped-application record, which is also the sole scope
+            authority in this package - the standalone sys_scope artifact
+            was removed as Defect A. `<sys_scope>` and `<sys_package>`
+            resolve via `source` attribute lookup against the scope source
+            name `x_casemgmt`, so this record must exist before this
+            dictionary entry can resolve them).
 
       - This record MUST load BEFORE:
           * ../seed-data/parties/x_casemgmt_case_party_demo_*.xml

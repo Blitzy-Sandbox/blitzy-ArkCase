@@ -243,7 +243,14 @@
             member of the group)
           * ../flows/sub_flows/validate_open_transition.xml (the
             Draft -> Open gate; the subflow inspects current.assigned_group
-            and throws a blocking error if empty)
+            and RETURNS A VERDICT ({ok, error}) that is not ok when the
+            group is empty. The subflow does not surface the message itself:
+            the order-250 before-update business rule
+            ../business_rules/x_casemgmt_enforce_forward_transitions.xml
+            runs the subflow synchronously and, on a not-ok verdict, calls
+            gs.addErrorMessage() with the verdict's text and
+            setAbortAction(true) - which is what makes the error appear on
+            the form and the save fail)
           * ../flows/general_inquiry_state_machine.xml (the parent flow
             for type=General Inquiry that calls validate_open_transition)
           * ../flows/complaint_state_machine.xml (the parent flow for

@@ -29,8 +29,13 @@ stateDiagram-v2
     end note
 
     note right of Pending
-        pending_reason field is required
-        when entering Pending state.
+        pending_reason is captured by the
+        Set Pending UI Action, which prompts
+        for it and re-validates it server-side.
+        It is NOT a blocking precondition of
+        the transition: a status change made
+        any other way is not refused for a
+        missing pending_reason.
         Choices: Awaiting Info,
         Awaiting Third Party, Other.
     end note
@@ -78,7 +83,22 @@ A case actively being worked by an agent. Both `assigned_group` and `assigned_ag
 
 ### Pending
 
-A case whose progress is blocked awaiting external input. Setting Pending requires populating `pending_reason` (one of: `Awaiting Info`, `Awaiting Third Party`, `Other`). The only legal forward transition is Pending → In Progress, which clears `pending_reason`. The transition is enabled by the `clear_pending_reason_on_inprogress` business rule.
+A case whose progress is blocked awaiting external input.
+
+**How `pending_reason` gets populated, stated precisely** — because two things that sound alike are not the same
+here. The **Set Pending UI Action** ([`../ui_action/x_casemgmt_case_set_pending.xml`](../ui_action/x_casemgmt_case_set_pending.xml))
+prompts the user for one of the three allowed values, writes it with `g_form.setValue('pending_reason', reason)`,
+and its server half re-validates the submitted value against
+[`../choices/sys_choice_case_pending_reason.xml`](../choices/sys_choice_case_pending_reason.xml) before saving.
+**That UI Action is the only writer of `pending_reason`.** The `validate_pending_transition` subflow, by contrast,
+**has no blocking precondition and sets nothing** — it returns a permitting verdict for every well-formed case,
+because AAP §0.5.5 defines the In Progress → Pending transition as "None; sets `pending_reason`". So a status
+change to Pending driven through the button always carries a reason, while one driven any other way is **not
+refused** for lacking one. Earlier revisions of this document said `pending_reason` was "required when entering
+Pending", which overstated it and contradicted this document's own per-subflow section.
+
+The only legal forward transition out is Pending → In Progress, which clears `pending_reason` via the
+`clear_pending_reason_on_inprogress` business rule (order 400).
 
 ### Resolved
 
@@ -218,55 +238,74 @@ The execution chain on `x_casemgmt_case` is: **100** `block_terminal_closed` →
 
 ## Script Include: CaseTransitionValidator
 
-A reusable Script Include centralizes the transition guard logic so it can be called from both case-type flows AND from business rules without duplication. This is the ServiceNow-native equivalent of ArkCase's `ChangeCaseFileStateService`.
+A reusable Script Include centralizes the transition guard logic so it can be called from both case-type flows
+AND from business rules without duplication. This is the ServiceNow-native equivalent of ArkCase's
+`ChangeCaseFileStateService`.
 
-```javascript
-// File: ../script_includes/x_casemgmt_CaseTransitionValidator.xml
-var CaseTransitionValidator = Class.create();
-CaseTransitionValidator.prototype = {
-    initialize: function() {},
+**The authoritative source is
+[`../script_includes/x_casemgmt_CaseTransitionValidator.xml`](../script_includes/x_casemgmt_CaseTransitionValidator.xml).**
+This section documents its *contract* rather than reproducing its body: an earlier revision of this document
+carried a pseudocode copy that drifted out of date — it showed boolean returns, a no-argument
+`canTransitionToClosed()` and a method named `isAgentMemberOfGroup`, none of which match the delivered code.
+Read the artifact for the implementation; read the contract below to call it correctly.
 
-    /**
-     * Returns true if the case has zero open child tasks; false otherwise.
-     * Used by validate_resolved_transition subflow.
-     */
-    canTransitionToResolved: function(caseSysId) {
-        var taskGr = new GlideRecord('x_casemgmt_case_task');
-        taskGr.addQuery('case', caseSysId);
-        // Choice value is Title Case 'Closed' per ../choices/sys_choice_case_task_status.xml
-        taskGr.addQuery('status', '!=', 'Closed');
-        taskGr.setLimit(1);
-        taskGr.query();
-        return !taskGr.next();
-    },
+### The contract
 
-    /**
-     * Returns true if the current user has the case_manager role; false otherwise.
-     * Used by validate_closed_transition subflow.
-     */
-    canTransitionToClosed: function() {
-        return gs.hasRole('x_casemgmt_case_manager');
-    },
+Every guard takes the case `GlideRecord` and returns a **verdict object**, never a boolean:
 
-    /**
-     * Returns true if the assigned_agent is a member of assigned_group; false otherwise.
-     * Used by validate_inprogress_transition subflow and validate_assigned_agent_membership business rule.
-     */
-    isAgentMemberOfGroup: function(agentSysId, groupSysId) {
-        if (!agentSysId || !groupSysId) return false;
-        var memGr = new GlideRecord('sys_user_grmember');
-        memGr.addQuery('user', agentSysId);
-        memGr.addQuery('group', groupSysId);
-        memGr.setLimit(1);
-        memGr.query();
-        return memGr.next();
-    },
-
-    type: 'CaseTransitionValidator'
-};
+```
+{ ok: true }                       // the transition is permitted
+{ ok: false, error: '<message>' }  // refused; error is the exact text to show the user
 ```
 
-The Script Include uses NO hard-coded `sys_id`s; all references are passed in as parameters or resolved via `gs.hasRole(<roleName>)`. This compliance with AAP Section 0.7.2 ("No-hardcoded-`sys_id` constraint") ensures the Update Set is portable to any fresh PDI.
+| Method | Signature | Refuses when |
+| --- | --- | --- |
+| `canTransitionToOpen` | `(caseGr)` | `assigned_group` is empty |
+| `canTransitionToInProgress` | `(caseGr)` | `assigned_agent` is empty, or is not a member of `assigned_group` (delegated to `isAgentInGroup`) |
+| `canTransitionToResolved` | `(caseGr)` | any child `x_casemgmt_case_task` has `status != Closed` — refusal message is the verbatim `All tasks must be closed before resolving this case.` |
+| `canTransitionToClosed` | `(caseGr, userId)` | the user identified by `userId` does not hold `x_casemgmt_case_manager` |
+| `isAgentInGroup` | `(userSysId, groupSysId)` | — returns a plain `boolean`; it answers a membership question, not a transition question, so a verdict object would add nothing |
+
+A missing or null `caseGr` is itself a refusal — `{ ok: false, error: 'Case record is missing.' }` — so a caller
+never has to null-check before asking.
+
+### How the acting user is resolved, and why it is passed explicitly
+
+`canTransitionToClosed` takes the acting user's `sys_id` as its second argument, and the caller supplies it:
+the order-250 Business Rule passes `gs.getUserID()`. It is explicit rather than implicit for a reason that was
+measured on this platform, not assumed:
+
+- **If `userId` is empty, or equals the current session user**, the role is read from `gs.getUser()`.
+- **If `userId` names a *different* user**, the grant is resolved with a `GlideRecord` query against
+  `sys_user_has_role` — the platform's own store of *effective* grants, which already accounts for roles
+  inherited through groups and through role containment.
+- **`gs.getUser(userName)` is not used, and must not be.** On this release it **ignores its argument and returns
+  the session user**. An earlier revision of the third branch called
+  `gs.getUser(userGr.getValue('user_name')).hasRole(...)` and therefore answered with the *caller's* roles rather
+  than the named user's — which let a non-manager pass the Resolved → Closed guard and receive `{ ok: true }`.
+  That was a silent bypass of the AAP §0.5.5 rule, it was caught by assertion A10 of the transition-logic
+  regression harness, and it is fixed.
+
+The Script Include is `access=package_private`, so nothing outside the application can instantiate it — which is
+also why the regression harness has to run **in scope** rather than from Global.
+
+### Where enforcement actually happens
+
+The Script Include decides; it does not block. The blocking is done by the before-update Business Rule
+`x_casemgmt_enforce_forward_transitions` at **order 250**, which:
+
+1. calls the matching subflow through `sn_fd.FlowAPI.getRunner()` and reads its `blocked` output;
+2. calls the matching `canTransitionTo…` method directly for the in-flight verdict;
+3. **cross-checks the two** and logs a server-side discrepancy if the flow's `blocked` disagrees with `!ok`;
+4. on refusal, calls `gs.addErrorMessage(verdict.error)` followed by `current.setAbortAction(true)` — the message
+   on the form and the cancelled write, respectively;
+5. treats an unusable verdict as a refusal: if the guard throws, or returns something that is not a verdict
+   object, or returns `ok: false` with an empty `error`, the rule aborts the write with a generic message and logs
+   the detail. **Enforcement never depends on the guard succeeding.**
+
+The Script Include uses NO hard-coded `sys_id`s; all references are passed in as parameters or resolved via
+`gs.hasRole(<roleName>)` and by query. This complies with AAP Section 0.7.2 ("No-hardcoded-`sys_id` constraint")
+and keeps the Update Set portable to any fresh PDI.
 
 ## Source-Side Semantic Mapping
 

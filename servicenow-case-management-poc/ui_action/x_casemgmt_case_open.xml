@@ -32,11 +32,11 @@
     establishes the canonical pattern that the other 5 sibling UI Actions
     extend with additional checks and dialogs:
         Open               (THIS FILE,                order=100)
-        Start Progress     (../x_casemgmt_case_start_progress.xml,    order=200)
-        Set Pending        (../x_casemgmt_case_set_pending.xml,       order=300)
-        Resume             (../x_casemgmt_case_resume.xml,            order=400)
-        Resolve            (../x_casemgmt_case_resolve.xml,           order=500)
-        Close              (../x_casemgmt_case_close.xml,             order=600)
+        Start Progress     (./x_casemgmt_case_start_progress.xml,    order=200)
+        Set Pending        (./x_casemgmt_case_set_pending.xml,       order=300)
+        Resume             (./x_casemgmt_case_resume.xml,            order=400)
+        Resolve            (./x_casemgmt_case_resolve.xml,           order=500)
+        Close              (./x_casemgmt_case_close.xml,             order=600)
 
     SERVER-SIDE-ONLY PATTERN (matches sibling case_resume.xml; contrasts
     with case_set_pending.xml):
@@ -311,10 +311,9 @@
                x_casemgmt.CaseTransitionValidator)
             - ../roles/sys_user_role_x_casemgmt_case_manager.xml
               (the manager role referenced by <roles> and condition)
-            - ../app/sys_app/x_casemgmt_case_management.xml
-              (the scoped application)
-            - ../app/sys_scope/x_casemgmt.xml
-              (the scope record)
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
 
         And BEFORE:
             - ../seed-data/cases/x_casemgmt_case_demo_01.xml

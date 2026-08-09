@@ -98,7 +98,7 @@
     SCOPE BINDING (AAP Sections 0.5.2 and 0.7.2):
       `<sys_scope>` and `<sys_package>` reference the scoped application by
       its actual scope NAME (`x_casemgmt`), not by sys_id. The actual scope
-      record's `<name>` is `x_casemgmt` per `../app/sys_scope/x_casemgmt.xml`,
+      record's `<name>` is `x_casemgmt` per `../app/sys_app/x_casemgmt_case_management.xml`,
       and `<scope>x_casemgmt</scope>` per `../app/sys_app/x_casemgmt_case_management.xml`.
       ALL sibling XMLs in this scoped application reference the scope by that
       same name (`x_casemgmt`). Update Set re-import resolves cross-references
@@ -168,7 +168,7 @@
         sibling-file convention).
       - sys_scope text-node value: `x_casemgmt` (NOT
         `x_casemgmt_case_management`). The actual scope record's `<name>`
-        is `x_casemgmt` per ../app/sys_scope/x_casemgmt.xml, matching every
+        is `x_casemgmt` per ../app/sys_app/x_casemgmt_case_management.xml, matching every
         sibling XML in this scoped app.
       - sys_package text-node value: `x_casemgmt` with `source="x_casemgmt"`
         attribute, matching the sys_app record's `<scope>x_casemgmt</scope>`
@@ -225,11 +225,9 @@
 
     CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
       THIS RECORD MUST LOAD AFTER:
-        - ../app/sys_scope/x_casemgmt.xml (scope record; `<sys_scope>`
-          cross-reference resolves against this record's `<name>`)
-        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application
-          record; `<sys_package>` cross-reference resolves against this
-          record's `<scope>`)
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
 
       THIS RECORD SHOULD LOAD AFTER (but ServiceNow's two-pass import
       tolerates any order within the same Update Set, since references

@@ -164,8 +164,9 @@
 
     UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
         This sys_script_include record MUST be loaded AFTER:
-            - ../app/sys_app/x_casemgmt_case_management.xml   (scoped app)
-            - ../app/sys_scope/x_casemgmt.xml                 (scope record)
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
             - ../tables/x_casemgmt_case.xml                   (case table queried by both methods)
             - ../dictionary/x_casemgmt_case_number.xml        (auto-numbered field returned by submitCase, queried by lookupCase)
             - ../dictionary/x_casemgmt_case_subject.xml       (whitelisted in/out field)

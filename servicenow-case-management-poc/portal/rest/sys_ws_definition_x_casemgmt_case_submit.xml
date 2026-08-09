@@ -180,10 +180,9 @@
       sibling-file convention used by every other XML record in this scoped
       application:
 
-        - ../../app/sys_scope/x_casemgmt.xml carries `<name>x_casemgmt</name>`
-          and `<source>x_casemgmt</source>`.
-        - ../../app/sys_app/x_casemgmt_case_management.xml carries
-          `<scope>x_casemgmt</scope>` and `<vendor_prefix>x_casemgmt</vendor_prefix>`.
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
         - All sibling dictionary entries (../../dictionary/x_casemgmt_case_*.xml),
           choices, tables, roles, ACLs, and the parent portal record
           (../sp_portal_x_casemgmt_case_portal.xml) use
@@ -328,11 +327,9 @@
     CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
 
       THIS RECORD MUST LOAD AFTER:
-        - ../../app/sys_scope/x_casemgmt.xml (scope record; <sys_scope>
-          cross-reference resolves against this record's <name>x_casemgmt</name>)
-        - ../../app/sys_app/x_casemgmt_case_management.xml (scoped application
-          record; <sys_package> cross-reference resolves against this
-          record's <scope>x_casemgmt</scope>)
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
 
       THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
       tolerates any order within the same Update Set, since references

@@ -243,8 +243,9 @@
 
     UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
         This sys_script_include record MUST be loaded AFTER:
-            - ../app/sys_app/x_casemgmt_case_management.xml   (scoped app)
-            - ../app/sys_scope/x_casemgmt.xml                 (scope record)
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
             - ../tables/x_casemgmt_case.xml                   (case table; caseGr.getValue() reads its fields)
             - ../tables/x_casemgmt_case_task.xml              (task table; queried via GlideAggregate)
             - ../dictionary/x_casemgmt_case_status.xml        (read by validateNoBacktransition)

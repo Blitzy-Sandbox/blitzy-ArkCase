@@ -32,33 +32,74 @@ The following table is preserved verbatim from AAP Section 0.7.3 and serves as t
 ## Measured Status
 
 The table above is the frozen AAP criteria and is reproduced verbatim; it is deliberately left unaltered. The
-table below is the **measured outcome** of those criteria, taken on `https://dev379024.service-now.com` during
-the clean-instance round trip described in
-[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Every entry is an
-observation, not an expectation. Where a gate's outcome depends on an operational step, that is stated rather
-than folded into a pass.
+table below is the **measured outcome** of those criteria on `https://dev379024.service-now.com` (Australia
+Patch 3). Every entry is an observation, not an expectation. Where a gate's outcome depends on an operational
+step, that is stated rather than folded into a pass.
+
+**Read the evidence attribution carefully — the measurements come from three different runs, and they are not
+interchangeable:**
+
+- **The clean-instance round trip** ([`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md))
+  established the install behaviour and the zero-preview-error result. It was performed on an **earlier
+  916-block revision** of the Update Set (3,448,009 bytes, SHA-256 `32a064d6…`). **The shipping package is 913
+  blocks / 3,594,744 bytes / SHA-256 `b5b624ab…` and has not been round-tripped**, which is why the Update Set
+  gate below is qualified rather than a pass.
+- **Later verification runs on the committed application** produced the workflow, ACL, REST and ATF results.
+  These were taken against the live application after remediation, not from the import.
+- **Browser observation** produced the portal-page, dashboard and related-list results.
+
+Each row below names which of the three it rests on.
 
 | Gate | Measured status | Evidence |
 | --- | --- | --- |
 | Data model | ⚠️ **PASS only after remediation** | A clean commit yields table metadata with **no physical storage** (REST 403, zero `sys_choice` rows, inserts fail with `invalid table name`). After the §9.5 remediation: 3 physical tables (21/14/13 columns), 24 choice rows, all 7 choice lists rendering their exact option labels, and the three list views rendering as real data grids with zero banners and zero console errors. |
-| Workflow | ✅ **PASS** | Independently re-verified after the round trip: clicking the real **Resolve** UI Action on a case with an open child task was blocked, no write occurred (`sys_mod_count` unchanged), and the form displayed `All tasks must be closed before resolving this case.` — codepoint-verified, 52 ASCII characters, terminating U+002E. Both prohibited-transition messages, the date stamping and the `pending_reason` clearing were re-measured and hold. |
-| ACLs | ⚠️ **PASS on the parent table after remediation; FAIL on the child tables** | A clean commit gives 26 ACLs with **0 of 27** role links; after remediation, **27**. Parent-table matrix then correct by impersonation: manager 14/14 with Delete, agent 9/14 without Delete, viewer 14/14 read-only. Both halves of "Assigned only" proven, including group-only visibility and record-level denial by direct URL. **But** the agent's `case_task`/`case_party` read+write conditions cannot compile (`current.case`; `case` is a JS reserved word) and deny every row — caught by ATF 07. |
+| Workflow | ✅ **PASS** | Two distinct pieces of evidence, deliberately kept apart. **(a) Breadth — the U1 enforcement pass:** all 13 transition-logic assertions covering every row of the AAP §0.5.5 matrix (both case types, both prohibited transitions, the task-closure gate, the date stamping, the `pending_reason` lifecycle) pass under the order-250 `enforce_forward_transitions` Business Rule; re-measured after every subsequent change at **13 / 13**, per assertion, byte-identical expected vs actual (§9.7). **(b) Depth on the form, one dedicated run after the round trip:** clicking the real **Resolve** UI Action on a case with an open child task was blocked, no write occurred (`sys_mod_count` unchanged), and the form displayed `All tasks must be closed before resolving this case.` — codepoint-verified, 52 ASCII characters, terminating U+002E. (b) proves the message reaches the form for one transition; (a) proves the matrix. All 7 flows are `active=true`, `status=published`. |
+| ACLs | ⚠️ **PASS on all three tables after remediation** — qualified only because the remediation is manual | A clean commit gives 26 ACLs with **0 of 27** `sys_security_acl_role` link rows; after running `scripts/post_import_remediation.js` in Global, **27 of 27**. The matrix is then correct on the case table by impersonation: manager 14/14 with Delete, agent 9/14 without Delete, viewer 14/14 read-only. Both halves of "Assigned only" proven, including group-only visibility and record-level denial by direct URL. **The child-table defect is fixed:** the agent's `case_task` / `case_party` read+write conditions previously could not compile (`current.case` — `case` is a JS reserved word) and denied every row; the mirror is now enforced correctly and **ATF 06 and ATF 07 both pass** in the final suite run. |
 | Portal — submission | ⚠️ **REST contract PASS · portal page FAIL** | Anonymous `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. The submit **page** renders blank (0 inputs, 0 buttons) because `sp/page` returns `containers: []` — the layout records were never authored. |
 | Portal — lookup | ⚠️ **REST contract PASS · portal page FAIL** | GET valid → exactly `{status, subject, opened_date}`, all seven internal fields absent from body and raw response. GET unknown → **404** with `No case found with that number.`, byte-identical to the required literal. The lookup **page** renders blank for the same reason. |
-| Dashboards | ❌ **FAIL** | Both `pa_dashboards` records **do commit** and are live, but each composite block serializes its tab child as `<pa_tab>` while this release's table is `pa_tabs` — so the commit log carries two `Table 'pa_tab' does not exist` errors on every import, `pa_m2m_dashboard_tabs` stays empty for both dashboards, and a dashboard with no tab renders no widgets. A one-element packaging defect in the deliverable, pre-existing; see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.6 E5 and §10.2 item 11. The 8 backing `sys_report` records do commit and are backed by populated tables. |
-| Update Set | ✅ **PASS** | **Before = 42 errors** on the populated instance; **after = 0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed`. Full progression 42 → 559 → 297 → 0 and its two root causes are in §9.2. |
+| Dashboards | ❌ **FAIL** | Browser-observed: both dashboards open, and both render **0 tabs and 0 widgets**, showing the platform's empty state, "Add widgets using the widget picker." — with 0 console errors and 0 failed network requests, so nothing is being blocked at runtime. The cause is packaging: each dashboard's composite block names **three child tables that do not exist on this release** — `pa_tab` (the real table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8 widget placements (3 Agent Workspace + 5 Manager View) and the role grants are dropped on commit, and a dashboard with no tab can render no widgets. **A second, independent defect compounds it:** all 8 `sys_report` rows commit with an **empty `group_by`** although every report artifact specifies one, so even once placed, *All Cases by Status* would render grouped by *Assigned Agent*. Both are packaging defects in the deliverable; see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5, §0.6 and §9.6 E5. The 8 report records themselves do commit, and a scoped report renders correctly when opened directly. |
+| Update Set | ⚠️ **PASS on the revision measured; NOT YET PROVEN on the bytes that ship** | On the **916-block `32a064d6…` revision**: before = **42 errors** on the populated instance; after = **0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed` (full progression 42 → 559 → 297 → 0 and its two root causes in §9.2). **The shipping file is a different artifact** — 913 blocks, 3,594,744 bytes, SHA-256 `b5b624ab…` — and no upload → preview → commit has been run on it. Static checks on it pass (all 913 blocks parse, all 913 canonically named and unique, one `<unload>` root) and the delta from the proven revision is confined to record descriptions plus the removal of the bootstrap trigger block, so a clean preview is expected — but expected is not measured. This is [open limitation 1](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) and the first recommended next step. |
 
-> **Net: 2 gates pass outright, 3 pass with a qualification, 1 fails.** The application logic is sound; the
-> package is not self-installing and the portal UI and dashboards are not usable on this instance. The
-> step-by-step install procedure that does work, and the residual manual footprint per defect, are in §9.5 of
-> the limitations register. One further AAP requirement outside these seven gates was also measured and fails:
-> §0.4.4's related lists for `case_task` and `case_party` were never authored.
+> **Net: 1 gate passes outright · 5 pass only with a qualification · 1 fails** — 1 + 5 + 1 = 7.
+>
+> | Verdict | Gates |
+> | --- | --- |
+> | ✅ Pass outright (1) | Workflow |
+> | ⚠️ Qualified (5) | Data model *(needs the manual remediation)* · ACLs *(needs the manual remediation)* · Portal — submission *(REST contract passes, page blank)* · Portal — lookup *(REST contract passes, page blank)* · Update Set *(zero-error proof belongs to an earlier revision's bytes)* |
+> | ❌ Fail (1) | Dashboards |
+>
+> **On the count.** This is the conservative reading, and it is the one every document in this deliverable
+> quotes. Gates 1 and 3 carry **the same single qualification** — the documented manual post-import remediation,
+> which is an approved installer step rather than a defect in the data model or the ACL design — so a reader who
+> counts that step as part of a normal install will read gates 1, 2 and 3 as outright passes and arrive at
+> **3 pass · 3 qualified · 1 fail**. Both accountings describe the identical measured state. An earlier revision
+> of this section claimed "2 pass, 3 qualified, 1 fail", which does not sum to 7; any count that fails to sum to
+> 7 is wrong on its face.
+>
+> **What the qualifications mean, because "qualified" must not be read as "fine".** The two portal gates pass at
+> the contract level and fail at the surface level: an anonymous caller can submit a case and look one up
+> through the REST endpoints exactly as specified, but a human visiting either portal page sees a blank screen,
+> so the gate's own wording — "Case created from unauthenticated portal **submission**" — is only satisfied
+> programmatically. Data model and ACLs are correct once an operator has run the Global remediation script, and
+> incorrect until then. The Update Set gate's zero-error proof belongs to a different set of bytes.
+>
+> The application logic is sound; the package is not self-installing, and the portal pages and dashboards are
+> not usable on this instance. The install procedure that does work, and the residual manual footprint per
+> defect, are in §9.5 of the limitations register. Two further AAP requirements outside these seven gates were
+> also measured and fail: §0.4.4's related lists for `case_task` and `case_party` were never authored
+> (`sys_ui_related_list` holds 0 rows for this scope and the form's related-lists wrapper measures 0 pixels
+> tall), and all 8 reports lost their `group_by` on commit.
 >
 > **Regression gate (outside the seven).** The 13 transition-logic assertions that were passing before this
 > pass were re-measured afterwards with the same harness, run verbatim: **13 / 13 before, 13 / 13 after**, per
-> assertion, with byte-identical expected and actual values — see §9.7 of the limitations register. The ATF
-> suite runs on the committed instance and scores **20 ran / 16 Success / 4 Failure / 0 Error / 0 Skipped**,
-> identically across three runs; every failure is reported rather than relaxed (§9.6 E-ATF, E-ATF15).
+> assertion, with byte-identical expected and actual values — see §9.7 of the limitations register.
+>
+> **ATF gate (outside the seven).** The final suite run on the committed instance, `TES0001015`, scores
+> **20 / 20 tests Success and 180 / 180 step results Success** — 0 Failure, 0 Error, 0 Skipped, ~4 minutes, no
+> test residue left behind. An earlier run, `TES0001014`, scored 16 Success / 4 Failure; those 4 failures were
+> the child-table ACL condition and the ATF-15 form assertion, both since fixed, and that result is history
+> rather than status. Running the suite requires `sn_atf.runner.enabled = true` and a browser-attached client
+> runner — see [`ATF_MANUAL_TEST_PLAN.md`](./ATF_MANUAL_TEST_PLAN.md).
 
 ## Per-Gate Detail
 
@@ -83,7 +124,16 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
 - **Criterion:** All state transitions enforced for both case types
 - **Pass Condition:** Invalid transitions return blocking error; task-closure check blocks Resolved transition
 - **Detailed Verification Procedure:**
-    1. Open Flow Designer → filter by name `x_casemgmt_*state_machine`. Confirm both flows are Active (not Draft).
+    1. Open Flow Designer and filter by **Application = `x_casemgmt Case Management`**, which is the reliable
+       way to list them. The two parent flows are named **`general_inquiry_state_machine`** and
+       **`complaint_state_machine`** internally, and **General Inquiry State Machine** / **Complaint State
+       Machine** on screen — note there is **no `x_casemgmt_` prefix on flow names**, so a name filter of
+       `x_casemgmt_*state_machine` matches nothing. Searching the name for `state_machine` works. Confirm both
+       are **Active** and **Published**, not Draft. The same filter shows the five subflows they call:
+       `validate_open_transition`, **`validate_in_progress_transition`** (note the underscores — the repository
+       file is `validate_inprogress_transition.xml`), `validate_pending_transition`,
+       `validate_resolved_transition`, `validate_closed_transition`. All seven were last measured
+       `active=true`, `status=published`.
     2. As `x_casemgmt_demo_manager` user, create a new General Inquiry case in Draft status; attempt to set status to Open WITHOUT setting `assigned_group`. Verify a blocking form-level error appears.
     3. Set `assigned_group` and re-attempt the Open transition. Verify success.
     4. Attempt In Progress transition WITHOUT setting `assigned_agent`. Verify blocking error.
@@ -159,7 +209,18 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
     6. Confirm all 5 widgets render: cases by status (bar), cases by type (donut), cases by priority (bar), avg time-to-close (single-score), cases-opened-30-days (single-score).
     7. Confirm each widget shows synthetic-data values consistent with the seed data.
 - **Cross-Reference Document:** [`dashboards.md`](./dashboards.md)
-- **Failure Mode:** If a widget fails to render, the underlying report record is broken. Fix the report XML in `reports/` and the dashboard reference in `dashboards/` and re-export. Per AAP Section 0.7.2 Minimal-Change Clause, if a gap requires adding widgets beyond the eight reports defined in [`dashboards.md`](./dashboards.md), stop and report — do not substitute.
+- **What actually happens today, so nobody spends time diagnosing it twice:** steps 2 and 6 fail immediately.
+  Both dashboards open and show **0 tabs and 0 widgets** with the platform's empty state, "Add widgets using the
+  widget picker." There are no console errors and no failed requests. The reports are not the problem — opening a
+  scoped report directly renders it. **Two independent packaging defects** are:
+    1. each dashboard's composite block names three child tables that do not exist on this release — `pa_tab`
+       (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8
+       widget placements and the role grants are dropped on commit; and
+    2. all 8 `sys_report` rows commit with an **empty `group_by`** although the artifacts specify one, so the
+       charts would not aggregate as designed even once placed.
+- **Failure Mode:** Fix the three child table names in `dashboards/*.xml` and the `group_by` carriage in
+  `reports/*.xml`, then re-export — **not** by hand-building the dashboards on the instance, which would leave
+  the deliverable still broken. Per AAP Section 0.7.2 Minimal-Change Clause, if a gap requires adding widgets beyond the eight reports defined in [`dashboards.md`](./dashboards.md), stop and report — do not substitute.
 
 ### Gate 7 — Update Set
 
@@ -174,6 +235,10 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
     6. If preview errors exist, return to source PDI, fix the underlying records, re-export, and restart this procedure.
     7. Click Commit. Wait for commit to complete.
     8. Re-run all of Gates 1–6 on the verification PDI to confirm the application is fully functional after a fresh install.
+- **Status of this procedure:** it has been executed end-to-end with **0 preview errors and 0 warnings**, but on
+  the **916-block `32a064d6…`** revision. It has **not** been executed on the shipping bytes (913 blocks /
+  3,594,744 bytes / `b5b624ab…`). Running it on those bytes, and recording the preview problem count, is the
+  first item on the open-work list.
 - **Cross-Reference Document:** [`deployment.md`](./deployment.md) and [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md)
 - **Failure Mode:** Update Set integrity is the final gate; failure here blocks delivery. The most common cause is hard-coded `sys_id` references — search every flow, ACL, business rule, and seed record for literal `sys_id` values and replace with `GlideRecord` lookups by name/user_name/number/role_label. Per AAP Section 0.7.2 Minimal-Change Clause, if the preview reports errors that would require modifying global tables, installing Store applications, or adding scope-external artifacts to resolve, stop and report — do not substitute.
 
@@ -208,11 +273,13 @@ In addition, every Gate's Pass Condition (column 3 of the Seven Gates table abov
 > above records exactly where. Against the success criteria reproduced in this section: cases can be created,
 > assigned, progressed through every state and closed **via the internal UI** but **not via the external
 > portal**, because the portal pages render blank; tasks and parties work and case resolution is correctly
-> blocked until all linked tasks are closed; ACLs are enforced as specified on the case table but **not** on
-> the task and party tables for the agent role; the **2 dashboards are not operational** on this instance; and
-> the scoped application **is** exported as a single complete Update Set that previews with zero errors. The
-> outstanding work is enumerated with effort estimates in
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+> blocked until all linked tasks are closed; ACLs are enforced as specified **on all three tables**, the agent
+> role's task and party conditions having been fixed and confirmed by ATF 06 and 07 passing; the **2 dashboards
+> are not operational** on this instance; and the scoped application **is** exported as a single complete Update
+> Set, which previewed with zero errors — **on an earlier revision's bytes, not the ones that ship**. The
+> outstanding work is enumerated in priority order in
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md), where re-running the round
+> trip on the shipping bytes is item 1.
 
 ## Cross-References
 

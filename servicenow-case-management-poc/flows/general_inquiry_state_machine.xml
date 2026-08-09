@@ -50,7 +50,7 @@
         Flow Designer's own loader (GET /api/now/processflow/flow/<sys_id>) returns HTTP 200
         with errorCode 0 for this record, and the graph counts it reports match the
         structure below. The state-machine gates these flows enforce were exercised on the
-        live case form for both case types; see ../../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md
+        live case form for both case types; see ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md
         section 3 for the recorded results.
 -->
 <record_update sys_domain="global" table="sys_hub_flow">

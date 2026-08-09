@@ -150,7 +150,7 @@
       This task DEPENDS ON (loaded BEFORE this record):
         - The scoped application records under ../../app/
             (sys_app at ../../app/sys_app/x_casemgmt_case_management.xml
-             and sys_scope at ../../app/sys_scope/x_casemgmt.xml; this
+             and sys_scope at ../../app/sys_app/x_casemgmt_case_management.xml; this
              task's <sys_scope>/<sys_package> reference fields resolve
              via the source attribute against those records, with the
              source value x_casemgmt matching the sys_scope record's

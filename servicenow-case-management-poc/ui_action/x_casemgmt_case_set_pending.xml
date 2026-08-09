@@ -95,9 +95,11 @@
         That single method covered EVERY transition by string-matching
         the `newState` parameter. The ServiceNow target instead splits
         per-transition logic across:
-          - This UI Action (In Progress -> Pending)
-          - The validate_pending_transition.xml subflow (sub-step that
-            stamps pending_reason from the parent flow context)
+          - This UI Action (In Progress -> Pending) - it prompts for the
+            reason and is the only writer of pending_reason
+          - The validate_pending_transition.xml subflow (the guard for this
+            edge; per AAP Section 0.5.5 the edge has no precondition, so the
+            subflow returns an ok verdict and writes nothing)
           - The clear_pending_reason_on_inprogress.xml business rule
             (the reverse Pending -> In Progress edge)
 
@@ -242,10 +244,9 @@
               (the manager role referenced by <roles> and condition)
             - ../roles/sys_user_role_x_casemgmt_case_agent.xml
               (the agent role referenced by <roles> and condition)
-            - ../app/sys_app/x_casemgmt_case_management.xml
-              (the scoped application)
-            - ../app/sys_scope/x_casemgmt.xml
-              (the scope record)
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
 
         And BEFORE:
             - ../seed-data/cases/x_casemgmt_case_demo_03.xml

@@ -24,34 +24,33 @@
     This dictionary entry ONLY declares that the `closed_date` field exists
     on the parent table. The auto-population logic
     (`closed_date = gs.nowDateTime()` on the Resolved -> Closed transition)
-    is configured in TWO redundant places by intentional design (per agent
-    prompt Phase 10 Key Insights item 4):
+    has exactly ONE writer in the delivered implementation:
 
-        1) ../business_rules/x_casemgmt_set_closed_date.xml
-           A before-update business rule on `x_casemgmt_case` that fires when
-           previous.status == "Resolved" AND current.status == "Closed".
-           This guarantees the timestamp is set on EVERY Closed transition,
-           including direct updates via the Table API, GlideRecord scripts,
-           bulk imports, and any future server-side automation that bypasses
-           the Flow Designer flow.
+        ../business_rules/x_casemgmt_set_closed_date.xml
+           A before-update business rule on `x_casemgmt_case`, order 500,
+           that fires when previous.status == "Resolved" AND
+           current.status == "Closed". Being a before-update rule on the
+           write path, it stamps the timestamp on EVERY Closed transition -
+           the form, direct updates via the Table API, GlideRecord scripts,
+           bulk imports, and any future server-side automation.
 
-        2) ../flows/sub_flows/validate_closed_transition.xml
-           A Flow Designer subflow invoked by both
-           ../flows/general_inquiry_state_machine.xml and
-           ../flows/complaint_state_machine.xml when the case transitions
-           into Closed. The subflow auto-sets closed_date in the case-state
-           context so the timestamp is visible alongside the role-check
-           outcome ("Caller has x_casemgmt_case_manager role" per AAP
-           Section 0.5.5).
+    ../flows/sub_flows/validate_closed_transition.xml does NOT write this
+    column. That subflow is a guard: invoked from
+    ../flows/general_inquiry_state_machine.xml and
+    ../flows/complaint_state_machine.xml (and, synchronously, from the
+    order-250 business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml),
+    it evaluates the "Caller has x_casemgmt_case_manager role" precondition
+    of AAP Section 0.5.5 and RETURNS A VERDICT ({ok, error}). When the
+    verdict is ok the save proceeds and the order-500 rule stamps the
+    timestamp; when it is not, the order-250 rule aborts the save, so
+    closed_date is never stamped. Ordering is what makes this work: the
+    guard at 250 runs before the stamp at 500 in the same before-update
+    pass.
 
-    The redundancy is INTENTIONAL: the business rule guarantees
-    write-path coverage independent of the orchestration layer; the
-    subflow guarantees the timestamp is surfaced in the same execution
-    scope as the user-facing transition validation. Both writers respect
-    the read_only=true dictionary attribute because read_only governs
-    USER-INITIATED writes through forms / Table API / import sources -
-    server-side scripts using GlideRecord.setValue() bypass the
-    read_only check by design.
+    The single writer respects the read_only=true dictionary attribute
+    because read_only governs USER-INITIATED writes through forms /
+    Table API / import sources - server-side scripts using
+    GlideRecord.setValue() bypass the read_only check by design.
 
     Semantic source-side reference (read-only, NOT byte-for-byte ported):
       - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
@@ -245,16 +244,18 @@
         the table by name.
       - This record MUST load BEFORE the consumers that read or write
         the `closed_date` column:
-          * ../business_rules/x_casemgmt_set_closed_date.xml (before-update
-            business rule that populates this field with `gs.nowDateTime()`
-            on the Resolved -> Closed transition; the rule references the
-            column by element name and would fail to resolve against the
-            table if this dictionary entry is absent)
+          * ../business_rules/x_casemgmt_set_closed_date.xml (the sole
+            writer: before-update business rule, order 500, that populates
+            this field with `gs.nowDateTime()` on the Resolved -> Closed
+            transition; the rule references the column by element name and
+            would fail to resolve against the table if this dictionary
+            entry is absent)
           * ../flows/sub_flows/validate_closed_transition.xml (Flow
-            Designer subflow that auto-sets closed_date as part of the
-            user-facing Resolved -> Closed transition; depends on this
-            dictionary entry to resolve the Set Field Value action's
-            target column)
+            Designer guard subflow for the Resolved -> Closed transition.
+            It writes nothing; it returns a verdict that the order-250
+            business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml
+            turns into an abort. Listed here because it reads the case
+            record and must resolve against the same table)
           * ../reports/x_casemgmt_avg_time_to_close.xml (single-score:
             AVG(`closed_date - opened_date`) over Closed cases - per
             AAP Section 0.4.1 Manager View Dashboard widget inventory;
@@ -289,7 +290,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Closed Date</column_label>
-        <comments>DateTime auto-set when status transitions Resolved-&gt;Closed via ../business_rules/x_casemgmt_set_closed_date.xml and ../flows/sub_flows/validate_closed_transition.xml. Read-only from user perspective. Used by ../reports/x_casemgmt_avg_time_to_close.xml. Replaces ArkCase CaseFile.closed (Date with @Temporal(TIMESTAMP)).</comments>
+        <comments>DateTime stamped on the Resolved-&gt;Closed transition by exactly one writer: the order-500 before-update business rule ../business_rules/x_casemgmt_set_closed_date.xml. The guard subflow ../flows/sub_flows/validate_closed_transition.xml writes nothing - it returns a verdict that the order-250 business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml turns into an abort. Read-only from user perspective. Used by ../reports/x_casemgmt_avg_time_to_close.xml. Replaces ArkCase CaseFile.closed (Date with @Temporal(TIMESTAMP)).</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>

@@ -185,7 +185,7 @@
         pattern in this scoped app).
       - sys_scope text-node value: `x_casemgmt` (NOT
         `x_casemgmt_case_management`). The actual scope record's
-        `<name>` is `x_casemgmt` per ../app/sys_scope/x_casemgmt.xml,
+        `<name>` is `x_casemgmt` per ../app/sys_app/x_casemgmt_case_management.xml,
         and ALL sibling XMLs in this scoped app reference the scope
         by that name. Update Set re-import resolves cross-references
         by matching `<sys_scope>` text against the scope record's
@@ -214,11 +214,9 @@
 
     CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
       THIS RECORD MUST LOAD AFTER:
-        - ../app/sys_scope/x_casemgmt.xml (scope record; sys_scope
-          cross-reference resolves against this)
-        - ../app/sys_app/x_casemgmt_case_management.xml (scoped
-          application record; sys_package cross-reference resolves
-          against this)
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
         - ../tables/x_casemgmt_case_party.xml (parent table; the UI
           Policy targets this table by name)
         - ../dictionary/x_casemgmt_case_party_party_type.xml (the

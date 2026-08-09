@@ -298,7 +298,7 @@
             looks up the group's sys_id from its name at import time.
           - <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
                 resolves by scope source-name lookup against the
-                sys_scope record at ../../app/sys_scope/x_casemgmt.xml
+                sys_scope record at ../../app/sys_app/x_casemgmt_case_management.xml
           - <sys_package display_value="Case Management" source="x_casemgmt">
                 x_casemgmt
             </sys_package>  resolves by scope source-name lookup; the
@@ -311,7 +311,7 @@
       Rule 8 - Scope binding:
         <sys_scope>   binds this case row to the scoped application via
                       the scope source name "x_casemgmt" defined in
-                      ../../app/sys_scope/x_casemgmt.xml at
+                      ../../app/sys_app/x_casemgmt_case_management.xml at
                       <source>x_casemgmt</source>; the display_value
                       "Case Management" matches the sys_app's human-
                       readable name (the sys_app's <name> is "x_casemgmt

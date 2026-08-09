@@ -2,7 +2,16 @@
 
 A proof-of-concept ServiceNow scoped application that re-platforms a subset of ArkCase's case-management functional domain onto the ServiceNow Now Platform.
 
-This subdirectory contains a complete, self-contained ServiceNow scoped application that targets a ServiceNow Personal Developer Instance (PDI) running the latest available release (Yokohama, Zurich, or Australia depending on PDI rollout state at provisioning time). The scoped application is delivered as a single Update Set XML at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
+This subdirectory contains the ServiceNow scoped application, delivered as a **single self-contained Update Set XML** at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It targets a ServiceNow Personal Developer Instance (PDI); it has been built and verified on `dev379024`, running **Australia Patch 3**. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
+
+> **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and four things are open. Read this before planning around it:
+>
+> 1. **Two manual post-import steps are mandatory** — the physical table schema (Defect C) and the 27 ACL role-link records (Defect 9). The package ships the remediation body as a Fix Script but **ships no trigger and nothing that auto-executes**; an operator must run `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with **"In scope" = Global**.
+> 2. **The clean-slate round trip has not been run on the bytes that ship.** The complete upload → preview → commit proof this project holds is for an earlier 916-block revision. The current file is **913 blocks, 3,594,744 bytes, SHA-256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`**, and AAP §0.7.1's zero-preview-error gate is therefore **unproven on it**.
+> 3. **Three user-facing surfaces do not work**: both portal **pages** render blank, both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The portal **REST endpoints** do work.
+> 4. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
+>
+> Every one of these is measured, not estimated. [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) is the authoritative current-state record and the place to start.
 
 ## Refactoring Objective
 
@@ -29,7 +38,7 @@ The following ArkCase capabilities are explicitly NOT replicated by this POC:
 - Time tracking and cost tracking.
 - External-system integrations (Alfresco CMIS, Outlook/Exchange EWS, Pentaho BI, OnlyOffice, ZyLAB, Ephesoft, AWS Comprehend Medical, AWS Transcribe, LDAP/AD SSO).
 - Data migration from ArkCase (zero rows are read from the ArkCase MySQL database; all seed data is fabricated).
-- Global-scope changes (no edits to `sys_user`, `sys_user_group`, `sys_user_role` outside the three scoped roles created here, `core_company`, `task`, `incident`, or any out-of-the-box ServiceNow tables).
+- Global-scope changes (no edits to `sys_user`, `sys_user_group`, `sys_user_role` outside the three scoped roles created here, `core_company`, `task`, `incident`, or any out-of-the-box ServiceNow tables) — with **one disclosed and approved exception**: the installer Fix Script `x_casemgmt Post-Import Remediation` is authored in the **global** scope, because the `GlideTableDescriptor` and `GlideSecurityManager` calls it needs are refused in scoped execution. It is installer wiring rather than application configuration, and the commit engine rewrites it into `x_casemgmt` anyway. See Build Constraints item 1 and [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.7](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). The global tables `sys_user`, `sys_user_group`, `sys_user_role` and `core_company` receive **data** inserts only, never schema changes.
 - ServiceNow Store applications (none are installed; the build relies exclusively on the platform's standard low-code tooling shipped with the PDI).
 - Any module, workflow, portal page, table, or integration beyond the defined POC scope.
 
@@ -56,40 +65,79 @@ The following ArkCase locations were consulted as semantic source-of-truth when 
 
 ## Directory Layout
 
+Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`188` files in total, README included).
+
 ```plaintext
 servicenow-case-management-poc/
-├── README.md                    (this file — overview and entry point)
-├── update-set/                  (final exported Update Set XML deliverable)
-├── app/                         (scoped application + scope records: sys_app, sys_scope)
-├── tables/                      (three custom table definitions: sys_db_object)
-├── dictionary/                  (every dictionary field entry: sys_dictionary)
-├── choices/                     (every Choice list record: sys_choice)
-├── numbers/                     (auto-numbering counters for case, task, party)
-├── roles/                       (three scoped role records: sys_user_role)
-├── acl/                         (table-level + field-level ACLs: sys_security_acl)
-├── flows/                       (Flow Designer flows + shared subflows: sys_hub_flow)
-├── script_includes/             (reusable Script Includes for transition validation + portal helpers)
-├── business_rules/              (Before-insert / before-update business rules)
-├── ui_policy/                   (UI Policies for conditional-field visibility)
-├── ui_action/                   (UI Actions for state transitions)
-├── portal/                      (Service Portal record + pages + widgets + scripted REST endpoints)
-├── dashboards/                  (Agent Workspace + Manager View dashboards)
-├── reports/                     (eight report records backing the dashboards)
-├── seed-data/                   (synthetic demo data: users, group, role assignments, cases, tasks, parties)
-├── docs/                        (data model, state machine, ACL matrix, portal pages, dashboards, validation gates, deployment)
-└── scripts/                     (idempotent server-side seed script + round-trip-verify procedure)
+├── README.md                          (this file — overview and entry point)
+├── update-set/                    [1] x_casemgmt_case_management_update_set.xml — THE deliverable
+│                                      (913 blocks · 3,594,744 bytes)
+├── app/                           [1] app/sys_app/x_casemgmt_case_management.xml — the scoped
+│                                      application record. There is no separate sys_scope
+│                                      artifact: the platform derives sys_scope from sys_app
+│                                      on commit, so shipping one would duplicate it.
+├── tables/                        [3] case, case_task, case_party (sys_db_object)
+├── dictionary/                   [25] every field on the three tables (sys_dictionary)
+├── choices/                       [7] every Choice list (sys_choice)
+├── numbers/                       [3] auto-numbering counters (sys_number)
+├── roles/                         [3] the three scoped roles (sys_user_role)
+├── acl/                          [26] table-level + field-level ACLs (sys_security_acl).
+│                                      The 27 sys_security_acl_role LINK rows that grant these
+│                                      to the roles are a different table and are created by
+│                                      the post-import remediation script, not by these files.
+├── flows/                         [9] 2 parent flows + 5 subflows + 1 Custom Action
+│   ├── general_inquiry_state_machine.xml
+│   ├── complaint_state_machine.xml
+│   ├── custom_actions/                x_casemgmt_transition_guard_action.xml — the Custom
+│   │                                  Action that returns the transition verdict to a flow
+│   └── sub_flows/                     validate_open / validate_inprogress / validate_pending /
+│                                      validate_resolved / validate_closed, plus
+│                                      shared_flow_logic_block.xml (sys_hub_flow_block, the
+│                                      shared logic block the five subflows reuse)
+├── script_includes/               [2] CaseTransitionValidator + CasePortalService
+├── business_rules/                [7] before-insert / before-update guards. The two that
+│                                      matter most: x_casemgmt_enforce_forward_transitions
+│                                      (order 250 — calls the subflow and raises the blocking
+│                                      form error) and x_casemgmt_set_closed_date (order 500 —
+│                                      the only writer of closed_date).
+├── ui_policy/                     [1] case_party conditional person/organization fields
+├── ui_action/                     [6] the state-transition buttons
+├── portal/                       [10] portal record + 2 pages + 3 widgets + 2 scripted REST
+│                                      endpoints + supporting records. The REST endpoints work;
+│                                      the two pages render blank (see docs/PDI_LIMITATIONS…).
+├── dashboards/                    [2] Agent Workspace + Manager View. Both currently render
+│                                      with no tabs and no widgets (see docs/PDI_LIMITATIONS…).
+├── reports/                       [8] the eight reports the dashboards are meant to show
+├── seed-data/                     [35] synthetic demo data: 3 users, 1 group, 3 role
+│                                      assignments, 10 cases, tasks, parties
+├── atf/                          [21] the Automated Test Framework suite: 20 test definitions
+│                                      (ATF 01-20) + x_casemgmt_atf_test_suite.xml. These
+│                                      serialize to 761 of the package's 913 blocks.
+├── docs/                         [11] see the Documentation Index below
+└── scripts/                       [6] post_import_remediation.js — the mandatory Global
+                                       post-import script (Defect C + Defect 9)
+                                       sys_script_fix_x_casemgmt_post_import_remediation.xml —
+                                       the Fix Script wrapper that carries that body inside
+                                       the Update Set (it does NOT auto-run)
+                                       seed_demo_data.js — idempotent demo-data seeder
+                                       transition_logic_regression_assertions.js — server-side
+                                       regression assertions for the transition guards
+                                       verify_artifact_references.js — CI gate that fails if
+                                       any artifact header references a non-existent file
+                                       round_trip_verify.md — the re-import/preview procedure
 ```
 
 Each subfolder corresponds to a category of ServiceNow record definitions or supporting artifacts:
 
 - `update-set/` holds the single final Update Set XML deliverable that gets imported into a fresh PDI.
-- `app/` holds the scoped-application metadata records (`sys_app`, `sys_scope`).
+- `app/` holds the scoped-application record (`sys_app`).
 - `tables/`, `dictionary/`, `choices/`, `numbers/` define the three custom tables, their fields, choice lists, and auto-numbering counters.
 - `roles/` and `acl/` define the three scoped roles and their table-level and field-level ACLs.
 - `flows/`, `script_includes/`, `business_rules/`, `ui_policy/`, `ui_action/` implement the case state-machine transition rules and form behavior.
 - `portal/` holds the Experience Portal record, pages, widgets, and scripted REST endpoints powering external case submission and lookup.
 - `dashboards/` and `reports/` define the two POC dashboards and their eight underlying reports.
 - `seed-data/` contains synthetic demo data that exercises every status, both case types, and the full ACL matrix.
+- `atf/` holds the 20 automated tests and the suite that assert the data model, the ACL matrix, the transition rules, and the portal REST contracts.
 - `docs/` and `scripts/` hold supporting documentation and operational scripts.
 
 ## Data Model Quick Reference
@@ -142,7 +190,7 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
-5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml` and re-imports on a fresh PDI with zero preview errors.
+5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met; AAP §0.7.1's zero-preview-error gate is not yet proven on the bytes that ship.** A complete clean-slate upload → preview → commit with zero preview errors was achieved, but on an earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`). The shipping file is 913 blocks / 3,594,744 bytes / SHA-256 `b5b624ab…` and its round trip has not been run. Every block in it parses, all 913 are uniquely named, and the differences from the proven revision are confined to record *descriptions* and the removal of the bootstrap trigger — so the expectation is a clean preview, but expectation is not evidence. Running it is [open limitation 1](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 6. **Flow-Designer-exclusive workflow** — all transition logic lives in Flow Designer (with helper Script Includes and Business Rules at the entity level); no direct background scripts for workflow state management.
 7. **Repository minimality** — output confined to `servicenow-case-management-poc/`; the existing ArkCase repository structure is read-only context and is not refactored in place.
 8. **Tooling restriction** — App Engine Studio, Flow Designer, and UI Builder only; no paid Store applications; no alternative authoring path.
@@ -178,41 +226,96 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 
 - **Update Set XML:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
 - **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation. **The URL resolves anonymously with no login wall, but both pages currently render blank** — see Current Status below.
-- **Dashboards:** Agent Workspace + Manager View records are in the package and **do install**, but they **cannot render** — each composite block serializes its tab child as `<pa_tab>` while the table on the verification instance is `pa_tabs`, so the tab never lands and a dashboard with no tab shows no widgets. A one-element packaging defect; see Current Status below.
+- **Dashboards:** Agent Workspace + Manager View records are in the package and **do install**, but they **cannot render** — both were observed with **0 tabs and 0 widgets**, showing the platform's empty state, "Add widgets using the widget picker." The cause is packaging, not the reports: each dashboard's composite block names **three child tables that do not exist on this release** — `pa_tab` (the real table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`), and `pa_dashboard_role` — so the tab, all 8 widget placements (3 on Agent Workspace, 5 on Manager View) and the role grants are all silently dropped on commit. See Current Status below.
 - **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group. The packaged seed rows require one preparatory step before the seed script can populate them correctly — see Current Status below.
 
 ## Current Status
 
-A clean-instance round trip was performed on `https://dev379024.service-now.com`: the application was torn down
-and the exported Update Set was re-imported through upload → preview → commit. The measured outcome:
+All statements below were measured on `https://dev379024.service-now.com` (Australia Patch 3). Nothing here is
+projected.
 
-- **The Update Set previews with zero errors** (before the teardown it reported 42 on a populated instance; on a
-  genuine clean slate it reports **0 errors and 0 warnings**) and commits successfully.
-- **It is not self-installing.** Two defects need one manual remediation run after commit: the physical table
-  schema, and the 27 ACL role-link records. The package ships the automation for both and the auto-execute
-  trigger demonstrably fires, but it cannot complete — the commit engine rewrites the dispatched record's scope
-  to the application, where the APIs it needs are refused.
-- **Working:** the three-table data model, auto-numbering (`CASE0000452`-format), the full state machine with
-  blocking form errors for both case types, the role × CRUD matrix on the case table including record-level
-  "Assigned only" narrowing and the field-level ACLs, the anonymous portal **REST endpoints** (201 / 200 / 404
-  with the verbatim messages), the 8 reports, and the demo data.
-- **Not working:** the portal **pages** render blank (their Service Portal layout records were never authored);
-  the two dashboards install but cannot render (their tab child is serialized as `pa_tab` while this release's
-  table is `pa_tabs`, so no tab is created); the `case_agent` role's ACL conditions on the task and party
-  tables cannot compile, so they deny every row; and the case form has no related lists.
-- **No regressions.** The 13 transition-logic assertions that passed before this pass were re-measured with the
-  same harness afterwards: **13 / 13 before, 13 / 13 after**, per assertion. The ATF suite runs on the
-  committed instance and scores 16 Success / 4 Failure over 20 tests, with every failure reported rather than
-  relaxed.
+**The package**
+
+- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,594,744 bytes,
+  SHA-256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`**. Quote these numbers and no
+  others; earlier revisions carried different ones.
+- **Round-trip status: OPEN.** A clean-slate upload → preview → commit with **0 preview errors and 0 warnings**
+  was achieved, but on an **earlier 916-block revision** (3,448,009 bytes, SHA-256 `32a064d6…`). The bytes above
+  have **not** been round-tripped, so AAP §0.7.1's gate is unproven on what ships. This is the first
+  recommended next step.
+- **Nothing in it fires on its own.** The package contains **no record that auto-executes, of any kind** — no
+  Business Rule, no scheduled job, no `sys_trigger` row. (It does contain a Fix Script, which is a record; the
+  point is that nothing *runs* it.) An earlier revision did ship one (the global Business
+  Rule `x_casemgmt Post-Import Bootstrap`); it was **removed**, both because it could not succeed (the commit
+  engine rewrites the dispatched record into the application scope, where the APIs it needs are refused) and
+  because its condition fired on the commit of *any* retrieved Update Set, which would have dispatched
+  privileged, partly destructive remediation onto unrelated deployments. The remediation body still ships, as
+  the Fix Script `x_casemgmt Post-Import Remediation`, but a Fix Script does not self-run either.
+
+**Installation is therefore a two-part operation**
+
+Commit, then run `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with
+**"In scope" = Global**. Two defects require it, and neither can be automated on a PDI:
+
+- **Defect C** — the three tables commit as dictionary metadata without physical storage.
+- **Defect 9** — the 26 ACLs commit without their **27** `sys_security_acl_role` link rows, so they grant
+  nothing until the links exist.
+
+[`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) carries the numbered
+procedure. Do not substitute the Fix Script UI: it executes in the application scope and fails.
+
+**Working — directly observed**
+
+- The three-table data model, and auto-numbering in `CASE0000001` format.
+- The full state machine for both case types, with blocking form errors. All **7 flows** are `active=true`
+  and `status=published`.
+- The role × table × CRUD matrix, including record-level "Assigned only" narrowing and the field-level ACLs on
+  `assigned_group` / `assigned_agent` — **on all three tables**. The `case_agent` condition defect that
+  previously denied every row on the task and party tables has been fixed and the ATF tests that cover it
+  (06, 07) pass.
+- The anonymous portal **REST endpoints**: submit returns `201` with the new case number; lookup returns `200`
+  with exactly `{status, subject, opened_date}`; an unknown number returns `404` with the verbatim
+  `No case found with that number.`
+- The 8 report definitions and the demo data (census at last measurement: **11 cases, 10 tasks, 8 parties**).
+- **The ATF suite is green.** Run `TES0001015`: **20 / 20 tests Success, 180 / 180 step results Success**, zero
+  failures, errors or skips, ~4 minutes, no test residue left behind. (An earlier run, `TES0001014`, scored
+  16 / 4; that result predates the fixes and is history, not status.)
+
+**Not working — also directly observed**
+
+- **Both portal pages render blank.** All three portal routes return HTTP 200 with no login wall, but the page
+  API reports **0 containers** and the rendered pages contain 0 forms, 0 inputs and 0 buttons — verified pure
+  white across every pixel, with 0 console errors. A control page on the same portal and session renders its
+  widgets normally, so the portal itself is sound: the two pages' Service Portal layout records
+  (container / row / column / instance) were never authored. The REST endpoints behind them work.
+- **Both dashboards render no tabs and no widgets** — the platform's empty state. Their composite blocks name
+  three child tables that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`),
+  so the tab, all 8 widget placements and the role grants are dropped on commit.
+- **All 8 installed reports lost their grouping.** Every report artifact specifies a `group_by`, but all 8
+  `sys_report` rows commit with it empty — so, for example, *All Cases by Status* renders grouped by *Assigned
+  Agent*. A report-by-report repair, unrelated to the dashboard defect above.
+- **The case form has no related lists.** `sys_ui_related_list` holds **0 rows** for this scope, and the form's
+  related-lists wrapper measures **exactly 0 pixels** tall. The reference fields make the relationship
+  available; the list placements were never authored.
+
+**No regressions.** The 13 transition-logic assertions that passed before this pass were re-measured with the
+same harness afterwards: **13 / 13 before, 13 / 13 after**, per assertion.
 
 **Read [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) before deploying.**
-Section 9.5 of that document is the step-by-step install procedure that actually works, Section 9.6 lists every
-known defect with its root cause, and Section 10 gives the recommended next steps with effort estimates. The
-measured status of each of the seven validation gates is in
-[`docs/validation-gates.md`](docs/validation-gates.md#measured-status).
+**Section 0** of that document is the authoritative current-state record and supersedes any later section it
+disagrees with; Section 9.5 is the install procedure, Section 9.6 lists every known defect with its root cause,
+and Section 10.0 gives the recommended next steps in priority order. The measured status of each of the seven
+validation gates is in [`docs/validation-gates.md`](docs/validation-gates.md#measured-status).
 
 > **Instance note.** The reachable verification instance is `https://dev379024.service-now.com`. The
 > `dev364430` host named in some older documentation in this repository is stale and returns HTTP 401.
+
+> **Running the ATF suite needs one instance setting that the package deliberately does not carry.** Set
+> `sn_atf.runner.enabled = true` under *sys_properties*, then start the suite from a browser-attached client
+> runner (open `/atf_test_runner.do?sysparm_nostack=true` first and select it under "Pick a Browser").
+> Headless execution is **off** on `dev379024` and could not be enabled there, so it is unverified. The
+> property is instance configuration and is excluded from the package on purpose — importing an app should not
+> silently enable test execution on someone's instance.
 
 ## Install & Deployment
 
@@ -223,8 +326,10 @@ measured status of each of the seven validation gates is in
 
 > **These four steps are the AAP's deployment contract, reproduced as written. They are not sufficient on this
 > instance.** A commit alone leaves the three tables without physical storage and the 26 ACLs without their 27
-> role links, and step 3's dashboard check cannot pass because the dashboards' tab child names `pa_tab` instead of `pa_tabs`. Follow
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the procedure that
+> role links. Step 3's dashboard check cannot pass either — the dashboards name three child tables that this
+> release does not have (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) — and its portal check will find
+> the URL live but the pages blank. Follow
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0 and §9.5](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the procedure that
 > works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**
 > (*Scripts - Background*, "In scope" = Global — **not** the Fix Script UI, which runs in the application scope
 > and fails), commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to
@@ -237,7 +342,7 @@ Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification pro
 
 ## Validation Gates
 
-Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — 2 pass outright, 3 pass with a qualification, 1 fails — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status).
+Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — **1 passes outright, 5 pass only with a qualification, 1 fails** (1 + 5 + 1 = 7) — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status). In brief: **Workflow** passes. **Data model** and **ACLs** are correct only after the documented manual post-import remediation. **Portal — submission** and **Portal — lookup** pass at the REST-contract level while their pages render blank. **Update Set** previewed with zero errors, but on an earlier revision's bytes rather than the ones that ship. **Dashboards** fails. Counting the documented remediation as part of a normal install instead yields 3 pass · 3 qualified · 1 fail; both describe the same measured state, and this deliverable quotes the conservative one throughout.
 
 | Gate | Criterion | Pass Condition |
 | --- | --- | --- |
@@ -251,19 +356,30 @@ Detailed gate definitions live in `docs/validation-gates.md`. The seven gates be
 
 ## Documentation Index
 
-Files under `docs/`:
+Read them in this order. The first is authoritative wherever any other document disagrees with it.
 
-- `docs/data-model.md` — the three-table schema with field/type/constraint tables.
-- `docs/state-machine.md` — narrative of the transition matrix and blocking-error messages.
-- `docs/acl-matrix.md` — the role × table × CRUD matrix and the "Assigned only" definition.
-- `docs/portal-pages.md` — wireframe-level specs for submission and lookup pages.
-- `docs/dashboards.md` — widget inventory for both dashboards.
-- `docs/validation-gates.md` — the seven-row validation framework with pass criteria.
-- `docs/deployment.md` — Update Set export, re-import, preview, and commit walkthrough.
+| Document | What it is for |
+| --- | --- |
+| [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) | **The authoritative current-state record.** §0 carries the package identity, what is and is not verified, the open limitations, and the gate rollup. Start here. |
+| [`docs/validation-gates.md`](docs/validation-gates.md) | AAP §0.7.3's seven gates with the evidence behind each verdict. |
+| [`docs/data-model.md`](docs/data-model.md) | The three tables, field by field, per AAP §0.5.7. |
+| [`docs/state-machine.md`](docs/state-machine.md) | The transition matrix per AAP §0.5.5, the blocking-error strings, and how enforcement is wired. |
+| [`docs/acl-matrix.md`](docs/acl-matrix.md) | The role × table × CRUD matrix per AAP §0.5.6 and the definition of "Assigned only". |
+| [`docs/portal-pages.md`](docs/portal-pages.md) | The submission and lookup surfaces and their exact field whitelists. |
+| [`docs/dashboards.md`](docs/dashboards.md) | The widget inventory for both dashboards and the reports behind them. |
+| [`docs/deployment.md`](docs/deployment.md) | Export, upload, preview, commit, and post-commit verification. |
+| [`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) | The full operator runbook, including the mandatory post-import remediation procedure. |
+| [`docs/ATF_MANUAL_TEST_PLAN.md`](docs/ATF_MANUAL_TEST_PLAN.md) | What each of the 20 ATF tests asserts, and how to run the suite. |
+| [`docs/WORKFLOW_TRYOUT_GUIDE.md`](docs/WORKFLOW_TRYOUT_GUIDE.md) | A hands-on walkthrough of the case lifecycle on a live instance. |
+| [`scripts/round_trip_verify.md`](scripts/round_trip_verify.md) | The Update Set re-import and preview verification procedure. |
 
 Files under `scripts/`:
 
+- `scripts/post_import_remediation.js` — **the mandatory post-import remediation.** Builds the three tables' physical storage (Defect C) and creates the 27 `sys_security_acl_role` link rows (Defect 9). Run it from *Scripts - Background* with "In scope" = **Global**; it is fail-closed and reports `verified=true` only when both are correct.
+- `scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` — the Fix Script record that carries that same body inside the Update Set so it arrives with the app. It does **not** auto-run, and running it from the Fix Script UI fails (application scope).
 - `scripts/seed_demo_data.js` — idempotent server-side seed script (uses `GlideRecord` lookups by `user_name` / `name` / `number`; no hard-coded `sys_id`s).
+- `scripts/transition_logic_regression_assertions.js` — the 13 server-side assertions over the transition guards, used to prove no regression across changes.
+- `scripts/verify_artifact_references.js` — CI gate: fails with a non-zero exit if any artifact header comment references a file that does not exist. Run `node scripts/verify_artifact_references.js` from this directory.
 - `scripts/round_trip_verify.md` — manual procedure for the fresh-PDI re-import preview gate.
 
 ## License

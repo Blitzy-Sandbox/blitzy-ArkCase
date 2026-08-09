@@ -199,8 +199,9 @@
 
     Cross-references (AAP Section 0.5.2 dependency ordering):
       THIS RECORD SET MUST LOAD AFTER:
-        - ../app/sys_app/x_casemgmt_case_management.xml (scoped application)
-        - ../app/sys_scope/x_casemgmt.xml (scope record)
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
         - ../tables/x_casemgmt_case.xml (parent table; priority field's host)
         - ../dictionary/x_casemgmt_case_priority.xml (parent dictionary entry;
           declares the column shape, choice=3, default_value=Medium,
