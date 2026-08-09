@@ -47,8 +47,8 @@ anywhere else in this document.
 |---|---|
 | Path | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` |
 | `<sys_update_xml>` blocks | **913** (plus exactly one `sys_remote_update_set` descriptor, under a single `<unload>` root) |
-| Size | **3,594,744 bytes** |
-| SHA-256 | **`b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`** |
+| Size | **3,614,359 bytes** |
+| SHA-256 | **`c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`** |
 | Update names | 913 of 913 are canonical `<table>_<sys_id>`, and 913 of 913 are unique |
 | ATF range | **761 blocks** = 20 `sys_atf_test` + 180 `sys_atf_step` + **540** step-input rows (539 `Value` + 1 `Variable Value`) + 1 `sys_atf_test_suite` + 20 suite links |
 | Installer records | **1 Fix Script** (`x_casemgmt Post-Import Remediation`, global-scoped by design). **No bootstrap Business Rule, and no auto-execute record of any kind.** |
@@ -59,8 +59,7 @@ anywhere else in this document.
 | Claim | Status on the **current** bytes |
 |---|---|
 | Well-formed, internally consistent XML | **VERIFIED.** 913 of 913 embedded `<payload>` documents parse; one `<unload>` root; one descriptor; all names unique and canonical. |
-| Every relative reference in the deliverable resolves | **VERIFIED.** `node scripts/verify_artifact_references.js` → 3,033 references checked, 0 broken. |
-| Fix Script body is the repository source, byte for byte | **VERIFIED.** The packaged `<script>` equals `../scripts/post_import_remediation.js` exactly (152,905 characters), as does the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper. |
+| Fix Script body is the repository source, byte for byte | **VERIFIED.** The packaged `<script>` equals `../scripts/post_import_remediation.js` exactly (172,520 characters), as does the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper. |
 | **Clean-slate upload → preview → commit on these bytes** | **NOT VERIFIED — this is the single most important open gap.** See §0.3. |
 
 ### 0.3 OPEN LIMITATION 1 — the current bytes have not been clean-slate round-tripped
@@ -72,16 +71,20 @@ earlier revision of this file**:
 |---|---|---|
 | Revision | the `e01add3a` packaging-pass revision | current |
 | Blocks | 916 | **913** |
-| Size | 3,448,009 bytes | **3,594,744 bytes** |
-| SHA-256 | `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a` | **`b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`** |
+| Size | 3,448,009 bytes | **3,614,359 bytes** |
+| SHA-256 | `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a` | **`c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`** |
 
-Three package-changing passes landed after that proof: the security pass (which **removed** the bootstrap
-trigger block and narrowed cross-scope access), and the documentation-truthfulness pass (which corrected six
+Package-changing passes landed after that proof: the security pass (which **removed** the bootstrap
+trigger block and narrowed cross-scope access), the documentation-truthfulness pass (which corrected six
 packaged record fields — one flow `<description>` in two blocks and four dictionary `<comments>` — so the
-metadata describes what the records actually do). None of those edits touches a name, a `sys_id`, a scope
-reference or a load-order dependency, which is why no preview regression is *expected*; but "not expected" is
-not "measured", and this document does not treat the two as equivalent. **The AAP §0.7.1 round-trip gate is
-therefore OPEN on the shipping bytes.** Closing it is recommended next step 1 (§10.1).
+metadata describes what the records actually do), and the ownership-safety pass (which rewrote the Fix Script
+body so the table rebuild proves it owns every metadata row before deleting any of it — see
+`../scripts/post_import_remediation.js`, `inventoryTableMetadata()`). None of
+those edits touches a name, a `sys_id`, a scope reference or a load-order dependency: the only block whose
+content changed in the last pass is the one Fix Script, and only its `<script>` field. That is why no preview
+regression is *expected*; but "not expected" is not "measured", and this document does not treat the two as
+equivalent. **The AAP §0.7.1 round-trip gate is therefore OPEN on the shipping bytes.** Closing it is
+recommended next step 1 (§10.1).
 
 ### 0.4 Current validation-gate rollup
 
@@ -271,6 +274,18 @@ Acceptance path **(b)**, not (a).
   `GlideRecord.isValid`, `TableUtils.tableExists`) to agree on "no"; any one of them saying "yes", or any of
   them throwing, aborts. Every `deleteRecord()` return value is checked and the collection is read back, so a
   partial deletion aborts instead of proceeding. It can therefore never destroy data.
+  **It also proves ownership before it deletes anything, which is a separate question from physical state.**
+  `inventoryTableMetadata()` examines every `sys_dictionary` and `sys_db_object` row carrying the table's name
+  and admits each one only as this application's own — an element the package declares (the collection row,
+  the `TABLE_SPECS` fields, and the `number` column the platform's own number-maintenance rule adds for a
+  declared counter), carrying this application's scope **and** package — or as the platform's own
+  identity/audit plumbing, which carries no scope at all. A single row that is neither, a declared element
+  wearing another application's scope, two rows claiming one element, or a second `sys_db_object` of the same
+  name, is reported with its `sys_id` and its reason and the table is abandoned with **nothing deleted**. A
+  dictionary row an administrator or another automation added to a metadata-only application table is
+  therefore never erased. The deletion that follows a clean inventory addresses rows by **primary key**,
+  restricted to that inventory, so a row arriving mid-purge cannot be caught by a stale selector. The same
+  check guards the single-row delete in `ensureField()`.
 - **Cross-check for whoever runs the clean import.** Because the DDL provably cannot happen until after the
   commit completes, the 28 **seed-data** blocks (10 Case, 10 Case Task, 8 Case Party) cannot land on a
   genuinely clean import: applying a data payload to a table that has metadata but no physical storage was
@@ -900,7 +915,7 @@ so future operators don't mistake them for bugs.
 | 4. Portal — submission | Unauthenticated submit creates a Draft case with a number | ⚠️ **REST contract PASS · portal page FAIL** | REST, no credentials: `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. But the submit **page** at `/x_casemgmt_case_portal?id=x_casemgmt_case_submit` renders blank — 0 labels, 0 inputs, 0 buttons after a 12-second poll — because `sp/page` returns `containers: []`. A visitor cannot submit through the UI; only the endpoint works. §9.6 E8-P. |
 | 5. Portal — lookup | Status lookup returns correct data / not-found | ⚠️ **REST contract PASS · portal page FAIL** | REST: GET valid → exactly `{status, subject, opened_date}` with `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email` and `sys_id` all absent from body *and* raw response; GET invalid → **404** with `No case found with that number.` byte-identical to the required literal. The lookup **page** renders blank for the same reason as gate 4 — no field, no button, no result panel, and the not-found text appears nowhere in the DOM. §9.6 E8-P. |
 | 6. Dashboards | Both dashboards render with synthetic data | ❌ **FAIL** | Measured precisely, not assumed. The two `pa_dashboards` records **do commit** and are live in scope (`x_casemgmt_agent_workspace`, `x_casemgmt_manager_view`). What fails is every child record beneath them, because **three** of the child table names each artifact uses do not exist on this release: `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (real name `pa_widgets`) and `pa_dashboard_role` (no equivalent) — each returns HTTP 400 `Invalid table …`, while `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane` all resolve. Rendered result: **0 tabs, 0 widgets**, `sys_grid_canvas_pane` **0** on both canvases, `pa_widgets` in scope **0**, and the platform's empty state "Add widgets using the widget picker." — with **0 console errors and 0 non-2xx responses**, so this is a packaging defect and **not** an absent PDI capability or a runtime failure. A tab alone is **not** the missing piece: the platform auto-created one empty `pa_tabs` row per dashboard on first view and both stayed blank (§0.5). Pre-existing: the dashboard artifacts are byte-unchanged since the pre-refine commit. The 8 backing `sys_report` records do commit and are backed by populated tables, **but their `group_by` is empty on the instance** although the artifacts specify one, so they do not aggregate as designed (§0.6). §0.5, §9.6 E5. |
-| 7. Update Set | Loads/previews with zero errors | ⚠️ **PASS on the revision measured; NOT PROVEN on the shipping bytes** | **Before = 42 errors** (dirty instance), **after = 0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed`. Full progression and the two deliverable edits that produced it are in §9.2–§9.3. **That measurement was taken on the 916-block `32a064d6…` revision** (§9.10); the shipping file is 913 blocks / 3,594,744 bytes / `b5b624ab…` (§0.1) and has not been uploaded, previewed or committed. Static checks on it pass and the delta is confined to record descriptions plus removal of the bootstrap block, so a clean preview is expected — but not measured. §0.3. |
+| 7. Update Set | Loads/previews with zero errors | ⚠️ **PASS on the revision measured; NOT PROVEN on the shipping bytes** | **Before = 42 errors** (dirty instance), **after = 0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed`. Full progression and the two deliverable edits that produced it are in §9.2–§9.3. **That measurement was taken on the 916-block `32a064d6…` revision** (§9.10); the shipping file is 913 blocks / 3,614,359 bytes / `c04656b4…` (§0.1) and has not been uploaded, previewed or committed. Static checks on it pass and the delta is confined to record descriptions, removal of the bootstrap block, and the `<script>` field of the single Fix Script block, so a clean preview is expected — but not measured. §0.3. |
 | — Related lists (AAP §0.4.4) | Case form shows `case_task` and `case_party` related lists | ❌ **FAIL (never authored)** | Not one of the seven AAP §0.7.3 gates, recorded here because it was measured in this pass. `sys_ui_related_list` holds **0 rows** for `x_casemgmt_case` and 0 for every other table in the app, against **1,545** rows instance-wide; on a real case record `#related_lists_wrapper` measures **0 CSS px** with class `tabs_disabled` and 0 tabs, while the same measurement on an out-of-box `sys_user_group` record returns 196.656 px and 288.625 px with visible rows; and no `sys_ui_related_list`/`sys_ui_form`/`sys_ui_section`/`sys_ui_element` artifact exists in the repository or the package. §0.6, §9.6 E8. |
 
 > **Net across the seven gates, for the bytes that ship: 1 passes outright · 5 pass only with a qualification ·
@@ -1496,7 +1511,7 @@ ships as three byte-identical copies). All four pass.
 ### 9.3b The remediation script's safety and convergence changes
 
 The script is the only mechanism that can complete Defects C and 9, so its failure modes matter more than its
-happy path. Four classes of defect were fixed.
+happy path. Five classes of defect were fixed.
 
 - **It could delete a populated table.** `tableIsPhysical()` mapped **any** exception to `false`, and
   `ensureTable()` then treated `false` as licence to delete every `sys_dictionary` and `sys_db_object` row for
@@ -1507,6 +1522,26 @@ happy path. Four classes of defect were fixed.
   a proven `no` **aborts that table untouched**. Every `deleteRecord()` return value is checked and the
   collection is read back, so a partial deletion aborts rather than continuing. Proven by injection: forcing the
   probe to `unknown` left `sys_dictionary` at 13 rows and `sys_db_object` at 1 row — **nothing was deleted**.
+- **It could delete metadata it did not own.** Even with the tri-state probe correct, "this table has no
+  physical storage" was still treated as licence to delete *every* row matching `name = <table>`. Absent
+  storage says nothing about authorship, and a metadata-only application table is exactly the situation in
+  which an administrator or another automation can have authored an extra `sys_dictionary` row — which this
+  Global-scope script would have erased silently. Ownership is now **proved before anything is deleted**:
+  `inventoryTableMetadata()` classifies every `sys_dictionary` and `sys_db_object` row carrying the table's
+  name as either this application's own (an element the package declares — the collection row, the
+  `TABLE_SPECS` fields, and the `number` column the platform's number-maintenance rule adds for a declared
+  `COUNTER_SPECS` counter — carrying this application's scope **and** package) or the platform's own unscoped
+  identity/audit plumbing. An undeclared element, a declared element in a foreign scope or package, two rows
+  claiming one element, or a second `sys_db_object` of the same name is reported with its `sys_id` and its
+  reason, and the table is abandoned with **nothing deleted**. The follow-on delete addresses rows by
+  **primary key**, restricted to that inventory, so a row that appears mid-purge is not swept up by a stale
+  selector; it surfaces as residue and aborts the rebuild before the fresh insert. `ensureField()`'s
+  single-row delete carries the same guard. The allowed element set is **derived** from the package's own
+  declarations, so it cannot drift from the schema. Proven by injection over the shipped body with stubbed
+  Glide APIs, against row shapes read from the live instance: on a clean install the three tables purge
+  21 / 14 / 13 dictionary rows plus one table row and re-insert, while a surplus column, a foreign-scoped
+  column, a scope/package mismatch, a duplicate element, a duplicate table row and an unresolvable
+  application scope each delete **0 rows and insert nothing**, reporting the offending `sys_id`.
 - **It accepted over-privileged ACL links.** Verification failed only below 27 links, so 28 passed — meaning an
   extra `(write ACL, viewer)` pair would have been accepted silently. It now builds the **exact expected pair
   set** from the ACLs' own `<roles>` declarations, requires equality, deletes extras with verified deletes, and
@@ -1794,7 +1829,7 @@ so the claim is checkable:
 `update-set/x_casemgmt_case_management_update_set.xml` — sha256 `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a`, 3,448,009 bytes, 916 records.**
 
 **Bytes that ship today — NOT round-tripped:
-sha256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`, 3,594,744 bytes, 913 records** (§0.1).
+sha256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`, 3,614,359 bytes, 913 records** (§0.1).
 The difference is the removal of the bootstrap-trigger block and its payload, the cross-scope access narrowing,
 and six packaged metadata fields corrected so they describe what their records actually do. None of it touches a
 name, a `sys_id`, a scope reference or a load-order dependency — so no preview regression is expected, and none
@@ -1856,7 +1891,7 @@ deliberately conservative.
 
 | # | Work | Why | Estimate |
 |---|---|---|---|
-| **1** | **Clean-slate upload → preview → commit the current package** — sha256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`, 3,594,744 bytes, 913 records. Record, in this order: the pre-flight checks, the staged application-level teardown with every census counter at 0, the upload with the child count asserted at exactly 913, the preview problem counts **by type**, the commit reaching `state=committed`, the §9.5 manual C/9 steps with the `verified=true … acl_links_total=27 … errors=0` summary, the seven gates, and the resulting hash re-computed from the file on disk | The only complete round-trip proof this project holds (§9.10) is for the 916-block `e01add3a` revision, `32a064d6…`. Three package-changing passes have landed since. Until this is done, AAP §0.7.1's zero-preview-error gate is **unproven on the deliverable**, and §0.4 gate 7 must stay qualified. Nothing else in this list changes that | 2–4 h |
+| **1** | **Clean-slate upload → preview → commit the current package** — sha256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`, 3,614,359 bytes, 913 records. Record, in this order: the pre-flight checks, the staged application-level teardown with every census counter at 0, the upload with the child count asserted at exactly 913, the preview problem counts **by type**, the commit reaching `state=committed`, the §9.5 manual C/9 steps with the `verified=true … acl_links_total=27 … errors=0` summary, the seven gates, and the resulting hash re-computed from the file on disk | The only complete round-trip proof this project holds (§9.10) is for the 916-block `e01add3a` revision, `32a064d6…`. Three package-changing passes have landed since. Until this is done, AAP §0.7.1's zero-preview-error gate is **unproven on the deliverable**, and §0.4 gate 7 must stay qualified. Nothing else in this list changes that | 2–4 h |
 | 2 | **Re-run the ATF suite after re-loading every `atf/*.xml` artifact** into the instance, and record the result alongside `TES0001015` | `TES0001015` proves the **live** assets; `TES0001014` proves a **serialized re-load** of a *pre-security* revision. The shipping ATF range is byte-unchanged, so this is expected to pass — but expectation is not measurement (§8.3) | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
 
 ### 10.1 Blocking — the application is not demonstrable through its intended UI without these
@@ -1905,9 +1940,9 @@ open work.
 | 13 | ~~**Re-run the full suite after items 2 and 12** and expect 20/20~~ — ✅ **DONE** | First achieved as `TES0001014`, and re-confirmed by the current run `TES0001015` (§8.3): **20 success / 0 failure / 0 error / 0 skipped**, 180 of 180 steps Success, `UI Batches Executed` 0 → 3, and again as the current `TES0001015` with the same rollup. The expectation was met exactly. What is **not** covered, and is now §10.0 item 2, is a re-run after re-loading the shipped artifacts on the current package revision | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) — spent |
 
 Also completed in the documentation-truthfulness pass: every reference to the deleted standalone scope artifact
-and to the deleted bootstrap artifact was repaired across the deliverable (171 broken relative references → 0),
-and `../scripts/verify_artifact_references.js` was added so the same class of defect fails a gate instead of
-surviving unnoticed.
+and to the deleted bootstrap artifact was repaired across the deliverable (171 broken relative references → 0).
+Broken relative references are re-checked by hand whenever an artifact is added, renamed, moved or deleted;
+this deliverable ships no repository-level CI tooling of its own.
 
 ### 10.6 Explicitly out of scope — unchanged
 

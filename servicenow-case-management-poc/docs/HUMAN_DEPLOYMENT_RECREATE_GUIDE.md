@@ -94,7 +94,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,594,744 bytes (≈3.43 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`. Verify the digest before uploading. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
+| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,614,359 bytes (≈3.45 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`. Verify the digest before uploading. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -361,7 +361,11 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > writes no `x_casemgmt_*` data rows at all — seeding stays the job of §5g, which *does* run in scope. It is
 > idempotent, so running it when nothing is wrong is harmless and reports only "already correct" lines. It is
 > also **fail-closed**: if it cannot positively establish whether a table has physical storage, it leaves that
-> table strictly alone and aborts rather than assuming it is safe to rebuild.
+> table strictly alone and aborts rather than assuming it is safe to rebuild. Separately, it will not delete a
+> metadata row it cannot prove it owns — every `sys_dictionary` and `sys_db_object` row carrying a rebuilt
+> table's name must be either an element this package declares, in this application's scope and package, or one
+> of the platform's own unscoped identity/audit columns. Anything else is reported with its `sys_id` and the
+> table is abandoned with nothing deleted, so a column an administrator added by hand survives the rebuild.
 >
 > ### Confirming it actually converged
 >

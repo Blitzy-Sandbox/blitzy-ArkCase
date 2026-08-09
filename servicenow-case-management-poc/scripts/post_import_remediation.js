@@ -185,6 +185,25 @@
  *     produces 'unknown', and 'unknown' ABORTS the table with an error. It never
  *     reaches the delete. The pre-refine version converted any exception to
  *     "not physical" and deleted on that basis; that fail-open path is gone.
+ *   - OWNERSHIP-PROVEN METADATA PURGE. Absent physical storage says nothing
+ *     about who authored the metadata, so the rebuild does not treat a `name`
+ *     match as a licence to delete. inventoryTableMetadata() inspects every
+ *     `sys_dictionary` and `sys_db_object` row carrying the table's name and
+ *     admits each one only as this application's own - an element the package
+ *     declares (TABLE_SPECS, plus the collection row, plus the `number` column
+ *     the platform's own number-maintenance rule adds for a declared
+ *     COUNTER_SPECS counter), carrying this application's scope AND package - or
+ *     as the platform's own table plumbing (a `sys_`-prefixed identity/audit
+ *     column carrying no scope at all; the six measured names are in
+ *     PLATFORM_TABLE_COLUMNS). Anything else - an element the package never
+ *     declared, a row belonging to another application, two rows claiming one
+ *     element, a second `sys_db_object` of the same name - is REPORTED with its
+ *     sys_id and its reason, and the table is abandoned with NOTHING deleted. A
+ *     dictionary row an administrator or another automation added to a
+ *     metadata-only application table is therefore never erased by this
+ *     Global-scope script. The delete that follows a clean inventory addresses
+ *     rows by PRIMARY KEY, restricted to that inventory, so a row arriving
+ *     mid-purge cannot be caught by a stale selector.
  *   - Every deletion is verified: `deleteRecord()`'s return value is checked, the
  *     collection is re-read afterwards, and any residue or any refused delete
  *     aborts the rebuild before the fresh insert. Counters record only verified
@@ -513,6 +532,45 @@ var COUNTER_SPECS = [
     { table: TABLE_CASE_TASK, prefix: 'TASK' },
     { table: TABLE_CASE_PARTY, prefix: 'PARTY' }
 ];
+
+// ----------------------------------------------------------------------------
+// PLATFORM_TABLE_COLUMNS - the `sys_dictionary` rows the PLATFORM, not this
+// application, owns on every table it creates.
+//
+// These are the identity and audit columns the platform adds when a table comes
+// into existence, and it removes them again with the table. They are named here
+// so the ownership inventory in inventoryTableMetadata() can tell them apart
+// from a column somebody else added: an unrecognised row is refused, and
+// without this list every rebuild would refuse itself.
+//
+// Measured on the target PDI against all three application tables: each table
+// carries exactly these six rows, and every one of them has `sys_scope` and
+// `sys_package` EMPTY - unlike the application's own rows, which carry the
+// application scope in both. That difference is what makes them identifiable
+// rather than merely name-matched.
+// ----------------------------------------------------------------------------
+var PLATFORM_TABLE_COLUMNS = [
+    'sys_id',
+    'sys_created_by',
+    'sys_created_on',
+    'sys_mod_count',
+    'sys_updated_by',
+    'sys_updated_on'
+];
+
+// The prefix that marks a dictionary element as platform infrastructure. A row
+// whose element starts with this AND which carries no application scope or
+// package is platform-managed table plumbing; the six names above are the set
+// measured here, and the prefix rule additionally covers the domain-separation
+// and class columns (`sys_domain`, `sys_domain_path`, `sys_class_name`,
+// `sys_tags`) that other instance configurations add, so a correctly-configured
+// instance is never refused for carrying one. A `sys_`-prefixed row that DOES
+// carry a scope is not plumbing and is refused like any other surprise.
+var PLATFORM_COLUMN_PREFIX = 'sys_';
+
+// The value a `sys_scope` / `sys_package` column carries when the row belongs to
+// no application. Both the empty string and the literal 'global' occur.
+var UNSCOPED_MARKERS = ['', 'global'];
 
 // ----------------------------------------------------------------------------
 // REST_SPECS - the two scripted REST definitions, keyed by their `name`. The
@@ -969,47 +1027,315 @@ function columnExists(tableName, element) {
 // ============================================================================
 
 /**
- * Delete every row of `table` matching (`field` = `value`), verifying each
- * deletion individually and then re-reading the collection.
+ * True when `value` is one of the markers a `sys_scope` / `sys_package` column
+ * carries when the row belongs to no application.
  *
- * This exists because `GlideRecord.deleteRecord()` returns false when a delete is
- * refused - by an ACL, by a cross-scope policy, by a data policy or by a delete
- * business rule - and the pre-refine code ignored that return value while
- * incrementing a "removed" counter regardless. A rebuild that believes it
- * cleared the metadata when it did not goes on to insert a colliding row.
+ * @param {string} value the stored column value
+ * @return {boolean} true when the row is unscoped
+ */
+function isUnscoped(value) {
+    var v = String(value || '');
+    for (var i = 0; i < UNSCOPED_MARKERS.length; i++) {
+        if (v === UNSCOPED_MARKERS[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Classify `element` as platform-owned table plumbing, or not.
  *
- * @param {string} table table to purge
- * @param {string} field column to match
- * @param {string} value value to match
+ * The exact six names measured on this instance are checked first, so the
+ * ordinary case is recognised by identity rather than by a pattern. The
+ * `sys_`-prefix rule is the documented fallback for the columns other instance
+ * configurations add (`sys_domain`, `sys_domain_path`, `sys_class_name`,
+ * `sys_tags`); it keeps a correctly-configured instance from being refused
+ * without widening the rule to anything that is not platform plumbing.
+ *
+ * The caller supplies the scope test separately: a `sys_`-named row that carries
+ * an application scope is NOT plumbing, and must not reach this function's
+ * accept path.
+ *
+ * @param {string} element the dictionary element name
+ * @return {string} 'measured' | 'prefix' | '' (empty when it is not plumbing)
+ */
+function platformColumnKind(element) {
+    for (var i = 0; i < PLATFORM_TABLE_COLUMNS.length; i++) {
+        if (element === PLATFORM_TABLE_COLUMNS[i]) {
+            return 'measured';
+        }
+    }
+    return element.indexOf(PLATFORM_COLUMN_PREFIX) === 0 ? 'prefix' : '';
+}
+
+/**
+ * The complete set of `sys_dictionary` elements this application legitimately
+ * owns on `spec.name`, derived from the package's own declarations - never from a
+ * wildcard.
+ *
+ * Three sources, and nothing else is admissible:
+ *   - the COLLECTION row, the table's own dictionary entry, whose `element` is
+ *     empty. It is represented here by the empty-string key.
+ *   - every `spec.fields[].element` in TABLE_SPECS, which is transcribed from
+ *     ../tables/*.xml + ../dictionary/*.xml.
+ *   - `number`, but ONLY when COUNTER_SPECS declares a counter for this table.
+ *     The platform's own after-insert business rule `Create Default Number
+ *     Maintenance Field` adds that column because the package ships a
+ *     `sys_number` counter for the table, and it stamps it with the application
+ *     scope, so it is application-owned without appearing in a field list.
+ *     Measured: `x_casemgmt_case_task` and `x_casemgmt_case_party` each carry an
+ *     app-scoped `number` row that TABLE_SPECS does not list (case declares its
+ *     own). Omitting it here would make the inventory refuse a row the platform
+ *     created on this application's behalf, and the rebuild would never run.
+ *
+ * @param {Object} spec one entry of TABLE_SPECS
+ * @return {Object} map of allowed element name -> origin label; '' is the collection row
+ */
+function expectedDictionaryElements(spec) {
+    var allowed = {};
+    allowed[''] = 'collection row';
+    for (var f = 0; f < spec.fields.length; f++) {
+        allowed[spec.fields[f].element] = 'package field';
+    }
+    for (var c = 0; c < COUNTER_SPECS.length; c++) {
+        if (COUNTER_SPECS[c].table === spec.name) {
+            if (!allowed.hasOwnProperty('number')) {
+                allowed.number = 'platform number-maintenance column';
+            }
+            break;
+        }
+    }
+    return allowed;
+}
+
+/**
+ * Inventory every metadata row that carries `spec.name` and decide, row by row,
+ * whether this package owns it.
+ *
+ * WHY THIS EXISTS. The rebuild in ensureTable() has to remove a table's
+ * metadata before it can re-insert it, and the earlier revision selected what to
+ * remove with nothing but `name = spec.name`. Proving that the table has no
+ * physical storage - which is all probePhysicalState() establishes - is NOT
+ * proof of ownership: a metadata-only application table is exactly the situation
+ * in which an administrator or another automation can have authored an extra
+ * dictionary row, and a name-matched purge running in the Global scope would
+ * erase it silently. This function supplies the missing proof, in the same
+ * spirit as installerOwnsLink() does for `sys_security_acl_role`: identity is
+ * established positively, and anything unrecognised is reported rather than
+ * destroyed.
+ *
+ * A row is accepted only as one of exactly two kinds:
+ *   APPLICATION - its `element` is in expectedDictionaryElements(spec) AND both
+ *     `sys_scope` and `sys_package` equal this application's scope. Both columns
+ *     are required: a row carrying this application's scope but another
+ *     application's package (or the reverse) is not unambiguously ours.
+ *   PLATFORM - its `element` starts with PLATFORM_COLUMN_PREFIX AND it carries
+ *     no application scope or package. These are the identity/audit columns the
+ *     platform creates with the table and destroys with it (PLATFORM_TABLE_COLUMNS).
+ *
+ * Everything else is UNEXPECTED: an element the package never declared, a row
+ * belonging to another application, an app-scoped row wearing a `sys_` name, or
+ * a second `sys_db_object` row of the same name. Any single unexpected row makes
+ * `ok` false, and the caller must then delete NOTHING.
+ *
+ * @param {Object} spec one entry of TABLE_SPECS
+ * @param {string} scopeSysId the application scope, resolved by name
+ * @return {Object} { ok, dictionaryIds, dbObjectIds, unexpected, appRows, platformRows, missing }
+ */
+function inventoryTableMetadata(spec, scopeSysId) {
+    var allowed = expectedDictionaryElements(spec);
+    var result = {
+        ok: true,
+        dictionaryIds: [],
+        dbObjectIds: [],
+        unexpected: [],
+        appRows: 0,
+        platformRows: 0,
+        missing: [],
+        carried: { sysId: '', label: spec.label, plural: spec.plural }
+    };
+
+    if (!scopeSysId) {
+        result.ok = false;
+        result.unexpected.push({
+            table: 'sys_scope',
+            sysId: '',
+            label: SCOPE_NAME,
+            reason: 'the application scope could not be resolved by name, so no row can be proved to belong to it'
+        });
+        return result;
+    }
+
+    var seen = {};
+    var dict = new GlideRecord('sys_dictionary');
+    dict.addQuery('name', spec.name);
+    dict.query();
+    while (dict.next()) {
+        var id = dict.getUniqueValue();
+        var element = String(dict.getValue('element') || '');
+        var rowScope = String(dict.getValue('sys_scope') || '');
+        var rowPackage = String(dict.getValue('sys_package') || '');
+        var label = spec.name + '.' + (element || '(collection)') + ' [sys_id=' + id + ']';
+
+        if (allowed.hasOwnProperty(element)) {
+            if (rowScope === scopeSysId && rowPackage === scopeSysId) {
+                if (seen.hasOwnProperty(element)) {
+                    result.ok = false;
+                    result.unexpected.push({
+                        table: 'sys_dictionary',
+                        sysId: id,
+                        label: label,
+                        reason: 'a second row already claims element "' + (element || '(collection)') +
+                            '" on this table (first was sys_id=' + seen[element] + '); a duplicate cannot be' +
+                            ' attributed to this package'
+                    });
+                    continue;
+                }
+                seen[element] = id;
+                result.dictionaryIds.push(id);
+                result.appRows++;
+                continue;
+            }
+            result.ok = false;
+            result.unexpected.push({
+                table: 'sys_dictionary',
+                sysId: id,
+                label: label,
+                reason: 'element "' + (element || '(collection)') + '" is one this package declares, but the row' +
+                    ' is recorded in scope "' + (rowScope || '(empty)') + '" / package "' + (rowPackage || '(empty)') +
+                    '" instead of this application\'s ' + scopeSysId + ', so it is not this package\'s row to delete'
+            });
+            continue;
+        }
+
+        var plumbing = platformColumnKind(element);
+        if (plumbing && isUnscoped(rowScope) && isUnscoped(rowPackage)) {
+            result.dictionaryIds.push(id);
+            result.platformRows++;
+            if (plumbing === 'prefix') {
+                log('TABLE|' + spec.name + '|platform column "' + element + '" recognised by the sys_ prefix' +
+                    ' rather than by name - this instance adds a column the six measured ones do not cover' +
+                    ' (domain separation or table extension), and it carries no application scope, so it is' +
+                    ' platform plumbing.');
+            }
+            continue;
+        }
+
+        result.ok = false;
+        result.unexpected.push({
+            table: 'sys_dictionary',
+            sysId: id,
+            label: label,
+            reason: 'element "' + (element || '(collection)') + '" is not one this package declares' +
+                ' (scope "' + (rowScope || '(empty)') + '", package "' + (rowPackage || '(empty)') + '") - it was' +
+                ' added by an administrator, by a newer version of this application, or by another automation'
+        });
+    }
+
+    for (var want in allowed) {
+        if (allowed.hasOwnProperty(want) && !seen.hasOwnProperty(want)) {
+            result.missing.push(want || '(collection)');
+        }
+    }
+
+    var obj = new GlideRecord('sys_db_object');
+    obj.addQuery('name', spec.name);
+    obj.query();
+    while (obj.next()) {
+        var objId = obj.getUniqueValue();
+        var objScope = String(obj.getValue('sys_scope') || '');
+        var objPackage = String(obj.getValue('sys_package') || '');
+        var objLabel = 'sys_db_object ' + spec.name + ' [sys_id=' + objId + ']';
+        if (objScope !== scopeSysId || objPackage !== scopeSysId) {
+            result.ok = false;
+            result.unexpected.push({
+                table: 'sys_db_object',
+                sysId: objId,
+                label: objLabel,
+                reason: 'the table definition is recorded in scope "' + (objScope || '(empty)') + '" / package "' +
+                    (objPackage || '(empty)') + '" instead of this application\'s ' + scopeSysId
+            });
+            continue;
+        }
+        if (result.dbObjectIds.length > 0) {
+            result.ok = false;
+            result.unexpected.push({
+                table: 'sys_db_object',
+                sysId: objId,
+                label: objLabel,
+                reason: 'a second sys_db_object row already claims the name "' + spec.name + '" (first was sys_id=' +
+                    result.dbObjectIds[0] + '); which one this package owns cannot be established'
+            });
+            continue;
+        }
+        result.dbObjectIds.push(objId);
+        result.carried.sysId = objId;
+        if (obj.getValue('label')) {
+            result.carried.label = obj.getValue('label');
+        }
+        if (obj.getValue('plural')) {
+            result.carried.plural = obj.getValue('plural');
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Delete exactly the rows named by `sysIds` from `table`, verifying each
+ * deletion individually and then re-reading the name-scoped collection.
+ *
+ * Deletion is by PRIMARY KEY, not by a name match, so a row that appears between
+ * the ownership inventory and this call is not swept up by a stale selector: it
+ * is left in place and surfaces as residue below, which aborts the rebuild.
+ *
+ * Every return value is checked because `GlideRecord.deleteRecord()` returns
+ * false when a delete is refused - by an ACL, by a cross-scope policy, by a data
+ * policy or by a delete business rule - and an earlier revision ignored that
+ * return value while incrementing a "removed" counter regardless. A rebuild that
+ * believes it cleared the metadata when it did not goes on to insert a colliding
+ * row.
+ *
+ * @param {string} table table to delete from
+ * @param {Array} sysIds the verified-owned primary keys, in inventory order
+ * @param {string} residueField column the read-back matches on
+ * @param {string} residueValue value the read-back matches on
  * @return {Object} { ok: boolean, deleted: number, refused: number, residue: number }
  */
-function deleteAllVerified(table, field, value) {
+function deleteVerifiedById(table, sysIds, residueField, residueValue) {
     var deleted = 0;
     var refused = 0;
-    var gr = new GlideRecord(table);
-    gr.addQuery(field, value);
-    gr.query();
-    while (gr.next()) {
-        var id = gr.getUniqueValue();
+    for (var i = 0; i < sysIds.length; i++) {
+        var id = sysIds[i];
+        var gr = new GlideRecord(table);
+        if (!gr.get(id)) {
+            // Already gone. Nothing to do, and nothing to complain about: the
+            // read-back below is what decides whether the purge succeeded.
+            continue;
+        }
         var ok = false;
         try {
             ok = gr.deleteRecord();
         } catch (e) {
-            logError('DELETE|' + table + '.' + field + '=' + value + '|sys_id=' + id + '|threw ' + e);
+            logError('DELETE|' + table + '|sys_id=' + id + '|threw ' + e);
             ok = false;
         }
         if (ok) {
             deleted++;
         } else {
             refused++;
-            logError('DELETE|' + table + '|refused for sys_id=' + id + ' (' + field + '=' + value + ')');
+            logError('DELETE|' + table + '|refused for sys_id=' + id + ' (' + residueField + '=' +
+                residueValue + ')');
         }
     }
 
     // Read back: the authoritative check is what remains, not what the calls
-    // claimed to do.
+    // claimed to do. Any row still carrying this table's name - whether a
+    // refused delete or a row that arrived mid-purge - is residue and stops the
+    // rebuild before the fresh insert.
     var after = new GlideRecord(table);
-    after.addQuery(field, value);
+    after.addQuery(residueField, residueValue);
     after.query();
     var residue = after.getRowCount();
     return { ok: refused === 0 && residue === 0, deleted: deleted, refused: refused, residue: residue };
@@ -1033,14 +1359,32 @@ function deleteAllVerified(table, field, value) {
  *     discovering a dropped table afterwards.
  *   - Only a unanimous 'no' is accepted as proof there is nothing to destroy,
  *     and that proof is re-taken immediately before the delete.
- *   - Every delete is verified and read back (deleteAllVerified). Any refused
+ *   - OWNERSHIP IS PROVED BEFORE ANYTHING IS DELETED. Absent physical storage
+ *     says nothing about who authored the metadata, so inventoryTableMetadata()
+ *     examines every `sys_dictionary` and `sys_db_object` row carrying this
+ *     table's name and admits it only as this application's own (a declared
+ *     element, in this application's scope AND package) or as the platform's own
+ *     table plumbing (a `sys_`-prefixed identity/audit column carrying no
+ *     scope). A single row that is neither - an element the package never
+ *     declared, a row belonging to another application, a duplicate claim on one
+ *     element, or a second `sys_db_object` of the same name - aborts the table
+ *     with that row's sys_id and the reason, and NOTHING is deleted. The
+ *     alternative, deleting on the strength of a `name` match alone, erases work
+ *     this script did not create.
+ *   - Deletion is BY PRIMARY KEY, restricted to the inventoried rows, so a row
+ *     that appears between the inventory and the delete is not swept up by a
+ *     stale selector.
+ *   - Every delete is verified and read back (deleteVerifiedById). Any refused
  *     delete or any residue aborts the rebuild BEFORE the fresh insert, so the
  *     table is never left half-dismantled by a silent failure.
  *
- * The committed sys_db_object row's own sys_id, label, plural and access flags
- * are captured first and replayed onto the fresh insert, so every ACL, business
- * rule, report and reference field in the package continues to resolve to the
- * same record.
+ * The committed sys_db_object row's own sys_id, label and plural are taken from
+ * that same ownership inventory - the row proved to be this application's, not
+ * merely the first one matching the name - and replayed onto the fresh insert, so
+ * every ACL, business rule, report and reference field in the package continues
+ * to resolve to the same record. Access flags are deliberately NOT carried over:
+ * the committed row's flags are the very thing that is wrong (see
+ * TABLE_ACCESS_SPEC), so they are re-declared from the spec.
  *
  * @param {Object} spec one entry of TABLE_SPECS
  * @param {string} scopeSysId the application scope, resolved by name
@@ -1065,27 +1409,36 @@ function ensureTable(spec, scopeSysId) {
         return false;
     }
 
-    // Capture whatever the commit left behind so the rebuild is faithful. Access
-    // flags are deliberately NOT carried over: the committed row's flags are the
-    // very thing that is wrong (see TABLE_ACCESS_SPEC), so they are re-declared
-    // from the spec on the fresh insert.
-    var carried = {
-        sysId: '',
-        label: spec.label,
-        plural: spec.plural
-    };
-    var existing = new GlideRecord('sys_db_object');
-    existing.addQuery('name', spec.name);
-    existing.query();
-    if (existing.next()) {
-        carried.sysId = existing.getUniqueValue();
-        if (existing.getValue('label')) {
-            carried.label = existing.getValue('label');
+    // Establish, row by row, which metadata this package owns - and refuse to go
+    // any further if a single row cannot be attributed to it. This runs BEFORE
+    // the re-probe and before the lease re-assertion because it deletes nothing:
+    // it is pure inspection, and its verdict decides whether a destructive step
+    // is permissible at all.
+    //
+    // It also supplies `carried`: the sys_id, label and plural come from the
+    // sys_db_object row proved to be this application's, so the rebuild is
+    // faithful to the committed record rather than to whichever row happened to
+    // match the name first.
+    var owned = inventoryTableMetadata(spec, scopeSysId);
+    if (!owned.ok) {
+        STATS.tablesUncertain++;
+        for (var u = 0; u < owned.unexpected.length; u++) {
+            logError('TABLE|' + spec.name + '|OWNERSHIP|' + owned.unexpected[u].table + '|' +
+                owned.unexpected[u].label + '|not this package\'s to delete: ' + owned.unexpected[u].reason);
         }
-        if (existing.getValue('plural')) {
-            carried.plural = existing.getValue('plural');
-        }
+        logError('TABLE|' + spec.name + '|refusing to rebuild: ' + owned.unexpected.length + ' metadata row(s)' +
+            ' carrying this table\'s name could not be proved to belong to this application (' + owned.appRows +
+            ' application row(s) and ' + owned.platformRows + ' platform row(s) were recognised). NOTHING was' +
+            ' deleted. The rebuild removes this table\'s sys_dictionary and sys_db_object rows, and it will not' +
+            ' remove a row it did not create. Recovery: inspect each sys_id listed above, move or delete it' +
+            ' deliberately if it is genuinely unwanted, then re-run this script from System Definition >' +
+            ' Scripts - Background with "In scope" = Global.');
+        return false;
     }
+    var carried = owned.carried;
+    log('TABLE|' + spec.name + '|ownership verified|application_rows=' + owned.appRows +
+        '|platform_rows=' + owned.platformRows + '|db_object_rows=' + owned.dbObjectIds.length +
+        '|unexpected=0' + (owned.missing.length > 0 ? '|not_yet_present=' + owned.missing.join(',') : ''));
 
     // Re-take the proof immediately before the destructive step. The window
     // between the decision above and the delete below is tiny, but if anything
@@ -1105,10 +1458,12 @@ function ensureTable(spec, scopeSysId) {
         return false;
     }
 
-    // Remove the metadata-only rows. Without this the fresh insert would
-    // collide with the committed row and the after-insert business rule that
-    // performs the DDL would never be reached. Both purges are verified, and a
-    // failure stops the rebuild here rather than proceeding to the insert.
+    // Remove the metadata-only rows - and only the ones the inventory above
+    // proved this package owns, addressed by primary key. Without this the fresh
+    // insert would collide with the committed row and the after-insert business
+    // rule that performs the DDL would never be reached. Both purges are
+    // verified, and a failure stops the rebuild here rather than proceeding to
+    // the insert.
     //
     // The lease is re-asserted immediately before each purge, not merely at the
     // start of the run: this is the point of no return, and proceeding without
@@ -1121,7 +1476,7 @@ function ensureTable(spec, scopeSysId) {
             ' System Definition > Scripts - Background with "In scope" = Global.');
         return false;
     }
-    var dictPurge = deleteAllVerified('sys_dictionary', 'name', spec.name);
+    var dictPurge = deleteVerifiedById('sys_dictionary', owned.dictionaryIds, 'name', spec.name);
     if (!dictPurge.ok) {
         logError('TABLE|' + spec.name + '|aborting rebuild: sys_dictionary purge incomplete' +
             ' (deleted=' + dictPurge.deleted + ',refused=' + dictPurge.refused +
@@ -1136,7 +1491,7 @@ function ensureTable(spec, scopeSysId) {
             ' running (sys_mutex where name=' + LEASE_NAME + ').');
         return false;
     }
-    var objPurge = deleteAllVerified('sys_db_object', 'name', spec.name);
+    var objPurge = deleteVerifiedById('sys_db_object', owned.dbObjectIds, 'name', spec.name);
     if (!objPurge.ok) {
         logError('TABLE|' + spec.name + '|aborting rebuild: sys_db_object purge incomplete' +
             ' (deleted=' + objPurge.deleted + ',refused=' + objPurge.refused +
@@ -1505,12 +1860,32 @@ function ensureField(tableName, field, scopeSysId) {
     // its identity) so the re-insert can fire the platform's column DDL. The
     // delete is verified: proceeding to insert while the old row survives would
     // create a duplicate dictionary entry for the same column.
+    //
+    // Ownership is proved first, for the same reason ensureTable() proves it
+    // before its purge: `name` + `element` identifies the column this package
+    // declares, but it does not establish that the ROW belongs to this
+    // application. A row recorded in another application's scope or package is
+    // reported and left exactly as it is - this script does not delete a
+    // dictionary row it did not create, and it will not insert a competing one
+    // either.
     var carriedSysId = '';
     var stale = new GlideRecord('sys_dictionary');
     stale.addQuery('name', tableName);
     stale.addQuery('element', field.element);
     stale.query();
     if (stale.next()) {
+        var staleScope = String(stale.getValue('sys_scope') || '');
+        var stalePackage = String(stale.getValue('sys_package') || '');
+        if (staleScope !== scopeSysId || stalePackage !== scopeSysId) {
+            logError('FIELD|' + tableName + '.' + field.element + '|OWNERSHIP|sys_id=' +
+                stale.getUniqueValue() + '|the existing dictionary row is recorded in scope "' +
+                (staleScope || '(empty)') + '" / package "' + (stalePackage || '(empty)') + '" rather than this' +
+                ' application\'s ' + scopeSysId + ', so it is not this script\'s row to delete. Nothing was' +
+                ' removed and no replacement was inserted. Recovery: decide deliberately whether that row' +
+                ' should exist, then re-run this script from System Definition > Scripts - Background with' +
+                ' "In scope" = Global.');
+            return;
+        }
         carriedSysId = stale.getUniqueValue();
         var removed = false;
         try {

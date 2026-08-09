@@ -9,8 +9,8 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > **Status of the zero-preview-error requirement stated above.** It has been met — on an **earlier 916-block
 > revision** of the deliverable (3,448,009 bytes, SHA-256 `32a064d6…`), which uploaded, previewed with **0 errors
 > and 0 warnings** on a genuine clean slate, and committed. **The bytes that currently ship are different** —
-> 913 blocks, **3,594,744 bytes**, SHA-256
-> `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7` — and this procedure has **not** been run
+> 913 blocks, **3,614,359 bytes**, SHA-256
+> `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7` — and this procedure has **not** been run
 > against them. Running it, and recording the preview problem count, is the first open item in
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10.0](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Verify the digest before
 > you upload, so you know which artifact you are testing.

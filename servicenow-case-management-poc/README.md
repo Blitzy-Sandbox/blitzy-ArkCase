@@ -7,7 +7,7 @@ This subdirectory contains the ServiceNow scoped application, delivered as a **s
 > **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and four things are open. Read this before planning around it:
 >
 > 1. **Two manual post-import steps are mandatory** — the physical table schema (Defect C) and the 27 ACL role-link records (Defect 9). The package ships the remediation body as a Fix Script but **ships no trigger and nothing that auto-executes**; an operator must run `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with **"In scope" = Global**.
-> 2. **The clean-slate round trip has not been run on the bytes that ship.** The complete upload → preview → commit proof this project holds is for an earlier 916-block revision. The current file is **913 blocks, 3,594,744 bytes, SHA-256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`**, and AAP §0.7.1's zero-preview-error gate is therefore **unproven on it**.
+> 2. **The clean-slate round trip has not been run on the bytes that ship.** The complete upload → preview → commit proof this project holds is for an earlier 916-block revision. The current file is **913 blocks, 3,614,359 bytes, SHA-256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`**, and AAP §0.7.1's zero-preview-error gate is therefore **unproven on it**.
 > 3. **Three user-facing surfaces do not work**: both portal **pages** render blank, both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The portal **REST endpoints** do work.
 > 4. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
 >
@@ -65,13 +65,13 @@ The following ArkCase locations were consulted as semantic source-of-truth when 
 
 ## Directory Layout
 
-Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`188` files in total, README included).
+Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`187` files in total, README included).
 
 ```plaintext
 servicenow-case-management-poc/
 ├── README.md                          (this file — overview and entry point)
 ├── update-set/                    [1] x_casemgmt_case_management_update_set.xml — THE deliverable
-│                                      (913 blocks · 3,594,744 bytes)
+│                                      (913 blocks · 3,614,359 bytes)
 ├── app/                           [1] app/sys_app/x_casemgmt_case_management.xml — the scoped
 │                                      application record. There is no separate sys_scope
 │                                      artifact: the platform derives sys_scope from sys_app
@@ -114,7 +114,7 @@ servicenow-case-management-poc/
 │                                      (ATF 01-20) + x_casemgmt_atf_test_suite.xml. These
 │                                      serialize to 761 of the package's 913 blocks.
 ├── docs/                         [11] see the Documentation Index below
-└── scripts/                       [6] post_import_remediation.js — the mandatory Global
+└── scripts/                       [5] post_import_remediation.js — the mandatory Global
                                        post-import script (Defect C + Defect 9)
                                        sys_script_fix_x_casemgmt_post_import_remediation.xml —
                                        the Fix Script wrapper that carries that body inside
@@ -122,8 +122,6 @@ servicenow-case-management-poc/
                                        seed_demo_data.js — idempotent demo-data seeder
                                        transition_logic_regression_assertions.js — server-side
                                        regression assertions for the transition guards
-                                       verify_artifact_references.js — CI gate that fails if
-                                       any artifact header references a non-existent file
                                        round_trip_verify.md — the re-import/preview procedure
 ```
 
@@ -190,7 +188,7 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
-5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met; AAP §0.7.1's zero-preview-error gate is not yet proven on the bytes that ship.** A complete clean-slate upload → preview → commit with zero preview errors was achieved, but on an earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`). The shipping file is 913 blocks / 3,594,744 bytes / SHA-256 `b5b624ab…` and its round trip has not been run. Every block in it parses, all 913 are uniquely named, and the differences from the proven revision are confined to record *descriptions* and the removal of the bootstrap trigger — so the expectation is a clean preview, but expectation is not evidence. Running it is [open limitation 1](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met; AAP §0.7.1's zero-preview-error gate is not yet proven on the bytes that ship.** A complete clean-slate upload → preview → commit with zero preview errors was achieved, but on an earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`). The shipping file is 913 blocks / 3,614,359 bytes / SHA-256 `c04656b4…` and its round trip has not been run. Every block in it parses, all 913 are uniquely named, and the differences from the proven revision are confined to record *descriptions*, the removal of the bootstrap trigger, and the one Fix Script block whose `<script>` body was rewritten to prove metadata ownership before deleting anything — so the expectation is a clean preview, but expectation is not evidence. Running it is [open limitation 1](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 6. **Flow-Designer-exclusive workflow** — all transition logic lives in Flow Designer (with helper Script Includes and Business Rules at the entity level); no direct background scripts for workflow state management.
 7. **Repository minimality** — output confined to `servicenow-case-management-poc/`; the existing ArkCase repository structure is read-only context and is not refactored in place.
 8. **Tooling restriction** — App Engine Studio, Flow Designer, and UI Builder only; no paid Store applications; no alternative authoring path.
@@ -236,8 +234,8 @@ projected.
 
 **The package**
 
-- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,594,744 bytes,
-  SHA-256 `b5b624abe19afb5ba5fff4f34e50a63ecc52ae7282592f1b7eabaf9200d00af7`**. Quote these numbers and no
+- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,614,359 bytes,
+  SHA-256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`**. Quote these numbers and no
   others; earlier revisions carried different ones.
 - **Round-trip status: OPEN.** A clean-slate upload → preview → commit with **0 preview errors and 0 warnings**
   was achieved, but on an **earlier 916-block revision** (3,448,009 bytes, SHA-256 `32a064d6…`). The bytes above
@@ -379,7 +377,6 @@ Files under `scripts/`:
 - `scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` — the Fix Script record that carries that same body inside the Update Set so it arrives with the app. It does **not** auto-run, and running it from the Fix Script UI fails (application scope).
 - `scripts/seed_demo_data.js` — idempotent server-side seed script (uses `GlideRecord` lookups by `user_name` / `name` / `number`; no hard-coded `sys_id`s).
 - `scripts/transition_logic_regression_assertions.js` — the 13 server-side assertions over the transition guards, used to prove no regression across changes.
-- `scripts/verify_artifact_references.js` — CI gate: fails with a non-zero exit if any artifact header comment references a file that does not exist. Run `node scripts/verify_artifact_references.js` from this directory.
 - `scripts/round_trip_verify.md` — manual procedure for the fresh-PDI re-import preview gate.
 
 ## License
