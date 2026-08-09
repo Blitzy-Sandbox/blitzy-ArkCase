@@ -145,6 +145,13 @@
           the not-found message (yellow-bordered with alert icon).
         - <dl>, <dt>, <dd>: semantic definition list for accessibility
           (screen readers parse <dl> as key-value pairs).
+        - help-block: standard styling for the status paragraph under the
+          button, which carries the visible reason the button is disabled and
+          the announcement of the in-flight state (role="status",
+          aria-live="polite", referenced by the button through
+          aria-describedby). The form also sets aria-busy while a lookup is
+          outstanding, because the button's inner text changing to
+          "Looking up..." is not by itself announced.
       No custom CSS is authored or referenced. No custom branding artifacts
       (icons, images, colors) are defined.
 
@@ -497,7 +504,10 @@
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <template><![CDATA[<div class="x-casemgmt-case-lookup-widget">
     <h2>Case Status Lookup</h2>
-    <form name="caseLookupForm" novalidate ng-submit="c.lookup()">
+    <form name="caseLookupForm"
+          novalidate
+          ng-attr-aria-busy="{{c.loading ? 'true' : 'false'}}"
+          ng-submit="c.lookup()">
         <div class="form-group">
             <label for="x-casemgmt-case-number">Case Number</label>
             <input type="text"
@@ -510,10 +520,27 @@
         <div class="form-group">
             <button type="submit"
                     class="btn btn-primary"
+                    aria-describedby="x-casemgmt-lookup-hint"
                     ng-disabled="c.loading || !c.caseNumber">
                 <span ng-if="!c.loading">Look Up Status</span>
                 <span ng-if="c.loading">Looking up...</span>
             </button>
+            <!--
+                Status region: the visible REASON the button is disabled (the
+                form carries novalidate, so the browser contributes no message
+                of its own) and the announcement of the in-flight state, which
+                the button's inner text alone does not convey to assistive
+                technology. Always present in the DOM so the button's
+                aria-describedby never dangles; polite so it never steals
+                focus. `help-block` is bundled Bootstrap 3 - this widget still
+                ships zero CSS, per AAP Section 0.4.4's default theme.
+            -->
+            <p id="x-casemgmt-lookup-hint" class="help-block" role="status" aria-live="polite">
+                <span ng-if="c.loading">Looking up your case, please wait...</span>
+                <span ng-if="!c.loading">
+                    <span ng-if="!c.caseNumber">Enter a case number to enable Look Up Status.</span>
+                </span>
+            </p>
         </div>
     </form>
 

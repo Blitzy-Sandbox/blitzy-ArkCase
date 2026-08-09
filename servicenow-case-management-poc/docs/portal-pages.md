@@ -16,6 +16,20 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 - The scripted REST endpoints execute with platform-default elevated privilege but the request/response shapes whitelist exactly the fields specified by AAP Section 0.7.4.
 - No PII in any example record; all examples reference synthetic data consistent with [`../seed-data/`](../seed-data/).
 
+### Accessibility of the two form widgets
+
+Both form widgets are keyboard-operable, semantically marked up, and announce their own state. What is authored,
+and why, so that a later edit does not remove it by accident:
+
+| Concern | Treatment | Where |
+| --- | --- | --- |
+| Accessible name for every control | A bound `<label for>` on every input, select and textarea | both widgets |
+| Required-ness | `required` **and** `aria-required="true"` on the four mandatory controls. The `*` in the label is decoration, so it carries `aria-hidden="true"` and is never the only carrier of the information | submission widget |
+| Reason a disabled button is disabled | The form sets `novalidate`, so the browser contributes no per-field message. A `help-block` paragraph under the button states the reason in visible text and is referenced by the button through `aria-describedby`. It is always present in the DOM, so the reference never dangles | both widgets |
+| In-flight state | The same paragraph is a `role="status" aria-live="polite"` region that announces "Submitting your case, please wait..." / "Looking up your case, please wait...", and the form sets `aria-busy` while the request is outstanding. The button's changing inner text is no longer the only signal | both widgets |
+| Result and error announcements | `role="alert"` on the submission error panel, the lookup result's not-found panel, and the confirmation panel; the lookup result itself is a `<dl>`/`<dt>`/`<dd>` definition list | both widgets |
+| Colour contrast | **Inherited in full from the platform default theme and not measurable project-side.** All three widgets ship an empty `css` element and an empty `link` element, define no colour, and reference no branding asset; `sp_portal.theme` / `theme_dv` are empty. AAP Section 0.4.4 mandates that default treatment ("ServiceNow Experience Portal default theme. No custom CSS, no custom branding"), so there is nothing project-side to change — authoring CSS to alter contrast would violate that requirement. If the platform theme's contrast is ever judged insufficient, that is a theme decision to raise against the AAP, not a defect in these widgets | portal surface |
+
 ## Page 1: Case Submission
 
 ### Purpose

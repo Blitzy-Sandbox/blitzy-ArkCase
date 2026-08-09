@@ -697,28 +697,57 @@
         input fields per AAP Section 0.4.4:
             subject, type, description, requester_name, requester_email
         Four are mandatory (subject, type, description, requester_name);
-        requester_email is optional. HTML5 `required` attributes plus the
+        requester_email is optional.
+
+        ACCESSIBILITY of this form, and why each attribute is here:
+          - Every control has a bound <label for>, so the accessible name is
+            the visible label.
+          - The `*` in each label is decoration only, so it carries
+            aria-hidden="true"; the required-ness itself is conveyed
+            programmatically by `required` AND by aria-required="true" on the
+            control, which is what assistive technology reports.
+          - The form carries `novalidate`, which suppresses the browser's own
+            per-field messages. Without something else, a disabled Submit
+            button would be the ONLY feedback for an incomplete form and it
+            would give no reason. The status paragraph below the button
+            (id="x-casemgmt-submit-hint") supplies that reason as visible
+            text, is referenced by the button through aria-describedby, and is
+            a role="status" aria-live="polite" region so a change is announced
+            without stealing focus.
+          - The same region announces the in-flight state, and the form sets
+            aria-busy while a request is outstanding, so "Submitting..." is no
+            longer conveyed by the button's inner text alone.
+          - No CSS ships with this widget: `help-block` is part of the Service
+            Portal's bundled Bootstrap 3, so the treatment stays inside the
+            AAP Section 0.4.4 default theme.
+
+        HTML5 `required` attributes plus the
         AngularJS form's $invalid binding to the submit button's ng-disabled
         prevents submission of incomplete payloads at the UI layer.
     -->
     <div ng-if="!c.data.submitted">
         <h2>Submit a Case</h2>
-        <form name="caseSubmitForm" novalidate ng-submit="c.submit()">
+        <form name="caseSubmitForm"
+              novalidate
+              ng-attr-aria-busy="{{c.submitting ? 'true' : 'false'}}"
+              ng-submit="c.submit()">
             <div class="form-group">
-                <label for="x-casemgmt-subject">Subject <span class="required">*</span></label>
+                <label for="x-casemgmt-subject">Subject <span class="required" aria-hidden="true">*</span></label>
                 <input type="text"
                        id="x-casemgmt-subject"
                        class="form-control"
                        maxlength="255"
                        ng-model="c.formData.subject"
                        placeholder="Enter your case subject"
+                       aria-required="true"
                        required />
             </div>
             <div class="form-group">
-                <label for="x-casemgmt-type">Type <span class="required">*</span></label>
+                <label for="x-casemgmt-type">Type <span class="required" aria-hidden="true">*</span></label>
                 <select id="x-casemgmt-type"
                         class="form-control"
                         ng-model="c.formData.type"
+                        aria-required="true"
                         required>
                     <option value="">-- Select a type --</option>
                     <option value="General Inquiry">General Inquiry</option>
@@ -726,23 +755,25 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="x-casemgmt-description">Description <span class="required">*</span></label>
+                <label for="x-casemgmt-description">Description <span class="required" aria-hidden="true">*</span></label>
                 <textarea id="x-casemgmt-description"
                           class="form-control"
                           rows="4"
                           maxlength="4000"
                           ng-model="c.formData.description"
                           placeholder="Describe your case in detail"
+                          aria-required="true"
                           required></textarea>
             </div>
             <div class="form-group">
-                <label for="x-casemgmt-requester-name">Your Name <span class="required">*</span></label>
+                <label for="x-casemgmt-requester-name">Your Name <span class="required" aria-hidden="true">*</span></label>
                 <input type="text"
                        id="x-casemgmt-requester-name"
                        class="form-control"
                        maxlength="100"
                        ng-model="c.formData.requester_name"
                        placeholder="Enter your name"
+                       aria-required="true"
                        required />
             </div>
             <div class="form-group">
@@ -780,10 +811,26 @@
             <div class="form-group">
                 <button type="submit"
                         class="btn btn-primary"
+                        aria-describedby="x-casemgmt-submit-hint"
                         ng-disabled="c.submitting || caseSubmitForm.$invalid">
                     <span ng-if="!c.submitting">Submit</span>
                     <span ng-if="c.submitting">Submitting...</span>
                 </button>
+                <!--
+                    Status region: the visible REASON the button is disabled
+                    (the form's novalidate suppresses the browser's own
+                    per-field messages) and the announcement of the in-flight
+                    state. It is always present in the DOM so the button's
+                    aria-describedby never dangles, and it is polite so it
+                    never steals focus mid-typing.
+                -->
+                <p id="x-casemgmt-submit-hint" class="help-block" role="status" aria-live="polite">
+                    <span ng-if="c.submitting">Submitting your case, please wait...</span>
+                    <span ng-if="!c.submitting">
+                        <span ng-if="caseSubmitForm.$invalid">Every field marked * is required. Complete all four to enable Submit.</span>
+                        <span ng-if="!caseSubmitForm.$invalid">All required fields are complete.</span>
+                    </span>
+                </p>
             </div>
         </form>
     </div>

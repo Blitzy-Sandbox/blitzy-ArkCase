@@ -39,11 +39,11 @@ step, that is stated rather than folded into a pass.
 **Read the evidence attribution carefully — the measurements come from three different runs, and they are not
 interchangeable:**
 
-- **The clean-instance round trip** ([`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md))
-  established the install behaviour and the zero-preview-error result. It was performed on an **earlier
-  916-block revision** of the Update Set (3,448,009 bytes, SHA-256 `32a064d6…`). **The shipping package is 913
-  blocks / 3,614,359 bytes / SHA-256 `c04656b4…` and has not been round-tripped**, which is why the Update Set
-  gate below is qualified rather than a pass.
+- **The clean-instance round trip** ([`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md))
+  established the install behaviour and the zero-preview-error result. It has now been run **on the bytes that
+  ship** — 913 blocks / 3,618,378 bytes / SHA-256 `7272edfc…` — which is why the Update Set gate below is an
+  outright pass. An earlier run of the same procedure on the **916-block `32a064d6…`** revision (3,448,009 bytes)
+  is retained in §9.10 as history; the two are separate measurements and only the first is the current status.
 - **Later verification runs on the committed application** produced the workflow, ACL, REST and ATF results.
   These were taken against the live application after remediation, not from the import.
 - **Browser observation** produced the portal-page, dashboard and related-list results.
@@ -58,30 +58,32 @@ Each row below names which of the three it rests on.
 | Portal — submission | ⚠️ **REST contract PASS · portal page FAIL** | Anonymous `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. The submit **page** renders blank (0 inputs, 0 buttons) because `sp/page` returns `containers: []` — the layout records were never authored. |
 | Portal — lookup | ⚠️ **REST contract PASS · portal page FAIL** | GET valid → exactly `{status, subject, opened_date}`, all seven internal fields absent from body and raw response. GET unknown → **404** with `No case found with that number.`, byte-identical to the required literal. The lookup **page** renders blank for the same reason. |
 | Dashboards | ❌ **FAIL** | Browser-observed: both dashboards open, and both render **0 tabs and 0 widgets**, showing the platform's empty state, "Add widgets using the widget picker." — with 0 console errors and 0 failed network requests, so nothing is being blocked at runtime. The cause is packaging: each dashboard's composite block names **three child tables that do not exist on this release** — `pa_tab` (the real table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8 widget placements (3 Agent Workspace + 5 Manager View) and the role grants are dropped on commit, and a dashboard with no tab can render no widgets. **A second, independent defect compounds it:** all 8 `sys_report` rows commit with an **empty `group_by`** although every report artifact specifies one, so even once placed, *All Cases by Status* would render grouped by *Assigned Agent*. Both are packaging defects in the deliverable; see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5, §0.6 and §9.6 E5. The 8 report records themselves do commit, and a scoped report renders correctly when opened directly. |
-| Update Set | ⚠️ **PASS on the revision measured; NOT YET PROVEN on the bytes that ship** | On the **916-block `32a064d6…` revision**: before = **42 errors** on the populated instance; after = **0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed` (full progression 42 → 559 → 297 → 0 and its two root causes in §9.2). **The shipping file is a different artifact** — 913 blocks, 3,614,359 bytes, SHA-256 `c04656b4…` — and no upload → preview → commit has been run on it. Static checks on it pass (all 913 blocks parse, all 913 canonically named and unique, one `<unload>` root) and the delta from the proven revision is confined to record descriptions, the removal of the bootstrap trigger block, and the `<script>` field of the single Fix Script block, so a clean preview is expected — but expected is not measured. This is [open limitation 1](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) and the first recommended next step. |
+| Update Set | ✅ **PASS — measured on the bytes that ship** | On the shipping **913-block / 3,618,378-byte / SHA-256 `7272edfc…`** file: **before = 41 errors** previewed against the already-populated instance (20 local-update collisions + 18 `x_casemgmt_case`/`case` + 3 `core_company`/`organization` reference problems); then, after a staged teardown proven complete (scope query `[]`, every application census counter 0, all three tables moving from HTTP 200 to HTTP 400), an upload with the child `sys_update_xml` count asserted at **exactly 913**; **298** problems on the first clean-slate preview, every one `Found a local update that is newer than this one` — the teardown's own deletions captured locally, the same root cause §9.2 records for the earlier revision; and **after = 0 problems of any type** once that local capture was purged at source. Not assumed but checked against the platform's own predicate: `state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`. Then committed, `previewed → committing → committed`. **Progression 41 → 298 → 0.** The file on disk is byte-unchanged by the trip. The earlier **916-block `32a064d6…`** result (42 → 0) is retained in §9.2/§9.10 as the history of that revision. What remains is the install footprint, not a verification gap: a bare commit creates no physical storage, so the documented §9.5 sequence — two commits with a Global remediation run between and after them — is required, and it completed with `verified=true`, `acl_links_total=27`, `errors=0`. |
 
-> **Net: 1 gate passes outright · 5 pass only with a qualification · 1 fails** — 1 + 5 + 1 = 7.
+> **Net: 2 gates pass outright · 4 pass only with a qualification · 1 fails** — 2 + 4 + 1 = 7.
 >
 > | Verdict | Gates |
 > | --- | --- |
-> | ✅ Pass outright (1) | Workflow |
-> | ⚠️ Qualified (5) | Data model *(needs the manual remediation)* · ACLs *(needs the manual remediation)* · Portal — submission *(REST contract passes, page blank)* · Portal — lookup *(REST contract passes, page blank)* · Update Set *(zero-error proof belongs to an earlier revision's bytes)* |
+> | ✅ Pass outright (2) | Workflow · Update Set *(zero problems measured on the shipping bytes)* |
+> | ⚠️ Qualified (4) | Data model *(needs the manual remediation)* · ACLs *(needs the manual remediation)* · Portal — submission *(REST contract passes, page blank)* · Portal — lookup *(REST contract passes, page blank)* |
 > | ❌ Fail (1) | Dashboards |
 >
 > **On the count.** This is the conservative reading, and it is the one every document in this deliverable
 > quotes. Gates 1 and 3 carry **the same single qualification** — the documented manual post-import remediation,
 > which is an approved installer step rather than a defect in the data model or the ACL design — so a reader who
-> counts that step as part of a normal install will read gates 1, 2 and 3 as outright passes and arrive at
-> **3 pass · 3 qualified · 1 fail**. Both accountings describe the identical measured state. An earlier revision
-> of this section claimed "2 pass, 3 qualified, 1 fail", which does not sum to 7; any count that fails to sum to
-> 7 is wrong on its face.
+> counts that step as part of a normal install will read gates 1, 2, 3 and 7 as outright passes and arrive at
+> **4 pass · 2 qualified · 1 fail**. Both accountings describe the identical measured state. The Update Set gate
+> moved out of the qualified column when the round trip was measured on the shipping bytes rather than on an
+> earlier revision's; nothing else in this rollup changed. An earlier revision of this section claimed
+> "2 pass, 3 qualified, 1 fail", which does not sum to 7; any count that fails to sum to 7 is wrong on its face.
 >
 > **What the qualifications mean, because "qualified" must not be read as "fine".** The two portal gates pass at
 > the contract level and fail at the surface level: an anonymous caller can submit a case and look one up
 > through the REST endpoints exactly as specified, but a human visiting either portal page sees a blank screen,
 > so the gate's own wording — "Case created from unauthenticated portal **submission**" — is only satisfied
 > programmatically. Data model and ACLs are correct once an operator has run the Global remediation script, and
-> incorrect until then. The Update Set gate's zero-error proof belongs to a different set of bytes.
+> incorrect until then. The Update Set gate no longer carries a qualification: its zero-problem result was
+> measured on the shipping bytes themselves.
 >
 > The application logic is sound; the package is not self-installing, and the portal pages and dashboards are
 > not usable on this instance. The install procedure that does work, and the residual manual footprint per
@@ -96,10 +98,15 @@ Each row below names which of the three it rests on.
 >
 > **ATF gate (outside the seven).** The final suite run on the committed instance, `TES0001015`, scores
 > **20 / 20 tests Success and 180 / 180 step results Success** — 0 Failure, 0 Error, 0 Skipped, ~4 minutes, no
-> test residue left behind. An earlier run, `TES0001014`, scored 16 Success / 4 Failure; those 4 failures were
-> the child-table ACL condition and the ATF-15 form assertion, both since fixed, and that result is history
-> rather than status. Running the suite requires `sn_atf.runner.enabled = true` and a browser-attached client
-> runner — see [`ATF_MANUAL_TEST_PLAN.md`](./ATF_MANUAL_TEST_PLAN.md).
+> test residue left behind. An earlier *series* of runs, `TES0001010`–`TES0001012`, scored **16 Success / 4
+> Failure** — `ATF 07` (the child-table ACL condition) plus the three form tests `ATF 15` / `ATF 16` / `ATF 17`;
+> both root causes are fixed and that result is history rather than status. **`TES0001014` scored 20 / 0 / 0 / 0**
+> with 180 of 180 steps Success and is the last verdict taken against a fresh re-load of the shipped `atf/*.xml`
+> artifacts — the project's only serialized-import proof; it is a separate claim from `TES0001015`, which proves
+> the live assets, and the two are not interchangeable (see
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §8.3](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Running the suite requires
+> `sn_atf.runner.enabled = true` and a browser-attached client runner — see
+> [`ATF_MANUAL_TEST_PLAN.md`](./ATF_MANUAL_TEST_PLAN.md).
 
 ## Per-Gate Detail
 
@@ -235,10 +242,15 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
     6. If preview errors exist, return to source PDI, fix the underlying records, re-export, and restart this procedure.
     7. Click Commit. Wait for commit to complete.
     8. Re-run all of Gates 1–6 on the verification PDI to confirm the application is fully functional after a fresh install.
-- **Status of this procedure:** it has been executed end-to-end with **0 preview errors and 0 warnings**, but on
-  the **916-block `32a064d6…`** revision. It has **not** been executed on the shipping bytes (913 blocks /
-  3,614,359 bytes / `c04656b4…`). Running it on those bytes, and recording the preview problem count, is the
-  first item on the open-work list.
+- **Status of this procedure:** it has been executed end-to-end **on the shipping bytes** (913 blocks /
+  3,618,378 bytes / `7272edfc…`), reaching **0 preview problems of any type** — verified through the platform's
+  own `unresolvedProblems=false` / `shouldDisplay=true` predicate — and then `state=committed`. The measured
+  progression was **41 → 298 → 0**: 41 against the already-populated instance, 298 on the first clean-slate
+  preview (all of them the teardown's own deletions captured as newer local updates), and 0 once that local
+  capture was purged at source. It was also executed earlier, with the same zero result, on the **916-block
+  `32a064d6…`** revision. Step 8 of this procedure was carried out: all of gates 1–6 were re-measured on the
+  freshly installed instance, and their outcomes are the ones in the Measured Status table above. Note that
+  steps 7–8 require the §9.5 install sequence — a bare commit leaves the three tables without physical storage.
 - **Cross-Reference Document:** [`deployment.md`](./deployment.md) and [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md)
 - **Failure Mode:** Update Set integrity is the final gate; failure here blocks delivery. The most common cause is hard-coded `sys_id` references — search every flow, ACL, business rule, and seed record for literal `sys_id` values and replace with `GlideRecord` lookups by name/user_name/number/role_label. Per AAP Section 0.7.2 Minimal-Change Clause, if the preview reports errors that would require modifying global tables, installing Store applications, or adding scope-external artifacts to resolve, stop and report — do not substitute.
 

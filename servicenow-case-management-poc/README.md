@@ -4,12 +4,13 @@ A proof-of-concept ServiceNow scoped application that re-platforms a subset of A
 
 This subdirectory contains the ServiceNow scoped application, delivered as a **single self-contained Update Set XML** at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It targets a ServiceNow Personal Developer Instance (PDI); it has been built and verified on `dev379024`, running **Australia Patch 3**. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
 
-> **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and four things are open. Read this before planning around it:
+> **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and three things are open. Read this before planning around it:
 >
 > 1. **Two manual post-import steps are mandatory** — the physical table schema (Defect C) and the 27 ACL role-link records (Defect 9). The package ships the remediation body as a Fix Script but **ships no trigger and nothing that auto-executes**; an operator must run `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with **"In scope" = Global**.
-> 2. **The clean-slate round trip has not been run on the bytes that ship.** The complete upload → preview → commit proof this project holds is for an earlier 916-block revision. The current file is **913 blocks, 3,614,359 bytes, SHA-256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`**, and AAP §0.7.1's zero-preview-error gate is therefore **unproven on it**.
-> 3. **Three user-facing surfaces do not work**: both portal **pages** render blank, both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The portal **REST endpoints** do work.
-> 4. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
+> 2. **Three user-facing surfaces do not work**: both portal **pages** render blank, both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The portal **REST endpoints** do work.
+> 3. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
+>
+> **Now closed, and previously listed here as open:** the clean-slate round trip **has** been run on the bytes that ship — 913 blocks, 3,618,378 bytes, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`. Measured progression **41 → 298 → 0** preview problems, then `state=committed`, with the file byte-unchanged by the trip. AAP §0.7.1's zero-preview-error gate is therefore **met on the deliverable**. Detail in [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 >
 > Every one of these is measured, not estimated. [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) is the authoritative current-state record and the place to start.
 
@@ -71,7 +72,7 @@ Every directory is listed below with its exact file count, so the tree can be di
 servicenow-case-management-poc/
 ├── README.md                          (this file — overview and entry point)
 ├── update-set/                    [1] x_casemgmt_case_management_update_set.xml — THE deliverable
-│                                      (913 blocks · 3,614,359 bytes)
+│                                      (913 blocks · 3,618,378 bytes)
 ├── app/                           [1] app/sys_app/x_casemgmt_case_management.xml — the scoped
 │                                      application record. There is no separate sys_scope
 │                                      artifact: the platform derives sys_scope from sys_app
@@ -188,7 +189,7 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
-5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met; AAP §0.7.1's zero-preview-error gate is not yet proven on the bytes that ship.** A complete clean-slate upload → preview → commit with zero preview errors was achieved, but on an earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`). The shipping file is 913 blocks / 3,614,359 bytes / SHA-256 `c04656b4…` and its round trip has not been run. Every block in it parses, all 913 are uniquely named, and the differences from the proven revision are confined to record *descriptions*, the removal of the bootstrap trigger, and the one Fix Script block whose `<script>` body was rewritten to prove metadata ownership before deleting anything — so the expectation is a clean preview, but expectation is not evidence. Running it is [open limitation 1](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met, and AAP §0.7.1's zero-preview-error gate is now proven on the bytes that ship.** The shipping file — 913 blocks / 3,618,378 bytes / SHA-256 `7272edfc…` — was taken through a complete teardown → upload → preview → commit: **41** preview problems against the already-populated instance, **298** on the first clean-slate pass (all of them the teardown's own deletions captured as newer local updates), and **0 problems of any type** once that capture was purged at source, confirmed by the platform's own `unresolvedProblems=false` predicate, then `state=committed`. The file on disk is byte-unchanged by the trip. An earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as history. Detail in [§0.3 of the limitations register](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 6. **Flow-Designer-exclusive workflow** — all transition logic lives in Flow Designer (with helper Script Includes and Business Rules at the entity level); no direct background scripts for workflow state management.
 7. **Repository minimality** — output confined to `servicenow-case-management-poc/`; the existing ArkCase repository structure is read-only context and is not refactored in place.
 8. **Tooling restriction** — App Engine Studio, Flow Designer, and UI Builder only; no paid Store applications; no alternative authoring path.
@@ -234,13 +235,19 @@ projected.
 
 **The package**
 
-- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,614,359 bytes,
-  SHA-256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`**. Quote these numbers and no
+- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,618,378 bytes,
+  SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`**. Quote these numbers and no
   others; earlier revisions carried different ones.
-- **Round-trip status: OPEN.** A clean-slate upload → preview → commit with **0 preview errors and 0 warnings**
-  was achieved, but on an **earlier 916-block revision** (3,448,009 bytes, SHA-256 `32a064d6…`). The bytes above
-  have **not** been round-tripped, so AAP §0.7.1's gate is unproven on what ships. This is the first
-  recommended next step.
+- **Round-trip status: CLOSED — measured on the bytes above.** Teardown proven complete (scope query `[]`, every
+  application census counter 0, all three tables moving from HTTP 200 to HTTP 400), upload with the child
+  `sys_update_xml` count asserted at **exactly 913**, then preview problems **by type**: **41** against the
+  already-populated instance → **298** on the first clean-slate pass, every one
+  `Found a local update that is newer than this one` (the teardown's own deletions) → **0 of any type** once that
+  local capture was purged at source, checked against the platform's own `state=previewed` /
+  `unresolvedProblems=false` / `shouldDisplay=true` predicate rather than assumed. Then
+  `previewed → committing → committed`. The SHA-256 re-computed from the file afterwards is unchanged. AAP
+  §0.7.1's gate is therefore **met on what ships**. The earlier 916-block revision (3,448,009 bytes,
+  SHA-256 `32a064d6…`) reached the same zero result and is kept as history, not as the current status.
 - **Nothing in it fires on its own.** The package contains **no record that auto-executes, of any kind** — no
   Business Rule, no scheduled job, no `sys_trigger` row. (It does contain a Fix Script, which is a record; the
   point is that nothing *runs* it.) An earlier revision did ship one (the global Business
@@ -274,10 +281,13 @@ procedure. Do not substitute the Fix Script UI: it executes in the application s
 - The anonymous portal **REST endpoints**: submit returns `201` with the new case number; lookup returns `200`
   with exactly `{status, subject, opened_date}`; an unknown number returns `404` with the verbatim
   `No case found with that number.`
-- The 8 report definitions and the demo data (census at last measurement: **11 cases, 10 tasks, 8 parties**).
+- The 8 report definitions and the demo data (census as re-measured after the §0.3 round trip: **10 cases, 10 tasks, 8 parties** — see §9.8a of the limitations register).
 - **The ATF suite is green.** Run `TES0001015`: **20 / 20 tests Success, 180 / 180 step results Success**, zero
-  failures, errors or skips, ~4 minutes, no test residue left behind. (An earlier run, `TES0001014`, scored
-  16 / 4; that result predates the fixes and is history, not status.)
+  failures, errors or skips, ~4 minutes, no test residue left behind. (An earlier *series* of runs,
+  `TES0001010`–`TES0001012`, scored **16 / 4** — `ATF 07` plus the three form tests `ATF 15` / `ATF 16` /
+  `ATF 17`; that result predates the fixes and is history, not status. **`TES0001014` scored 20 / 0 / 0 / 0** and
+  is the last verdict taken against a fresh re-load of the shipped `atf/*.xml` artifacts — the project's only
+  serialized-import proof.)
 
 **Not working — also directly observed**
 
@@ -340,7 +350,7 @@ Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification pro
 
 ## Validation Gates
 
-Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — **1 passes outright, 5 pass only with a qualification, 1 fails** (1 + 5 + 1 = 7) — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status). In brief: **Workflow** passes. **Data model** and **ACLs** are correct only after the documented manual post-import remediation. **Portal — submission** and **Portal — lookup** pass at the REST-contract level while their pages render blank. **Update Set** previewed with zero errors, but on an earlier revision's bytes rather than the ones that ship. **Dashboards** fails. Counting the documented remediation as part of a normal install instead yields 3 pass · 3 qualified · 1 fail; both describe the same measured state, and this deliverable quotes the conservative one throughout.
+Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — **2 pass outright, 4 pass only with a qualification, 1 fails** (2 + 4 + 1 = 7) — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status). In brief: **Workflow** passes, and **Update Set** passes with zero preview problems of any type measured on the bytes that actually ship. **Data model** and **ACLs** are correct only after the documented manual post-import remediation. **Portal — submission** and **Portal — lookup** pass at the REST-contract level while their pages render blank. **Dashboards** fails. Counting the documented remediation as part of a normal install instead yields 4 pass · 2 qualified · 1 fail; both describe the same measured state, and this deliverable quotes the conservative one throughout.
 
 | Gate | Criterion | Pass Condition |
 | --- | --- | --- |

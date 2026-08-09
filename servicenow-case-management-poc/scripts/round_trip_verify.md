@@ -397,11 +397,14 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 7. §6.6 — The regression harness returns the same count after the round trip as before it, per assertion, and any
    test-suite failure is reported rather than relaxed.
 
-> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold **for the 916-block `32a064d6…`
-> revision**, which is the artifact this round trip was performed on. **The bytes that currently ship — 913
-> blocks, 3,614,359 bytes, SHA-256 `c04656b4…` — have not been through Phases 1-3 at all**, so criteria 1-3 are
-> open on them; closing that is the first item in
-> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10.0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Criterion 4
+> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold **for the bytes that ship**:
+> 913 blocks, 3,618,378 bytes, SHA-256 `7272edfc…`. Phases 1-3 were executed on them after a proven teardown —
+> `state=loaded` with the child count asserted at exactly 913; preview problems **41 → 298 → 0 of any type**,
+> the 298 being the teardown's own deletions captured as newer local updates and the 0 confirmed by the
+> platform's `unresolvedProblems=false` / `shouldDisplay=true` predicate; then `state=committed`. The same three
+> criteria also held earlier on the 916-block `32a064d6…` revision, which is retained as history in
+> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of
+> that document is the current record. Criterion 4
 > holds: `verified=true` with 27 of 27 links, after two remediation runs separated by a second commit.
 > Criterion 5 holds for Workflow, and for Data model and ACLs **on all three tables** after remediation; it does
 > **not** hold for Dashboards or for the portal pages. Criterion 6 is met in the second sense — the package is

@@ -283,8 +283,10 @@ measured on this platform, not assumed:
   the session user**. An earlier revision of the third branch called
   `gs.getUser(userGr.getValue('user_name')).hasRole(...)` and therefore answered with the *caller's* roles rather
   than the named user's — which let a non-manager pass the Resolved → Closed guard and receive `{ ok: true }`.
-  That was a silent bypass of the AAP §0.5.5 rule, it was caught by assertion A10 of the transition-logic
-  regression harness, and it is fixed.
+  That was a silent bypass of the AAP §0.5.5 rule, it was caught by assertion **A9** of the transition-logic
+  regression harness (A9 is the `canTransitionToClosed` non-manager assertion; A10 is the any → Draft assertion —
+  see the per-assertion table in
+  [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.7](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)), and it is fixed.
 
 The Script Include is `access=package_private`, so nothing outside the application can instantiate it — which is
 also why the regression harness has to run **in scope** rather than from Global.

@@ -6,14 +6,18 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
-> **Status of the zero-preview-error requirement stated above.** It has been met — on an **earlier 916-block
-> revision** of the deliverable (3,448,009 bytes, SHA-256 `32a064d6…`), which uploaded, previewed with **0 errors
-> and 0 warnings** on a genuine clean slate, and committed. **The bytes that currently ship are different** —
-> 913 blocks, **3,614,359 bytes**, SHA-256
-> `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7` — and this procedure has **not** been run
-> against them. Running it, and recording the preview problem count, is the first open item in
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10.0](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Verify the digest before
-> you upload, so you know which artifact you are testing.
+> **Status of the zero-preview-error requirement stated above.** It has been met **on the bytes that ship** —
+> 913 blocks, **3,618,378 bytes**, SHA-256
+> `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`. This procedure was run against them end to
+> end: **41** preview problems against an already-populated instance, **298** on the first pass after a proven
+> teardown (all `Found a local update that is newer than this one` — the teardown's own deletions captured as
+> local updates), and **0 problems of any type** once that local capture was purged at source, confirmed through
+> the platform's own `unresolvedProblems=false` predicate, then committed to `state=committed`. An earlier
+> 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as
+> history in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of that
+> document is the current record. **Verify the digest before you upload, so you know which artifact you are
+> testing** — and note that a bare commit is not sufficient on its own: the §9.5 install sequence below is
+> mandatory, because the commit creates the table metadata without physical storage.
 
 ## Pre-Deployment Checklist
 

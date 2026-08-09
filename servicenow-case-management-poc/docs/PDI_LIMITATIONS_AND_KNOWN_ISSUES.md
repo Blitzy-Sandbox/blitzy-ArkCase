@@ -47,8 +47,8 @@ anywhere else in this document.
 |---|---|
 | Path | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` |
 | `<sys_update_xml>` blocks | **913** (plus exactly one `sys_remote_update_set` descriptor, under a single `<unload>` root) |
-| Size | **3,614,359 bytes** |
-| SHA-256 | **`c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`** |
+| Size | **3,618,378 bytes** |
+| SHA-256 | **`7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`** |
 | Update names | 913 of 913 are canonical `<table>_<sys_id>`, and 913 of 913 are unique |
 | ATF range | **761 blocks** = 20 `sys_atf_test` + 180 `sys_atf_step` + **540** step-input rows (539 `Value` + 1 `Variable Value`) + 1 `sys_atf_test_suite` + 20 suite links |
 | Installer records | **1 Fix Script** (`x_casemgmt Post-Import Remediation`, global-scoped by design). **No bootstrap Business Rule, and no auto-execute record of any kind.** |
@@ -60,36 +60,51 @@ anywhere else in this document.
 |---|---|
 | Well-formed, internally consistent XML | **VERIFIED.** 913 of 913 embedded `<payload>` documents parse; one `<unload>` root; one descriptor; all names unique and canonical. |
 | Fix Script body is the repository source, byte for byte | **VERIFIED.** The packaged `<script>` equals `../scripts/post_import_remediation.js` exactly (172,520 characters), as does the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper. |
-| **Clean-slate upload → preview → commit on these bytes** | **NOT VERIFIED — this is the single most important open gap.** See §0.3. |
+| **Clean-slate upload → preview → commit on these bytes** | **VERIFIED.** Measured end to end on the bytes above — teardown to zero, upload with the child count asserted at 913, preview to **0 problems of any type**, then commit to `state=committed`. See §0.3. |
 
-### 0.3 OPEN LIMITATION 1 — the current bytes have not been clean-slate round-tripped
+### 0.3 CLOSED — the shipping bytes have now been clean-slate round-tripped
 
-The last complete teardown → upload → preview → commit proof (§9.10) was performed against a **different,
-earlier revision of this file**:
+This was previously OPEN LIMITATION 1: the zero-preview-error proof belonged to an **earlier revision** of the
+file rather than to the bytes that ship. **That gap is now closed by measurement, on the exact bytes in §0.1.**
 
-| | Bytes that were proved | Bytes that ship now |
-|---|---|---|
-| Revision | the `e01add3a` packaging-pass revision | current |
-| Blocks | 916 | **913** |
-| Size | 3,448,009 bytes | **3,614,359 bytes** |
-| SHA-256 | `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a` | **`c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`** |
+The trip was run on `https://dev379024.service-now.com` (Australia Patch 3). It is the same procedure the
+earlier revision went through, executed again from a genuine teardown, and every figure below is an observation:
 
-Package-changing passes landed after that proof: the security pass (which **removed** the bootstrap
-trigger block and narrowed cross-scope access), the documentation-truthfulness pass (which corrected six
-packaged record fields — one flow `<description>` in two blocks and four dictionary `<comments>` — so the
-metadata describes what the records actually do), and the ownership-safety pass (which rewrote the Fix Script
-body so the table rebuild proves it owns every metadata row before deleting any of it — see
-`../scripts/post_import_remediation.js`, `inventoryTableMetadata()`). None of
-those edits touches a name, a `sys_id`, a scope reference or a load-order dependency: the only block whose
-content changed in the last pass is the one Fix Script, and only its `<script>` field. That is why no preview
-regression is *expected*; but "not expected" is not "measured", and this document does not treat the two as
-equivalent. **The AAP §0.7.1 round-trip gate is therefore OPEN on the shipping bytes.** Closing it is
-recommended next step 1 (§10.1).
+| Stage | Measured result |
+|---|---|
+| Package identity going in | 913 blocks · 3,618,378 bytes · SHA-256 `7272edfc…` (§0.1) |
+| **BEFORE** — the same bytes previewed against the **already-populated** instance | **41 problems, all type `error`**: 20 × `Found a local update that is newer than this one`, 18 × `Could not find a record in x_casemgmt_case for column case`, 3 × `Could not find a record in core_company for column organization` |
+| Teardown | Staged application-level teardown proven complete: `sys_scope` query returns `[]`, **every** application census counter is 0, and all three tables move from HTTP 200 to **HTTP 400** (table absent, not merely access-denied) |
+| Upload onto the clean slate | `state=loaded`, child `sys_update_xml` count **exactly 913** |
+| First clean-slate preview | **298 problems**, every one `Found a local update that is newer than this one` — these are the *teardown's own deletions* captured as local updates, not a defect in the package (see §9.2 for the same root cause on the earlier revision) |
+| **AFTER** — preview once that local capture is purged at source | **0 problems of any type.** Checked against the platform's own predicate rather than assumed: `state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true` |
+| Commit | `previewed` → `committing` → **`committed`** |
+
+**Progression: 41 → 298 → 0, then committed.**
+
+The commit log (`sys_update_set_log`, *not* `sys_update_log`, which returns 0 rows over REST) recorded **30**
+errors, and every one is an already-documented defect rather than anything new: 28 are the seed rows failing to
+insert because a bare commit creates no physical storage (**Defect C** — 10 × `Table 'x_casemgmt_case' does not
+exist`, 10 × `…case_task…`, 8 × `…case_party…`), and 2 are `Table 'pa_tab' does not exist` (**E5**, the dashboard
+packaging defect in §0.5). The documented §9.5 install sequence then completed normally: remediation run 1
+built the 3 physical tables (25 fields, 24 choices, 3 counters), a second upload → preview → commit restored the
+26 ACLs and the seed rows, and remediation run 2 reported **`verified=true`, `acl_links_created=27`,
+`acl_links_total=27` (manager 14 / agent 10 / viewer 3), `security_cache_flushed=true`, `errors=0`**.
+
+**The file on disk is byte-unchanged by the trip** — re-measured after commit: 3,618,378 bytes, SHA-256
+`7272edfc…`, 913 blocks, identical to §0.1.
+
+**The AAP §0.7.1 round-trip gate is therefore MET on the shipping bytes.** What remains is not a verification
+gap but the install footprint itself: a bare commit is not self-sufficient, and the documented §9.5 sequence
+(two commits with a Global remediation run between and after them) is required. That footprint is §10.2, and it
+is unchanged by this result.
 
 ### 0.4 Current validation-gate rollup
 
-**1 gate passes outright · 5 pass only with a qualification · 1 fails** — 1 + 5 + 1 = 7. Per-gate detail is in
-§6 and in `validation-gates.md`; the qualifications are real and are not rounded away:
+**2 gates pass outright · 4 pass only with a qualification · 1 fails** — 2 + 4 + 1 = 7. Per-gate detail is in
+§6 and in `validation-gates.md`; the qualifications are real and are not rounded away. Gate 7 moved from
+qualified to an outright pass when the round trip was measured on the shipping bytes (§0.3); nothing else in this
+table changed:
 
 | Gate | Current status |
 |---|---|
@@ -99,16 +114,23 @@ recommended next step 1 (§10.1).
 | 4 Portal submission | ⚠️ Qualified — the anonymous **REST contract** passes; the submission **page renders blank** |
 | 5 Portal lookup | ⚠️ Qualified — the anonymous **REST contract** passes; the lookup **page renders blank** |
 | 6 Dashboards | ❌ **Fail** — both dashboards render zero tabs and zero widgets (§0.5) |
-| 7 Update Set | ⚠️ Qualified — zero preview problems were measured, but on the earlier bytes of §0.3, not these |
+| 7 Update Set | ✅ **Pass** — measured on **these** bytes: 41 → 298 → **0** problems of any type, then `committed` (§0.3) |
 
 **On the count.** An earlier revision of this document claimed *"2 pass, 3 qualified, 1 fail"*, which does not
 sum to 7. The count above is derived from the table, one row at a time, and is the count every other document in
 this deliverable now quotes. It is deliberately the conservative reading: gates 1 and 3 carry **the same single
 qualification** — the documented manual post-import remediation, which is an approved installer step, not a
 defect in the data model or the ACL design — so a reader who counts that step as part of a normal install will
-read gates 1, 2 and 3 as outright passes and arrive at **3 pass · 3 qualified · 1 fail**. Both accountings
+read gates 1, 2, 3 and 7 as outright passes and arrive at **4 pass · 2 qualified · 1 fail**. Both accountings
 describe the identical measured state; this document uses the conservative one so that no qualification is ever
 lost by rounding. What must never be written is any count that fails to sum to 7.
+
+**Read the two remaining qualifications precisely, because "qualified" must not be read as "fine".** Gates 4 and
+5 pass at the *contract* level and fail at the *surface* level: an anonymous caller can submit a case and look
+one up through the scripted REST endpoints exactly as specified, but a human visiting either portal page sees a
+blank screen. Gates 1 and 3 are correct once an operator has run the Global remediation script, and incorrect
+until then. Gate 6 fails outright. The application logic is sound; the package is not self-installing, and the
+portal pages and dashboards are not usable on this instance.
 
 ### 0.5 The dashboard failure is larger than earlier revisions of this document claimed
 
@@ -134,7 +156,8 @@ creation times 00:39:59 and 00:43:29 UTC matched the two page loads to the secon
 verbatim: **"Add widgets using the widget picker."** Both pages returned HTTP 200 with **zero console errors
 and zero non-2xx responses**, so this is not a runtime or authorization failure. Controls run in the same
 session: the out-of-box "Incident Management" dashboard renders 6 widget cards with 4 live charts, and the
-scoped report *All Cases by Status* runs and draws a live bar chart from the real 11 rows — dashboard
+scoped report *All Cases by Status* runs and draws a live bar chart from the real case rows (10 at the latest
+measurement) — dashboard
 rendering, charting and the data are all healthy.
 
 > **Disclosure — a side effect of measuring this.** Those two empty `pa_tabs` rows and two link rows now exist
@@ -155,6 +178,26 @@ rendering, charting and the data are all healthy.
   `sys_user_group` record returns 196.656 px and 288.625 px with visible rows. The case measured has 2 task
   rows and 1 party row that would have displayed. The child tables' `case` reference fields make the related
   lists *possible*; the configuration that would render them was never authored.
+
+### 0.6a The seven gates as re-measured on the §0.3 install — evidence per gate
+
+The §0.4 rollup is the verdict; this is the evidence behind it, taken on the instance produced by the §0.3 round
+trip rather than carried forward from an earlier pass. Each row names the measurement, not the expectation.
+
+| Gate | Verdict | Evidence measured on this install |
+|---|---|---|
+| 1 Data model | ⚠️ Pass after remediation | All **25** shipped `dictionary/*.xml` artifacts compared field by field against the live `sys_dictionary` rows, keyed on `(name, element)`: **0 absent, 0 divergent** on `internal_type`, `max_length`, `mandatory`, `read_only`, `choice`, `default_value`, `function_field`, `display`, `active` and reference target. All **7** choice lists present with their exact labels (24 rows, 0 inactive). `number` carries `default_value=javascript:global.getNextObjNumberPadded()` and `read_only=1`; display fields are `number` / `subject` / `role_label`. An insert probe produced `CASE0000989`, matching `^CASE[0-9]{7}$`, defaulting to `Draft`, and was removed. The three list views render as real data grids with 10 / 10 / 8 rows, zero banners, zero console errors. **Physical storage exists only because the remediation built it** — hence the qualification, not the field definitions. |
+| 2 Workflow | ✅ Pass | **Breadth:** the shipped harness `../scripts/transition_logic_regression_assertions.js` re-run verbatim in scope `x_casemgmt` emitted `U1ASSERT\|TOTAL=13 PASSED=13 FAILED=0`, with `expected` and `actual` byte-identical on all 13 and labels A1–A13 matching the §9.7 table exactly (**A9** is the `canTransitionToClosed` non-manager assertion; **A10** is any → Draft). Its own `CLEANUP` line reports `tasks=4 cases=7 remainingCases=10`, so every fixture it created was removed. **Depth on the form:** clicking the real **Resolve** UI Action on a case with one open child task produced a single error banner whose painted text is `All tasks must be closed before resolving this case.` — **52** characters, no surrounding whitespace, zero non-ASCII, final codepoint U+002E — and the literal was provably absent from the page before the click. `status` still read `In Progress` after the click and after a clean reload; server-side probes showed `sys_mod_count` unchanged at **0** and `sys_updated_on` unchanged, so **no write occurred**. The submit returned **302 back to the same record** — the abort-and-redisplay signature. All 6 UI Actions are `active=true`. |
+| 3 ACLs | ⚠️ Pass after remediation | Measured at **record** level by impersonation, because a table-level `canRead()` cannot evaluate a conditional ACL. **manager:** create on all 3 tables, all 10 cases visible, read+write+**delete** on unassigned, group-only and agent-assigned fixtures, both sensitive fields writable. **agent:** create yes; **9 of 10** cases visible — the unassigned case is `read=DENIED`; write yes on both assigned shapes; **delete no**; field ACLs correct — `assigned_group` not writable at all, `assigned_agent` writable **only** on the case where the agent is the assigned agent. **viewer:** create **no** on all 3, all 10 visible, write and delete **no** everywhere. Both halves of "Assigned only" proven — the group half via a group-only case, the agent half via an agent-assigned case. **Child-table mirror proven with a purpose-built fixture** (the demo data could not prove it, as the unassigned case has no children): one task and one party added to the unassigned case were visible to manager and viewer (11 / 9) but **excluded from the agent's list and denied on direct read**; the fixture was then deleted and the census restored to 10 / 10 / 8. |
+| 4 Portal — submission | ⚠️ REST pass · page fail | Fully anonymous `POST /api/x_casemgmt/case_submit` → **201**, body exactly `{"number":"CASE0000990","message":"Your case has been submitted"}`. Internally the row landed as `status=Draft` with `opened_date` set and `assigned_group` / `assigned_agent` / `closed_date` all empty. The probe row was then deleted. The **page** still renders blank — see gate 5's row for the shared root cause. |
+| 5 Portal — lookup | ⚠️ REST pass · page fail | Anonymous `GET …/case_status_lookup?number=<valid>` → **200** with exactly three keys, `{status, subject, opened_date}`; a leak audit over the **raw** response bytes for `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email`, `pending_reason`, `sys_id`, `sys_created_on`, `sys_updated_on` and `duration_to_close` found **zero** of them present. Unknown number → **404** with `No case found with that number.` byte-exact. **Both pages render blank** to an anonymous visitor: 0 inputs, 0 textareas, 0 selects, 0 buttons, 0 labels, 0 visible characters, and all three portal screenshots byte-identical. Root cause re-confirmed by measurement: `/api/now/sp/page` returns `containers` length **0** for both pages and for the portal root, against **1** for the out-of-box `sp?id=404` control which renders fully in the same anonymous session. Pages are correctly `public=true`, `draft=false`, HTTP 200, no `error` field — the layout tree is simply empty. Newly measured detail: the portal record also returns `theme: {header:{}, footer:{}}`, so not even a navbar paints. Zero console errors and zero non-2xx throughout, so the failure is silent and structural (**E8-P**). |
+| 6 Dashboards | ❌ Fail | Both dashboards open and render **0 visible tabs and 0 widgets**, showing the platform's empty state verbatim: **"Add widgets using the widget picker."** No chart, no table, no score tile, and **no error indicator** — with 0 console errors and 0 non-2xx, and neither dashboard issuing a single widget or report data request, which is the signature of an empty canvas rather than a broken reference. `pa_widgets` in scope `x_casemgmt` is **0 rows**; the only two scoped `sys_grid_canvas_pane` rows are inert stubs with no canvas link, no widget reference and no geometry. Control: the scoped report *All Cases by Status* opens and draws a live bar chart over the 10 seeded rows — so reports work. It also re-confirms §0.6: it renders grouped by **Assigned Agent** with a blank X-axis title, because `sys_report.field` is empty on all 8 scoped reports while every sampled out-of-box chart report has it populated. |
+| 7 Update Set | ✅ Pass | §0.3 in full: 41 → 298 → **0** problems of any type, `unresolvedProblems=false`, then `committed`; file byte-unchanged afterwards. |
+
+Two AAP requirements outside the seven gates were re-measured and still fail: **related lists** (`sys_ui_related_list`
+holds 0 rows for this scope; `#related_lists_wrapper` measures **0 px** tall on a case that has 2 child tasks and
+2 child parties — §9.6 E8) and the **party UI Policy's on-change re-evaluation** (§9.6 E4, whose root cause is
+corrected there). The demo census behind all of the above is §9.8a.
 
 ### 0.7 What the current package contains no automation for
 
@@ -915,23 +958,24 @@ so future operators don't mistake them for bugs.
 | 4. Portal — submission | Unauthenticated submit creates a Draft case with a number | ⚠️ **REST contract PASS · portal page FAIL** | REST, no credentials: `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. But the submit **page** at `/x_casemgmt_case_portal?id=x_casemgmt_case_submit` renders blank — 0 labels, 0 inputs, 0 buttons after a 12-second poll — because `sp/page` returns `containers: []`. A visitor cannot submit through the UI; only the endpoint works. §9.6 E8-P. |
 | 5. Portal — lookup | Status lookup returns correct data / not-found | ⚠️ **REST contract PASS · portal page FAIL** | REST: GET valid → exactly `{status, subject, opened_date}` with `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email` and `sys_id` all absent from body *and* raw response; GET invalid → **404** with `No case found with that number.` byte-identical to the required literal. The lookup **page** renders blank for the same reason as gate 4 — no field, no button, no result panel, and the not-found text appears nowhere in the DOM. §9.6 E8-P. |
 | 6. Dashboards | Both dashboards render with synthetic data | ❌ **FAIL** | Measured precisely, not assumed. The two `pa_dashboards` records **do commit** and are live in scope (`x_casemgmt_agent_workspace`, `x_casemgmt_manager_view`). What fails is every child record beneath them, because **three** of the child table names each artifact uses do not exist on this release: `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (real name `pa_widgets`) and `pa_dashboard_role` (no equivalent) — each returns HTTP 400 `Invalid table …`, while `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane` all resolve. Rendered result: **0 tabs, 0 widgets**, `sys_grid_canvas_pane` **0** on both canvases, `pa_widgets` in scope **0**, and the platform's empty state "Add widgets using the widget picker." — with **0 console errors and 0 non-2xx responses**, so this is a packaging defect and **not** an absent PDI capability or a runtime failure. A tab alone is **not** the missing piece: the platform auto-created one empty `pa_tabs` row per dashboard on first view and both stayed blank (§0.5). Pre-existing: the dashboard artifacts are byte-unchanged since the pre-refine commit. The 8 backing `sys_report` records do commit and are backed by populated tables, **but their `group_by` is empty on the instance** although the artifacts specify one, so they do not aggregate as designed (§0.6). §0.5, §9.6 E5. |
-| 7. Update Set | Loads/previews with zero errors | ⚠️ **PASS on the revision measured; NOT PROVEN on the shipping bytes** | **Before = 42 errors** (dirty instance), **after = 0 errors / 0 warnings** on a genuine clean slate, then committed to `state=committed`. Full progression and the two deliverable edits that produced it are in §9.2–§9.3. **That measurement was taken on the 916-block `32a064d6…` revision** (§9.10); the shipping file is 913 blocks / 3,614,359 bytes / `c04656b4…` (§0.1) and has not been uploaded, previewed or committed. Static checks on it pass and the delta is confined to record descriptions, removal of the bootstrap block, and the `<script>` field of the single Fix Script block, so a clean preview is expected — but not measured. §0.3. |
+| 7. Update Set | Loads/previews with zero errors | ✅ **PASS — measured on the shipping bytes** | On the shipping 913-block / 3,618,378-byte / `7272edfc…` file (§0.1): **before = 41 errors** against the already-populated instance, **298** on the first clean-slate preview (all `Found a local update that is newer than this one` — the teardown's own deletions), **after = 0 problems of any type** once that local capture was purged at source, verified against the platform's own predicate (`state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`), then **`committed`**. The teardown was proven complete first (scope `[]`, every census counter 0, all three tables at HTTP 400). The file on disk is byte-unchanged by the trip. Full detail in §0.3; the earlier 916-block `32a064d6…` measurement (42 → 0) is retained in §9.2–§9.3 and §9.10 as the history of the previous revision, not as the current status. |
 | — Related lists (AAP §0.4.4) | Case form shows `case_task` and `case_party` related lists | ❌ **FAIL (never authored)** | Not one of the seven AAP §0.7.3 gates, recorded here because it was measured in this pass. `sys_ui_related_list` holds **0 rows** for `x_casemgmt_case` and 0 for every other table in the app, against **1,545** rows instance-wide; on a real case record `#related_lists_wrapper` measures **0 CSS px** with class `tabs_disabled` and 0 tabs, while the same measurement on an out-of-box `sys_user_group` record returns 196.656 px and 288.625 px with visible rows; and no `sys_ui_related_list`/`sys_ui_form`/`sys_ui_section`/`sys_ui_element` artifact exists in the repository or the package. §0.6, §9.6 E8. |
 
-> **Net across the seven gates, for the bytes that ship: 1 passes outright · 5 pass only with a qualification ·
-> 1 fails.** `1 + 5 + 1 = 7`.
+> **Net across the seven gates, for the bytes that ship: 2 pass outright · 4 pass only with a qualification ·
+> 1 fails.** `2 + 4 + 1 = 7`.
 >
-> - **Outright pass (1):** **Workflow**.
-> - **Qualified (5):** **Data model** and **ACLs**, each correct only after one manual remediation run;
+> - **Outright pass (2):** **Workflow**, and **Update Set** — the latter now measured on the shipping bytes
+>   themselves (41 → 298 → **0** problems of any type, then `committed`; §0.3).
+> - **Qualified (4):** **Data model** and **ACLs**, each correct only after one manual remediation run;
 >   **Portal — submission** and **Portal — lookup**, each passing at the REST layer and failing at the page
->   layer; **Update Set**, whose zero-preview-error result was genuinely measured but on the earlier bytes
->   identified in §0.3, not on the bytes that ship.
+>   layer.
 > - **Outright failure (1):** **Dashboards**.
 >
-> **How this relates to the 2 · 4 · 1 figure recorded in §9.10.** On the `e01add3a` bytes the Update Set gate was
-> an outright pass, so that revision scored **2 pass · 4 qualified · 1 fail**. Re-packaging moved gate 7 into the
-> qualified column and nothing else changed, which is the whole of the difference. An earlier revision of this
-> note said "2 pass, 3 qualified, 1 fail", which totals six and was simply wrong.
+> **How this relates to the 2 · 4 · 1 figure recorded in §9.10.** The shipping bytes now score the same
+> **2 pass · 4 qualified · 1 fail** as the `e01add3a` bytes did, because gate 7 has been measured on them
+> directly. Between those two measurements this line read `1 + 5 + 1` with gate 7 in the qualified column, which
+> was correct at the time and is now superseded. An even earlier revision said "2 pass, 3 qualified, 1 fail",
+> which totals six and was simply wrong.
 >
 > Gate 2 remains a full PASS and was independently re-verified: clicking the real **Resolve** UI Action on a case
 > with an open child task was blocked, the record was not written (`sys_mod_count` unchanged), and the form
@@ -1120,9 +1164,16 @@ exactly one batch per `ATF 15/16/17`.
 > **The gap, stated plainly.** `TES0001014` proves the *serialized* assets of the package revision current at
 > that moment — a **pre-security** revision. `TES0001015` proves the *live* assets as they stand now. The suite
 > has **not** been re-run against a fresh re-load of the shipped artifacts since the security and
-> documentation-truthfulness passes changed the package. Nothing in either pass touched an ATF record, and the
-> 761-block ATF range is byte-unchanged, so no regression is *expected* — but it has not been *measured*, and
-> this document does not present the two as the same thing. Closing it is recommended next step 4 (§10.3).
+> documentation-truthfulness passes changed the package. **The security pass did touch ATF records:** it rewrote
+> `ATF 18`'s anonymous leg (to a non-mutating one, §9.6a P6) and `ATF 19`'s setup, which changed **10 packaged
+> blocks** — 2 `Test`, 4 `Test Step` and 4 `Value` — and the two artifacts
+> `atf/x_casemgmt_atf_18_*.xml` and `atf/x_casemgmt_atf_19_*.xml` on disk. The ATF range has been byte-unchanged
+> **from that pass onward** (0 content-differing blocks between it and HEAD; the only later ATF edit is a header
+> comment in `atf/x_casemgmt_atf_03_*.xml`, which the package does not carry), and the range has held at exactly
+> **761** blocks throughout, with nothing added or removed. So `TES0001014` **predates the current form of those
+> two tests**, which is a further reason the serialized re-load re-run is outstanding rather than a formality.
+> An earlier revision of this paragraph asserted that nothing in either pass touched an ATF record; that was
+> measured and is false for precisely `ATF 18` and `ATF 19`. Closing the gap is recommended next step 2 (§10.0).
 
 > **History, kept because it matters.** The immediately preceding run of the same suite, `TES0001013`
 > (`0fd7ebc2936a4b10830ef82bdd03d6e7`, 2026-08-08 10:50), was **19 / 1** — `ATF 03` failed at step 8 with
@@ -1632,8 +1683,8 @@ Defect F, not Defects C/E/7/9, and not the ATF suite). They are recorded here so
 | **E1** | Packaged `Case Record` payloads omit the `number` element entirely (field set is `description, priority, requester_email, requester_name, status, subject, type` + `sys_*`) | All 10 demo cases commit with `number` empty; `x_casemgmt_case_task.case` and `x_casemgmt_case_party.case` then hold the literal string `"CASE0000008"`, and `case_party.organization` holds `"Synthetic Org Beta"` | Case↔task and case↔party relationships are broken in the packaged demo data, and the seed script cannot repair them because its idempotency key already matches. Remedy in §9.5 step 5 |
 | **E2** | `sys_user_grmember.group` is a dangling literal (`group_raw=x_casemgmt_demo_team`, `is_sys_id=false`, empty display value) while the `user` side resolved correctly | `gs.getUser().isMemberOf()` can never match | The **group branch** of the agent's read/write ACL is inert, so "Assigned only" collapses to the `assigned_agent` branch (7 rows instead of 9). Repaired by the seed script, which creates a correct membership; the bad row must be deleted |
 | **E3** | `sys_ui_action.condition` is `condition_string`, **max length 254**. Four conditions exceed it and are silently truncated mid-expression on import: `x_casemgmt_case_start_progress` (264), `_set_pending` (271), `_resume` (267), `_resolve` (271). The Resolve condition ends `…isMemberOf(current.assigned_grou` | Exactly those four buttons render for the **viewer**, who has no write ACL, a fully read-only form and no Update button; the two short-condition actions (`_open` 76, `_close` 79) behave correctly | A truncated condition cannot evaluate, so the guard fails open. Data security is intact — the write ACL rejects the change server-side — but the affordance is misleading. Fix: move the condition into a Script Include call short enough to fit, or into the UI Action's script |
-| **E4** | UI Policy `x_casemgmt_case_party_conditional_fields` does not re-evaluate on change | Both branches are configured correctly and apply correctly **at form load** (Person record → Person visible and mandatory, Organization absent from the DOM; Organization record → the mirror). Driving `party_type` through the real `<select>` *and* through `g_form.setValue()` in both directions on both record types left `isVisible`/`isMandatory` frozen at the load-time branch every time | A user switching Party Type is not shown the field they now need and is still required to fill the wrong one. Signature of **"Reverse if false" unchecked** |
-| **E5** — **re-measured and WIDER than first recorded** | Each Dashboard composite block uses **three table names that do not exist on this release**: `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (real name `pa_widgets`) and `pa_dashboard_role` (no equivalent) | `GET /api/now/table/pa_tab` → **HTTP 400 `Invalid table pa_tab`**; `pa_dashboard_widgets` → **HTTP 400**; `pa_dashboard_role` → **HTTP 400**; while `pa_tabs` → 200 (26 rows), `pa_widgets` → 200 (167 rows) and `sys_grid_canvas_pane` → 200 (121 rows) all resolve. `sys_db_object` holds `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane`, and no `pa_tab`. Both `pa_dashboards` rows commit and are live; the children do not — **0** `sys_grid_canvas_pane` rows on either canvas and **0** `pa_widgets` in scope `x_casemgmt`. Rendered: **0 tabs, 0 widgets**, empty state "Add widgets using the widget picker.", **0 console errors, 0 non-2xx** | Neither dashboard renders anything, and validation gate 6 fails. The PDI capability is present — the out-of-box "Incident Management" dashboard renders 6 widget cards with 4 live charts in the same session, and the scoped report *All Cases by Status* draws a live chart from the real 11 rows — so this is a **multi-element packaging defect in the deliverable**. **An earlier revision of this row called it a one-element defect fixable by renaming `pa_tab`; that was measured and is wrong** — the platform auto-created an empty `pa_tabs` row on first view and both dashboards stayed blank, because the widget and pane records never land either. **Pre-existing**: `dashboards/pa_dashboards_x_casemgmt_*.xml` are byte-unchanged since the pre-refine commit, so no unit of this pass introduced it. Fix in §10.2 item 11 |
+| **E4** | UI Policy `x_casemgmt_case_party_conditional_fields` does not re-evaluate on change | Both branches are configured correctly and apply correctly **at form load**, re-confirmed by measurement on existing records: `PARTY0000159` (`party_type=Person`) → `person` `isVisible`/`isMandatory` both **true**, row `display:block` `offsetHeight:32`, mandatory marker rendered, while `organization` is `false`/`false`, `display:none`, `offsetHeight:0`; `PARTY0000160` (`party_type=Organization`) → the exact mirror. On a **new** record (`party_type` empty) both are correctly hidden. But driving `party_type` through `g_form.setValue()`, through a native `input`+`change` on the real `<select>` (which does fire the platform's own inline `onChange(...)`), and through a true CDP-level fill — in both directions — produced **zero** delta every time, leaving the form self-contradictory (Party Type reads Organization while Person is still shown and mandatory) | A user switching Party Type is not shown the field they now need and is still required to fill the wrong one. **Root cause, measured — not the "Reverse if false" setting an earlier revision of this row named.** The condition is `party_typeISNOTEMPTY^ORparty_typeISEMPTY`, a **tautology**: true at load and true after every change. The platform's `GlideFieldPolicy.runActions()` opens with `if (result == this.lastResult) return;`, so the Execute-if-true script — which holds *all* the branch logic and is correct — runs **exactly once per form load** and never again. Proven decisively by clearing only `lastResult` and re-invoking `runPolicy()` with `party_type=Organization`, which immediately applied the correct branch. `reverse_if_false=false` is therefore irrelevant (the false path is unreachable) and `script_false` is empty; `sys_ui_policy_action` holds **0** rows for the policy and 0 for the table (against 5,139 instance-wide), so nothing declarative can move the fields either. The corrected remedy is §10.2 item 8 |
+| **E5** — **re-measured and WIDER than first recorded** | Each Dashboard composite block uses **three table names that do not exist on this release**: `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (real name `pa_widgets`) and `pa_dashboard_role` (no equivalent) | `GET /api/now/table/pa_tab` → **HTTP 400 `Invalid table pa_tab`**; `pa_dashboard_widgets` → **HTTP 400**; `pa_dashboard_role` → **HTTP 400**; while `pa_tabs` → 200 (26 rows), `pa_widgets` → 200 (167 rows) and `sys_grid_canvas_pane` → 200 (121 rows) all resolve. `sys_db_object` holds `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane`, and no `pa_tab`. Both `pa_dashboards` rows commit and are live; the children do not — **0** `sys_grid_canvas_pane` rows on either canvas and **0** `pa_widgets` in scope `x_casemgmt`. Rendered: **0 tabs, 0 widgets**, empty state "Add widgets using the widget picker.", **0 console errors, 0 non-2xx** | Neither dashboard renders anything, and validation gate 6 fails. The PDI capability is present — the out-of-box "Incident Management" dashboard renders 6 widget cards with 4 live charts in the same session, and the scoped report *All Cases by Status* draws a live chart from the real case rows (10 at the latest measurement) — so this is a **multi-element packaging defect in the deliverable**. **An earlier revision of this row called it a one-element defect fixable by renaming `pa_tab`; that was measured and is wrong** — the platform auto-created an empty `pa_tabs` row on first view and both dashboards stayed blank, because the widget and pane records never land either. **Pre-existing**: `dashboards/pa_dashboards_x_casemgmt_*.xml` are byte-unchanged since the pre-refine commit, so no unit of this pass introduced it. Fix in §10.2 item 11 |
 | **E7** — ✅ **FIXED, both carriers** | Was: 13 of 14 `x_casemgmt_case` dictionary entries carried `display=true` (also 6 of 6 on `case_task`, 5 of 5 on `case_party`), in the packaged blocks **and** in `post_import_remediation.js`. Now: the 24 dictionary artifacts and their payloads ship `display=false` except one column per table, and the script sets `display: true` only on `case.number` / `case_task.subject` / `case_party.role_label`, reconciles the flag per table, and **verifies exactly one display field per table** | Was: `getDisplayValue('case')` returned `""`; the `Case` column showed "(empty)" on every task and party row. Now: the package itself yields one display field per table on commit, and the script's verification fails the run if it does not | Resolved. No longer a residual manual step — see §9.5 step 4, retained only so existing cross-references resolve |
 | **E8** | AAP §0.4.4's **Related Lists were never authored** | `sys_ui_related_list` holds **0 rows** for `x_casemgmt_case` and 0 for every other table in the app — against **1,545** rows instance-wide and 4 for `sys_user_group`, so the emptiness is a real absence and not a query artifact. On a real case record (2 task rows and 1 party row of its own) the form's **`#related_lists_wrapper` measures exactly 0 CSS pixels** (`offsetHeight`/`clientHeight`/`scrollHeight` all 0, computed `height: 0px`, class `tabs2_wrapper_default tabs_disabled`, its only child a `<script>`), `#tabs2_list` has **0 children** and `display: none`, and the form does not scroll. Same measurement on an out-of-box `sys_user_group` record: **196.656 px** and **288.625 px** with tabs "Roles (1)" / "Group Members" / "Groups" and 1 and 4 visible rows. Not a load-timing artifact: related-list load timing is `default`, no "Load related lists" affordance exists, the platform already fired `related_lists.ready`, and no related-list fetch is issued at all. Not a script or network failure either: 0 console errors, 0 non-2xx. No `sys_ui_related_list`/`sys_ui_form`/`sys_ui_section`/`sys_ui_element` artifact exists in the repository or the package (only 1 `sys_ui_policy` and 6 `sys_ui_action`) | AAP §0.4.4 requires related lists for `case_task` and `case_party` on the case form. A user cannot see or add a case's tasks or parties from the case form. The child tables' `case` reference fields make the lists *possible*; only the configuration is missing, so §10.2 item 6 closes it |
 | **E8-P** | The Service Portal **layout** records were never authored | `GET /api/now/sp/page` returns HTTP 200 with `containers: []` for all three routes, alongside `theme:{footer:{},header:{}}`. `sp_portal`, both `sp_page` records (`public:true`, `draft:false`, correct titles and routing) and all 3 `sp_widget` records are present and healthy. No `sp_container`/`sp_row`/`sp_column`/`sp_instance` record exists on disk, in the package, or in the pre-refine package | Both portal pages render **completely blank** — 0 labels, 0 inputs, 0 buttons; all six portal screenshots are byte-identical. `Your case has been submitted`, the case number, the whitelisted lookup result and `No case found with that number.` appear **only** in the API responses, never on screen. Validation gates 4 and 5 pass at the REST layer only. There is also no navigation: the only link on any page is "Skip to page content". **ACL filtering is ruled out by control probe:** the *same* anonymous guest session receives **populated** `containers` (length 1, 2 widget instances, an 11,867-byte body carrying the full `sys_container` shape) from the out-of-the-box `404` and `unauthorized` portal pages, while both `x_casemgmt` pages return a 927–947-byte body with `containers: []` on a fully resolved `public:true, draft:false` record. Three response signatures were characterised — 565 B page-does-not-exist, 927–947 B page-healthy-but-no-layout, 11,867 B page-with-layout — and both `x_casemgmt` pages sit in the middle band. The rendered `<main>` is 336 characters ending in `<!-- ngRepeat: container in containers -->` with zero instances; the three route screenshots are byte-identical (one sha256) and each is 100 % pure white across all 1,296,000 pixels; console errors 0, and of 77 requests the only non-2xx are two benign 304 revalidations of the platform’s own `sn_banner.xml` — so this is configuration, not a crash. `sp_portal.theme_dv` is also empty, which is why no header/footer chrome renders. Fix: capture the container/row/column/widget-instance records for both pages, plus a menu |
@@ -1711,7 +1762,8 @@ Each run reports its own `CLEANUP` figures. Every run removed all seven of its o
 of its fixture tasks, so the harness leaves nothing behind. The `remainingCases` figure is a census of the whole
 table at that moment and therefore moves with the instance rather than with the harness: the 2026-08-08 09:18:43
 run reported `remainingCases=20`, matching the census in §9.8 taken while that run's own and other suites'
-fixtures were still present. The final-HEAD run reports **`remainingCases=11`**, which is the *clean* steady state:
+fixtures were still present. The final-HEAD run reported **`remainingCases=11`**, which was the *clean* steady state
+at that time:
 the **10** demo cases required by AAP §0.7.4 (`CASE0000587`–`CASE0000596`, covering all six statuses across both
 case types) plus one pre-existing `guest`-created row left by the setup phase's own portal verification, which is
 not ATF residue and was deliberately not deleted on a shared instance. Neither figure indicates a harness leak;
@@ -1762,11 +1814,23 @@ was **blocked**: the persisted status stayed `In Progress`, `closed_date` stayed
 exactly `All tasks must be closed before resolving this case.` in the `gs.addErrorMessage()` banner —
 codepoint-verified as 52 pure-ASCII characters with a terminating U+002E, no leading or trailing whitespace.
 
-### 9.8 Demo data restored (AAP §0.7.4)
+### 9.8 Demo data restored (AAP §0.7.4) — as measured in the U4 clean-instance pass
 
-| Threshold | Required | Measured |
+> **Which measurement this is.** Every figure in this subsection was measured **at the end of the U4
+> clean-instance pass**, and the specific `CASE…` / `TASK…` / `PARTY…` ranges belong to *that* pass. They are not
+> a current-state statement: each teardown-and-re-seed allocates fresh numbers from the live counters, so the
+> ranges move every time. A later measurement of the same census is in §9.7 (10 demo cases
+> `CASE0000587`–`CASE0000596`, `remainingCases=11`), and the **current** census — measured after the §0.3 round
+> trip and re-seed — is in §9.8a below. Any statement about the census *now* has to be re-measured rather than
+> read out of this table. **What is invariant across all of these measurements, and is what AAP §0.7.4
+> actually requires, is the shape of the census — the threshold and "Measured" columns below other than the
+> literal number ranges.** An earlier revision of this subsection
+> presented its ranges as the current census without saying which pass produced them, which read as a
+> contradiction of §9.7.
+
+| Threshold | Required | Measured (U4 pass) |
 |---|---|---|
-| Cases | ≥ 10 | **10 demo cases** (`CASE0000452`–`CASE0000461`), `number` empty on none |
+| Cases | ≥ 10 | **10 demo cases** (`CASE0000452`–`CASE0000461` in that pass), `number` empty on none |
 | Statuses covered | all six | **all six** — Draft, Open, In Progress, Pending, Resolved, Closed |
 | Case types | both | **both** — General Inquiry and Complaint |
 | Tasks | open + closed mix | **10** — 3 Open, 1 In Progress, 6 Closed; zero dangling parent references |
@@ -1776,13 +1840,50 @@ codepoint-verified as 52 pure-ASCII characters with a terminating U+002E, no lea
 | Role grants | 3 | **3** |
 
 All synthetic and PII-free: every demo user and every case `requester_email` is on `@example.invalid`; the two
-companies are `Synthetic Org Alpha` and `Synthetic Org Beta`. Counters proven live across all three tables:
-`CASE0000452`–`461`, `TASK0000091`–`0000100`, `PARTY0000042`–`0000049`.
+companies are `Synthetic Org Alpha` and `Synthetic Org Beta`. Counters proven live across all three tables — the
+ranges quoted here are the ones the **U4 pass** allocated, and later passes allocate later ranges from the same
+counters: `CASE0000452`–`461`, `TASK0000091`–`0000100`, `PARTY0000042`–`0000049`. The invariant the counters
+prove is the `CASE0000001` / `TASK0000001` / `PARTY0000001` seven-digit shape and monotonic allocation, not the
+particular numbers.
 
 The case table also holds a handful of additional synthetic `Draft` rows created as validation probes during
 this pass, plus one row per ATF suite run left by `ATF 18` for the reason already documented in §8.6 (M4): an
 inbound anonymous HTTP request runs as `guest` in its own transaction, outside ATF's rollback. All are
 synthetic and on `@example.invalid`. Demo-data cleanup remains out of scope.
+
+### 9.8a Demo data as it stands now — measured after the §0.3 round trip
+
+This is the **current** census, taken on `dev379024` after the clean-slate round trip, the §9.5 install sequence
+and a re-seed with `scripts/seed_demo_data.js`. It is a separate measurement from §9.8 and from §9.7; where a
+reader wants "the census now", this is the row set to quote.
+
+The packaged seed rows had to be removed before re-seeding, exactly as **E1/E2** predict: all 10 packaged cases
+committed with an **empty `number`**, and all 10 packaged tasks and 8 packaged parties held their parent as a
+literal string (`case='CASE0000008'`, `organization='Synthetic Org Beta'`) rather than a reference. Those 28 rows
+plus one dangling `sys_user_grmember` row were deleted, then the seed script was run in scope `x_casemgmt`
+(Global cannot write these tables by design — **E9**) and exited 0.
+
+| Threshold | Required | Measured now |
+|---|---|---|
+| Cases | ≥ 10 | **10**, `CASE0000979`–`CASE0000988`, `number` empty on none |
+| Statuses covered | all six | **all six** — Draft 1, Open 2, In Progress 2, Pending 1, Resolved 2, Closed 2 |
+| Case types | both | **both** — General Inquiry 6, Complaint 4 |
+| Priorities | — | all four present — Low, Medium, High, Critical |
+| Date stamping | — | `opened_date` on 10 of 10; `closed_date` on **only** the 2 Closed cases |
+| Tasks | open + closed mix | **10**, `TASK0000276`–`TASK0000285` — 3 Open, 1 In Progress, 6 Closed; all four types; zero dangling parent references; `assigned_to` and `due_date` populated on all |
+| Parties | Person + Organization | **8**, `PARTY0000159`–`PARTY0000166` — 5 Person, 3 Organization; zero dangling references; no Person row without `person`, no Organization row without `organization`, and no row with both |
+| Demo users | 3 | **3**, all active |
+| Demo group | 1 | **1** (`x_casemgmt_demo_team`), with a valid membership for the agent |
+| Role grants | 3 | **3** — one per role |
+
+All synthetic and PII-free: every demo user address and every case `requester_email` is on `@example.invalid`;
+the two companies remain `Synthetic Org Alpha` and `Synthetic Org Beta`.
+
+> **One census reading that is not a defect.** `sys_user_grmember` holds a **second** row for
+> `x_casemgmt_demo_agent`, pointing at group `5ee74940b70022108d4406dd1e11a918`. That is the platform's own
+> auto-provisioned `snc_required_script_writer_permission` group — it resolves (HTTP 200), its
+> `sys_created_by` is `system`, and it appears **0** times in the package. It is a platform-managed global row,
+> not a dangling reference, and it was deliberately left untouched.
 
 ### 9.9 Final re-verification of every gate, at the end of the pass
 
@@ -1796,7 +1897,7 @@ recording.
 > certification has been withdrawn and the rows that were superseded are marked inline. Where this table and §0
 > disagree, **§0 is correct.** Specifically superseded here: the ATF row's `16 Success / 4 Failure` verdict and
 > its `542` step-parameter count (current: **20 / 0 / 0 / 0** and **540** — §0.1, §8.3), and the demo-data row's
-> 20/21-case census (current: **11 cases / 10 tasks / 8 parties** — §9.8).
+> 20/21-case census (current: **10 cases / 10 tasks / 8 parties** — §9.8a).
 
 | Gate | Re-measured result |
 |---|---|
@@ -1805,7 +1906,7 @@ recording.
 | REST, anonymously (no credentials sent) | `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000543","message":"Your case has been submitted"}`, and the created case is in `Draft`. `GET …/case_status_lookup?number=CASE0000543` → **200** with body keys **exactly** `{opened_date, status, subject}`; `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email` and `sys_id` are absent from the parsed body **and** from the raw response text. `GET …?number=CASE9999999` → **404** `{"error":"No case found with that number."}`, **31 of 31 bytes identical** to the required literal. |
 | RBAC | `sys_security_acl` 26, **`sys_security_acl_role` 27**. Table-level probe under impersonation with `GlideRecordSecure`: manager create/read/write/delete on all three tables; agent create only, with **no blanket read or write** and **delete false**; viewer read only. Record-level narrowing was proven in the browser earlier in the pass on both halves of the AAP §0.5.6 definition. |
 | Roles and scope | One `sys_user_role` row each for `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`; exactly one `sys_scope` row, `scope=x_casemgmt`, version 1.0.0. |
-| Demo data ⚠️ **census SUPERSEDED — currently 11 cases / 10 tasks / 8 parties (§9.8)** | *At the time of this snapshot:* 20 cases at the census (21 once the last anonymous-submit regression probe, `CASE0000553`, was added), **none with an empty `number`**, spanning **all six** statuses and **both** case types; 10 tasks (3 Open, 1 In Progress, 6 Closed) with **zero** dangling parent references; 8 parties (5 Person, 3 Organization) with zero dangling parent or organization references; 3 users, 1 group with a correctly-referenced membership, 3 role grants, 2 synthetic companies. Every case `requester_email` is on `@example.invalid` — 20 of 20 at the census, and the later probe likewise. The rows above the AAP threshold of 10 are the disclosed validation probes and the `ATF 18` residue of §9.8; the regression harness left nothing behind (`U1BASE-` rows remaining: 0). |
+| Demo data ⚠️ **census SUPERSEDED — currently 10 cases / 10 tasks / 8 parties (§9.8a)** | *At the time of this snapshot:* 20 cases at the census (21 once the last anonymous-submit regression probe, `CASE0000553`, was added), **none with an empty `number`**, spanning **all six** statuses and **both** case types; 10 tasks (3 Open, 1 In Progress, 6 Closed) with **zero** dangling parent references; 8 parties (5 Person, 3 Organization) with zero dangling parent or organization references; 3 users, 1 group with a correctly-referenced membership, 3 role grants, 2 synthetic companies. Every case `requester_email` is on `@example.invalid` — 20 of 20 at the census, and the later probe likewise. The rows above the AAP threshold of 10 are the disclosed validation probes and the `ATF 18` residue of §9.8; the regression harness left nothing behind (`U1BASE-` rows remaining: 0). |
 | Workflow, on the form | `Resolve` clicked on `CASE0000454` while `TASK0000091` was still `Open`: **blocked**, with exactly one visible message, `All tasks must be closed before resolving this case.` — 52 characters, no leading or trailing whitespace, terminating U+002E, strict equality against the required literal true. **No write occurred**: after a cache-bypassing reload the status is still `In Progress`, `closed_date` still empty, `sys_mod_count` still **0**, and the complete before and after record XML snapshots are **byte-identical**. |
 | ATF ⚠️ **SUPERSEDED — see §8.3** | `sn_atf.runner.enabled=true`, `sn_atf.headless.enabled=false` (instance settings; the package contains **zero** `sys_properties` records). *At the time of this snapshot:* three suite runs, byte-identical verdicts each time, **20 ran, 16 Success, 4 Failure, 0 Error, 0 Skipped** — failures `ATF 07` (§9.6 E-ATF) and `ATF 15`/`16`/`17` (§9.6 E-ATF15), both root causes since fixed. **Current result: `TES0001015` = 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps Success** (§8.3). Survivability of the re-imported records at the time: `sys_atf_test` 20, `sys_atf_step` 180, step-parameter rows **542** — matching the `Value` blocks the package then shipped; the shipping range is now **761 blocks with 540 inputs** (§0.1) — one suite, 20 suite members, **zero tests with no steps**, **zero steps with no parameters**, suite `sys_mod_count` 0. The ATF records did **not** degrade the way the flows did in Defect F. |
 | Regression | The baseline harness re-run verbatim: **13 / 13 before, 13 / 13 after** (§9.7). |
@@ -1828,14 +1929,17 @@ so the claim is checkable:
 **Bytes proved by this subsection — the `e01add3a` packaging-pass revision:
 `update-set/x_casemgmt_case_management_update_set.xml` — sha256 `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a`, 3,448,009 bytes, 916 records.**
 
-**Bytes that ship today — NOT round-tripped:
-sha256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`, 3,614,359 bytes, 913 records** (§0.1).
-The difference is the removal of the bootstrap-trigger block and its payload, the cross-scope access narrowing,
-and six packaged metadata fields corrected so they describe what their records actually do. None of it touches a
-name, a `sys_id`, a scope reference or a load-order dependency — so no preview regression is expected, and none
-has been measured.
+**Bytes that ship today — round-tripped separately and successfully:
+sha256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`, 3,618,378 bytes, 913 records** (§0.1).
+The difference from the revision proved in this subsection is the removal of the bootstrap-trigger block and its
+payload, the cross-scope access narrowing, six packaged metadata fields corrected so they describe what their
+records actually do, one Script Include comment label, and the two portal-widget templates. None of it touches a
+name, a `sys_id`, a scope reference or a load-order dependency. **The shipping bytes have since had their own
+complete teardown → upload → preview → commit run — 41 → 298 → 0 problems, then `committed` — recorded in
+§0.3.** This subsection is retained as the history of the `e01add3a` revision; §0.3 is the current status, and
+where the two disagree §0 is correct.
 
-> **Why the trip was run twice.** The first pass used sha256 `475a97a3…a17ea` and reached the same result (54 → 296 → **0**, committed). It also surfaced the **E-GU** authorization bypass through harness assertion A10, which was then fixed in `script_includes/x_casemgmt_CaseTransitionValidator.xml` — changing one payload **after** the trip. Rather than argue that a script body cannot affect preview resolution, the entire trip was **repeated from a fresh teardown on the corrected bytes**, and every figure below is from that second run. This is deliberately not the earlier mistake of attributing a clean-slate result to bytes that were subsequently edited.
+> **Why the trip was run twice.** The first pass used sha256 `475a97a3…a17ea` and reached the same result (54 → 296 → **0**, committed). It also surfaced the **E-GU** authorization bypass through harness assertion **A9** (the `canTransitionToClosed` non-manager assertion — A10 is the any → Draft assertion, per the table in §9.7), which was then fixed in `script_includes/x_casemgmt_CaseTransitionValidator.xml` — changing one payload **after** the trip. Rather than argue that a script body cannot affect preview resolution, the entire trip was **repeated from a fresh teardown on the corrected bytes**, and every figure below is from that second run. This is deliberately not the earlier mistake of attributing a clean-slate result to bytes that were subsequently edited.
 
 | Stage | Measurement |
 |---|---|
@@ -1863,18 +1967,52 @@ number, 10 tasks / 0 unresolved, 8 parties / 0 unresolved**, all six statuses an
 | 4 Portal submission | ⚠️ REST contract PASS · page FAIL | Anonymous, no credentials: **201** `{"number":"CASE0000586","message":"Your case has been submitted"}`. The submission **page** renders blank (E8-P), so the user-facing gate does not pass — recorded as ✅ in an earlier revision of this table, which conflated the endpoint with the page |
 | 5 Portal lookup | ⚠️ REST contract PASS · page FAIL | **200** with body keys exactly `{status, subject, opened_date}`; unknown number → **404** `{"error":"No case found with that number."}`. The lookup **page** renders blank (E8-P), so the user-facing gate does not pass |
 | 6 Dashboards | ❌ FAIL | 2 `pa_dashboards` present, **0 `pa_tabs`** — the pre-existing packaging defect E5, unchanged by this pass. Re-measured since: the defect spans **three** invalid child table names, not one, and 0 canvas panes and 0 scoped `pa_widgets` land either (§0.5) |
-| 7 Update Set | ✅ PASS **for these bytes only** | Zero problems of any type on a genuine clean slate, then committed. The shipping bytes have not been through this (§0.3) |
+| 7 Update Set | ✅ PASS **for these bytes** | Zero problems of any type on a genuine clean slate, then committed. The shipping bytes have since had their own equivalent trip, with the same zero result (§0.3) |
 
 **On the `e01add3a` bytes: 2 gates passed outright — 2 Workflow and 7 Update Set — 4 passed with a
 qualification (1 Data model and 3 ACLs, each only after the manual remediation; 4 Portal — submission and
 5 Portal — lookup, each only at the REST layer), and 1 failed (6 Dashboards). `2 + 4 + 1 = 7`.** An earlier revision of
 this line read "Six of seven gates pass on the final bytes", which is not supportable: gates 4 and 5 passed only
-at the REST layer, gates 1 and 3 passed only after the manual remediation of §9.5, and gate 7's pass belongs to
-these bytes rather than the ones that ship. The single outright failure is the pre-existing E5 packaging defect,
-now known to be wider than first recorded (§0.5). **For the shipping bytes the Update Set gate drops out of the
-outright-pass column, giving 1 · 5 · 1** — that single move is the only difference between the two rollups. The
-current rollup for the shipping bytes is in §0.4.
+at the REST layer, and gates 1 and 3 passed only after the manual remediation of §9.5. The single outright
+failure is the pre-existing E5 packaging defect, now known to be wider than first recorded (§0.5).
+**The shipping bytes now score the identical 2 · 4 · 1**, because gate 7 has been measured on them directly
+(§0.3); for a period between the two measurements this rollup and §0.4 differed by that one gate, and they no
+longer do. The current rollup for the shipping bytes is in §0.4.
 
+
+### 9.11 Accessibility of the two portal form widgets — what is authored, and what is inherited
+
+Four accessibility observations were raised against the portal widgets at the acceptance gate. Three were
+authored into the widgets and their Update Set payloads; the fourth cannot be acted on project-side, and saying
+so is more useful than claiming a fix.
+
+| Observation | Disposition | What changed |
+|---|---|---|
+| The required indicator was a visual-only `<span class="required">*</span>`, with no `aria-hidden` and no `aria-required` on the control | ✅ **Authored** | The four asterisks carry `aria-hidden="true"` — they are decoration and are no longer read out as content — and the four mandatory controls carry `aria-required="true"` alongside the existing `required`, so required-ness is conveyed programmatically and not only visually |
+| `novalidate` suppresses the browser's per-field messages, so a disabled Submit button was the only feedback for an incomplete form, and it gave **no reason** | ✅ **Authored** | Each form gained a `help-block` paragraph under its button that states the reason in visible text ("Every field marked * is required. Complete all four to enable Submit." / "Enter a case number to enable Look Up Status."), referenced by the button through `aria-describedby`. The paragraph is always in the DOM, so the reference never dangles |
+| The in-flight state changed only the button's inner text, with no `aria-busy`/`aria-live`, so "Submitting..." was announced only if focus happened to be on the button | ✅ **Authored** | The same paragraph is a `role="status" aria-live="polite"` region and announces the in-flight state; each form sets `aria-busy` through `ng-attr-aria-busy` while its request is outstanding |
+| Colour contrast is not statically measurable | ⚠️ **Not actionable project-side, by AAP design** | Nothing changed, and nothing can be. All three widgets ship an **empty** `css` element and an **empty** `link` element, define no colour and reference no branding asset, and `sp_portal.theme`/`theme_dv` are empty — the entire visual treatment is the platform default theme that **AAP §0.4.4 mandates** ("No custom CSS, no custom branding"). Authoring CSS to alter contrast would violate that requirement, so if the platform theme's contrast is ever judged insufficient it is a theme decision to raise against the AAP rather than a defect in these widgets |
+
+Everything above is markup on the `template` field of `portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml`
+and `…_case_lookup_widget.xml`, mirrored byte-for-byte into the two `Widget` `<payload>` blocks, so artifact and
+package cannot disagree. No CSS was added, no verbatim string was touched, no `sys_id` literal was introduced, and
+the block count is unchanged at 913. **These are markup-level improvements to widgets that still do not render**,
+because the Service Portal *layout* records were never authored (§9.6 E8-P) — they raise the quality of the widgets
+that the layout work of §10.1 item 3 will finally put on screen, and they do not by themselves make the pages
+visible. The per-attribute rationale is in `portal-pages.md` → *Accessibility of the two form widgets*, and in the
+template comments so a later edit does not quietly remove it.
+
+**Verified installed, not merely authored.** After the §0.3 round trip the three live `sp_widget` records were
+compared field by field against their artifacts: `template`, `client_script` and `script` are **byte-identical on
+all three** (submission 8,524 / 11,638 / 2,170 characters; lookup 3,769 / 8,195 / 1,253; confirmation 429 / 1,613 /
+1,053 — matching SHA-256 on every field), and `public=true`, `servicenow=false`, `roles=''` are preserved so
+anonymous access is intact. The accessibility markup above therefore ships and installs, rather than existing only
+in the repository. The comparison also confirms the one observation that could not be acted on: **`css` and `link`
+are empty strings on all three widgets**, so there is no project-authored stylesheet in which to raise the
+contrast of the inherited theme — AAP §0.4.4 mandates the platform default theme, and changing it would be a
+scope violation rather than a fix.
+
+---
 
 ## 10. Recommended next steps
 
@@ -1887,12 +2025,14 @@ deliberately conservative.
 > items were not listed and then listed six of them (2, 3, 9, 10, 12, 13) struck through in the active tables;
 > that contradiction is resolved here.
 
-### 10.0 Do this first — close the round-trip gate on the bytes that ship
+### 10.0 Do this first
+
+Item 1 — the clean-slate round trip on the shipping bytes — **has been done**; it is recorded in §0.3 and moved
+to §10.5 under its original number. One item remains here.
 
 | # | Work | Why | Estimate |
 |---|---|---|---|
-| **1** | **Clean-slate upload → preview → commit the current package** — sha256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`, 3,614,359 bytes, 913 records. Record, in this order: the pre-flight checks, the staged application-level teardown with every census counter at 0, the upload with the child count asserted at exactly 913, the preview problem counts **by type**, the commit reaching `state=committed`, the §9.5 manual C/9 steps with the `verified=true … acl_links_total=27 … errors=0` summary, the seven gates, and the resulting hash re-computed from the file on disk | The only complete round-trip proof this project holds (§9.10) is for the 916-block `e01add3a` revision, `32a064d6…`. Three package-changing passes have landed since. Until this is done, AAP §0.7.1's zero-preview-error gate is **unproven on the deliverable**, and §0.4 gate 7 must stay qualified. Nothing else in this list changes that | 2–4 h |
-| 2 | **Re-run the ATF suite after re-loading every `atf/*.xml` artifact** into the instance, and record the result alongside `TES0001015` | `TES0001015` proves the **live** assets; `TES0001014` proves a **serialized re-load** of a *pre-security* revision. The shipping ATF range is byte-unchanged, so this is expected to pass — but expectation is not measurement (§8.3) | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
+| 2 | **Re-run the ATF suite after re-loading every `atf/*.xml` artifact** into the instance, and record the result alongside `TES0001015` | `TES0001015` proves the **live** assets; `TES0001014` proves a **serialized re-load** of a *pre-security* revision. The security pass rewrote `ATF 18` and `ATF 19` (10 packaged blocks), so `TES0001014` predates those two tests' current serialized form; the range has been byte-unchanged since, which makes a pass *expected* — but expectation is not measurement (§8.3) | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
 
 ### 10.1 Blocking — the application is not demonstrable through its intended UI without these
 
@@ -1908,7 +2048,7 @@ deliberately conservative.
 | 5 | **Emit canonical `<table>_<sys_id>` update names from the generator** | An earlier pass had to rewrite all 916 names of the then-current package to get a zero-error preview on a clean instance (all 913 in the shipping file are canonical and unique); the generator still emits human-readable names (§9.2) | 1 h in the generator |
 | 6 | **Author the two related lists** required by AAP §0.4.4 (`case_task` and `case_party` on the case form) and capture them | Never authored; a user cannot see a case's tasks or parties from the case form (§9.6 E8) | 1–2 h |
 | 7 | **Shorten the four over-length UI Action conditions** to ≤ 254 characters, or move the logic into the action script | Truncation makes the guards fail open, so transition buttons render for users who cannot use them (§9.6 E3) | 1 h |
-| 8 | **Tick "Reverse if false" on the party UI Policy** (and confirm it is not load-only) | The conditional Person/Organization fields do not re-evaluate when `party_type` changes on screen (§9.6 E4) | 15 min |
+| 8 | **Replace the party UI Policy's tautological condition** in `ui_policy/x_casemgmt_case_party_conditional_fields.xml` and its packaged payload: either two policies with genuinely discriminating conditions (`party_type=Person` and `party_type=Organization`) backed by declarative `sys_ui_policy_action` rows, or an `onChange` Client Script on `party_type`. **Do not simply tick "Reverse if false"** — that cannot work here, and an earlier revision of this row wrongly prescribed it | The conditional Person/Organization fields do not re-evaluate when `party_type` changes on screen (§9.6 E4). The measured mechanism is the condition `party_typeISNOTEMPTY^ORparty_typeISEMPTY`, which is **always true**, so `GlideFieldPolicy.runActions()` returns at its `result == lastResult` guard and the Execute-if-true script runs exactly once per form load. The false branch is unreachable, so "Reverse if false" changes nothing, and there are **0** `sys_ui_policy_action` rows, so nothing declarative can move the fields either | 1 h + one re-import |
 | 9 | **Correct the three invalid Dashboard child table names** — `pa_tab` → `pa_tabs`, `pa_dashboard_widgets` → `pa_widgets`, and resolve `pa_dashboard_role` (no such table; dashboard sharing is not a child record on this release) — in `dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml`, `…_manager_view.xml` and the two matching Dashboard `<payload>` blocks in the Update Set; then re-import and confirm one `pa_m2m_dashboard_tabs` row per dashboard, a `sys_grid_canvas_pane` per widget, 3 + 5 `pa_widgets` rows in scope, and both dashboards rendering | Validation gate 6 fails today because no tab, no canvas pane and no widget record lands (§0.5, §9.6 E5). The capability is present — `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane` all exist and the out-of-box dashboards render — so this is a renaming-and-rewiring job, **not** the single rename an earlier revision of this row described. Supplying only a tab is proven insufficient | 1–3 h + one re-import |
 
 ### 10.3 Test suite
@@ -1932,6 +2072,7 @@ open work.
 
 | Former # | Work | Outcome |
 |---|---|---|
+| 1 | ~~**Clean-slate upload → preview → commit the current package**~~ — ✅ **DONE, on the bytes that ship** | Run end to end on `dev379024` against sha256 `7272edfc…`, 3,618,378 bytes, 913 records. Pre-flight passed (using the corrected `upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` predicate, since the documented `state=executing` one is invalid on this release). Staged teardown proven complete — scope `[]`, every census counter 0, all three tables at HTTP 400. Upload asserted the child count at exactly 913. Preview problems **by type**: 41 before on the populated instance → 298 on the first clean-slate pass (all `Found a local update that is newer than this one`) → **0 of any type**, confirmed by the platform's own `unresolvedProblems=false` / `shouldDisplay=true` predicate. Commit reached **`state=committed`**. The §9.5 C/9 sequence then reported **`verified=true`, `acl_links_total=27`, `errors=0`**. All seven gates were re-measured (§0.4) and the hash re-computed from the file on disk is unchanged. **Full record in §0.3** |
 | 2 | ~~**Fix the four child-table ACL conditions** — replace `current.case` with `current.getValue('case')`~~ — ✅ **DONE** | `case` is a JS reserved word, so the conditions could not compile and denied every row; the agent had no access to tasks or parties (§9.6 E-ATF). Implemented as `current.getElement('case')`, which measurement showed to be the accessor that supports every operation the conditions need. The impersonated agent now sees 10 task rows and 8 party rows with `canWrite=true` and `canDelete=false`, and `ATF 07` passes with 58 checks across five parent fixtures — green in `TES0001014`. No functional access-control gap remains | 1 h incl. re-running ATF 07 — spent |
 | 3 | ~~**Reduce each table to a single display field**~~ — ✅ **DONE in this pass**, in the packaged `Dictionary` blocks **and** in `post_import_remediation.js` | Was: every reference to a case rendered blank, and re-running the remediation reintroduced the problem. Now: the package ships one display field per table, and the script reconciles and verifies it (§9.6 E7) | — |
 | 9 | ~~**Resolve roles from `sys_user_has_role`** in `CaseTransitionValidator.canTransitionToClosed()` instead of `gs.getUser(userName)`~~ — ✅ **DONE** | Closes a latent authorisation hole on branch (b): any future caller that passes a foreign `userId` is answered against the *caller’s* roles. The shipped runtime never takes that branch and all 13 regression assertions pass, so this is hardening rather than a fix for a live failure (§9.6 E-GU, §9.7) | 30 min |

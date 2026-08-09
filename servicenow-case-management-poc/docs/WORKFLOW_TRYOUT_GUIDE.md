@@ -68,8 +68,8 @@
 
 - **All cases:** in the Filter Navigator, type `x_casemgmt_case.list` (or open **Case Management** in the app
   navigator). You should see **at least 10 demo cases** spanning all six statuses and both types. The census at
-  the last measurement was 11 cases, 10 tasks and 8 parties — 11 because a portal smoke-test case was left in
-  place as evidence.
+  the last measurement was **10 cases, 10 tasks and 8 parties** (`CASE0000979`–`CASE0000988`); the extra
+  smoke-test case that made it 11 in an earlier revision of this note no longer exists.
 - **Tasks:** `x_casemgmt_case_task.list`. **Parties:** `x_casemgmt_case_party.list`.
 - The case form shows fields in this order: subject, type, status, priority, description, requester_name,
   requester_email, opened_date, closed_date, assigned_group, assigned_agent. **There are no Related Lists at the

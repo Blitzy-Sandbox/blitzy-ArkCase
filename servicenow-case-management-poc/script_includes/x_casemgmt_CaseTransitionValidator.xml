@@ -529,7 +529,7 @@ CaseTransitionValidator.prototype = {
         // guard and this method returned { ok: true }. That is a silent
         // bypass of the AAP Section 0.5.5 rule "Resolved -> Closed
         // requires the caller to hold x_casemgmt_case_manager", and it was
-        // caught by assertion A10 of the transition-logic regression
+        // caught by assertion A9 of the transition-logic regression
         // harness on a clean install.
         // sys_user_has_role is the platform's own store of EFFECTIVE role
         // grants - it is maintained to include roles inherited through

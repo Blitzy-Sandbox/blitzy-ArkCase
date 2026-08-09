@@ -72,7 +72,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 - **7 Flow Designer flows** — 2 parent flows (`general_inquiry_state_machine`, `complaint_state_machine`) and 5 subflows (`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`) — plus **1 Custom Action** (`x_casemgmt_transition_guard_action`) and **1 shared flow logic block**.
 - **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards**, **1 Experience/Service Portal** with 2 pages and 3 widgets, **1 UI policy**, **6 UI Actions**, and **number counters**.
 - **1 Fix Script** (`x_casemgmt Post-Import Remediation`) carrying the post-import remediation body. It does not run by itself.
-- **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **Do not expect specific case numbers.** Numbers are allocated by the instance counter when the seed script runs, so they differ on every install; the numbers `CASE0000013`–`CASE0000022` quoted in older revisions of this guide were simply what one particular run produced. On the verification instance the counter has since moved well past them (a case created during testing was numbered `CASE0000590`), and the current census is 11 cases, 10 tasks and 8 parties. Identify demo records by `subject`, `status` and `type`, never by number.
+- **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **Do not expect specific case numbers.** Numbers are allocated by the instance counter when the seed script runs, so they differ on every install; the numbers `CASE0000013`–`CASE0000022` quoted in older revisions of this guide were simply what one particular run produced. On the verification instance the counter has since moved well past them (the current demo cases are `CASE0000979`–`CASE0000988`), and the current census is **10 cases, 10 tasks and 8 parties**. Identify demo records by `subject`, `status` and `type`, never by number.
 
 > **The flows work — an earlier revision of this guide said they did not, and that is now out of date.** All
 > **7 flows are `active=true` and `status=published`** on the verification instance (last measured directly
@@ -94,7 +94,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,614,359 bytes (≈3.45 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `c04656b40c7f1e7d4a63b551fac6f1bf1227c9fb41b8900eba71f2cd34dbd7e7`. Verify the digest before uploading. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
+| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,618,378 bytes (≈3.45 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`. Verify the digest before uploading. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -709,9 +709,10 @@ Portal UI: `https://dev379024.service-now.com/x_casemgmt_case_portal`.
 > (an out-of-box page on the same portal renders normally, so the portal and the anonymous path are both fine).
 > The `curl` checks above are therefore the real and only test of the portal contract on this package.
 
-> Remember to delete any smoke-test cases afterward so the demo dataset does not drift. Note that the current
-> census on the verification instance is 11 cases, 10 tasks and 8 parties — 11 rather than 10 because a
-> smoke-test case was left in place as evidence.
+> Remember to delete any smoke-test cases afterward so the demo dataset does not drift. The current census on the
+> verification instance is **10 cases, 10 tasks and 8 parties** — the extra smoke-test case that made it 11 in an
+> earlier revision of this note was removed by the teardown and re-seed of §0.3, and the probes run since have
+> each been deleted after measurement.
 
 ### 6.3 ACL matrix (impersonation `canX` probe — run **global**)
 
