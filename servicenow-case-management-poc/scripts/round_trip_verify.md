@@ -67,6 +67,29 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 - State = Loaded.
 - Application name matches the scoped application (`x_casemgmt Case Management`).
 - No upload error message displayed.
+- **The child `sys_update_xml` count is exactly 913.** Assert this, do not eyeball it — see the warning below
+  for why it is the one number that catches the most common mistake in this procedure.
+
+> ⚠️ **Uploading this file onto an instance that already holds it REUSES the same Retrieved Update Set row and
+> APPENDS its children — it does not replace them.** Measured directly: the `<sys_remote_update_set>` descriptor
+> in this file hard-codes `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, so the loader matches on it. Two
+> successive uploads onto a row that already carried one committed batch took the child count
+> **913 → 1,826 → 2,739**, and the second upload silently reset the row's state from `previewed` back to
+> `loaded`, discarding the first preview. `sys_updated_on` cannot tell the loads apart, because each load stamps
+> it back to the file's literal `2026-04-30 12:00:00`.
+>
+> Two consequences to plan around:
+> - **Preview problem totals scale with the duplication.** Observed totals of 68 and 102 were exactly 2 × 34 and
+>   3 × 34 — the same 34 problems repeated per batch, not new defects. If you must read absolute counts, attribute
+>   each problem to its originating batch through `remote_update` → that child's `sys_created_on`.
+> - **This procedure's zero-problem criterion is only meaningful from a clean slate**, which is what Phase 0's
+>   teardown is for. On a fresh PDI that has never seen this application, the count is 913 and the question does
+>   not arise.
+>
+> Related trap when diffing two loads: **preview rewrites `sys_update_xml.name`**, re-canonicalising a
+> `<table>_<sys_id>` name into a human-readable one (e.g. `sys_dictionary_0bf56c20…` →
+> `sys_dictionary_x_casemgmt_case_closed_date`). Key any comparison on the immutable `type` + `target_name`
+> pair instead, or you will see differences that are not there.
 
 ### If Phase 1 Fails
 
@@ -87,8 +110,13 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 ### Pass Criteria for Phase 2
 
 - **Zero rows** in the Preview Problems list with Severity = Error AND Status ≠ Skipped.
-- Warning-only rows are acceptable IF they are platform-default warnings (e.g., "Found in update set but not in target") that do not block the commit.
+- Warning-only rows are acceptable IF they are platform-default warnings (e.g., "Found in update set but not in target") that do not block the commit. **Do not assume a collision is one of those**: on this release a
+  re-import collision arrives as `Found a local update that is newer than this one` typed **`error`**, and the
+  preview dialog states plainly *"To commit this update set you must address all problems."*
 - In doubt, treat any non-zero error count as **fail** and return to the source PDI.
+- Read the outcome from the record and the problems list, not from an HTTP status: the platform reports a preview
+  that finished **with** problems by painting its progress bar red and labelling it **"Failed at 100%"**, which
+  is not a crash, and the record still reaches `state=previewed`.
 
 ### Common Preview Problem Categories
 
@@ -106,7 +134,7 @@ The most frequent failure mode in this gate is **hard-coded `sys_id` references*
 | `"Could not find a record in <table> for ..."` | A reference field in a flow / ACL / seed record points at a sys_id that exists on the source PDI but not on the verification PDI. | Open the offending source record on the source PDI; replace the sys_id reference with a `GlideRecord` lookup by `name` / `user_name` / `number` / `role_label` (per AAP Section 0.5.2 reference resolution rules); re-export. |
 | `"Found in update set but missing in target"` | A child artifact (subflow, choice list, dictionary entry) was referenced by another artifact but was not itself captured in the Update Set. | On the source PDI, open the Update Set's Customer Updates list; verify the missing artifact's table appears; if not, manually add the artifact to the Update Set and re-export. |
 | `"Has been changed by ... in the target instance"` | A global-scope record was modified, violating the "no global-scope writes" constraint (AAP Section 0.7.1). | Identify the global record on the source PDI and revert the change; the scoped application MUST live entirely in `x_casemgmt` namespace. |
-| `"Skipped — newer version in target"` | The verification PDI already had this record (e.g., a re-run of the same Update Set). | Acceptable on re-runs; reset the verification PDI for a clean test if rigor is required. |
+| `"Found a local update that is newer than this one"` — the verbatim text this instance emits, and it is typed **`error`**, not `warning` (measured on Australia Patch 3; its count equals the record's `Collisions` field exactly). An earlier revision of this row quoted it as `"Skipped — newer version in target"` and called it an acceptable warning; both were wrong. | The verification PDI already holds this record and its local copy is newer — a re-run of the same Update Set, or a record edited directly on the instance after the file was produced. | Expected on re-runs and NOT a package defect, but it **does** block the commit, so it cannot simply be ignored: reset the verification PDI (Phase 0 teardown) for a clean test, and be aware that a bare re-upload appends children rather than replacing them (see the Phase 1 warning). |
 | `"Choices missing for field ..."` | A `sys_choice` record was not captured in the Update Set. | On the source PDI, add the missing choice record to the Update Set via the Customer Updates list; re-export. |
 | `"Cannot find application ..."` | The `../app/sys_app/x_casemgmt_case_management.xml` record was not the first record in the Update Set. | Verify the scope record is present and correctly identified; the scope record MUST come before all other records (per AAP Section 0.5.2 dependency-ordering). |
 
@@ -397,8 +425,14 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 7. §6.6 — The regression harness returns the same count after the round trip as before it, per assertion, and any
    test-suite failure is reported rather than relaxed.
 
-> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold **for the bytes that ship**:
-> 913 blocks, 3,618,378 bytes, SHA-256 `7272edfc…`. Phases 1-3 were executed on them after a proven teardown —
+> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the revision of this
+> deliverable immediately preceding the one that ships today: 913 blocks, 3,618,378 bytes, SHA-256 `7272edfc…`.
+> **Today's bytes are 913 blocks, 3,643,389 bytes, SHA-256 `89638c17…`** — the same file with 9 payloads
+> re-synced by the QA-remediation pass, measured **preview-neutral** against the revision below by a matched A/B
+> upload-and-preview against one instance state (identical problem signatures: 34 problems each, the same
+> 18 / 13 / 3 on the same target records, 0 descriptions present in one and not the other; see
+> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)).
+> Phases 1-3 were executed on the `7272edfc…` bytes after a proven teardown —
 > `state=loaded` with the child count asserted at exactly 913; preview problems **41 → 298 → 0 of any type**,
 > the 298 being the teardown's own deletions captured as newer local updates and the 0 confirmed by the
 > platform's `unresolvedProblems=false` / `shouldDisplay=true` predicate; then `state=committed`. The same three

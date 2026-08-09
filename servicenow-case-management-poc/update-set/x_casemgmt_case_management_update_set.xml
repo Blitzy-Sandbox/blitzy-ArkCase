@@ -1573,7 +1573,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Duration to Close</column_label>
-        <comments>Virtual Duration function field on x_casemgmt_case computed at query time as glidefunction:datediff(closed_date,opened_date). Used by ../reports/x_casemgmt_avg_time_to_close.xml as the aggregation_source for the Manager View dashboard's "Average Time to Close" single-score widget (AAP Section 0.4.4 Widget 4). Resolves QA Checkpoint 4 Issue #1: implements Option A (function field) so the widget renders an actual Duration AVG instead of the "No data" placeholder. Not stored on the row (virtual=true); not displayed on form/list (display=false); not auditable (audit=false). Read-only by definition for function fields.</comments>
+        <comments>Virtual Duration function field on x_casemgmt_case computed at query time as glidefunction:datediff(closed_date,opened_date). Used by ../reports/x_casemgmt_avg_time_to_close.xml as the aggregation_source for the Manager View dashboard's "Average Time to Close" single-score widget (AAP Section 0.4.4 Widget 4). Resolves QA Checkpoint 4 Issue #1: implements Option A (function field) so the widget renders an actual Duration AVG instead of the "No data" placeholder. Not stored in a database column - the database evaluates the expression inside the query - but the dictionary row MUST carry virtual=false: `virtual` means the value comes from a virtual_type script provider, and setting it true with no provider makes the column return EMPTY for every row, which is exactly what happened before this was corrected. Not displayed on form/list (display=false); not auditable (audit=false). Read-only by definition for function fields.</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -1626,7 +1626,7 @@
         <use_dependent_field>false</use_dependent_field>
         <use_dynamic_default>false</use_dynamic_default>
         <use_reference_qualifier>simple</use_reference_qualifier>
-        <virtual>true</virtual>
+        <virtual>false</virtual>
         <virtual_type/>
         <widget/>
         <write_roles/>
@@ -5241,6 +5241,362 @@ CaseTransitionValidator.prototype = {
         }
 
         return { ok: true };
+    },
+
+    /**
+     * Validates the transition EDGE itself: is `previousStatus ->
+     * newStatus` one of the edges the state machine defines?
+     *
+     * WHY THIS EXISTS (the gap it closes). The canTransitionTo* methods
+     * above each validate the PRECONDITION OF A TARGET STATUS - "does
+     * this case satisfy what Open requires", "does it satisfy what
+     * Resolved requires". None of them, and nothing else in the
+     * application, checked WHERE the case was coming FROM. A single save
+     * that moved a case straight from Draft to Closed therefore passed:
+     * it never had to satisfy Open's assigned_group requirement, nor In
+     * Progress's agent-membership requirement, nor Resolved's
+     * task-closure gate, and it reached the terminal state with
+     * closed_date empty (../business_rules/x_casemgmt_set_closed_date.xml
+     * keys on the Resolved -> Closed edge). All eight illegal
+     * skip/backward edges behaved the same way.
+     *
+     * AAP Section 0.5.5 defines the legal edges, and AAP Section 0.7.3
+     * Gate 2 requires "All state transitions enforced for both case
+     * types". The adjacency list below is that matrix, read as the
+     * complete set of legal edges:
+     *
+     *     Draft       -> Open
+     *     Open        -> In Progress
+     *     In Progress -> Pending      (and back)
+     *     In Progress -> Resolved
+     *     Pending     -> In Progress
+     *     Resolved    -> Closed
+     *     Closed      -> (nothing; terminal)
+     *
+     * This method is the SINGLE DEFINITION of that graph for the whole
+     * application, so the before-update Business Rule
+     * ../business_rules/x_casemgmt_enforce_forward_transitions.xml
+     * (order 250), the Flow Designer subflows in ../flows/sub_flows/ and
+     * the Custom Action ../flows/custom_actions/x_casemgmt_transition_guard_action.xml
+     * all answer the question the same way.
+     *
+     * MESSAGE OWNERSHIP. The two PROHIBITED rows of the matrix keep
+     * their verbatim AAP Section 0.7.4 wording, returned from here as
+     * well as from validateNoBacktransition() above, so a caller that
+     * consults only this method still surfaces the contractual text:
+     *   - source Closed -> 'Closed cases are terminal and cannot be modified.'
+     *   - target Draft  -> 'Cases cannot be returned to Draft.'
+     * Every other rejection is a skip edge, for which AAP Section 0.5.5
+     * prescribes no wording (it has no row for those edges, only the
+     * general Section 0.7.1 requirement that the error be surfaced on
+     * the form). Those get a specific, actionable sentence that names
+     * both the attempted edge and the legal next status, in the same
+     * voice as the existing invalid-status message in the order-250
+     * Business Rule.
+     *
+     * Edge cases, all resolved as { ok: true } because none is a
+     * transition:
+     *   - INSERT: previousStatus is null/empty. Seed data and the portal
+     *     legitimately insert rows directly at Draft, and the demo data
+     *     inserts rows at every status, so an insert must never be
+     *     judged against the graph.
+     *   - newStatus null/empty: no proposed value.
+     *   - previousStatus === newStatus: a field-only save, not a
+     *     transition.
+     *
+     * FAIL CLOSED on an unrecognised SOURCE status. If a row somehow
+     * holds a status outside the six choice values, its legal successors
+     * are unknown, so the move is refused rather than guessed. (An
+     * unrecognised TARGET status is refused earlier, by the order-250
+     * rule's own allowlist, with its own message.)
+     *
+     * @param {String} previousStatus - the committed status, i.e.
+     *     String(previous.status) in a before-update Business Rule, or
+     *     the status read from the database by a subflow.
+     * @param {String} newStatus - the proposed status, i.e.
+     *     String(current.status).
+     * @return {Object} { ok: true } when the edge is legal, otherwise
+     *     { ok: false, error: <message to surface on the form> }.
+     */
+    validateTransitionEdge: function(previousStatus, newStatus) {
+        // Defensive coercion, identical in style to
+        // validateNoBacktransition above: callers may hand over
+        // GlideElement objects, primitives, null or undefined.
+        var prev = previousStatus ? String(previousStatus).trim() : '';
+        var next = newStatus ? String(newStatus).trim() : '';
+
+        // Not a transition - nothing to validate. See the edge-case list
+        // in the doc comment for why each of these three is allowed.
+        if (prev === '' || next === '' || prev === next) {
+            return { ok: true };
+        }
+
+        // The two PROHIBITED rows of AAP Section 0.5.5, with their
+        // VERBATIM Section 0.7.4 messages - DO NOT paraphrase. These are
+        // also enforced (and normally reached first) by the order-100 and
+        // order-200 Business Rules; repeating them here means this method
+        // alone is a complete answer for any caller.
+        if (prev === 'Closed') {
+            return { ok: false, error: 'Closed cases are terminal and cannot be modified.' };
+        }
+        if (next === 'Draft') {
+            return { ok: false, error: 'Cases cannot be returned to Draft.' };
+        }
+
+        // The adjacency list is declared inside the method deliberately:
+        // a function-local object cannot be mutated by a caller holding a
+        // reference to this Script Include, so the graph cannot drift at
+        // runtime. The keys and values are the Title Case choice values
+        // from ../choices/sys_choice_case_status.xml, verbatim.
+        var ALLOWED_NEXT = {
+            'Draft': ['Open'],
+            'Open': ['In Progress'],
+            'In Progress': ['Pending', 'Resolved'],
+            'Pending': ['In Progress'],
+            'Resolved': ['Closed'],
+            'Closed': []
+        };
+
+        // hasOwnProperty rather than a truthiness test: an empty array is
+        // falsy-adjacent in some engines' idioms and 'Closed' maps to one
+        // legitimately (though the prev === 'Closed' branch above already
+        // returned). This distinguishes "known status with no successors"
+        // from "status this application does not recognise".
+        if (!ALLOWED_NEXT.hasOwnProperty(prev)) {
+            return {
+                ok: false,
+                error: 'This case is in a status this application does not recognise, so its status ' +
+                       'cannot be changed. Please tell your administrator.'
+            };
+        }
+
+        var allowed = ALLOWED_NEXT[prev];
+        if (allowed.indexOf(next) >= 0) {
+            return { ok: true };
+        }
+
+        // Build the guidance half of the message from the same adjacency
+        // list, so the sentence can never contradict the graph it is
+        // describing. Only 'In Progress' has two successors today; the
+        // join is written generically so adding a choice value to the
+        // graph needs no change here.
+        var guidance;
+        if (allowed.length === 0) {
+            guidance = prev + ' is a terminal status, so no further status change is possible.';
+        } else if (allowed.length === 1) {
+            guidance = 'From ' + prev + ' the only valid next status is ' + allowed[0] + '.';
+        } else {
+            guidance = 'From ' + prev + ' the valid next statuses are ' +
+                       allowed.slice(0, allowed.length - 1).join(', ') + ' or ' +
+                       allowed[allowed.length - 1] + '.';
+        }
+
+        return { ok: false, error: 'A case cannot go from ' + prev + ' to ' + next + '. ' + guidance };
+    },
+
+    /**
+     * Verifies that a case already in the terminal Closed status is
+     * being saved WITHOUT any change to its own columns.
+     *
+     * WHY THIS EXISTS. AAP Section 0.5.5 row 8 pairs the prohibition
+     * "Closed -> *" with the message "Closed cases are terminal and
+     * cannot be modified." - and the application honoured only the first
+     * half. A status change out of Closed was refused, but a save that
+     * left status alone and rewrote priority, subject, or cleared
+     * assigned_agent committed silently, so the record the message calls
+     * unmodifiable was in fact freely editable. This method closes that
+     * gap and makes the contractual sentence, and the four in-scope
+     * documents that quote it, literally true.
+     *
+     * WHAT IS COMPARED, AND WHY ONLY THIS. The list is exactly the
+     * application's own columns: the twelve fields of AAP Section 0.5.7
+     * plus pending_reason. It deliberately excludes:
+     *   - every sys_* column, because sys_mod_count and sys_updated_on
+     *     change on any save and comparing them would turn a genuine
+     *     no-op into a rejection;
+     *   - duration_to_close, which is a virtual function field computed
+     *     at query time and cannot be written at all.
+     *
+     * THE NO-OP SAVE STAYS ALLOWED. Opening a Closed case and pressing
+     * Update without editing anything changes no compared field, so this
+     * method returns { ok: true } and the save proceeds as the harmless
+     * no-op it is. That behaviour is asserted by the QA suite and is
+     * preserved on purpose.
+     *
+     * IMMUTABILITY IS NOT AUTHORIZATION. This is a data-integrity guard
+     * on the terminal state, not an access-control check; who may write
+     * the row at all is decided by the scoped ACLs in ../acl/.
+     *
+     * @param {GlideRecord} caseGr - the in-flight record, i.e. the
+     *     platform-injected `current` in a before-update Business Rule.
+     * @param {GlideRecord} previousGr - the committed record, i.e.
+     *     `previous`. REQUIRED: callers must guard for the insert case
+     *     (where `previous` is null) before calling, exactly as
+     *     ../business_rules/x_casemgmt_block_terminal_closed.xml does.
+     *     Without a prior snapshot nothing can be verified, so a missing
+     *     record is refused rather than waved through.
+     * @return {Object} { ok: true } when no compared column changed, or
+     *     { ok: false, error: 'Closed cases are terminal and cannot be modified.' }
+     *     when one did, or { ok: false, error: 'Case record is missing.' }
+     *     when either GlideRecord is absent.
+     */
+    validateClosedRecordUnchanged: function(caseGr, previousGr) {
+        if (!caseGr || !previousGr) {
+            return { ok: false, error: 'Case record is missing.' };
+        }
+
+        // The application's own columns, in the order AAP Section 0.5.7
+        // lists them, with number first and pending_reason last.
+        var GUARDED_FIELDS = [
+            'number',
+            'type',
+            'status',
+            'priority',
+            'subject',
+            'description',
+            'opened_date',
+            'closed_date',
+            'assigned_group',
+            'assigned_agent',
+            'requester_name',
+            'requester_email',
+            'pending_reason'
+        ];
+
+        for (var i = 0; i < GUARDED_FIELDS.length; i++) {
+            var field = GUARDED_FIELDS[i];
+            // getValue() returns the raw column value as a string, or
+            // null when the column is empty. Normalizing null/undefined
+            // to '' is what makes "empty before, empty after" compare
+            // equal instead of null !== '' rejecting a no-op save, and
+            // what makes "populated -> cleared" (e.g. clearing
+            // assigned_agent) compare as the change it is.
+            var after = caseGr.getValue(field);
+            var before = previousGr.getValue(field);
+            after = (after === null || after === undefined) ? '' : String(after);
+            before = (before === null || before === undefined) ? '' : String(before);
+            if (after !== before) {
+                // VERBATIM AAP Section 0.7.4 error message - DO NOT paraphrase.
+                return { ok: false, error: 'Closed cases are terminal and cannot be modified.' };
+            }
+        }
+
+        return { ok: true };
+    },
+
+    /**
+     * Decides whether a state-transition UI Action button should be
+     * VISIBLE on the case form to the user making the request.
+     *
+     * WHY THIS EXISTS (the platform limit it works around). A
+     * sys_ui_action.condition is a `condition_string` column with
+     * max_length 254 - a hard platform limit. Four of the six transition
+     * buttons carried a condition of 264-271 characters, so the platform
+     * silently truncated each one MID-EXPRESSION on import (the Resolve
+     * condition ended `...isMemberOf(current.assigned_grou`). A truncated
+     * condition cannot evaluate, and the platform's failure mode is to
+     * FAIL OPEN with no server-log entry: Start Progress, Set Pending,
+     * Resume and Resolve therefore rendered on every status for every
+     * identity, including the read-only x_casemgmt_case_viewer, whose
+     * form has no Update button at all. The two short conditions
+     * (x_casemgmt_case_open at 76 characters and x_casemgmt_case_close at
+     * 79) were unaffected and are left inline.
+     *
+     * There is a second reason the condition must carry the whole guard
+     * on this release: sys_ui_action has NO `roles` column here - UI
+     * Action role restrictions live in the m2m table
+     * sys_ui_action_role - so the <roles> element in a serialized
+     * sys_ui_action payload is inert and grants no gating whatsoever.
+     * The condition is the only guard the platform will honour, which is
+     * exactly why it must be short enough to survive import.
+     *
+     * Moving the expression into this method makes each condition a
+     * ~77-character call, comfortably inside the limit and immune to a
+     * future edit pushing it back over.
+     *
+     * THE RULE, unchanged from the four original inline expressions
+     * (AAP Section 0.4.1 "only those needed for state transitions
+     * visible to the appropriate roles", plus the Section 0.5.6
+     * "Assigned only" definition):
+     *
+     *     the case is in `requiredStatus`
+     *     AND (
+     *         the user holds x_casemgmt_case_manager
+     *         OR (
+     *             the user holds x_casemgmt_case_agent
+     *             AND ( assigned_agent is the user
+     *                   OR the user is a member of assigned_group )
+     *         )
+     *     )
+     *
+     * VISIBILITY IS NOT AUTHORIZATION. This governs only whether the
+     * affordance is drawn. Every one of the six UI Actions re-checks role
+     * and status server-side in its own script, the order-100/200/250
+     * Business Rules re-check the transition on the write itself, and the
+     * scoped ACLs decide who may write the row at all. Hiding a button
+     * the user cannot use removes a misleading affordance; it is not the
+     * security boundary and is not relied on as one.
+     *
+     * Group membership is resolved through this.isAgentInGroup(), which
+     * queries sys_user_grmember, rather than through
+     * gs.getUser().isMemberOf(). The two are equivalent for this purpose
+     * and reusing the helper keeps one membership implementation in the
+     * application. gs.getUser().hasRole() answers true for a user holding
+     * `admin`, which is why an administrator continues to see each button
+     * on its correct status.
+     *
+     * @param {GlideRecord} caseGr - the case record the form is showing,
+     *     i.e. the platform-injected `current` in a UI Action condition.
+     * @param {String} requiredStatus - the source status the button
+     *     belongs to: 'Open' for Start Progress, 'In Progress' for Set
+     *     Pending and Resolve, 'Pending' for Resume.
+     * @return {Boolean} true when the button should render, false
+     *     otherwise. Never throws: a missing record or a missing status
+     *     argument returns false, so the affordance fails CLOSED - the
+     *     opposite of the truncation behaviour this method replaces.
+     */
+    canShowAction: function(caseGr, requiredStatus) {
+        if (!caseGr || !requiredStatus) {
+            return false;
+        }
+
+        var wanted = String(requiredStatus).trim();
+        var actual = caseGr.getValue('status');
+        actual = (actual === null || actual === undefined) ? '' : String(actual).trim();
+        if (actual === '' || actual !== wanted) {
+            return false;
+        }
+
+        var user = gs.getUser();
+
+        // Managers act on any case in the right status. hasRole() is true
+        // for an admin as well, by platform design.
+        if (user.hasRole('x_casemgmt_case_manager')) {
+            return true;
+        }
+
+        // Anyone who is neither a manager nor an agent - the read-only
+        // x_casemgmt_case_viewer, or a user with no application role at
+        // all - gets no transition buttons.
+        if (!user.hasRole('x_casemgmt_case_agent')) {
+            return false;
+        }
+
+        // "Assigned only", per AAP Section 0.5.6: the agent named on the
+        // case, or any member of the group the case is assigned to.
+        var me = String(gs.getUserID());
+        var agent = caseGr.getValue('assigned_agent');
+        agent = (agent === null || agent === undefined) ? '' : String(agent);
+        if (agent !== '' && agent === me) {
+            return true;
+        }
+
+        var group = caseGr.getValue('assigned_group');
+        group = (group === null || group === undefined) ? '' : String(group);
+        if (group === '') {
+            return false;
+        }
+        return this.isAgentInGroup(me, group);
     },
 
     /**
@@ -15676,7 +16032,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <client_callable>false</client_callable>
         <collection>x_casemgmt_case</collection>
         <condition/>
-        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; it runs FIRST so that its verbatim message is the one surfaced when the case is already Closed. setAbortAction(true) cancels the write but not the chain - the later rules (block_draft_backtransition at 200, enforce_forward_transitions at 250, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) still run and each returns early on current.isActionAborted(). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. Script Include's validateNoBacktransition returns {ok: true} for the no-op Closed -&gt; Closed case (status field unchanged), so non-status edits to a Closed row pass through; only actual transitions out of Closed are blocked. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
+        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; it runs FIRST so that its verbatim message is the one surfaced when the case is already Closed. setAbortAction(true) cancels the write but not the chain - the later rules (block_draft_backtransition at 200, enforce_forward_transitions at 250, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) still run and each returns early on current.isActionAborted(). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. When the status itself is unchanged, the rule then calls x_casemgmt.CaseTransitionValidator.validateClosedRecordUnchanged(current, previous), which compares the case's own columns and surfaces the same verbatim message when any of them changed - so a Closed row is immutable in fact and not only in wording, while a genuine no-op save (nothing edited) still succeeds. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
@@ -15751,13 +16107,34 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
     var prevStatus = String(previous.status);
     var newStatus = String(current.status);
 
-    // Only fire when previous.status is Closed. The Script Include returns
-    // { ok: false, error: 'Closed cases are terminal and cannot be modified.' }
-    // when prev === 'Closed' && next !== 'Closed' && next !== ''. The Script
-    // Include returns { ok: true } for the no-op Closed -> Closed case (status
-    // unchanged - non-status edits to a Closed row are not blocked here; if
-    // additional per-field immutability is required, dictionary read_only
-    // flags or field-level ACLs are the right mechanism).
+    // Only fire when previous.status is Closed - a row that is not in the
+    // terminal state is none of this rule's business.
+    //
+    // TWO QUESTIONS ARE ASKED, IN ORDER, because AAP Section 0.5.5 row 8
+    // makes two promises and this rule used to keep only the first:
+    //
+    //   1) validateNoBacktransition(prev, next) - is the STATUS being moved
+    //      out of Closed? Returns { ok: false, error: 'Closed cases are
+    //      terminal and cannot be modified.' } when prev === 'Closed' &&
+    //      next !== 'Closed' && next !== '', and { ok: true } for the
+    //      no-op Closed -> Closed case.
+    //
+    //   2) validateClosedRecordUnchanged(current, previous) - if the status
+    //      is unchanged, is any OTHER column of the case being rewritten?
+    //      Until this call existed, the answer did not matter: a save that
+    //      left `status` alone and changed `priority`, `subject`, or that
+    //      cleared `assigned_agent`, committed silently on a Closed case,
+    //      which contradicted the very message this rule surfaces and the
+    //      four in-scope documents that quote it. The record the platform
+    //      told the user "cannot be modified" was in fact freely editable.
+    //      The method compares only the application's own columns, so a
+    //      genuine no-op save (Update pressed with nothing edited) still
+    //      succeeds - sys_mod_count and sys_updated_on are deliberately not
+    //      compared.
+    //
+    // The two calls are chained rather than combined so that a status move
+    // out of Closed keeps producing the message it always produced, and so
+    // that each method keeps a single, testable responsibility.
     if (prevStatus === 'Closed') {
         // Resolve the Script Include via the standard scoped reference syntax.
         // The `x_casemgmt` portion is the scope's vendor_prefix from
@@ -15766,6 +16143,13 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         // the resolution is by scoped class name only.
         var validator = new x_casemgmt.CaseTransitionValidator();
         var result = validator.validateNoBacktransition(prevStatus, newStatus);
+        if (result.ok) {
+            // The status itself is not moving. The row is still terminal, so
+            // reject any change to the case's own fields. Both methods return
+            // the same verbatim string for a rejection, so the user sees one
+            // consistent sentence whichever half of the promise was broken.
+            result = validator.validateClosedRecordUnchanged(current, previous);
+        }
         if (!result.ok) {
             // gs.addErrorMessage(result.error) surfaces the verbatim message
             // at the top of the form when the user attempts the save through
@@ -16539,13 +16923,21 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         // message. Every OTHER value is a status this application does not
         // recognise, and it must NOT be allowed through.
         //
-        // Why this matters: a mandatory Choice dictionary is not a server-side
-        // allowlist. ServiceNow stores and displays a value that is not (or is
-        // no longer) a valid choice, and a direct write - Table API, a scoped
-        // script, an import - can set `status` to anything at all. Returning
-        // without aborting, as an earlier revision did, let such a write park a
+        // Why this matters: a Choice dictionary is not this rule's allowlist,
+        // and the two layers protect different paths. MEASURED on this release:
+        // `status` carries choice = 3, so the REST Table API silently DROPS an
+        // unrecognised value before any rule evaluates - the PATCH answers
+        // HTTP 200, the stored value is unchanged and sys_mod_count stays 0, so
+        // this branch is never reached from that path (see the register, section
+        // 4 item 15). What the branch guards is every OTHER way `status` can
+        // hold a value this application does not recognise: a stale choice left
+        // behind by a de-activated or renamed sys_choice row, and any write path
+        // that does not run dictionary choice validation. Returning without
+        // aborting, as an earlier revision did, would let such a value park a
         // case in an unrecognised state with NO assignment check, NO task
         // closure check and NO manager check: every order-250 gate skipped.
+        // It costs one map lookup, so it stays even though the common path
+        // cannot reach it.
         // ------------------------------------------------------------------
         if (proposedStatus === 'Draft') {
             return;
@@ -16568,6 +16960,74 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
     }
 
     var caseSysId = String(current.getUniqueValue());
+
+    // ------------------------------------------------------------------
+    // STEP 0 - validate the transition EDGE, i.e. previous -&gt; proposed.
+    //
+    // Everything below this point validates the PRECONDITION OF THE
+    // TARGET STATUS and nothing else: the subflow and the validator are
+    // both selected by `proposedStatus`. That answers "does this case
+    // satisfy what Resolved requires" but never "was this case allowed to
+    // reach Resolved from where it actually was". Without this step a
+    // single save moved a case straight from Draft to Closed: it skipped
+    // Open's assigned_group requirement, In Progress's agent-membership
+    // requirement and Resolved's task-closure gate, and it landed in the
+    // terminal state with closed_date empty, because
+    // x_casemgmt_set_closed_date (order 500) keys on the Resolved -&gt;
+    // Closed edge. All eight illegal skip/backward edges behaved the
+    // same way. AAP Section 0.5.5 is the complete set of legal edges and
+    // AAP Section 0.7.3 Gate 2 requires all of them to be enforced.
+    //
+    // The graph itself lives in x_casemgmt.CaseTransitionValidator so the
+    // Business Rule layer, the Flow Designer subflows and the Custom
+    // Action all share one definition.
+    //
+    // ORDER MATTERS, in three ways:
+    //   1) AFTER current.isActionAborted() above, so an already-rejected
+    //      save is not diagnosed twice.
+    //   2) AFTER the SUBFLOW_FOR_STATUS allowlist branch, so an
+    //      unrecognised TARGET status keeps its own message ("That is not
+    //      a valid case status...") and a proposed Draft keeps being
+    //      handled by x_casemgmt_block_draft_backtransition at order 200.
+    //   3) BEFORE the synchronous subflow run below, so an illegal edge
+    //      is refused in milliseconds instead of paying the several
+    //      seconds a foreground subflow costs.
+    //
+    // Fail CLOSED, exactly as STEP 2 does: this is an authorization-grade
+    // gate, so a verdict that cannot be computed or comes back malformed
+    // aborts the save rather than falling through to the target-only
+    // checks that were the whole defect.
+    // ------------------------------------------------------------------
+    var edgeVerdict;
+    try {
+        edgeVerdict = new x_casemgmt.CaseTransitionValidator()
+            .validateTransitionEdge(previousStatus, proposedStatus);
+        if (!edgeVerdict || typeof edgeVerdict !== 'object' || typeof edgeVerdict.ok !== 'boolean') {
+            throw 'the validator returned a malformed edge verdict (' + String(edgeVerdict) + ')';
+        }
+        if (edgeVerdict.ok === false &amp;&amp; (typeof edgeVerdict.error !== 'string' || edgeVerdict.error === '')) {
+            throw 'the validator rejected the edge without supplying a message';
+        }
+    } catch (edgeError) {
+        gs.error('x_casemgmt_enforce_forward_transitions: the transition edge could not be evaluated for' +
+                 ' case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus + ') - ' +
+                 edgeError + '. The save was aborted: an unevaluated transition is refused, never' +
+                 ' allowed.');
+        gs.addErrorMessage('This change could not be validated and has not been saved. Please try again, ' +
+                           'and tell your administrator if it keeps happening.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    if (!edgeVerdict.ok) {
+        // The message comes from the Script Include - for the two
+        // PROHIBITED rows of the matrix it is the VERBATIM AAP Section
+        // 0.7.4 text, and for a skip edge it names both the attempted
+        // edge and the legal next status. Never paraphrased here.
+        gs.addErrorMessage(edgeVerdict.error);
+        current.setAbortAction(true);
+        return;
+    }
 
     // ------------------------------------------------------------------
     // STEP 1 - run the Flow Designer subflow SYNCHRONOUSLY.
@@ -16987,7 +17447,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <active>true</active>
         <client>false</client>
         <comments>UI Action that transitions an Open case to In Progress status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when they are assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Server-side-only (no client prompt) - the transition has no required parameters beyond the assigned_agent and assigned_group fields that the operator should have populated on the form before clicking. Delegates the assigned_agent-populated AND member-of-assigned_group check to x_casemgmt.CaseTransitionValidator.canTransitionToInProgress() (single source of truth shared with ../flows/sub_flows/validate_inprogress_transition.xml and ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml). Per AAP Section 0.5.5 row 2 verbatim: "Open -&gt; In Progress: assigned_agent populated AND member of assigned_group - Surface form-level error". Performs the transition on the server with defense-in-depth re-validation of role, status, and "Assigned only" assignment. Surfaces a form-level blocking error via gs.addErrorMessage if any guard fails (verbatim message returned by the Script Include). Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'Open' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]]]><![CDATA[></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'Open')]]]]><![CDATA[></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>
@@ -17218,7 +17678,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <active>true</active>
         <client>true</client>
         <comments>UI Action that transitions an In Progress case to Pending status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Prompts the user for pending_reason (Awaiting Info / Awaiting Third Party / Other) on the client via a hybrid client+server pattern, then performs the transition on the server with defense-in-depth re-validation of role, status, assignment, and pending_reason. Per AAP Section 0.5.5 row 3 verbatim: "In Progress -&gt; Pending: None; sets pending_reason (Awaiting Info / Awaiting Third Party / Other)". Companion to ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml which clears pending_reason on the reverse transition, and ../flows/sub_flows/validate_pending_transition.xml which handles the same transition at the Flow Designer workflow layer. Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'In Progress' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]]]><![CDATA[></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'In Progress')]]]]><![CDATA[></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>
@@ -17316,14 +17776,29 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
     // legal even if the field was previously empty.
     g_form.setValue('pending_reason', reason);
 
-    // Submit the form via the standard ServiceNow UI-Action verb pattern.
-    // The verb name is derived from the UI Action's sys_name:
-    //   'sysverb_' + sys_name = 'sysverb_x_casemgmt_case_set_pending'
-    // The platform recognizes this verb, serializes the form state,
-    // posts it to the server, and re-evaluates this <script> body in
-    // a server-side sandbox where the `if (typeof window == 'undefined')`
-    // guard becomes true and serverSetPending() is invoked.
-    gsftSubmit(null, g_form.getFormElement(), 'sysverb_x_casemgmt_case_set_pending');
+    // Submit the form so the server half of this UI Action runs.
+    //
+    // The third argument is this UI Action's OWN action_name, exactly as
+    // it appears in the <action_name> element below:
+    //   'x_casemgmt_case_set_pending'
+    // The platform looks that name up in sys_ui_action for this table,
+    // serializes the form state, posts it, and re-evaluates this <script>
+    // body in a server-side sandbox where the
+    // `if (typeof window == 'undefined')` guard becomes true and
+    // serverSetPending() is invoked.
+    //
+    // *** DO NOT PREFIX THIS WITH sysverb_ ***
+    // An earlier revision passed 'sysverb_x_casemgmt_case_set_pending'.
+    // The sysverb_ prefix is reserved for the platform's own stock verbs
+    // (sysverb_update, sysverb_cancel, sysverb_delete...), so the lookup
+    // could never resolve a custom action and the platform answered:
+    //   "Unable to find UI Action with name
+    //    'sysverb_x_casemgmt_case_set_pending' on table 'x_casemgmt_case'"
+    // serverSetPending() was therefore NEVER reached and the button was
+    // 100% non-functional - while the client-side validation above kept
+    // working convincingly, which is what made the failure easy to miss.
+    // Measured: sys_mod_count stayed 0 on every attempt.
+    gsftSubmit(null, g_form.getFormElement(), 'x_casemgmt_case_set_pending');
 
     // Suppress the default form-submit handler. gsftSubmit already
     // submitted the form; allowing the default to fire would cause a
@@ -17512,7 +17987,7 @@ function serverSetPending() {
         <active>true</active>
         <client>false</client>
         <comments>UI Action that resumes a Pending case back to In Progress status, clearing pending_reason. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Server-side-only (no client prompt) - the transition has no required parameters per AAP Section 0.5.5 row 4 verbatim: "Pending -&gt; In Progress: None; clears pending_reason". Performs the transition on the server with defense-in-depth re-validation of role, status, and assignment. Explicitly clears pending_reason in addition to the companion business rule ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml (order=400) which also clears it during the same database update transaction; together they form a belt-and-suspenders defense-in-depth pair. Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'Pending' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]]]><![CDATA[></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'Pending')]]]]><![CDATA[></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>
@@ -17697,7 +18172,7 @@ function serverSetPending() {
         <active>true</active>
         <client>false</client>
         <comments>UI Action that transitions an In Progress case to Resolved status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when they are assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Delegates the all-tasks-closed check to x_casemgmt.CaseTransitionValidator.canTransitionToResolved() (single source of truth shared with ../flows/sub_flows/validate_resolved_transition.xml). Per AAP Section 0.5.5 row 5 verbatim: "In Progress -&gt; Resolved: All linked x_casemgmt_case_task records have status = Closed - Surface 'All tasks must be closed before resolving this case.'". Surfaces verbatim error message "All tasks must be closed before resolving this case." (per AAP Sections 0.5.5 and 0.7.4) when any child task has status != Closed. Server-side-only (no client prompt) - the transition has no required parameters beyond the existing child task rows on the case. Performs the transition on the server with defense-in-depth re-validation of role, status, and "Assigned only" assignment. Surfaces a form-level blocking error via gs.addErrorMessage if any guard fails (verbatim message returned by the Script Include). Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'In Progress' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]]]><![CDATA[></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'In Progress')]]]]><![CDATA[></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>
@@ -23679,9 +24154,10 @@ postImportRemediation();
         <payload><![CDATA[<record_update table="sys_report">
     <sys_report action="INSERT_OR_UPDATE">
         <aggregate>AVG</aggregate>
-        <aggregation_source>duration_to_close</aggregation_source>
+        <aggregation_source>no_override</aggregation_source>
         <chart_size>medium</chart_size>
-        <description>Manager View dashboard single-score widget for AVG(closed_date - opened_date) over x_casemgmt_case records at status=Closed. The aggregation source `duration_to_close` is a Function Field defined in ../dictionary/x_casemgmt_case_duration_to_close.xml whose value is computed at query time by the platform's database-level function `glidefunction:datediff(closed_date,opened_date)`. The widget renders a Duration AVG (e.g., "5 Days 03:42:11") of elapsed time between case opening and closure. Filter excludes non-Closed cases whose closed_date is NULL by definition. No external BI engine; uses native GlideAggregate. Satisfies AAP Section 0.7.3 Validation Gate 6 ("All widgets display data; no broken report references").</description>
+        <description>Manager View dashboard single-score widget for AVG(closed_date - opened_date) over x_casemgmt_case records at status=Closed. The aggregated column is `field` = `duration_to_close`, a Function Field defined in ../dictionary/x_casemgmt_case_duration_to_close.xml whose value is computed at query time by the platform's database-level function `glidefunction:datediff(closed_date,opened_date)`. The column is named in BOTH `field` (which is what the Report Designer's left rail reads, and what the Run button submits) and `sumfield` (which is what the cold-load renderer SingleScoreRunProcessor submits as sysparm_sumfield) - every out-of-box single-score report with a non-COUNT aggregate on this release carries the aggregated column in `sumfield`. `aggregation_source` is the platform's DATA-SOURCE override selector, not the aggregated column, and carries `no_override` like every out-of-box report. Naming the column only in `aggregation_source` left both `field` and `sumfield` empty, and the cold-load renderer then answered `Cannot generate the report. Invalid aggregate field  for aggregate function AVG` (note the empty field name) on every page load - the score appeared only after a manual Run. The widget renders a Duration AVG (e.g., "5 Days 03:42:11") of elapsed time between case opening and closure. Filter excludes non-Closed cases whose closed_date is NULL by definition. No external BI engine; uses native GlideAggregate. Satisfies AAP Section 0.7.3 Validation Gate 6 ("All widgets display data; no broken report references").</description>
+        <field>duration_to_close</field>
         <field_list/>
         <filter>status=Closed</filter>
         <format/>
@@ -23701,6 +24177,7 @@ postImportRemediation();
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_avg_time_to_close</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
+        <sumfield>duration_to_close</sumfield>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <table>x_casemgmt_case</table>
         <title>Average Time to Close</title>

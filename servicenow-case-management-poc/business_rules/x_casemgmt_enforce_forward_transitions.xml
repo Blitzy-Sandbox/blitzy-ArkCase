@@ -26,6 +26,19 @@
         | In Progress | Resolved    | every linked x_casemgmt_case_task has status = Closed      |
         | Resolved    | Closed      | caller holds x_casemgmt_case_manager                      |
 
+    AND THE EDGES THEMSELVES (AAP Section 0.5.5 read as the complete legal set,
+    AAP Section 0.7.3 Gate 2 "All state transitions enforced for both case types"):
+        Every row above is also an EDGE, and only those edges are legal. Until
+        STEP 0 below existed, this rule dispatched purely on the PROPOSED status
+        and never looked at where the case was coming from, so a case could be
+        driven from Draft straight to Closed in one save - skipping the
+        assigned_group requirement, the agent-membership requirement and the
+        task-closure gate, and arriving in the terminal state with `closed_date`
+        empty because order 500 keys on the Resolved -&gt; Closed edge. STEP 0 now
+        validates previous -&gt; proposed against the adjacency list held in
+        x_casemgmt.CaseTransitionValidator.validateTransitionEdge() before any
+        target-precondition work is done.
+
     VERBATIM ERROR MESSAGES (AAP Section 0.7.4 - NON-NEGOTIABLE). This rule never
     composes its own wording; it surfaces exactly what
     x_casemgmt.CaseTransitionValidator returns:
@@ -255,13 +268,21 @@
         // message. Every OTHER value is a status this application does not
         // recognise, and it must NOT be allowed through.
         //
-        // Why this matters: a mandatory Choice dictionary is not a server-side
-        // allowlist. ServiceNow stores and displays a value that is not (or is
-        // no longer) a valid choice, and a direct write - Table API, a scoped
-        // script, an import - can set `status` to anything at all. Returning
-        // without aborting, as an earlier revision did, let such a write park a
+        // Why this matters: a Choice dictionary is not this rule's allowlist,
+        // and the two layers protect different paths. MEASURED on this release:
+        // `status` carries choice = 3, so the REST Table API silently DROPS an
+        // unrecognised value before any rule evaluates - the PATCH answers
+        // HTTP 200, the stored value is unchanged and sys_mod_count stays 0, so
+        // this branch is never reached from that path (see the register, section
+        // 4 item 15). What the branch guards is every OTHER way `status` can
+        // hold a value this application does not recognise: a stale choice left
+        // behind by a de-activated or renamed sys_choice row, and any write path
+        // that does not run dictionary choice validation. Returning without
+        // aborting, as an earlier revision did, would let such a value park a
         // case in an unrecognised state with NO assignment check, NO task
         // closure check and NO manager check: every order-250 gate skipped.
+        // It costs one map lookup, so it stays even though the common path
+        // cannot reach it.
         // ------------------------------------------------------------------
         if (proposedStatus === 'Draft') {
             return;
@@ -284,6 +305,74 @@
     }
 
     var caseSysId = String(current.getUniqueValue());
+
+    // ------------------------------------------------------------------
+    // STEP 0 - validate the transition EDGE, i.e. previous -&gt; proposed.
+    //
+    // Everything below this point validates the PRECONDITION OF THE
+    // TARGET STATUS and nothing else: the subflow and the validator are
+    // both selected by `proposedStatus`. That answers "does this case
+    // satisfy what Resolved requires" but never "was this case allowed to
+    // reach Resolved from where it actually was". Without this step a
+    // single save moved a case straight from Draft to Closed: it skipped
+    // Open's assigned_group requirement, In Progress's agent-membership
+    // requirement and Resolved's task-closure gate, and it landed in the
+    // terminal state with closed_date empty, because
+    // x_casemgmt_set_closed_date (order 500) keys on the Resolved -&gt;
+    // Closed edge. All eight illegal skip/backward edges behaved the
+    // same way. AAP Section 0.5.5 is the complete set of legal edges and
+    // AAP Section 0.7.3 Gate 2 requires all of them to be enforced.
+    //
+    // The graph itself lives in x_casemgmt.CaseTransitionValidator so the
+    // Business Rule layer, the Flow Designer subflows and the Custom
+    // Action all share one definition.
+    //
+    // ORDER MATTERS, in three ways:
+    //   1) AFTER current.isActionAborted() above, so an already-rejected
+    //      save is not diagnosed twice.
+    //   2) AFTER the SUBFLOW_FOR_STATUS allowlist branch, so an
+    //      unrecognised TARGET status keeps its own message ("That is not
+    //      a valid case status...") and a proposed Draft keeps being
+    //      handled by x_casemgmt_block_draft_backtransition at order 200.
+    //   3) BEFORE the synchronous subflow run below, so an illegal edge
+    //      is refused in milliseconds instead of paying the several
+    //      seconds a foreground subflow costs.
+    //
+    // Fail CLOSED, exactly as STEP 2 does: this is an authorization-grade
+    // gate, so a verdict that cannot be computed or comes back malformed
+    // aborts the save rather than falling through to the target-only
+    // checks that were the whole defect.
+    // ------------------------------------------------------------------
+    var edgeVerdict;
+    try {
+        edgeVerdict = new x_casemgmt.CaseTransitionValidator()
+            .validateTransitionEdge(previousStatus, proposedStatus);
+        if (!edgeVerdict || typeof edgeVerdict !== 'object' || typeof edgeVerdict.ok !== 'boolean') {
+            throw 'the validator returned a malformed edge verdict (' + String(edgeVerdict) + ')';
+        }
+        if (edgeVerdict.ok === false &amp;&amp; (typeof edgeVerdict.error !== 'string' || edgeVerdict.error === '')) {
+            throw 'the validator rejected the edge without supplying a message';
+        }
+    } catch (edgeError) {
+        gs.error('x_casemgmt_enforce_forward_transitions: the transition edge could not be evaluated for' +
+                 ' case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus + ') - ' +
+                 edgeError + '. The save was aborted: an unevaluated transition is refused, never' +
+                 ' allowed.');
+        gs.addErrorMessage('This change could not be validated and has not been saved. Please try again, ' +
+                           'and tell your administrator if it keeps happening.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    if (!edgeVerdict.ok) {
+        // The message comes from the Script Include - for the two
+        // PROHIBITED rows of the matrix it is the VERBATIM AAP Section
+        // 0.7.4 text, and for a skip edge it names both the attempted
+        // edge and the legal next status. Never paraphrased here.
+        gs.addErrorMessage(edgeVerdict.error);
+        current.setAbortAction(true);
+        return;
+    }
 
     // ------------------------------------------------------------------
     // STEP 1 - run the Flow Designer subflow SYNCHRONOUSLY.

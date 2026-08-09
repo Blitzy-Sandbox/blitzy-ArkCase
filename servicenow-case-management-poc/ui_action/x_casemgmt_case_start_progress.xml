@@ -173,15 +173,46 @@
 
     BUTTON VISIBILITY CONDITION (the <condition> field):
 
-        The button is shown when ALL of the following are true:
-          1) current.status == 'Open'   (the source state of the
-             Open -> In Progress transition)
+        The <condition> is a single call into the shared Script Include:
+
+            new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'Open')
+
+        WHY A SCRIPT INCLUDE CALL AND NOT THE EXPRESSION ITSELF. The
+        expression this replaces was 264-271 characters long, and
+        sys_dictionary declares sys_ui_action.condition as a
+        `condition_string` with max_length 254 - a hard platform limit. On
+        import the platform silently TRUNCATED it mid-expression (the
+        Resolve condition ended `...isMemberOf(current.assigned_grou`), a
+        truncated condition cannot evaluate, and its failure mode is to
+        FAIL OPEN with nothing written to the server log. The measured
+        consequence: this button, and three of its siblings, rendered on
+        every one of the six statuses for every identity - including the
+        read-only x_casemgmt_case_viewer, whose form carries no Update
+        button at all. The two sibling actions whose conditions fit
+        (x_casemgmt_case_open at 76 characters, x_casemgmt_case_close at
+        79) were correct throughout and keep their inline expressions.
+        The call above is well under the limit and cannot be truncated.
+
+        A second reason the condition must carry the WHOLE guard: on this
+        release sys_ui_action has no `roles` column - UI Action role
+        restrictions live in the m2m table sys_ui_action_role - so the
+        <roles> element in this payload is inert on import and grants no
+        gating at all. The condition is the only guard the platform
+        honours here.
+
+        canShowAction() implements exactly the rule the inline expression
+        did, unchanged:
+          1) current.status == 'Open'   (the source state of this
+             transition)
           2) The current user holds at least one of:
              - x_casemgmt_case_manager   (always permitted)
              - x_casemgmt_case_agent AND (current.assigned_agent ==
                 gs.getUserID() OR current user is a member of
                 current.assigned_group)
              (per AAP Section 0.5.6 "Assigned only" rule for case_agent)
+        and it fails CLOSED - a missing record or missing status argument
+        returns false - which is the opposite of the truncation behaviour
+        it replaces.
 
         The visibility check runs server-side (the <condition> field is
         evaluated by the platform when rendering the form). The
@@ -583,7 +614,7 @@
         <active>true</active>
         <client>false</client>
         <comments>UI Action that transitions an Open case to In Progress status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when they are assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Server-side-only (no client prompt) - the transition has no required parameters beyond the assigned_agent and assigned_group fields that the operator should have populated on the form before clicking. Delegates the assigned_agent-populated AND member-of-assigned_group check to x_casemgmt.CaseTransitionValidator.canTransitionToInProgress() (single source of truth shared with ../flows/sub_flows/validate_inprogress_transition.xml and ../business_rules/x_casemgmt_validate_assigned_agent_membership.xml). Per AAP Section 0.5.5 row 2 verbatim: "Open -&gt; In Progress: assigned_agent populated AND member of assigned_group - Surface form-level error". Performs the transition on the server with defense-in-depth re-validation of role, status, and "Assigned only" assignment. Surfaces a form-level blocking error via gs.addErrorMessage if any guard fails (verbatim message returned by the Script Include). Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'Open' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'Open')]]></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>

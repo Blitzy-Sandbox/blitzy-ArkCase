@@ -100,19 +100,36 @@
                 return { ok: false, error: 'Closed cases are terminal and cannot be modified.' };
             }
 
-        The Script Include returns {ok: true} for the no-op
-        Closed -> Closed case (no field change in status). This means an
-        UPDATE that does NOT change status but DOES change another field
-        (e.g., description, priority, assigned_agent) on a Closed case
-        is NOT blocked by validateNoBacktransition() and therefore NOT
-        blocked by this BR. The justification in the Script Include is
-        that "no field change in status is not a real transition" and
-        the platform's other guards or dictionary read_only flags should
-        cover any per-field immutability requirements. Per AAP Section
-        0.5.5 row 8, the prohibition is on Closed -> ANY OTHER STATUS,
-        not on every database write to a Closed row. The BR faithfully
-        consumes the Script Include's return and does not introduce its
-        own additional guard logic.
+        validateNoBacktransition() answers only the STATUS half of the
+        question: it returns {ok: true} for the no-op Closed -> Closed
+        case (no change in status). On its own that left a real gap,
+        measured at runtime: an UPDATE that did NOT change status but DID
+        change another field - priority, subject, or clearing
+        assigned_agent - committed silently on a Closed case, through the
+        form and through the Table API alike. The platform was telling
+        the user "Closed cases are terminal and cannot be modified."
+        while the row was in fact freely editable, and four in-scope
+        documents (../docs/state-machine.md,
+        ../docs/validation-gates.md, ../docs/WORKFLOW_TRYOUT_GUIDE.md and
+        the known-issues register) all described the stricter behaviour.
+
+        This rule therefore asks the second half of the question too, via
+        validateClosedRecordUnchanged(current, previous), which compares
+        the case's own columns and returns the SAME verbatim message when
+        any of them differs. The two calls are chained: the status check
+        first (so a status move out of Closed keeps producing exactly the
+        message it always produced), then the field comparison.
+
+        A genuine no-op save - opening a Closed case and pressing Update
+        without editing anything - is still allowed, because no compared
+        column differs; sys_mod_count and sys_updated_on are deliberately
+        excluded from the comparison. The virtual function field
+        duration_to_close is excluded too, being unwritable by
+        definition.
+
+        This is a data-integrity guard on the terminal state, not an
+        access-control decision: who may write the row at all remains a
+        question for the scoped ACLs in ../acl/.
 
     DEFENSIVE PREVIOUS-NULL GUARD:
         The `previous` GlideRecord is null in certain async/system
@@ -346,7 +363,7 @@
         <client_callable>false</client_callable>
         <collection>x_casemgmt_case</collection>
         <condition/>
-        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; it runs FIRST so that its verbatim message is the one surfaced when the case is already Closed. setAbortAction(true) cancels the write but not the chain - the later rules (block_draft_backtransition at 200, enforce_forward_transitions at 250, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) still run and each returns early on current.isActionAborted(). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. Script Include's validateNoBacktransition returns {ok: true} for the no-op Closed -&gt; Closed case (status field unchanged), so non-status edits to a Closed row pass through; only actual transitions out of Closed are blocked. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
+        <description>Before-update guard on x_casemgmt_case: blocks ANY transition out of the Closed terminal status. When previous.status === 'Closed', delegates to x_casemgmt.CaseTransitionValidator.validateNoBacktransition(previousStatus, newStatus) and surfaces the verbatim error message 'Closed cases are terminal and cannot be modified.' via gs.addErrorMessage() + current.setAbortAction(true) when the validator returns {ok: false}. Per AAP Sections 0.5.5 (transition matrix row 8: 'Closed -&gt; *: PROHIBITED -- terminal state') and 0.7.4 (verbatim error message - non-negotiable). Order=100 is the HIGHEST priority before-update rule in this scoped application; it runs FIRST so that its verbatim message is the one surfaced when the case is already Closed. setAbortAction(true) cancels the write but not the chain - the later rules (block_draft_backtransition at 200, enforce_forward_transitions at 250, validate_assigned_agent_membership at 300, clear_pending_reason_on_inprogress at 400, set_closed_date at 500) still run and each returns early on current.isActionAborted(). The Script Include is the SINGLE SOURCE OF TRUTH for the verbatim error message; this BR contains zero inline error strings. action_insert=false because new cases always start at Draft (per dictionary default_value); only updates on already-Closed rows trigger this guard. Defensive previous-null guard handles async/system contexts where previous can be null. When the status itself is unchanged, the rule then calls x_casemgmt.CaseTransitionValidator.validateClosedRecordUnchanged(current, previous), which compares the case's own columns and surfaces the same verbatim message when any of them changed - so a Closed row is immutable in fact and not only in wording, while a genuine no-op save (nothing edited) still succeeds. Type-agnostic: fires for both General Inquiry and Complaint case types. Defense in depth: the per-type Flow Designer flows do NOT enforce this rule, so this BR is the only enforcer for direct DB modifications via Table API, scripted REST, GlideRecord scripts, and bulk imports. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
         <execute_function>false</execute_function>
         <filter_condition/>
         <is_rest>false</is_rest>
@@ -421,13 +438,34 @@
     var prevStatus = String(previous.status);
     var newStatus = String(current.status);
 
-    // Only fire when previous.status is Closed. The Script Include returns
-    // { ok: false, error: 'Closed cases are terminal and cannot be modified.' }
-    // when prev === 'Closed' && next !== 'Closed' && next !== ''. The Script
-    // Include returns { ok: true } for the no-op Closed -> Closed case (status
-    // unchanged - non-status edits to a Closed row are not blocked here; if
-    // additional per-field immutability is required, dictionary read_only
-    // flags or field-level ACLs are the right mechanism).
+    // Only fire when previous.status is Closed - a row that is not in the
+    // terminal state is none of this rule's business.
+    //
+    // TWO QUESTIONS ARE ASKED, IN ORDER, because AAP Section 0.5.5 row 8
+    // makes two promises and this rule used to keep only the first:
+    //
+    //   1) validateNoBacktransition(prev, next) - is the STATUS being moved
+    //      out of Closed? Returns { ok: false, error: 'Closed cases are
+    //      terminal and cannot be modified.' } when prev === 'Closed' &&
+    //      next !== 'Closed' && next !== '', and { ok: true } for the
+    //      no-op Closed -> Closed case.
+    //
+    //   2) validateClosedRecordUnchanged(current, previous) - if the status
+    //      is unchanged, is any OTHER column of the case being rewritten?
+    //      Until this call existed, the answer did not matter: a save that
+    //      left `status` alone and changed `priority`, `subject`, or that
+    //      cleared `assigned_agent`, committed silently on a Closed case,
+    //      which contradicted the very message this rule surfaces and the
+    //      four in-scope documents that quote it. The record the platform
+    //      told the user "cannot be modified" was in fact freely editable.
+    //      The method compares only the application's own columns, so a
+    //      genuine no-op save (Update pressed with nothing edited) still
+    //      succeeds - sys_mod_count and sys_updated_on are deliberately not
+    //      compared.
+    //
+    // The two calls are chained rather than combined so that a status move
+    // out of Closed keeps producing the message it always produced, and so
+    // that each method keeps a single, testable responsibility.
     if (prevStatus === 'Closed') {
         // Resolve the Script Include via the standard scoped reference syntax.
         // The `x_casemgmt` portion is the scope's vendor_prefix from
@@ -436,6 +474,13 @@
         // the resolution is by scoped class name only.
         var validator = new x_casemgmt.CaseTransitionValidator();
         var result = validator.validateNoBacktransition(prevStatus, newStatus);
+        if (result.ok) {
+            // The status itself is not moving. The row is still terminal, so
+            // reject any change to the case's own fields. Both methods return
+            // the same verbatim string for a rejection, so the user sees one
+            // consistent sentence whichever half of the promise was broken.
+            result = validator.validateClosedRecordUnchanged(current, previous);
+        }
         if (!result.ok) {
             // gs.addErrorMessage(result.error) surfaces the verbatim message
             // at the top of the form when the user attempts the save through

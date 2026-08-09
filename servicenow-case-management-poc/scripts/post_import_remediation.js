@@ -413,7 +413,29 @@ var TABLE_SPECS = [
             { element: 'requester_name', label: 'Requester Name', type: 'string', maxLength: '100', mandatory: true, choice: '0', readOnly: false, display: false },
             { element: 'requester_email', label: 'Requester Email', type: 'string', maxLength: '100', mandatory: false, choice: '0', readOnly: false, display: false },
             { element: 'pending_reason', label: 'Pending Reason', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
-            { element: 'duration_to_close', label: 'Duration to Close', type: 'glide_duration', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false }
+            // duration_to_close is the one FUNCTION FIELD in the package: the
+            // database computes closed_date - opened_date at query time and
+            // nothing is stored on the row. Two attributes are load-bearing and
+            // are easy to get wrong:
+            //   functionField: true   - what makes the expression evaluate and
+            //                           the column reportable.
+            //   virtual: false        - measured requirement. A function field
+            //                           must NOT be virtual. Every function
+            //                           field the platform ships (for example
+            //                           pa_dm_task_telemetry.duration and
+            //                           cmdb_data_management_policy_execution.execution_time)
+            //                           carries virtual=false; with virtual=true
+            //                           the platform treats the column as a
+            //                           script-backed virtual field with no
+            //                           calculation and returns EMPTY for every
+            //                           row. The package shipped virtual=true,
+            //                           which is why `duration_to_close` read
+            //                           empty on every Closed case and the
+            //                           "Average Time to Close" widget had
+            //                           nothing to average.
+            // The argument order is datediff(end, start) - the same order the
+            // platform's own function fields use - so closed_date comes first.
+            { element: 'duration_to_close', label: 'Duration to Close', type: 'glide_duration', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, functionField: true, functionDefinition: 'glidefunction:datediff(closed_date,opened_date)', virtual: false }
         ]
     },
     {
@@ -511,7 +533,18 @@ var DICTIONARY_ATTRIBUTES = [
     { column: 'display', spec: 'display', kind: 'bool' },
     { column: 'unique', spec: 'unique', kind: 'bool' },
     { column: 'defaultsort', spec: 'defaultSort', kind: 'string' },
-    { column: 'active', spec: 'active', kind: 'bool' }
+    { column: 'active', spec: 'active', kind: 'bool' },
+    // The three function-field attributes are compared like any other, so drift
+    // is repaired in BOTH directions: a `duration_to_close` row that arrives
+    // with virtual=true (which makes a function field return EMPTY for every
+    // row) is corrected to false, and an ordinary field that somehow arrives
+    // carrying a function definition is corrected back to a plain column. Every
+    // other field in TABLE_SPECS omits all three, so the expectation for them is
+    // function_field=false, virtual=false and an empty function_definition -
+    // which is what the platform already stores, so nothing else drifts.
+    { column: 'function_field', spec: 'functionField', kind: 'bool' },
+    { column: 'function_definition', spec: 'functionDefinition', kind: 'string' },
+    { column: 'virtual', spec: 'virtual', kind: 'bool' }
 ];
 
 // Every attribute of a `sys_choice` row this script owns and therefore compares
@@ -1918,8 +1951,18 @@ function ensureField(tableName, field, scopeSysId) {
     gr.setValue('display', field.display === true);
     gr.setValue('active', true);
     gr.setValue('audit', false);
-    gr.setValue('function_field', false);
-    gr.setValue('virtual', false);
+    // Function-field attributes come from the spec, not from a hard-coded false.
+    // Hard-coding them meant that on an instance where this script had to CREATE
+    // the column, `duration_to_close` was created as a plain stored duration that
+    // never computes anything - so the "Average Time to Close" report would have
+    // had an empty aggregation source even though the packaged dictionary artifact
+    // declares a function field. `virtual` must be false for a function field (see
+    // the note on the duration_to_close spec entry).
+    gr.setValue('function_field', field.functionField === true);
+    gr.setValue('virtual', field.virtual === true);
+    if (field.functionDefinition) {
+        gr.setValue('function_definition', field.functionDefinition);
+    }
     gr.setValue('unique', field.unique === true);
     gr.setValue('text_index', false);
     gr.setValue('spell_check', false);

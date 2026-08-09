@@ -38,8 +38,10 @@
 
 ## 0. Current state of the package — the authoritative block
 
-Everything in this section was measured on the bytes that ship today. It supersedes any conflicting number
-anywhere else in this document.
+Everything in this section was measured on the bytes that ship today, with one stated exception: the
+zero-preview-error round trip of §0.3 was measured on the immediately previous revision of the same file, and
+§0.3a records exactly what carries from it to today's bytes and what does not. It supersedes any conflicting
+number anywhere else in this document.
 
 ### 0.1 Package identity
 
@@ -47,8 +49,9 @@ anywhere else in this document.
 |---|---|
 | Path | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` |
 | `<sys_update_xml>` blocks | **913** (plus exactly one `sys_remote_update_set` descriptor, under a single `<unload>` root) |
-| Size | **3,618,378 bytes** |
-| SHA-256 | **`7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`** |
+| Size | **3,643,389 bytes** |
+| SHA-256 | **`89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`** |
+| Previous revision | **3,618,378 bytes · SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`** — the bytes the clean-slate round trip of §0.3 was run on. The QA-remediation pass re-synced **9** payloads into them (§0.3a); the block count, the block-name set and every byte outside those 9 payloads are unchanged |
 | Update names | 913 of 913 are canonical `<table>_<sys_id>`, and 913 of 913 are unique |
 | ATF range | **761 blocks** = 20 `sys_atf_test` + 180 `sys_atf_step` + **540** step-input rows (539 `Value` + 1 `Variable Value`) + 1 `sys_atf_test_suite` + 20 suite links |
 | Installer records | **1 Fix Script** (`x_casemgmt Post-Import Remediation`, global-scoped by design). **No bootstrap Business Rule, and no auto-execute record of any kind.** |
@@ -62,17 +65,19 @@ anywhere else in this document.
 | Fix Script body is the repository source, byte for byte | **VERIFIED.** The packaged `<script>` equals `../scripts/post_import_remediation.js` exactly (172,520 characters), as does the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper. |
 | **Clean-slate upload → preview → commit on these bytes** | **VERIFIED.** Measured end to end on the bytes above — teardown to zero, upload with the child count asserted at 913, preview to **0 problems of any type**, then commit to `state=committed`. See §0.3. |
 
-### 0.3 CLOSED — the shipping bytes have now been clean-slate round-tripped
+### 0.3 CLOSED — this deliverable has been clean-slate round-tripped
 
-This was previously OPEN LIMITATION 1: the zero-preview-error proof belonged to an **earlier revision** of the
-file rather than to the bytes that ship. **That gap is now closed by measurement, on the exact bytes in §0.1.**
+This was previously OPEN LIMITATION 1: the zero-preview-error proof belonged to a **much earlier revision** of
+the file. **That gap is closed by measurement** on the 913-block, 3,618,378-byte, SHA-256 `7272edfc…` revision
+— the file as it stood immediately before the QA-remediation pass re-synced 9 payloads into it. §0.3a states
+precisely how this result carries to today's `89638c17…` bytes.
 
 The trip was run on `https://dev379024.service-now.com` (Australia Patch 3). It is the same procedure the
 earlier revision went through, executed again from a genuine teardown, and every figure below is an observation:
 
 | Stage | Measured result |
 |---|---|
-| Package identity going in | 913 blocks · 3,618,378 bytes · SHA-256 `7272edfc…` (§0.1) |
+| Package identity going in | 913 blocks · 3,618,378 bytes · SHA-256 `7272edfc…` — the revision of the file that existed when this trip was run; the bytes that ship today are `89638c17…` (§0.1, §0.3a) |
 | **BEFORE** — the same bytes previewed against the **already-populated** instance | **41 problems, all type `error`**: 20 × `Found a local update that is newer than this one`, 18 × `Could not find a record in x_casemgmt_case for column case`, 3 × `Could not find a record in core_company for column organization` |
 | Teardown | Staged application-level teardown proven complete: `sys_scope` query returns `[]`, **every** application census counter is 0, and all three tables move from HTTP 200 to **HTTP 400** (table absent, not merely access-denied) |
 | Upload onto the clean slate | `state=loaded`, child `sys_update_xml` count **exactly 913** |
@@ -92,12 +97,82 @@ built the 3 physical tables (25 fields, 24 choices, 3 counters), a second upload
 `acl_links_total=27` (manager 14 / agent 10 / viewer 3), `security_cache_flushed=true`, `errors=0`**.
 
 **The file on disk is byte-unchanged by the trip** — re-measured after commit: 3,618,378 bytes, SHA-256
-`7272edfc…`, 913 blocks, identical to §0.1.
+`7272edfc…`, 913 blocks, identical to the identity that went in.
 
-**The AAP §0.7.1 round-trip gate is therefore MET on the shipping bytes.** What remains is not a verification
-gap but the install footprint itself: a bare commit is not self-sufficient, and the documented §9.5 sequence
-(two commits with a Global remediation run between and after them) is required. That footprint is §10.2, and it
-is unchanged by this result.
+**The AAP §0.7.1 round-trip gate is therefore MET on the bytes that were round-tripped.** What remains is not a
+verification gap but the install footprint itself: a bare commit is not self-sufficient, and the documented §9.5
+sequence (two commits with a Global remediation run between and after them) is required. That footprint is
+§10.2, and it is unchanged by this result. **§0.3a below states precisely how this result carries — and does not
+carry — to the bytes that ship today**, which the QA-remediation pass changed in 9 payloads.
+
+### 0.3a The QA-remediation pass changed 9 payloads — what that does to §0.3's result
+
+The pass fixed 9 records and, because every record exists twice in this repository (as a standalone
+record-definition artifact and as a `<payload>` inside the deliverable), re-synced all 9 payloads so the two
+copies agree. The file identity therefore moved from `7272edfc…` / 3,618,378 bytes to
+**`89638c17…` / 3,643,389 bytes**. The block count is still **913**.
+
+**What changed, exactly.** Nine `<payload>` bodies and nothing else. Verified mechanically rather than asserted:
+the two files have an identical 913-member block-name set, and with every `<sys_update_xml>` block replaced by a
+placeholder the two skeletons are **byte-identical** — so no block was added, removed, reordered or otherwise
+touched. The nine are `sys_script_include` `CaseTransitionValidator`; `sys_script`
+`enforce_forward_transitions` and `block_terminal_closed`; `sys_ui_action` `case_start_progress`,
+`case_set_pending`, `case_resume` and `case_resolve`; `sys_dictionary` `x_casemgmt_case.duration_to_close`; and
+`sys_report` `Average Time to Close`. Each payload was rebuilt by a transform **derived per record from the
+previous revision** — the previous payload was reproduced from the previous artifact first, and only the
+transform that reproduced it byte-for-byte was then applied to the new artifact — so the serialization
+convention could not drift.
+
+**Three-way parity holds for all 9:** artifact ⇄ payload ⇄ the live record on the instance agree field for
+field. The package-wide parity gate was re-run over all 140 artifacts: **120 matched, 0 absent, 10 divergent —
+the identical 10 that diverged before the pass**, so nothing regressed (those 10 are 8 records whose artifact
+file carries one extra trailing newline, and the 2 `sys_ws_operation` records whose payload XML-escapes the
+operation script where the artifact wraps it in a nested CDATA section — two encodings of the same string).
+All 913 embedded payloads still parse as XML, `xmllint --noout` passes on the file, and every script and UI
+Action condition extracted back out of the **patched** payloads passes `node --check` (11 bodies, 0 failures).
+No new `sys_id` literal was introduced in any of the 9 (each still holds exactly the 2 it held before: its own
+and the application's), and all 9 still carry `sys_scope` = the `x_casemgmt` application.
+
+**What was measured on the new bytes, and what was not.** The clean-slate 41 → 298 → 0 progression above
+belongs to `7272edfc…`. Repeating it would require another full application teardown, which cannot be done here
+— this PDI is shared with other automated work. What *was* measured instead is a **matched A/B preview** of both
+revisions, uploaded and previewed back to back through the platform's own Import-XML form and
+**Preview Update Set** UI action against the same instance state:
+
+| | `7272edfc…` (previous) | `89638c17…` (ships today) |
+|---|---|---|
+| Load | `state=loaded` | `state=loaded` |
+| Preview | `state=previewed`, ≈ 2 min | `state=previewed`, ≈ 5 min |
+| Problems attributable to that file's own 913 records | **34** — 18 `Could not find a record in x_casemgmt_case for column case` + 13 `Found a local update that is newer than this one` + 3 `Could not find a record in core_company for column organization` | **34** — **the same 18 / 13 / 3, on the same target records** |
+| Distinct problem descriptions | 3 | 3 |
+| Problem descriptions present in one but not the other | — | **0** |
+
+So the 9 re-synced payloads introduce **zero** new preview problems: the two revisions produce identical problem
+signatures, matched not merely by description text but by `(description, target record)` pair. Neither figure is
+a zero-error result, because both were previewed against an instance where the application is **already
+committed** — which is the same reason §0.3's "BEFORE" column reads 41 rather than 0. The honest statement is
+therefore: *the absolute zero-preview-error gate was measured on `7272edfc…`, and the change to `89638c17…` was
+measured to be preview-neutral.* Anyone wanting the absolute result on today's bytes should repeat §0.3's
+teardown on a dedicated instance.
+
+**Two platform behaviours measured during that A/B run, worth recording because each one can mislead:**
+
+1. **Re-uploading this file onto an instance that already has it reuses the same `sys_remote_update_set` row and
+   *appends* its children rather than replacing them.** The `<sys_remote_update_set>` descriptor hard-codes
+   `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, so the loader matches on it: the child count went
+   913 → 1,826 → 2,739 across two uploads onto a row that already carried one committed batch, the row's state
+   was reset from `previewed` back to `loaded` by the second load, and `sys_updated_on` is no help in telling
+   the loads apart because each one stamps it back to the file's literal `2026-04-30 12:00:00`. The consequence
+   for anyone reading raw counts: the **totals** were 68 and 102, both of which are simply 2 × 34 and 3 × 34 —
+   an artefact of duplicated children, not of package content. Attribute problems to their originating batch
+   (via `remote_update` → the child's `sys_created_on`) or start from a row with no accumulated children.
+2. **Preview rewrites `sys_update_xml.name`**, re-canonicalising a `<table>_<sys_id>` name to a human-readable
+   one (e.g. `sys_dictionary_0bf56c20…` → `sys_dictionary_x_casemgmt_case_closed_date`). A diff keyed on `name`
+   therefore reports phantom differences; key on the immutable `type` + `target_name` pair instead.
+
+Also measured, and correcting an assumption in earlier revisions of this document: on this release
+(Australia Patch 3) `Found a local update that is newer than this one` is typed **`error`**, not `warning`, and
+its count equals the record's `Collisions` field exactly.
 
 ### 0.4 Current validation-gate rollup
 
@@ -109,7 +184,7 @@ table changed:
 | Gate | Current status |
 |---|---|
 | 1 Data model | ⚠️ Qualified — correct **after** the manual Defect C remediation; a bare commit yields metadata with no physical storage |
-| 2 Workflow | ✅ Pass — all four precondition guards and both prohibitions block on the form, both case types |
+| 2 Workflow | ✅ Pass — all four precondition guards and both prohibitions block on the form, both case types; and since the QA-remediation pass the **transition graph** is enforced too (all 8 illegal skip/backward edges refused, §9.6 **E12**) and a Closed case is immutable rather than only status-frozen (§9.6 **E13**) |
 | 3 ACLs | ⚠️ Qualified — correct **after** the manual Defect 9 remediation creates the 27 ACL role links |
 | 4 Portal submission | ⚠️ Qualified — the anonymous **REST contract** passes; the submission **page renders blank** |
 | 5 Portal lookup | ⚠️ Qualified — the anonymous **REST contract** passes; the lookup **page renders blank** |
@@ -167,10 +242,29 @@ rendering, charting and the data are all healthy.
 
 ### 0.6 Two further gaps measured on the current instance
 
-- **Report grouping did not survive the commit.** All 8 installed `sys_report` rows have an **empty
-  `group_by`**, although every artifact specifies one (`status`, `priority`, `type`). The visible consequence:
-  *All Cases by Status* renders grouped by *Assigned Agent*. The reports exist and are backed by populated
-  tables, but they do not aggregate as designed.
+- **Report grouping does not arrive — and the QA-remediation pass root-caused it.** The six chart reports each
+  specify their grouping as `<group_by>status</group_by>` (or `priority` / `type`), and every installed row
+  arrives with no grouping at all; the visible consequence is that *All Cases by Status* renders grouped by
+  *Assigned Agent*. The reports exist and are backed by populated tables, but they do not aggregate as designed.
+
+  **This is not the commit engine dropping a column — `group_by` is not a column on `sys_report` at all.**
+  Measured on this release: `sys_dictionary` for `sys_report` holds `field`, `sumfield`, `group` (a reference)
+  and `additional_groupby`, and **no** `group_by`. So the element is discarded on import for the same reason as
+  the `sys_number` case in §4 item 6 and `defaultsort` in §9.3a item 3 — an element that is not a column on the
+  target table is silently ignored. **The column a chart report actually groups on is `field`**, which the pass
+  established while fixing the *Average Time to Close* single-score report (§9.6 **E14**): the Report Designer's
+  left rail and the Run button read `field`, and for a non-COUNT single score the aggregated column must
+  additionally be in `sumfield`, which is what the cold-load `SingleScoreRunProcessor` submits. All six chart
+  reports currently have `field` empty, which matches the symptom exactly.
+
+  The remedy is therefore a one-element rename in six artifacts and their six payloads — `group_by` → `field` —
+  plus the same correction in any generator. **The pass deliberately did not apply it**: no QA finding covers
+  these six reports, the change is owned by the reporting lane that §10.2 tracks, and touching six more records
+  would exceed the finding-driven scope this pass works under. It is recorded here with its measured root cause
+  so the fix lands in the right column rather than being attempted against a non-existent one. The two
+  single-score reports are unaffected: *Average Time to Close* was fixed by this pass and now renders
+  `7 Days 19 Hours 55 Minutes` on a cold load, and *Cases Opened in Last 30 Days* is a `COUNT` aggregate, which
+  correctly needs neither `field` nor `sumfield`.
 - **The case form has no related lists, and the AAP §0.4.4 requirement for them is unmet.** `sys_ui_related_list`
   holds **0 rows** for `x_casemgmt_case` — and 0 for any `x_casemgmt` table — against **1,545** rows
   instance-wide. On a real case record the form's `#related_lists_wrapper` element renders at a bounding height
@@ -187,7 +281,7 @@ trip rather than carried forward from an earlier pass. Each row names the measur
 | Gate | Verdict | Evidence measured on this install |
 |---|---|---|
 | 1 Data model | ⚠️ Pass after remediation | All **25** shipped `dictionary/*.xml` artifacts compared field by field against the live `sys_dictionary` rows, keyed on `(name, element)`: **0 absent, 0 divergent** on `internal_type`, `max_length`, `mandatory`, `read_only`, `choice`, `default_value`, `function_field`, `display`, `active` and reference target. All **7** choice lists present with their exact labels (24 rows, 0 inactive). `number` carries `default_value=javascript:global.getNextObjNumberPadded()` and `read_only=1`; display fields are `number` / `subject` / `role_label`. An insert probe produced `CASE0000989`, matching `^CASE[0-9]{7}$`, defaulting to `Draft`, and was removed. The three list views render as real data grids with 10 / 10 / 8 rows, zero banners, zero console errors. **Physical storage exists only because the remediation built it** — hence the qualification, not the field definitions. |
-| 2 Workflow | ✅ Pass | **Breadth:** the shipped harness `../scripts/transition_logic_regression_assertions.js` re-run verbatim in scope `x_casemgmt` emitted `U1ASSERT\|TOTAL=13 PASSED=13 FAILED=0`, with `expected` and `actual` byte-identical on all 13 and labels A1–A13 matching the §9.7 table exactly (**A9** is the `canTransitionToClosed` non-manager assertion; **A10** is any → Draft). Its own `CLEANUP` line reports `tasks=4 cases=7 remainingCases=10`, so every fixture it created was removed. **Depth on the form:** clicking the real **Resolve** UI Action on a case with one open child task produced a single error banner whose painted text is `All tasks must be closed before resolving this case.` — **52** characters, no surrounding whitespace, zero non-ASCII, final codepoint U+002E — and the literal was provably absent from the page before the click. `status` still read `In Progress` after the click and after a clean reload; server-side probes showed `sys_mod_count` unchanged at **0** and `sys_updated_on` unchanged, so **no write occurred**. The submit returned **302 back to the same record** — the abort-and-redisplay signature. All 6 UI Actions are `active=true`. |
+| 2 Workflow | ✅ Pass | **Since re-measured and widened by the QA-remediation pass:** the transition *graph* is now enforced as well as each target's precondition — 16/16 illegal-edge attempts (8 edges × both case types) refused with HTTP 403 and `sys_mod_count` 0, and form-driven `Draft→Closed` / `Draft→Resolved` blocked with an 85- and 87-character message while the legal `Draft→Open` control still commits with zero banners (§9.6 **E12**); a Closed case now refuses field-only edits with the 49-character verbatim message while still permitting a genuine no-op save (§9.6 **E13**); and the `Set Pending` UI Action, which could never reach the server, now performs its transition (§9.6 **E11**). The evidence below predates that pass and remains accurate. **Breadth:** the shipped harness `../scripts/transition_logic_regression_assertions.js` re-run verbatim in scope `x_casemgmt` emitted `U1ASSERT\|TOTAL=13 PASSED=13 FAILED=0`, with `expected` and `actual` byte-identical on all 13 and labels A1–A13 matching the §9.7 table exactly (**A9** is the `canTransitionToClosed` non-manager assertion; **A10** is any → Draft). Its own `CLEANUP` line reports `tasks=4 cases=7 remainingCases=10`, so every fixture it created was removed. **Depth on the form:** clicking the real **Resolve** UI Action on a case with one open child task produced a single error banner whose painted text is `All tasks must be closed before resolving this case.` — **52** characters, no surrounding whitespace, zero non-ASCII, final codepoint U+002E — and the literal was provably absent from the page before the click. `status` still read `In Progress` after the click and after a clean reload; server-side probes showed `sys_mod_count` unchanged at **0** and `sys_updated_on` unchanged, so **no write occurred**. The submit returned **302 back to the same record** — the abort-and-redisplay signature. All 6 UI Actions are `active=true`. |
 | 3 ACLs | ⚠️ Pass after remediation | Measured at **record** level by impersonation, because a table-level `canRead()` cannot evaluate a conditional ACL. **manager:** create on all 3 tables, all 10 cases visible, read+write+**delete** on unassigned, group-only and agent-assigned fixtures, both sensitive fields writable. **agent:** create yes; **9 of 10** cases visible — the unassigned case is `read=DENIED`; write yes on both assigned shapes; **delete no**; field ACLs correct — `assigned_group` not writable at all, `assigned_agent` writable **only** on the case where the agent is the assigned agent. **viewer:** create **no** on all 3, all 10 visible, write and delete **no** everywhere. Both halves of "Assigned only" proven — the group half via a group-only case, the agent half via an agent-assigned case. **Child-table mirror proven with a purpose-built fixture** (the demo data could not prove it, as the unassigned case has no children): one task and one party added to the unassigned case were visible to manager and viewer (11 / 9) but **excluded from the agent's list and denied on direct read**; the fixture was then deleted and the census restored to 10 / 10 / 8. |
 | 4 Portal — submission | ⚠️ REST pass · page fail | Fully anonymous `POST /api/x_casemgmt/case_submit` → **201**, body exactly `{"number":"CASE0000990","message":"Your case has been submitted"}`. Internally the row landed as `status=Draft` with `opened_date` set and `assigned_group` / `assigned_agent` / `closed_date` all empty. The probe row was then deleted. The **page** still renders blank — see gate 5's row for the shared root cause. |
 | 5 Portal — lookup | ⚠️ REST pass · page fail | Anonymous `GET …/case_status_lookup?number=<valid>` → **200** with exactly three keys, `{status, subject, opened_date}`; a leak audit over the **raw** response bytes for `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email`, `pending_reason`, `sys_id`, `sys_created_on`, `sys_updated_on` and `duration_to_close` found **zero** of them present. Unknown number → **404** with `No case found with that number.` byte-exact. **Both pages render blank** to an anonymous visitor: 0 inputs, 0 textareas, 0 selects, 0 buttons, 0 labels, 0 visible characters, and all three portal screenshots byte-identical. Root cause re-confirmed by measurement: `/api/now/sp/page` returns `containers` length **0** for both pages and for the portal root, against **1** for the out-of-box `sp?id=404` control which renders fully in the same anonymous session. Pages are correctly `public=true`, `draft=false`, HTTP 200, no `error` field — the layout tree is simply empty. Newly measured detail: the portal record also returns `theme: {header:{}, footer:{}}`, so not even a navbar paints. Zero console errors and zero non-2xx throughout, so the failure is silent and structural (**E8-P**). |
@@ -210,6 +304,20 @@ auditable there, but **running it from the Fix Script UI does not work either**,
 rewrites the record's scope. The only measured route is a manual run from *System Definition → Scripts -
 Background* with **"In scope" = Global**. §9.5 is the procedure.
 
+### 0.8 Four behaviours the QA-remediation pass disclosed rather than repaired
+
+Each was reported by QA as an informational finding, re-measured on the live instance during the remediation
+pass, and then written up where a reader would look for it instead of being fixed — because in each case the
+fix would either be impossible in the application layer or would add workflow the AAP does not specify. They
+are listed here so they are discoverable from this authoritative block and are not mistaken for oversights.
+
+| Behaviour | Why it is disclosed rather than fixed | Written up in |
+|---|---|---|
+| **An invalid choice value sent to the REST Table API returns `HTTP 200` and is silently dropped.** All five choice fields carry `choice = 3`, so the platform discards an unrecognised value before any Business Rule evaluates; `sys_mod_count` stays `0` and no error reaches the client | A before-update rule cannot see a value the dictionary already removed. Hard rejection would need a Scripted REST wrapper in front of the Table API, and AAP §0.1.1 states the target deliberately exposes the platform's auto-generated Table API | §4 item **15** |
+| **A write refused by an ACL is silent on the classic form** — `HTTP 302` exactly like a success, empty body, `#output_messages` keeps `outputmsg_hide`, `0` message nodes, and a 407-character page containing no explanation. The Table API says `403 ACL Exception Update Failed due to security constraints` | No application code runs: the ACL layer stops the write before any Business Rule evaluates, so there is nothing the application can author a message from. AAP §0.7.1's "surface all blocking errors on the form" is met by the workflow layer, which does render a banner on every transition refusal | §4 item **16** |
+| **The all-tasks-closed rule gates one edge, not the Resolved state** — a new open task can be added to a Resolved case, a closed task can be reopened, and `Resolved → Closed` then succeeds with open child work | AAP §0.5.5 attaches the condition to `In Progress → Resolved` and attaches only the manager-role check to `Resolved → Closed`. The implementation matches the matrix exactly; strengthening it would add workflow the Minimal-Change Clause (§0.7.2) forbids | §5, final bullet |
+| **For a same-save field-plus-status change the subflow's verdict is advisory and discarded** — the subflow reads the committed row, returns a false `blocked=true`, and the in-flight Script Include verdict wins and is correct | A before-update rule is the only layer that can abort a save and surface a form error; a flow trigger fires after the commit; no API lets a subflow read the in-flight `current`. Trusting the subflow would reject legal transitions. Covered by directive overrides **C1** and **C8** | §3.3 |
+
 ---
 
 ## 1. Executive summary
@@ -218,7 +326,9 @@ Background* with **"In scope" = Global**. §9.5 is the procedure.
 |---|---|
 | 3 custom tables + fields + choices + auto-number | ⚠️ **Working, but not from the package alone.** The physical schema is built by `../scripts/post_import_remediation.js`. The package ships that script as a Fix Script so the body is auditable, but it ships **no trigger and nothing that runs by itself**: an auto-execute Business Rule was built, was measured firing on commit, was measured failing with 121 `SecurityException`s (the commit engine forces the record's `sys_scope` to the application, and `GlideTableDescriptor`/`GlideSecurityManager` are then refused in scoped execution), and was subsequently **removed from the package** for that reason and for the security reason in §0.7. On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage** until an operator performs the manual sequence in §9.5, **steps 1-3**. Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
 | 3 roles + ACL role × CRUD matrix (manager/agent/viewer, incl. assigned-only + field ACLs) | ⚠️ **Working, but not from the package alone.** A clean commit produces the 26 ACLs with **0 of 27** `sys_security_acl_role` links; the 27 links and the security-cache flush appear only after the remediation is run manually (§9.4–§9.5). Once run, the live 12-cell matrix is correct: manager full CRUD on all three tables; agent create with **no blanket** read/write and `delete=false`; viewer read-only. **Record-level narrowing empirically confirmed for both halves of the AAP §0.5.6 "Assigned only" definition** — impersonated agent sees 9 of 14 cases; `CASE0000453` and `CASE0000458` are visible with an *empty* `assigned_agent`, so group membership is the only possible grant path, and the five cases with neither group nor agent are absent. Direct-URL access to an unassigned row returns "Security constraints prevent access to requested page". Field-level ACLs confirmed too: the agent sees `assigned_group` read-only while `assigned_agent` stays editable. **Child-table narrowing: historically broken, now passing.** An earlier revision's `case_task`/`case_party` agent conditions could not compile (`case` is a JavaScript reserved word, so a `current.case` dot-walk fails); with the `current.getElement('case')` accessor the impersonated agent sees its assigned task and party rows (10 and 8) with write but not delete, and `ATF 07` passes — green in the current suite run `TES0001015` (§8.3). The failure is retained in §9.6 E-ATF as diagnosis only; it is **not** an open defect. |
-| Prohibited-transition guards (Any→Draft, Closed→*) | ✅ Working (Business Rules) |
+| Prohibited-transition guards (Any→Draft, Closed→*) | ✅ Working (Business Rules). Since the QA-remediation pass this also covers a Closed row's **fields**, not just its status: a field-only edit to a Closed case raises the same verbatim message, while a save that changes nothing is still accepted (§9.6 **E13**) |
+| Transition-graph enforcement (only the edges AAP §0.5.5 lists are legal) | ✅ Working (Business Rule order 250, STEP 0). Was previously **absent** — only each target status's precondition was checked, so all 8 illegal skip/backward edges were accepted and `Draft→Closed` could reach the terminal state unassigned with an empty `closed_date`. Now refused with a message naming the attempted edge and the legal next status; 16/16 attempts blocked across both case types (§9.6 **E12**) |
+| The six transition **UI Actions** (`Open`, `Start Progress`, `Set Pending`, `Resume`, `Resolve`, `Close`) | ✅ Working. Visibility is correct for all 18 identity × status combinations, including zero buttons for the read-only viewer, after the four over-length conditions moved into `CaseTransitionValidator.canShowAction()` (§9.6 **E3**); and `Set Pending`, which could never reach the server because of a reserved `sysverb_` prefix in its `gsftSubmit` call, now performs its transition (§9.6 **E11**) |
 | Transition side-effects (`opened_date`, `closed_date`, clear `pending_reason`) | ✅ Working (Business Rules) |
 | `assigned_agent` must be a member of `assigned_group` (when an agent **is** set) | ✅ Working (Business Rule) |
 | Anonymous portal **REST contract** (submit → Draft + number; lookup → whitelisted) | ✅ Working. `service_id` is carried by the package itself (§2 Defect 7), and the two `sys_ws_operation` payloads were re-synced from their authoritative artifact files in this pass (§9.3, deliverable edit 2). Re-verified after the clean-instance round trip with **no credentials on the request**: `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`; `GET …/case_status_lookup?number=CASE0000450` → **200** with body keys exactly `{status, subject, opened_date}` and all seven internal fields absent; `?number=CASE9999999` → **404** `{"error":"No case found with that number."}` — byte-compared to the required literal, 31/31 bytes identical including the trailing full stop. |
@@ -657,6 +767,45 @@ reads the **committed** row, which is stale when `assigned_group` or `assigned_a
 save; any divergence between the two verdicts is logged. If the subflow call throws, the rule falls **closed**
 onto the validator's verdict rather than letting the save through.
 
+**The honest consequence of that design, measured — for a same-save field-plus-status change the subflow's
+verdict is advisory and is discarded.** Two of the six transitions have a field precondition
+(`Draft → Open` needs `assigned_group`; `Open → In Progress` needs `assigned_agent`), and whenever the user
+supplies that field in the *same* save as the status change, the subflow reads the row as it still exists in
+the database — precondition field empty — and returns a **false BLOCKED**. The Script Include, reading
+`current`, returns the correct ALLOWED and wins. So the flows demonstrably *execute* (which is what
+distinguishes a live flow from a dead record), but on this path they do not *decide*: the Script Include is
+the authoritative gate.
+
+Measured on the live instance, with the divergence written to `syslog` by the rule itself. `CASE0001080`,
+where both preconditions were supplied in-save, produced two entries — verbatim, one of them:
+
+```text
+x_casemgmt_enforce_forward_transitions: subflow x_casemgmt.validate_in_progress_transition reported
+blocked=true while the in-flight evaluation reported blocked=false for case
+c42ce4ea93a20f10830ef82bdd03d60f (Open -> In Progress). The in-flight evaluation decides because it
+reflects the row as it will be saved.
+```
+
+and the same sentence naming `x_casemgmt.validate_open_transition` for its `Draft -> Open`. Both saves
+returned **HTTP 200** and persisted, which is the correct outcome. The control that pins the mechanism:
+`CASE0001081` made the identical `Open → In Progress` change with `assigned_agent` written in a **prior**
+save, and that transition logged **no divergence at all** — the subflow read a committed row that already
+had the agent, agreed with the validator, and both said ALLOWED. So divergence tracks exactly one variable,
+whether the precondition field is written in the same transaction, and never the transition itself.
+Corroborating that the flow layer is genuinely running and not merely bypassed: `sys_flow_context` carries
+`COMPLETE` rows for the subflows with `source_table = sys_script` (the synchronous Business-Rule
+invocations) alongside the parent-flow context with `source_table = x_casemgmt_case`.
+
+This is disclosed rather than repaired because there is nothing to repair without breaking the AAP's own
+requirement. A before-update rule is the only layer that can abort a save and surface a form-level error
+(§0.7.1), a Flow Designer record trigger fires only *after* the write commits, and no platform API lets a
+subflow read the in-flight `current`. Trusting the subflow instead would reject legal transitions —
+setting the agent and the status together in one save is the natural gesture on the form and would fail.
+The divergence is logged rather than suppressed so that an operator reading `syslog` sees the two verdicts
+and which one applied. Directive overrides **C1** (Business-Rule enforcement approved in place of flow-only
+enforcement) and **C8** (a before-update rule invoking a subflow synchronously is approved) cover this
+arrangement explicitly.
+
 The Business Rule does **not** hardcode any message — it passes `verdict.error` through, so
 `CaseTransitionValidator` remains the single source of truth shared with the six UI Actions.
 
@@ -909,6 +1058,87 @@ so future operators don't mistake them for bugs.
     Idempotency was proved by running the shipped Fix Script twice back-to-back: both runs reported
     `verified=true`, `errors=0`, and every counter at `created=0` / `already=<expected>`.
 
+15. **An invalid choice value sent through the REST Table API is answered `HTTP 200` and silently dropped —
+    the API client is never told its field was rejected.** All five choice fields in the application
+    (`case.status`, `case.priority`, `case.type`, `case_task.status`, `case_party.party_type`) are
+    `internal_type=string` with **`choice = 3`** ("dropdown without --None--"), which means the platform
+    validates the submitted value against `sys_choice` and discards anything unrecognised **before** any
+    Business Rule sees the record. Measured on `CASE0001078`, a Draft case, one PATCH per row:
+
+    | Sent | HTTP | Stored afterwards | `sys_mod_count` | Error body |
+    |---|---|---|---|---|
+    | `status = "Bogus Status"` | **200** | `status` still `Draft` | **0** | none |
+    | `status = "Approved"` (a real ArkCase status, not one of ours) | **200** | `status` still `Draft` | **0** | none |
+    | `priority = "Catastrophic"` | **200** | `priority` still `Medium` | **0** | none |
+    | `type = "Freedom Of Information"` | **200** | `type` still `General Inquiry` | **0** | none |
+    | `case_task.status = "Cancelled"` | **200** | `status` still `Open` | **0** | none |
+    | *control:* `priority = "High"` | 200 | `priority` = **`High`** | **1** | none |
+
+    The control row is what makes this a measurement rather than an assumption: the same PATCH shape with a
+    *valid* value writes and increments `sys_mod_count`, so the write path is working and only the value was
+    dropped. **Why no blocking message appears:** the order-250 rule refuses an unrecognised status with
+    *That is not a valid case status…* — but it never runs, because by the time it evaluates,
+    `previous.status === current.status` and the rule early-returns on an unchanged status (its line 18).
+    So the two layers guard different paths, and the register records only what was measured: the dictionary
+    filters the REST Table API early and quietly, and the rule's fail-closed allowlist is what would catch a
+    value that reaches it — a stale choice left behind by a de-activated or renamed `sys_choice` row, or any
+    write path that does not run choice validation. The comment block in the rule was corrected in this pass:
+    it previously named the Table API as a path that "can set `status` to anything at all", which this
+    measurement disproves. **Consequence for an integrator:** no corrupt data can enter the tables this
+    way, but a client that PATCHes a typo receives `200` and must re-read the record to discover its change
+    was ignored. Nothing in the application can change this — a before-rule cannot see a value the dictionary
+    already removed. An API contract that needs hard rejection would have to validate against `sys_choice`
+    in a Scripted REST wrapper rather than use the Table API directly, which is outside the AAP's scope
+    (§0.1.1 states the target exposes the platform's auto-generated Table API and honours no legacy
+    API contract).
+
+16. **A write refused by an ACL is refused *silently* on the classic form, and explicitly only on the Table
+    API.** Measured under real UI Impersonation as `x_casemgmt_demo_viewer` (`window.NOW.user` read back in
+    the page: `name = x_casemgmt_demo_viewer`, `userID = 912ca3946a0f74c22d5b7c2e7e143771`,
+    `roles = allRoles = "x_casemgmt_case_viewer"`, `isImpersonating = true`) against `CASE0001082` — a
+    fixture staged at `status = Open` with `assigned_group` populated and `assigned_agent` already set to a
+    member of that group, so `Open → In Progress` is a **legal** edge whose only precondition is already
+    satisfied and the state machine would allow it. Any refusal is therefore attributable to access control
+    alone, and no workflow message appeared at any point.
+
+    | | Classic form (`/x_casemgmt_case.do`) | Table API (`PATCH /api/now/table/x_casemgmt_case/<sys_id>`) |
+    |---|---|---|
+    | HTTP status | **302** — byte-for-byte what a *successful* save returns | **403** |
+    | Response body | empty (`content-length: 0`) | `{"error":{"message":"Operation Failed","detail":"ACL Exception Update Failed due to security constraints"},"status":"failure"}` |
+    | Reason shown on screen | **none** | none — the text exists only in the JSON |
+    | `#output_messages` class | `outputmsg_container outputmsg_hide` — the `outputmsg_hide` class is **retained** | n/a |
+    | `.outputmsg_text` nodes | **0** | n/a |
+    | `data-server-messages` | `"false"` | n/a |
+
+    Render-time denial is thorough and is where the platform does its real work:
+    `g_form.getEditableFields()` returns **`[]`**, all 14 fields report `isReadOnly() === true`,
+    `.form_action_button` count is **0**, `#sysverb_update` **does not exist**, and every field's hidden value
+    carrier is stamped by the server with **`writeaccess="false"`** (the visible control is the
+    `sys_readonly.x_casemgmt_case.<field>` variant, `readonly="readonly"`, `aria-readonly="true"`).
+    But the client API itself offers no resistance: `g_form.setValue('status','In Progress')` on a field
+    `g_form` simultaneously reports as read-only **succeeds**, updates the hidden carrier and repaints the
+    grey display control, with zero warning. Forcing the submit the missing button would have issued
+    (`gsftSubmit(null, g_form.getFormElement(), 'sysverb_update')`) put the mutation on the wire —
+    the POST body carried `sys_action=sysverb_update` and
+    `sys_original.x_casemgmt_case.status=Open&x_casemgmt_case.status=In+Progress` — and the server discarded
+    it without a word. The complete rendered `body.innerText` afterwards is **407 characters** and contains
+    no error, warning, denial or the phrase "read only" anywhere; a genuine full-navigation reload and an
+    independent admin-side read both show `status = Open` with `sys_mod_count` unchanged at `2`.
+    A read control in the same session, same token, same record answers **`HTTP 200`** and returns all 21
+    fields, so the split is exactly read-allowed / write-denied.
+
+    **This is platform UX, not an application defect** — the application authors no message here because no
+    application code runs: the ACL layer stops the write before any Business Rule evaluates, which is also
+    why the AAP §0.7.1 "surface all blocking errors on the form" requirement is satisfied by the workflow
+    layer (every transition refusal renders a red banner) and not by this one. Worth recording for whoever
+    owns the RBAC experience: the platform **does** own a first-class denial pattern and used it elsewhere in
+    the very same impersonated session — the viewer's Home page printed *"Access Restricted — You do not have
+    the required permissions to view this content. Access is restricted by the report_view ACL. Please
+    contact your administrator for assistance"* four times — it simply is not wired to a record-form write
+    refusal. Two practical consequences: an operator diagnosing "my save did nothing" must use the Table API
+    or the browser network log to obtain a reason, and **`HTTP 302` from the classic form means nothing about
+    whether a save was accepted** (the same caveat as §3.4 caveat 3, arrived at from the ACL side).
+
 ---
 
 ## 5. Intentionally NOT done (per AAP scope / Refine-PR constraints)
@@ -945,6 +1175,30 @@ so future operators don't mistake them for bugs.
   Defects C/E/7/9, the ATF suite and the acceptance proof, and explicitly barred from authoring new portal
   artifacts or new application logic, so these were measured and reported rather than built. They are
   items 1 and 6 of §10.
+- **The all-tasks-closed rule is a gate on one transition, not a standing invariant — so a case can end up
+  `Closed` with open child work.** AAP §0.5.5 row 5 places the requirement precisely: *In Progress → Resolved,
+  required condition "All linked `x_[scope]_case_task` records have status = Closed"*. Row 6, `Resolved → Closed`,
+  requires only *"Caller has `x_[scope]_case_manager` role"*. The implementation matches the matrix exactly, so
+  nothing re-checks task state once a case has passed the Resolved edge, and no rule reacts to a child task
+  changing after that point. Measured end to end on `CASE0001079`:
+
+  | Step | Action | Result |
+  |---|---|---|
+  | 1 | `In Progress → Resolved` with one **open** child task (`TASK0000306`) | **HTTP 403** — the gate fires, as designed |
+  | 2 | close `TASK0000306`, retry `In Progress → Resolved` | HTTP 200 — the controlled experiment: task state was the only variable |
+  | 3 | insert a **new** `Open` task (`TASK0000307`) on the now-**Resolved** case | HTTP **201**; the case is byte-unchanged (`status Resolved`, `sys_mod_count` still `3`) — **no retro-enforcement** |
+  | 4 | **reopen** the already-closed `TASK0000306` (`Closed → Open`) on the Resolved case | HTTP 200; the case is again unchanged |
+  | 5 | `Resolved → Closed` with **two** open child tasks | HTTP **200** — the case closes, `closed_date` stamped, and both tasks remain `Open` afterwards |
+
+  This is **not an AAP violation** — adding a second task check on the `Resolved → Closed` edge, or a
+  child-table rule that pushes a Resolved case back to In Progress, would be application logic the AAP does not
+  specify, and the Minimal-Change Clause (§0.7.2) forbids adding workflow beyond the defined scope. It is
+  disclosed because the practical effect is not obvious from reading the matrix: *"all tasks must be closed
+  before resolving"* protects the moment of resolution, not the closed state, and the route to
+  Closed-with-open-work is a legal two-step sequence rather than an exploit. Anyone who wants the stronger
+  invariant should ask for it as a requirement change — the natural shape being the same
+  `x_casemgmt.CaseTransitionValidator.canTransitionToResolved()` check re-used on the `Resolved → Closed`
+  edge, plus an after-insert/after-update rule on `x_casemgmt_case_task`.
 
 ---
 
@@ -958,14 +1212,15 @@ so future operators don't mistake them for bugs.
 | 4. Portal — submission | Unauthenticated submit creates a Draft case with a number | ⚠️ **REST contract PASS · portal page FAIL** | REST, no credentials: `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE0000450","message":"Your case has been submitted"}`, case lands in `Draft`. But the submit **page** at `/x_casemgmt_case_portal?id=x_casemgmt_case_submit` renders blank — 0 labels, 0 inputs, 0 buttons after a 12-second poll — because `sp/page` returns `containers: []`. A visitor cannot submit through the UI; only the endpoint works. §9.6 E8-P. |
 | 5. Portal — lookup | Status lookup returns correct data / not-found | ⚠️ **REST contract PASS · portal page FAIL** | REST: GET valid → exactly `{status, subject, opened_date}` with `assigned_group`, `assigned_agent`, `description`, `closed_date`, `requester_name`, `requester_email` and `sys_id` all absent from body *and* raw response; GET invalid → **404** with `No case found with that number.` byte-identical to the required literal. The lookup **page** renders blank for the same reason as gate 4 — no field, no button, no result panel, and the not-found text appears nowhere in the DOM. §9.6 E8-P. |
 | 6. Dashboards | Both dashboards render with synthetic data | ❌ **FAIL** | Measured precisely, not assumed. The two `pa_dashboards` records **do commit** and are live in scope (`x_casemgmt_agent_workspace`, `x_casemgmt_manager_view`). What fails is every child record beneath them, because **three** of the child table names each artifact uses do not exist on this release: `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (real name `pa_widgets`) and `pa_dashboard_role` (no equivalent) — each returns HTTP 400 `Invalid table …`, while `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane` all resolve. Rendered result: **0 tabs, 0 widgets**, `sys_grid_canvas_pane` **0** on both canvases, `pa_widgets` in scope **0**, and the platform's empty state "Add widgets using the widget picker." — with **0 console errors and 0 non-2xx responses**, so this is a packaging defect and **not** an absent PDI capability or a runtime failure. A tab alone is **not** the missing piece: the platform auto-created one empty `pa_tabs` row per dashboard on first view and both stayed blank (§0.5). Pre-existing: the dashboard artifacts are byte-unchanged since the pre-refine commit. The 8 backing `sys_report` records do commit and are backed by populated tables, **but their `group_by` is empty on the instance** although the artifacts specify one, so they do not aggregate as designed (§0.6). §0.5, §9.6 E5. |
-| 7. Update Set | Loads/previews with zero errors | ✅ **PASS — measured on the shipping bytes** | On the shipping 913-block / 3,618,378-byte / `7272edfc…` file (§0.1): **before = 41 errors** against the already-populated instance, **298** on the first clean-slate preview (all `Found a local update that is newer than this one` — the teardown's own deletions), **after = 0 problems of any type** once that local capture was purged at source, verified against the platform's own predicate (`state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`), then **`committed`**. The teardown was proven complete first (scope `[]`, every census counter 0, all three tables at HTTP 400). The file on disk is byte-unchanged by the trip. Full detail in §0.3; the earlier 916-block `32a064d6…` measurement (42 → 0) is retained in §9.2–§9.3 and §9.10 as the history of the previous revision, not as the current status. |
+| 7. Update Set | Loads/previews with zero errors | ✅ **PASS — measured on the 913-block `7272edfc…` revision; the 9-payload re-sync to today's `89638c17…` was separately measured to be preview-neutral (§0.3a)** | On the 913-block / 3,618,378-byte / `7272edfc…` file: **before = 41 errors** against the already-populated instance, **298** on the first clean-slate preview (all `Found a local update that is newer than this one` — the teardown's own deletions), **after = 0 problems of any type** once that local capture was purged at source, verified against the platform's own predicate (`state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`), then **`committed`**. The teardown was proven complete first (scope `[]`, every census counter 0, all three tables at HTTP 400). The file on disk is byte-unchanged by the trip. Full detail in §0.3. The QA-remediation pass then re-synced 9 payloads, moving the file to 3,643,389 bytes / `89638c17…`; a matched A/B preview of both revisions against the same instance state produced **identical problem signatures** — 34 problems each, the same 18 / 13 / 3 on the same target records, **0** descriptions present in one and not the other — so the change is preview-neutral (§0.3a). The earlier 916-block `32a064d6…` measurement (42 → 0) is retained in §9.2–§9.3 and §9.10 as the history of that revision, not as the current status. |
 | — Related lists (AAP §0.4.4) | Case form shows `case_task` and `case_party` related lists | ❌ **FAIL (never authored)** | Not one of the seven AAP §0.7.3 gates, recorded here because it was measured in this pass. `sys_ui_related_list` holds **0 rows** for `x_casemgmt_case` and 0 for every other table in the app, against **1,545** rows instance-wide; on a real case record `#related_lists_wrapper` measures **0 CSS px** with class `tabs_disabled` and 0 tabs, while the same measurement on an out-of-box `sys_user_group` record returns 196.656 px and 288.625 px with visible rows; and no `sys_ui_related_list`/`sys_ui_form`/`sys_ui_section`/`sys_ui_element` artifact exists in the repository or the package. §0.6, §9.6 E8. |
 
 > **Net across the seven gates, for the bytes that ship: 2 pass outright · 4 pass only with a qualification ·
 > 1 fails.** `2 + 4 + 1 = 7`.
 >
-> - **Outright pass (2):** **Workflow**, and **Update Set** — the latter now measured on the shipping bytes
->   themselves (41 → 298 → **0** problems of any type, then `committed`; §0.3).
+> - **Outright pass (2):** **Workflow**, and **Update Set** — the latter measured on this deliverable's
+>   immediately previous revision (41 → 298 → **0** problems of any type, then `committed`; §0.3), with the
+>   9-payload re-sync to today's bytes measured preview-neutral against it (§0.3a).
 > - **Qualified (4):** **Data model** and **ACLs**, each correct only after one manual remediation run;
 >   **Portal — submission** and **Portal — lookup**, each passing at the REST layer and failing at the page
 >   layer.
@@ -1682,7 +1937,11 @@ Defect F, not Defects C/E/7/9, and not the ATF suite). They are recorded here so
 |---|---|---|---|
 | **E1** | Packaged `Case Record` payloads omit the `number` element entirely (field set is `description, priority, requester_email, requester_name, status, subject, type` + `sys_*`) | All 10 demo cases commit with `number` empty; `x_casemgmt_case_task.case` and `x_casemgmt_case_party.case` then hold the literal string `"CASE0000008"`, and `case_party.organization` holds `"Synthetic Org Beta"` | Case↔task and case↔party relationships are broken in the packaged demo data, and the seed script cannot repair them because its idempotency key already matches. Remedy in §9.5 step 5 |
 | **E2** | `sys_user_grmember.group` is a dangling literal (`group_raw=x_casemgmt_demo_team`, `is_sys_id=false`, empty display value) while the `user` side resolved correctly | `gs.getUser().isMemberOf()` can never match | The **group branch** of the agent's read/write ACL is inert, so "Assigned only" collapses to the `assigned_agent` branch (7 rows instead of 9). Repaired by the seed script, which creates a correct membership; the bad row must be deleted |
-| **E3** | `sys_ui_action.condition` is `condition_string`, **max length 254**. Four conditions exceed it and are silently truncated mid-expression on import: `x_casemgmt_case_start_progress` (264), `_set_pending` (271), `_resume` (267), `_resolve` (271). The Resolve condition ends `…isMemberOf(current.assigned_grou` | Exactly those four buttons render for the **viewer**, who has no write ACL, a fully read-only form and no Update button; the two short-condition actions (`_open` 76, `_close` 79) behave correctly | A truncated condition cannot evaluate, so the guard fails open. Data security is intact — the write ACL rejects the change server-side — but the affordance is misleading. Fix: move the condition into a Script Include call short enough to fit, or into the UI Action's script |
+| **E3** — ✅ **FIXED** | Was: `sys_ui_action.condition` is `condition_string`, **max length 254**, and four conditions exceeded it and were silently truncated mid-expression on import: `x_casemgmt_case_start_progress` (264), `_set_pending` (271), `_resume` (267), `_resolve` (271) — the Resolve condition ended `…isMemberOf(current.assigned_grou`. A truncated condition cannot evaluate, so the guard **failed open with no syslog error**, and exactly those four buttons rendered on all six statuses for `admin`, for `Demo Agent` and for the read-only `Demo Viewer`, who has no write ACL, a fully read-only form and no Update button. The two short-condition actions (`_open` 76, `_close` 79) always behaved correctly. **A second root cause, measured while fixing it: `sys_ui_action` has NO `roles` column on this release** — UI Action role restrictions live in the m2m table `sys_ui_action_role` (which holds rows for out-of-box actions and **0** for ours) — so the `<roles>` element in these payloads is inert on import and the `condition` was the only guard the platform was honouring | Now: the expression lives in `x_casemgmt.CaseTransitionValidator.canShowAction(caseGr, requiredStatus)` and each of the four conditions is the call `new x_casemgmt.CaseTransitionValidator().canShowAction(current, '<status>')` — **71, 78, 74 and 78 characters**, all far inside the limit and no longer truncatable. The method implements the identical rule (required status AND (manager OR (agent AND (assigned_agent = me OR member of assigned_group)))) and fails **closed** on a missing record or missing status. Fixed in the four `ui_action/*.xml` files, in `script_includes/x_casemgmt_CaseTransitionValidator.xml` and in all five matching Update Set payloads | **Resolved, and re-measured on the live instance as an 18-cell matrix** (3 identities × 6 statuses, 18 read-only form loads): every button now appears only on its own source status — `Open`→Draft, `Start Progress`→Open, `Set Pending`+`Resolve`→In Progress, `Resume`→Pending, `Close`→Resolved — a Closed case shows none of the six for any identity, `Demo Agent` never sees the manager-only `Open`/`Close` (on the Resolved case where it is the assigned agent the header is `Update` only), and **`Demo Viewer` sees zero of the six on every status and no `Update` button** (`.form_action_button` count literally 0). The overflow "additional actions" menu was enumerated per cell and holds only platform items, so nothing is merely relocated. 18/18 cells match. This closes what §10.2 item 7 planned |
+| **E11** — ✅ **FIXED** | The `Set Pending` UI Action was **100% non-functional**. Its client half ended `gsftSubmit(null, g_form.getFormElement(), 'sysverb_x_casemgmt_case_set_pending');` — the `sysverb_` prefix is reserved for the platform's own stock verbs, so the lookup could never resolve a custom action. The platform answered `Unable to find UI Action with name 'sysverb_x_casemgmt_case_set_pending' on table 'x_casemgmt_case'`, `serverSetPending()` was never reached and `sys_mod_count` stayed **0** on every attempt. The client-side allow-list *did* work (an invalid reason produced `Pending reason must be one of: Awaiting Info, Awaiting Third Party, Other.` and issued no POST), which is precisely what masked the failure in a demo | The third `gsftSubmit` argument is now the unprefixed `action_name` `x_casemgmt_case_set_pending`, matching the pattern the working actions use, with a `*** DO NOT PREFIX THIS WITH sysverb_ ***` block quoting the platform's own error so it is not "simplified" back. Fixed in `ui_action/x_casemgmt_case_set_pending.xml` and its Update Set payload | **Resolved, verified at runtime.** Clicking `Set Pending` on an `In Progress` case now issues `POST /x_casemgmt_case.do → 302`, and after a genuine full-navigation reload the case reads `status = Pending`, `pending_reason = Awaiting Third Party`. The string `Unable to find UI Action` did not appear once in the session (checked four independent ways: live MutationObserver on `document.body.innerText`, an offline scan of 455 archived console entries, an explicit DOM probe after every click and reload, and the CDP console list). The client-side guard is unweakened: an invalid reason still raises the 74-character allow-list error and `gsftSubmit` is provably never called |
+| **E12** — ✅ **FIXED** | **The transition graph was not enforced — only the target status's precondition was.** `enforce_forward_transitions` (order 250) dispatched purely on `proposedStatus`, and each subflow validated only that target's requirement, so nothing validated the `previous → current` edge. All **8** illegal skip/backward edges were accepted on both case types: `Draft→In Progress`, `Draft→Resolved`, `Draft→Closed`, `Open→Resolved`, `Open→Closed`, `Pending→Resolved`, `Resolved→In Progress`, `Resolved→Open`. Because the status select offers all six values on every record, `Draft→Closed` was reachable by any ordinary user through the form, in one save, with **zero** banners — landing a case in the terminal state unassigned, with open work, and with **`closed_date` empty** (order 500 keys on the `Resolved→Closed` edge), which also removed it silently from the *Average Time to Close* aggregate | `x_casemgmt.CaseTransitionValidator.validateTransitionEdge(prev, next)` now holds the adjacency list as the single definition for the whole application, and BR250 consults it as **STEP 0** — after its abort-state guard and its unrecognised-target allowlist (so those messages are untouched) and before the synchronous subflow (so an illegal edge costs milliseconds). An INSERT and a status-unchanged save are never judged against the graph; an unrecognised *source* status fails closed. Fixed in `script_includes/x_casemgmt_CaseTransitionValidator.xml`, `business_rules/x_casemgmt_enforce_forward_transitions.xml` and both Update Set payloads | **Resolved, verified at runtime.** 16/16 attempts (8 edges × 2 case types) are refused with HTTP 403 attributed to `x_casemgmt_enforce_forward_transitions`, `sys_mod_count` 0 on every fixture. Form-driven: `Draft→Closed` surfaces `A case cannot go from Draft to Closed. From Draft the only valid next status is Open.` (85 chars) and `Draft→Resolved` its 87-char equivalent, both with `#output_messages` losing `outputmsg_hide`, and after reload the case is still `Draft` with `closed_date` empty. The positive control — the legal `Draft→Open` — still commits with zero banners |
+| **E13** — ✅ **FIXED** | **`Closed` was not terminal for anything but `status`.** `validateNoBacktransition` guards `prev === 'Closed' && next !== 'Closed' && next !== ''`, so a save that left `status` alone committed silently on a Closed case: `priority Medium→High`, a `subject` rewrite and clearing `assigned_agent` all persisted, through the form and through the Table API (HTTP 200, `sys_mod_count` 0→3). The platform was telling the user *Closed cases are terminal and cannot be modified.* while the row was freely editable, and four in-scope documents described the stricter behaviour | `block_terminal_closed` (order 100) now chains `validateClosedRecordUnchanged(current, previous)` after the status check. It compares the 13 application columns, normalising empty to `''` so a cleared field counts as a change, and deliberately excludes every `sys_*` column and the virtual `duration_to_close` — which is what keeps a genuine no-op save (Update pressed with nothing edited) working. Fixed in `script_includes/x_casemgmt_CaseTransitionValidator.xml`, `business_rules/x_casemgmt_block_terminal_closed.xml` and both payloads | **Resolved, verified at runtime.** REST: `priority`, `subject` and clearing `assigned_agent` on a Closed case all return **403** with `sys_mod_count` unchanged and `closed_date` byte-stable; a true no-op returns 200 and still writes nothing. Form: changing only `priority` on a Closed case (status verifiably untouched) surfaces `Closed cases are terminal and cannot be modified.` at **49** chars and `priority` is still `Medium` after reload |
+| **E14** — ✅ **FIXED** | **`duration_to_close` returned EMPTY for every Closed case**, including demo `CASE0000984` (an 18-day span) and `CASE0000988`. It is the `aggregation_source` of the *Average Time to Close* single-score report, so that widget had no data to average | Root cause measured by comparison with the platform's own function fields (`pa_dm_task_telemetry.duration`, `cmdb_data_management_policy_execution.execution_time`): a `function_field` must have **`virtual = false`** — the DB computes the expression at query time — and ours shipped `virtual = true`, which makes the platform treat the column as a script-backed virtual field with no calculation and therefore always empty. The `glidefunction:datediff(closed_date,opened_date)` argument order was already correct (the OOB pattern is `datediff(end, start)`; swapping it was tested and produced nothing). Fixed in `dictionary/x_casemgmt_case_duration_to_close.xml` and its payload | **Resolved, verified at runtime.** With `virtual=false` the field returns real durations immediately: `CASE0000984` → **18 Days**, `CASE0000988` → **14 Days**, and a case closed during testing rendered `50 Minutes (00:50:06)` on the form, exactly matching its `closed_date − opened_date`. The *Average Time to Close* report now aggregates over populated values |
 | **E4** | UI Policy `x_casemgmt_case_party_conditional_fields` does not re-evaluate on change | Both branches are configured correctly and apply correctly **at form load**, re-confirmed by measurement on existing records: `PARTY0000159` (`party_type=Person`) → `person` `isVisible`/`isMandatory` both **true**, row `display:block` `offsetHeight:32`, mandatory marker rendered, while `organization` is `false`/`false`, `display:none`, `offsetHeight:0`; `PARTY0000160` (`party_type=Organization`) → the exact mirror. On a **new** record (`party_type` empty) both are correctly hidden. But driving `party_type` through `g_form.setValue()`, through a native `input`+`change` on the real `<select>` (which does fire the platform's own inline `onChange(...)`), and through a true CDP-level fill — in both directions — produced **zero** delta every time, leaving the form self-contradictory (Party Type reads Organization while Person is still shown and mandatory) | A user switching Party Type is not shown the field they now need and is still required to fill the wrong one. **Root cause, measured — not the "Reverse if false" setting an earlier revision of this row named.** The condition is `party_typeISNOTEMPTY^ORparty_typeISEMPTY`, a **tautology**: true at load and true after every change. The platform's `GlideFieldPolicy.runActions()` opens with `if (result == this.lastResult) return;`, so the Execute-if-true script — which holds *all* the branch logic and is correct — runs **exactly once per form load** and never again. Proven decisively by clearing only `lastResult` and re-invoking `runPolicy()` with `party_type=Organization`, which immediately applied the correct branch. `reverse_if_false=false` is therefore irrelevant (the false path is unreachable) and `script_false` is empty; `sys_ui_policy_action` holds **0** rows for the policy and 0 for the table (against 5,139 instance-wide), so nothing declarative can move the fields either. The corrected remedy is §10.2 item 8 |
 | **E5** — **re-measured and WIDER than first recorded** | Each Dashboard composite block uses **three table names that do not exist on this release**: `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (real name `pa_widgets`) and `pa_dashboard_role` (no equivalent) | `GET /api/now/table/pa_tab` → **HTTP 400 `Invalid table pa_tab`**; `pa_dashboard_widgets` → **HTTP 400**; `pa_dashboard_role` → **HTTP 400**; while `pa_tabs` → 200 (26 rows), `pa_widgets` → 200 (167 rows) and `sys_grid_canvas_pane` → 200 (121 rows) all resolve. `sys_db_object` holds `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane`, and no `pa_tab`. Both `pa_dashboards` rows commit and are live; the children do not — **0** `sys_grid_canvas_pane` rows on either canvas and **0** `pa_widgets` in scope `x_casemgmt`. Rendered: **0 tabs, 0 widgets**, empty state "Add widgets using the widget picker.", **0 console errors, 0 non-2xx** | Neither dashboard renders anything, and validation gate 6 fails. The PDI capability is present — the out-of-box "Incident Management" dashboard renders 6 widget cards with 4 live charts in the same session, and the scoped report *All Cases by Status* draws a live chart from the real case rows (10 at the latest measurement) — so this is a **multi-element packaging defect in the deliverable**. **An earlier revision of this row called it a one-element defect fixable by renaming `pa_tab`; that was measured and is wrong** — the platform auto-created an empty `pa_tabs` row on first view and both dashboards stayed blank, because the widget and pane records never land either. **Pre-existing**: `dashboards/pa_dashboards_x_casemgmt_*.xml` are byte-unchanged since the pre-refine commit, so no unit of this pass introduced it. Fix in §10.2 item 11 |
 | **E7** — ✅ **FIXED, both carriers** | Was: 13 of 14 `x_casemgmt_case` dictionary entries carried `display=true` (also 6 of 6 on `case_task`, 5 of 5 on `case_party`), in the packaged blocks **and** in `post_import_remediation.js`. Now: the 24 dictionary artifacts and their payloads ship `display=false` except one column per table, and the script sets `display: true` only on `case.number` / `case_task.subject` / `case_party.role_label`, reconciles the flag per table, and **verifies exactly one display field per table** | Was: `getDisplayValue('case')` returned `""`; the `Case` column showed "(empty)" on every task and party row. Now: the package itself yields one display field per table on commit, and the script's verification fails the run if it does not | Resolved. No longer a residual manual step — see §9.5 step 4, retained only so existing cross-references resolve |
@@ -1929,8 +2188,11 @@ so the claim is checkable:
 **Bytes proved by this subsection — the `e01add3a` packaging-pass revision:
 `update-set/x_casemgmt_case_management_update_set.xml` — sha256 `32a064d6a97dde91bb65d9d48adf44406b7fa6183681894db4570fee071a4f0a`, 3,448,009 bytes, 916 records.**
 
-**Bytes that ship today — round-tripped separately and successfully:
-sha256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`, 3,618,378 bytes, 913 records** (§0.1).
+**Bytes round-tripped separately and successfully:
+sha256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`, 3,618,378 bytes, 913 records** (§0.3).
+**Bytes that ship today: sha256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`,
+3,643,389 bytes, 913 records** (§0.1) — the same file with 9 payloads re-synced by the QA-remediation pass and
+measured preview-neutral against the revision above (§0.3a).
 The difference from the revision proved in this subsection is the removal of the bootstrap-trigger block and its
 payload, the cross-scope access narrowing, six packaged metadata fields corrected so they describe what their
 records actually do, one Script Include comment label, and the two portal-widget templates. None of it touches a
@@ -1975,9 +2237,10 @@ qualification (1 Data model and 3 ACLs, each only after the manual remediation; 
 this line read "Six of seven gates pass on the final bytes", which is not supportable: gates 4 and 5 passed only
 at the REST layer, and gates 1 and 3 passed only after the manual remediation of §9.5. The single outright
 failure is the pre-existing E5 packaging defect, now known to be wider than first recorded (§0.5).
-**The shipping bytes now score the identical 2 · 4 · 1**, because gate 7 has been measured on them directly
-(§0.3); for a period between the two measurements this rollup and §0.4 differed by that one gate, and they no
-longer do. The current rollup for the shipping bytes is in §0.4.
+**The shipping bytes score the identical 2 · 4 · 1**, because gate 7 has been measured on this deliverable
+directly (§0.3, on the revision immediately preceding today's bytes, with the 9-payload difference measured
+preview-neutral in §0.3a); for a period between the two measurements this rollup and §0.4 differed by that one
+gate, and they no longer do. The current rollup for the shipping bytes is in §0.4.
 
 
 ### 9.11 Accessibility of the two portal form widgets — what is authored, and what is inherited
@@ -2047,7 +2310,6 @@ to §10.5 under its original number. One item remains here.
 |---|---|---|---|
 | 5 | **Emit canonical `<table>_<sys_id>` update names from the generator** | An earlier pass had to rewrite all 916 names of the then-current package to get a zero-error preview on a clean instance (all 913 in the shipping file are canonical and unique); the generator still emits human-readable names (§9.2) | 1 h in the generator |
 | 6 | **Author the two related lists** required by AAP §0.4.4 (`case_task` and `case_party` on the case form) and capture them | Never authored; a user cannot see a case's tasks or parties from the case form (§9.6 E8) | 1–2 h |
-| 7 | **Shorten the four over-length UI Action conditions** to ≤ 254 characters, or move the logic into the action script | Truncation makes the guards fail open, so transition buttons render for users who cannot use them (§9.6 E3) | 1 h |
 | 8 | **Replace the party UI Policy's tautological condition** in `ui_policy/x_casemgmt_case_party_conditional_fields.xml` and its packaged payload: either two policies with genuinely discriminating conditions (`party_type=Person` and `party_type=Organization`) backed by declarative `sys_ui_policy_action` rows, or an `onChange` Client Script on `party_type`. **Do not simply tick "Reverse if false"** — that cannot work here, and an earlier revision of this row wrongly prescribed it | The conditional Person/Organization fields do not re-evaluate when `party_type` changes on screen (§9.6 E4). The measured mechanism is the condition `party_typeISNOTEMPTY^ORparty_typeISEMPTY`, which is **always true**, so `GlideFieldPolicy.runActions()` returns at its `result == lastResult` guard and the Execute-if-true script runs exactly once per form load. The false branch is unreachable, so "Reverse if false" changes nothing, and there are **0** `sys_ui_policy_action` rows, so nothing declarative can move the fields either | 1 h + one re-import |
 | 9 | **Correct the three invalid Dashboard child table names** — `pa_tab` → `pa_tabs`, `pa_dashboard_widgets` → `pa_widgets`, and resolve `pa_dashboard_role` (no such table; dashboard sharing is not a child record on this release) — in `dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml`, `…_manager_view.xml` and the two matching Dashboard `<payload>` blocks in the Update Set; then re-import and confirm one `pa_m2m_dashboard_tabs` row per dashboard, a `sys_grid_canvas_pane` per widget, 3 + 5 `pa_widgets` rows in scope, and both dashboards rendering | Validation gate 6 fails today because no tab, no canvas pane and no widget record lands (§0.5, §9.6 E5). The capability is present — `pa_tabs`, `pa_widgets` and `sys_grid_canvas_pane` all exist and the out-of-box dashboards render — so this is a renaming-and-rewiring job, **not** the single rename an earlier revision of this row described. Supplying only a tab is proven insufficient | 1–3 h + one re-import |
 
@@ -2072,9 +2334,10 @@ open work.
 
 | Former # | Work | Outcome |
 |---|---|---|
-| 1 | ~~**Clean-slate upload → preview → commit the current package**~~ — ✅ **DONE, on the bytes that ship** | Run end to end on `dev379024` against sha256 `7272edfc…`, 3,618,378 bytes, 913 records. Pre-flight passed (using the corrected `upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` predicate, since the documented `state=executing` one is invalid on this release). Staged teardown proven complete — scope `[]`, every census counter 0, all three tables at HTTP 400. Upload asserted the child count at exactly 913. Preview problems **by type**: 41 before on the populated instance → 298 on the first clean-slate pass (all `Found a local update that is newer than this one`) → **0 of any type**, confirmed by the platform's own `unresolvedProblems=false` / `shouldDisplay=true` predicate. Commit reached **`state=committed`**. The §9.5 C/9 sequence then reported **`verified=true`, `acl_links_total=27`, `errors=0`**. All seven gates were re-measured (§0.4) and the hash re-computed from the file on disk is unchanged. **Full record in §0.3** |
+| 1 | ~~**Clean-slate upload → preview → commit the current package**~~ — ✅ **DONE, on the `7272edfc…` revision** | Run end to end on `dev379024` against sha256 `7272edfc…`, 3,618,378 bytes, 913 records. Today's bytes (`89638c17…`, 3,643,389 bytes, still 913 records) differ only in the 9 payloads the QA-remediation pass re-synced, and were measured preview-neutral against this revision by a matched A/B preview (§0.3a). Pre-flight passed (using the corrected `upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` predicate, since the documented `state=executing` one is invalid on this release). Staged teardown proven complete — scope `[]`, every census counter 0, all three tables at HTTP 400. Upload asserted the child count at exactly 913. Preview problems **by type**: 41 before on the populated instance → 298 on the first clean-slate pass (all `Found a local update that is newer than this one`) → **0 of any type**, confirmed by the platform's own `unresolvedProblems=false` / `shouldDisplay=true` predicate. Commit reached **`state=committed`**. The §9.5 C/9 sequence then reported **`verified=true`, `acl_links_total=27`, `errors=0`**. All seven gates were re-measured (§0.4) and the hash re-computed from the file on disk is unchanged. **Full record in §0.3** |
 | 2 | ~~**Fix the four child-table ACL conditions** — replace `current.case` with `current.getValue('case')`~~ — ✅ **DONE** | `case` is a JS reserved word, so the conditions could not compile and denied every row; the agent had no access to tasks or parties (§9.6 E-ATF). Implemented as `current.getElement('case')`, which measurement showed to be the accessor that supports every operation the conditions need. The impersonated agent now sees 10 task rows and 8 party rows with `canWrite=true` and `canDelete=false`, and `ATF 07` passes with 58 checks across five parent fixtures — green in `TES0001014`. No functional access-control gap remains | 1 h incl. re-running ATF 07 — spent |
 | 3 | ~~**Reduce each table to a single display field**~~ — ✅ **DONE in this pass**, in the packaged `Dictionary` blocks **and** in `post_import_remediation.js` | Was: every reference to a case rendered blank, and re-running the remediation reintroduced the problem. Now: the package ships one display field per table, and the script reconciles and verifies it (§9.6 E7) | — |
+| 7 | ~~**Shorten the four over-length UI Action conditions** to ≤ 254 characters, or move the logic into the action script~~ — ✅ **DONE** | The truncated conditions made the guards fail open, so `Start Progress`, `Set Pending`, `Resume` and `Resolve` rendered for every status and every identity, including the read-only viewer (§9.6 **E3**). Implemented by moving the expression into `CaseTransitionValidator.canShowAction()`, leaving each condition a 71–78 character call. Re-measured as an 18-cell matrix on the live instance: 18/18 cells correct, the viewer now sees none of the six buttons and no `Update`, and all five server-side buttons still perform their transition when clicked | 1 h — spent |
 | 9 | ~~**Resolve roles from `sys_user_has_role`** in `CaseTransitionValidator.canTransitionToClosed()` instead of `gs.getUser(userName)`~~ — ✅ **DONE** | Closes a latent authorisation hole on branch (b): any future caller that passes a foreign `userId` is answered against the *caller’s* roles. The shipped runtime never takes that branch and all 13 regression assertions pass, so this is hardening rather than a fix for a live failure (§9.6 E-GU, §9.7) | 30 min |
 | 10 | ~~**Reconcile the duplicate `sys_ws_operation` identity** for the submit endpoint~~ — ✅ **DONE** | The artifact and the package carried different `sys_id`s for the same logical endpoint. Settled against the instance: the artifact's `e1b7bfa9…` returns **HTTP 404** while the package's `886ad712…` is the single live record, so `886ad712…` is now the sole identity in both (§9.3, §9.3a item 4) | — |
 | 12 | ~~**Make `ATF 15/16/17` create their fixture inside the client step's transaction** (or use ATF's `{{step[…]}}` substitution)~~ — ✅ **DONE, BUT NOT THIS WAY: THE PREMISE WAS WRONG** | This item assumed a fixture-to-form handoff problem and residue dependence. Measurement disproved both: the fixture is created and visible, and the failure came from the platform resolving that step's record in **Global** scope while the table's cross-scope access columns were false (§9.6 **E-ATF15** / **E9**). Fixing those five booleans fixed all three tests without touching how the fixtures are made. Step 1 of each test additionally gained a handoff guard — it re-reads every fixture by `sys_id` with a plain GlideRecord and asserts it resolves — so a genuine handoff problem would now fail precisely and upstream instead of surfacing as "does not have a record with id". All three pass 7/7 in the client runner, individually and inside `TES0001014` | 2–3 h estimated; the actual fix was five boolean values |

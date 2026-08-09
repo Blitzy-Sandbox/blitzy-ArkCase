@@ -433,9 +433,10 @@
 <record_update table="sys_report">
     <sys_report action="INSERT_OR_UPDATE">
         <aggregate>AVG</aggregate>
-        <aggregation_source>duration_to_close</aggregation_source>
+        <aggregation_source>no_override</aggregation_source>
         <chart_size>medium</chart_size>
-        <description>Manager View dashboard single-score widget for AVG(closed_date - opened_date) over x_casemgmt_case records at status=Closed. The aggregation source `duration_to_close` is a Function Field defined in ../dictionary/x_casemgmt_case_duration_to_close.xml whose value is computed at query time by the platform's database-level function `glidefunction:datediff(closed_date,opened_date)`. The widget renders a Duration AVG (e.g., "5 Days 03:42:11") of elapsed time between case opening and closure. Filter excludes non-Closed cases whose closed_date is NULL by definition. No external BI engine; uses native GlideAggregate. Satisfies AAP Section 0.7.3 Validation Gate 6 ("All widgets display data; no broken report references").</description>
+        <description>Manager View dashboard single-score widget for AVG(closed_date - opened_date) over x_casemgmt_case records at status=Closed. The aggregated column is `field` = `duration_to_close`, a Function Field defined in ../dictionary/x_casemgmt_case_duration_to_close.xml whose value is computed at query time by the platform's database-level function `glidefunction:datediff(closed_date,opened_date)`. The column is named in BOTH `field` (which is what the Report Designer's left rail reads, and what the Run button submits) and `sumfield` (which is what the cold-load renderer SingleScoreRunProcessor submits as sysparm_sumfield) - every out-of-box single-score report with a non-COUNT aggregate on this release carries the aggregated column in `sumfield`. `aggregation_source` is the platform's DATA-SOURCE override selector, not the aggregated column, and carries `no_override` like every out-of-box report. Naming the column only in `aggregation_source` left both `field` and `sumfield` empty, and the cold-load renderer then answered `Cannot generate the report. Invalid aggregate field  for aggregate function AVG` (note the empty field name) on every page load - the score appeared only after a manual Run. The widget renders a Duration AVG (e.g., "5 Days 03:42:11") of elapsed time between case opening and closure. Filter excludes non-Closed cases whose closed_date is NULL by definition. No external BI engine; uses native GlideAggregate. Satisfies AAP Section 0.7.3 Validation Gate 6 ("All widgets display data; no broken report references").</description>
+        <field>duration_to_close</field>
         <field_list/>
         <filter>status=Closed</filter>
         <format/>
@@ -455,6 +456,7 @@
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_report_x_casemgmt_avg_time_to_close</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
+        <sumfield>duration_to_close</sumfield>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <table>x_casemgmt_case</table>
         <title>Average Time to Close</title>

@@ -67,11 +67,65 @@ The following table is preserved verbatim from AAP Section 0.5.5 and serves as t
 | Any → Draft | (none) | PROHIBITED | Surface "Cases cannot be returned to Draft." |
 | Closed → * | (none) | PROHIBITED — terminal state | Surface "Closed cases are terminal and cannot be modified." |
 
+### The matrix is the complete set of legal edges, and the edge itself is enforced
+
+The six rows above are not merely a list of preconditions attached to target statuses — they are the **whole
+graph**, and every status change is checked against it. A change whose *source* status has no row leading to the
+proposed *target* status is refused with a form-level error, even when the target's own precondition happens to be
+satisfiable:
+
+| Attempted | Result |
+| --- | --- |
+| `Draft → In Progress`, `Draft → Resolved`, `Draft → Closed` | Blocked |
+| `Open → Resolved`, `Open → Closed` | Blocked |
+| `Pending → Resolved` | Blocked |
+| `Resolved → In Progress`, `Resolved → Open` | Blocked |
+
+The message names the attempted edge and the legal alternative, e.g. `Draft → Closed` surfaces
+`A case cannot go from Draft to Closed. From Draft the only valid next status is Open.` and `In Progress` (the
+one state with two successors) surfaces `From In Progress the valid next statuses are Pending or Resolved.`
+
+Why this matters beyond tidiness: a skip edge does not merely bypass a rule, it bypasses **every** rule between
+the two states. `Draft → Closed` in one save skipped the `assigned_group` requirement of Open, the
+agent-membership requirement of In Progress and the task-closure gate of Resolved, and landed the case in the
+terminal state with `closed_date` **empty**, because `set_closed_date` (order 500) keys on the `Resolved → Closed`
+edge — which in turn silently removed the case from the "Average Time to Close" aggregate. AAP §0.7.3 Gate 2
+requires "All state transitions enforced for both case types", and that is only true if the edge is validated and
+not just the destination.
+
+Where it is implemented: `x_casemgmt.CaseTransitionValidator.validateTransitionEdge(previousStatus, newStatus)`
+holds the adjacency list, and `enforce_forward_transitions` (order 250) consults it as its **first** step, before
+any target-precondition work. Keeping the graph in the Script Include means the Business Rule layer, the five
+subflows and the `Case Transition Guard` Custom Action all answer the question from one definition. An INSERT is
+never judged against the graph (seed data and the portal legitimately create rows directly at a given status),
+and a save that does not change `status` is not a transition at all.
+
+### "Closed cannot be modified" means the whole row, not only its status
+
+Row 8's message says a Closed case "cannot be modified", and that is now literally what happens.
+`block_terminal_closed` (order 100) asks two questions of a row whose committed status is `Closed`: is the status
+being moved out of Closed, and — if not — is any of the case's own columns being rewritten? Either one surfaces
+the same verbatim message and aborts the save. Previously only the first was asked, so an edit that left `status`
+alone and changed `priority`, `subject`, or cleared `assigned_agent` committed silently on a Closed case, through
+the form and through the Table API alike.
+
+Two deliberate exclusions keep the guard honest rather than obstructive:
+
+- **A genuine no-op save is still allowed.** Opening a Closed case and pressing Update without editing anything
+  changes no compared column, so it succeeds as the no-op it is. `sys_mod_count` and `sys_updated_on` are not
+  compared, precisely so that they cannot turn a no-op into a rejection.
+- **`duration_to_close` is not compared**, being a virtual function field computed at query time and unwritable
+  by definition.
+
+This is a data-integrity guard on the terminal state, not an authorization decision: who may write the row at all
+remains a question for the scoped ACLs in [`../acl/`](../acl/). Deletion is likewise unaffected — the guard is a
+before-**update** rule.
+
 ## Per-Status Descriptions
 
 ### Draft
 
-The default initial state for any new case. Set by the table-level default value on `x_casemgmt_case.status` and reinforced by the `set_opened_date` business rule. Cases submitted via the external Experience Portal also start in Draft. From Draft, the only legal transition is Draft → Open, which requires `assigned_group` to be populated.
+The default initial state for any new case. Set by the table-level default value on `x_casemgmt_case.status` and reinforced by the `set_opened_date` business rule. Cases submitted via the external Experience Portal also start in Draft. From Draft, the only legal transition is Draft → Open, which requires `assigned_group` to be populated — and that exclusivity is enforced, not merely described: `Draft → In Progress`, `Draft → Resolved` and `Draft → Closed` are each refused by the edge check in `enforce_forward_transitions` with `A case cannot go from Draft to <target>. From Draft the only valid next status is Open.`
 
 ### Open
 
@@ -104,9 +158,20 @@ The only legal forward transition out is Pending → In Progress, which clears `
 
 A case where the agent has completed all work but the manager has not yet closed it. Entering Resolved requires that ALL child `x_casemgmt_case_task` records have `status = Closed` — enforced by the `validate_resolved_transition` subflow with verbatim error message `"All tasks must be closed before resolving this case."`. The only legal forward transition is Resolved → Closed, which is gated to the `x_casemgmt_case_manager` role.
 
+**The task rule gates the `In Progress → Resolved` edge; it is not a standing invariant on the Resolved state.**
+AAP §0.5.5 attaches the all-tasks-closed condition to that one row of the matrix, and attaches nothing but the
+manager-role check to `Resolved → Closed`. The implementation matches the matrix exactly, and the practical
+consequence is worth stating plainly: once a case is Resolved, nothing re-checks its tasks. A new `Open` task
+can be created on a Resolved case, an already-closed task can be reopened, and neither touches the case;
+`Resolved → Closed` then succeeds with open child work and stamps `closed_date` as usual. Both behaviours were
+measured on the instance rather than inferred. Strengthening this into an invariant would mean adding workflow
+the AAP does not specify, which the Minimal-Change Clause (§0.7.2) forbids — so it is disclosed, with the full
+step-by-step evidence and the shape a future requirement change would take, in
+[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+
 ### Closed
 
-Terminal state. Entering Closed requires the caller to have the `x_casemgmt_case_manager` role. The transition auto-populates `closed_date = gs.nowDateTime()` via the `set_closed_date` business rule. NO transitions are permitted from Closed; any attempt to modify a Closed case raises the verbatim error `"Closed cases are terminal and cannot be modified."` (enforced by the `block_terminal_closed` business rule).
+Terminal state. Entering Closed requires the caller to have the `x_casemgmt_case_manager` role. The transition auto-populates `closed_date = gs.nowDateTime()` via the `set_closed_date` business rule. NO transitions are permitted from Closed, and no edit to the row's own fields is permitted either: `block_terminal_closed` checks the status move first and then compares the case's own columns, so a change to `status`, `priority`, `subject`, `description`, `assigned_group`, `assigned_agent`, `requester_name`, `requester_email`, `type`, `number`, `opened_date`, `closed_date` or `pending_reason` all raise the verbatim error `"Closed cases are terminal and cannot be modified."`. A save that changes nothing at all is still accepted as the harmless no-op it is (`sys_mod_count` and `sys_updated_on` are excluded from the comparison, as is the virtual `duration_to_close`). Deleting a Closed case is governed by the ACLs, not by this rule.
 
 ## Per-Transition Implementation Map
 
@@ -122,6 +187,8 @@ This section maps each transition row in the matrix to the specific subflow and/
 | Resolved → Closed | `validate_closed_transition.xml` | `enforce_forward_transitions.xml` (order 250), `set_closed_date.xml` | `"Only case managers can close cases."` (from `CaseTransitionValidator`) |
 | Any → Draft | (none) | `block_draft_backtransition.xml` | `"Cases cannot be returned to Draft."` (VERBATIM) |
 | Closed → * | (none) | `block_terminal_closed.xml` | `"Closed cases are terminal and cannot be modified."` (VERBATIM) |
+| Any edge not listed above (e.g. `Draft → Closed`) | (none) | `enforce_forward_transitions.xml` (order 250), STEP 0 → `CaseTransitionValidator.validateTransitionEdge()` | `"A case cannot go from <from> to <to>. From <from> the only valid next status is <next>."` |
+| Any field edit on a `Closed` row | (none) | `block_terminal_closed.xml` → `CaseTransitionValidator.validateClosedRecordUnchanged()` | `"Closed cases are terminal and cannot be modified."` (VERBATIM) |
 
 The three "VERBATIM" rows in the table above MUST surface the EXACT error text on the form — character-for-character match with AAP Sections 0.5.5 and 0.7.4. The remaining messages come from `CaseTransitionValidator` and reach the form unaltered, because `enforce_forward_transitions` passes the validator's `error` string straight to `gs.addErrorMessage()` rather than restating it. A blocked save also renders ServiceNow's stock `Invalid update` banner alongside the specific message; that is normal `setAbortAction(true)` behavior.
 
@@ -129,14 +196,53 @@ The three "VERBATIM" rows in the table above MUST surface the EXACT error text o
 
 The state-machine transitions are surfaced in the internal user UI as form buttons (UI Actions) on the `x_casemgmt_case` form. Each UI Action is gated by a visibility condition that re-implements the role-based authorization model from the ACL matrix (see [`acl-matrix.md`](./acl-matrix.md)) plus the source-status precondition for the transition.
 
-| UI Action | File | Visible to Role(s) | Source Status | Server-Side Validator Call |
-| --- | --- | --- | --- | --- |
-| **Open** | `x_casemgmt_case_open.xml` | `x_casemgmt_case_manager` only | `Draft` | `CaseTransitionValidator.canTransitionToOpen(current)` |
-| **Start Progress** | `x_casemgmt_case_start_progress.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `Open` | `CaseTransitionValidator.canTransitionToInProgress(current)` |
-| **Set Pending** | `x_casemgmt_case_set_pending.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `In Progress` | (no validator call — `pending_reason` is captured via UI prompt) |
-| **Resume** | `x_casemgmt_case_resume.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `Pending` | (no validator call — clears `pending_reason` via cooperating BR) |
-| **Resolve** | `x_casemgmt_case_resolve.xml` | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | `In Progress` | `CaseTransitionValidator.canTransitionToResolved(current)` (verbatim error) |
-| **Close** | `x_casemgmt_case_close.xml` | `x_casemgmt_case_manager` only (`form_style=destructive`) | `Resolved` | `CaseTransitionValidator.canTransitionToClosed(current)` |
+| UI Action | File | Visible to Role(s) | Source Status | Visibility `condition` | Server-Side Validator Call |
+| --- | --- | --- | --- | --- | --- |
+| **Open** | `x_casemgmt_case_open.xml` | `x_casemgmt_case_manager` only | `Draft` | inline, 76 chars | `CaseTransitionValidator.canTransitionToOpen(current)` |
+| **Start Progress** | `x_casemgmt_case_start_progress.xml` | `x_casemgmt_case_manager` OR assigned `x_casemgmt_case_agent` | `Open` | `canShowAction(current, 'Open')` | `CaseTransitionValidator.canTransitionToInProgress(current)` |
+| **Set Pending** | `x_casemgmt_case_set_pending.xml` | `x_casemgmt_case_manager` OR assigned `x_casemgmt_case_agent` | `In Progress` | `canShowAction(current, 'In Progress')` | (no validator call — `pending_reason` is captured via UI prompt) |
+| **Resume** | `x_casemgmt_case_resume.xml` | `x_casemgmt_case_manager` OR assigned `x_casemgmt_case_agent` | `Pending` | `canShowAction(current, 'Pending')` | (no validator call — clears `pending_reason` via cooperating BR) |
+| **Resolve** | `x_casemgmt_case_resolve.xml` | `x_casemgmt_case_manager` OR assigned `x_casemgmt_case_agent` | `In Progress` | `canShowAction(current, 'In Progress')` | `CaseTransitionValidator.canTransitionToResolved(current)` (verbatim error) |
+| **Close** | `x_casemgmt_case_close.xml` | `x_casemgmt_case_manager` only (`form_style=destructive`) | `Resolved` | inline, 79 chars | `CaseTransitionValidator.canTransitionToClosed(current)` |
+
+### Why four of the six conditions are a Script Include call
+
+`sys_dictionary` declares `sys_ui_action.condition` as a `condition_string` with **max_length 254** — a hard platform
+limit. The four conditions that also carry the "Assigned only" agent branch were 264–271 characters, so the platform
+silently truncated each one **mid-expression** on import (the Resolve condition ended
+`…isMemberOf(current.assigned_grou`). A truncated condition cannot evaluate, and the platform's failure mode is to
+**fail open with nothing in the server log**: `Start Progress`, `Set Pending`, `Resume` and `Resolve` rendered on
+every one of the six statuses for every identity — including the read-only `x_casemgmt_case_viewer`, whose form
+carries no Update button at all. The two manager-only conditions fit inside the limit and were correct throughout.
+
+The expression now lives in `x_casemgmt.CaseTransitionValidator.canShowAction(caseGr, requiredStatus)` and each
+condition is a 71–78 character call, which cannot be truncated. `canShowAction` implements the same rule the inline
+expression did — the case is in the required status AND (the user is a manager OR the user is an agent who is either
+the `assigned_agent` or a member of `assigned_group`) — and it fails **closed**, returning false for a missing record
+or a missing status.
+
+There is a second reason the condition must carry the whole guard on this release: **`sys_ui_action` has no `roles`
+column here.** UI Action role restrictions live in the m2m table `sys_ui_action_role`, so a `<roles>` element in a
+serialized `sys_ui_action` payload is inert on import and grants no gating at all. The `condition` is the only guard
+the platform honours, which is exactly why it must be short enough to survive import. The "Visible to Role(s)"
+column above therefore describes what `canShowAction` (or the inline expression) enforces, not a `<roles>` field.
+
+### Set Pending is the one client-side action, and its submit name matters
+
+Five of the six actions are server-side only (`client=false`). `Set Pending` is a hybrid: its client half prompts for
+the `pending_reason`, validates it against the three Choice labels, writes it with `g_form.setValue`, and then submits
+the form so the server half can perform the transition. That submit **must** name the action's own `action_name`:
+
+```js
+gsftSubmit(null, g_form.getFormElement(), 'x_casemgmt_case_set_pending');
+```
+
+An earlier revision passed `'sysverb_x_casemgmt_case_set_pending'`. The `sysverb_` prefix is reserved for the
+platform's own stock verbs, so the lookup could never resolve a custom action, the platform answered `Unable to find
+UI Action with name 'sysverb_x_casemgmt_case_set_pending' on table 'x_casemgmt_case'`, and the server half never ran
+— the button was completely non-functional while its client-side validation kept working convincingly, which is what
+made the failure easy to miss. The transition itself was always reachable by editing `status` and `pending_reason`
+directly, so the AAP §0.5.5 row 3 rule was met; the button was not.
 
 ### Design Decision: Open Button — Manager Only
 
@@ -149,7 +255,7 @@ The **Open** UI Action is intentionally restricted to `x_casemgmt_case_manager` 
 
 This decision intentionally departs from a simpler "all transitions visible to both roles" model. The trade-off favors UX clarity (the button only appears when the operator has authority to use it) over surface uniformity. The behavioral effect is identical to a hypothetical "agents see the button but every click fails the validator" model — in both cases agents cannot drive Draft → Open. The chosen design simply removes the misleading button.
 
-The departure is intentional and is preserved here as the canonical design rationale. The rule lives in ONE place — the `<roles>` and `<condition>` fields of `x_casemgmt_case_open.xml` — and is not duplicated in the Script Include `CaseTransitionValidator` (which performs the same check whether or not the UI Action is visible). This means the rule can be relaxed in a future iteration (allowing agents to see the button) by editing only the UI Action's visibility metadata, without touching any other artifact.
+The departure is intentional and is preserved here as the canonical design rationale. The rule lives in ONE place — the `<condition>` field of `x_casemgmt_case_open.xml` (`current.status == 'Draft' && gs.getUser().hasRole('x_casemgmt_case_manager')`, 76 characters, inline because it fits) — and is not duplicated in the Script Include `CaseTransitionValidator` (which performs the same check whether or not the UI Action is visible). This means the rule can be relaxed in a future iteration (allowing agents to see the button) by switching that one condition to `canShowAction(current, 'Draft')`, without touching any other artifact. The same applies to `Close`, whose 79-character manager-only condition is inline for the same reason. Note that the `<roles>` element in these payloads does **not** contribute to the gate on this release — see the note above on `sys_ui_action_role`.
 
 ## Subflow Specifications
 
@@ -305,6 +411,20 @@ The Script Include decides; it does not block. The blocking is done by the befor
    object, or returns `ok: false` with an empty `error`, the rule aborts the write with a generic message and logs
    the detail. **Enforcement never depends on the guard succeeding.**
 
+Step 3 is not decoration, and step 2 is the one that decides. A subflow reads the **committed** row, so when the
+transition's precondition field is written in the *same* save as the status — `assigned_group` on
+`Draft → Open`, `assigned_agent` on `Open → In Progress`, which is the natural gesture on the form — the
+subflow sees the field still empty and returns a **false `blocked = true`**. The in-flight evaluation reads
+`current`, returns the correct verdict, and wins. Measured on the instance: a case that set the group and then
+the agent in-save logged the divergence for both edges, and both saves correctly succeeded; the control case
+that set the agent in a *prior* save logged no divergence for the same `Open → In Progress` edge, because the
+subflow then read a row that already had the agent. So **for same-transaction field-plus-status saves the
+subflow verdict is advisory and discarded, and the Script Include is the authoritative gate** — the flows
+execute (their `sys_flow_context` rows complete on every save) but do not decide on that path. The divergence
+is logged rather than suppressed so it is visible in `syslog` rather than folklore. Full evidence, including
+the verbatim log line and the control, is in
+[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §3.3](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+
 The Script Include uses NO hard-coded `sys_id`s; all references are passed in as parameters or resolved via
 `gs.hasRole(<roleName>)` and by query. This complies with AAP Section 0.7.2 ("No-hardcoded-`sys_id` constraint")
 and keeps the Update Set portable to any fresh PDI.
@@ -346,8 +466,9 @@ For a complete pass/fail framework see [`validation-gates.md`](./validation-gate
 9. As `x_casemgmt_demo_agent`, attempt Resolved → Closed → form-level error
 10. As `x_casemgmt_demo_manager`, attempt Resolved → Closed → success; `closed_date` auto-populated
 11. Attempt to set status to Draft from any other state → verbatim error: `"Cases cannot be returned to Draft."`
-12. Attempt to update a Closed case → verbatim error: `"Closed cases are terminal and cannot be modified."`
-13. Repeat the entire procedure with a Complaint case
+12. Attempt to change any field on the Closed case (change `priority` only, leaving `status` alone) → verbatim error: `"Closed cases are terminal and cannot be modified."`; then attempt a status change out of Closed → the same verbatim error. Pressing Update with nothing edited is accepted, and is the one save a Closed case still allows
+13. Attempt a skip edge on a fresh Draft case — set status straight to `Closed` — → form-level error `A case cannot go from Draft to Closed. From Draft the only valid next status is Open.`, `status` still `Draft` after reload and `closed_date` still empty. `Open → Closed`, `Pending → Resolved` and `Resolved → Open` are refused the same way
+14. Repeat the entire procedure with a Complaint case
 
 ## Constraints
 

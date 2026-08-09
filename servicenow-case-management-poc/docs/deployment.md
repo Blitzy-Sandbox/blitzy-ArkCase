@@ -6,9 +6,12 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
-> **Status of the zero-preview-error requirement stated above.** It has been met **on the bytes that ship** —
-> 913 blocks, **3,618,378 bytes**, SHA-256
-> `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`. This procedure was run against them end to
+> **Status of the zero-preview-error requirement stated above.** It has been met on the 913-block,
+> **3,618,378-byte**, SHA-256
+> `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` revision. The bytes that ship today are
+> 913 blocks, **3,643,389 bytes**, SHA-256 `89638c17…` — the same file with 9 payloads re-synced by the
+> QA-remediation pass, measured preview-neutral against the revision below by a matched A/B preview (identical
+> problem signatures, 0 descriptions present in one and not the other). This procedure was run end to
 > end: **41** preview problems against an already-populated instance, **298** on the first pass after a proven
 > teardown (all `Found a local update that is newer than this one` — the teardown's own deletions captured as
 > local updates), and **0 problems of any type** once that local capture was purged at source, confirmed through

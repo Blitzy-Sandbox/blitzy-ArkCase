@@ -10,7 +10,7 @@ This subdirectory contains the ServiceNow scoped application, delivered as a **s
 > 2. **Three user-facing surfaces do not work**: both portal **pages** render blank, both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The portal **REST endpoints** do work.
 > 3. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
 >
-> **Now closed, and previously listed here as open:** the clean-slate round trip **has** been run on the bytes that ship — 913 blocks, 3,618,378 bytes, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`. Measured progression **41 → 298 → 0** preview problems, then `state=committed`, with the file byte-unchanged by the trip. AAP §0.7.1's zero-preview-error gate is therefore **met on the deliverable**. Detail in [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+> **Now closed, and previously listed here as open:** the clean-slate round trip **has** been run on this deliverable — on its 913-block, 3,618,378-byte, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` revision. Measured progression **41 → 298 → 0** preview problems, then `state=committed`, with the file byte-unchanged by the trip. The bytes that ship today are 913 blocks, 3,643,389 bytes, SHA-256 `89638c17…` — the same file with 9 payloads re-synced by the QA-remediation pass — and a matched A/B preview of the two revisions against the same instance state produced identical problem signatures, so the change is preview-neutral. AAP §0.7.1's zero-preview-error gate is therefore **met on the deliverable**, on the revision it was measured against. Detail in [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 >
 > Every one of these is measured, not estimated. [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) is the authoritative current-state record and the place to start.
 
@@ -72,7 +72,7 @@ Every directory is listed below with its exact file count, so the tree can be di
 servicenow-case-management-poc/
 ├── README.md                          (this file — overview and entry point)
 ├── update-set/                    [1] x_casemgmt_case_management_update_set.xml — THE deliverable
-│                                      (913 blocks · 3,618,378 bytes)
+│                                      (913 blocks · 3,643,389 bytes)
 ├── app/                           [1] app/sys_app/x_casemgmt_case_management.xml — the scoped
 │                                      application record. There is no separate sys_scope
 │                                      artifact: the platform derives sys_scope from sys_app
@@ -189,7 +189,7 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
-5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met, and AAP §0.7.1's zero-preview-error gate is now proven on the bytes that ship.** The shipping file — 913 blocks / 3,618,378 bytes / SHA-256 `7272edfc…` — was taken through a complete teardown → upload → preview → commit: **41** preview problems against the already-populated instance, **298** on the first clean-slate pass (all of them the teardown's own deletions captured as newer local updates), and **0 problems of any type** once that capture was purged at source, confirmed by the platform's own `unresolvedProblems=false` predicate, then `state=committed`. The file on disk is byte-unchanged by the trip. An earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as history. Detail in [§0.3 of the limitations register](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met, and AAP §0.7.1's zero-preview-error gate is proven on this deliverable — measured on its `7272edfc…` revision.** That file — 913 blocks / 3,618,378 bytes — was taken through a complete teardown → upload → preview → commit: **41** preview problems against the already-populated instance, **298** on the first clean-slate pass (all of them the teardown's own deletions captured as newer local updates), and **0 problems of any type** once that capture was purged at source, confirmed by the platform's own `unresolvedProblems=false` predicate, then `state=committed`. The file on disk is byte-unchanged by the trip. The bytes that ship today — 913 blocks / 3,643,389 bytes / SHA-256 `89638c17…` — are that same file with 9 payloads re-synced by the QA-remediation pass, and a matched A/B preview of the two revisions against one instance state produced identical problem signatures (34 problems each, same 18 / 13 / 3, same target records, 0 descriptions in one and not the other), so the change is preview-neutral. An earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as history. Detail in [§0.3 and §0.3a of the limitations register](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 6. **Flow-Designer-exclusive workflow** — all transition logic lives in Flow Designer (with helper Script Includes and Business Rules at the entity level); no direct background scripts for workflow state management.
 7. **Repository minimality** — output confined to `servicenow-case-management-poc/`; the existing ArkCase repository structure is read-only context and is not refactored in place.
 8. **Tooling restriction** — App Engine Studio, Flow Designer, and UI Builder only; no paid Store applications; no alternative authoring path.
@@ -208,6 +208,13 @@ The full transition matrix and narrative live in `docs/state-machine.md`. The ei
 | Resolved | Closed | Caller has `x_casemgmt_case_manager` role; auto-set `closed_date` | Surface form-level error |
 | Any → Draft | (none) | PROHIBITED | Surface "Cases cannot be returned to Draft." |
 | Closed → * | (none) | PROHIBITED — terminal state | Surface "Closed cases are terminal and cannot be modified." |
+
+Those eight rows are the **complete** graph, and the edge is validated as well as the destination: a status change
+whose source has no row leading to the proposed target — `Draft → Closed`, `Open → Resolved`, `Pending → Resolved`,
+`Resolved → Open` and the rest — is refused on the form with `A case cannot go from <from> to <to>. From <from> the
+only valid next status is <next>.` And "cannot be modified" covers the whole Closed row, not only its status: a
+field-only edit to a Closed case raises the same verbatim message, while a save that changes nothing is still
+accepted as a no-op. See `docs/state-machine.md`.
 
 ## Roles & ACLs Quick Reference
 
@@ -235,9 +242,10 @@ projected.
 
 **The package**
 
-- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,618,378 bytes,
-  SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`**. Quote these numbers and no
-  others; earlier revisions carried different ones.
+- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,643,389 bytes,
+  SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`**. Quote these numbers and no
+  others; earlier revisions carried different ones — the immediately previous one was 3,618,378 bytes /
+  `7272edfc…`, and the QA-remediation pass re-synced 9 payloads into it without changing the block count.
 - **Round-trip status: CLOSED — measured on the bytes above.** Teardown proven complete (scope query `[]`, every
   application census counter 0, all three tables moving from HTTP 200 to HTTP 400), upload with the child
   `sys_update_xml` count asserted at **exactly 913**, then preview problems **by type**: **41** against the
@@ -299,9 +307,12 @@ procedure. Do not substitute the Fix Script UI: it executes in the application s
 - **Both dashboards render no tabs and no widgets** — the platform's empty state. Their composite blocks name
   three child tables that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`),
   so the tab, all 8 widget placements and the role grants are dropped on commit.
-- **All 8 installed reports lost their grouping.** Every report artifact specifies a `group_by`, but all 8
-  `sys_report` rows commit with it empty — so, for example, *All Cases by Status* renders grouped by *Assigned
-  Agent*. A report-by-report repair, unrelated to the dashboard defect above.
+- **The six chart reports have no grouping column.** Each artifact specifies `<group_by>`, but **`group_by` is
+  not a column on `sys_report`** on this release, so the element is discarded on import and, for example, *All
+  Cases by Status* renders grouped by *Assigned Agent*. The column a chart groups on is `field`; the remedy is a
+  one-element rename in six artifacts and their six payloads. Root-caused by the QA-remediation pass while
+  fixing the *Average Time to Close* single-score report, which now renders correctly. Unrelated to the
+  dashboard defect above.
 - **The case form has no related lists.** `sys_ui_related_list` holds **0 rows** for this scope, and the form's
   related-lists wrapper measures **exactly 0 pixels** tall. The reference fields make the relationship
   available; the list placements were never authored.

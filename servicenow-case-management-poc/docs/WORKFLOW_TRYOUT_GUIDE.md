@@ -37,8 +37,9 @@
 >   `containers: []` and the pages contain 0 inputs and 0 buttons. The two scripted **REST endpoints** behind
 >   them work correctly, and §5 uses those.
 > - **Both dashboards render 0 tabs and 0 widgets**, showing the platform's own empty state, "Add widgets using
->   the widget picker." Each names three child tables this release does not have. Separately, all 8 reports
->   commit with an empty `group_by`, so a report opened directly renders but groups by the wrong field.
+>   the widget picker." Each names three child tables this release does not have. Separately, the six chart
+>   reports arrive with no grouping column, so a chart opened directly groups by the wrong field or draws
+>   nothing — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6).
 > - **The case form has no related lists.** `sys_ui_related_list` holds 0 rows for this scope, so the Tasks and
 >   Parties lists are simply absent from the bottom of the form — the wrapper measures 0 pixels tall. The data is
 >   there; open `x_casemgmt_case_task.list` and `x_casemgmt_case_party.list` and filter by case instead.
@@ -141,10 +142,17 @@ priority. Save — it gets a `CASE…` number and `opened_date` is set automatic
 | Resolved → Closed | caller has `x_casemgmt_case_manager`; auto-set `closed_date` | ✅ Both enforced — a non-manager is **blocked** with "Only case managers can close cases.", and for a manager `closed_date` is auto-set (Business Rule) | As a manager, move to Closed and confirm `closed_date`; then Impersonate **Demo Agent** on a `Resolved` case and confirm the block |
 | **Any → Draft** | PROHIBITED | ✅ **Blocked** | Try setting a non-Draft case back to Draft → blocked with **"Cases cannot be returned to Draft."** |
 | **Closed → anything** | PROHIBITED (terminal) | ✅ **Blocked** | Open any case with `status = Closed` and try to change status → blocked with **"Closed cases are terminal and cannot be modified."** |
+| **Any edit to a Closed case** | PROHIBITED (terminal means the row, not just its status) | ✅ **Blocked** | On a Closed case change **only** `priority` and Save → same message. Pressing Save with nothing edited is accepted — the no-op is the one save a Closed case still allows |
+| **Any edge not in this table** — e.g. `Draft → Closed`, `Draft → Resolved`, `Open → Closed`, `Pending → Resolved`, `Resolved → Open` | PROHIBITED (the table is the whole graph) | ✅ **Blocked** | On a fresh Draft case set `status` straight to *Closed* → blocked with **"A case cannot go from Draft to Closed. From Draft the only valid next status is Open."**, and the case is still Draft after a reload |
 
 **Quick proof of the guards that DO work:**
 - Open **any Closed case** (filter `status = Closed`), change status to *In Progress*, Save → you get
-  **"Closed cases are terminal and cannot be modified."** and the change is rejected.
+  **"Closed cases are terminal and cannot be modified."** and the change is rejected. Change only its
+  `priority` instead and Save → the same message, because a Closed row is immutable and not merely
+  status-frozen.
+- Create a case, leave it in **Draft**, set `status` directly to *Closed* and Save → you get
+  **"A case cannot go from Draft to Closed. From Draft the only valid next status is Open."** The case is
+  still Draft after a reload and `closed_date` is still empty.
 - Open **any Open case** (filter `status = Open`), change status to *Draft*, Save → you get
   **"Cases cannot be returned to Draft."**
 - On any case, set `assigned_group = x_casemgmt_demo_team` and `assigned_agent` to a user **not** in that
@@ -284,11 +292,20 @@ curl -s -w '\nHTTP %{http_code}\n' "$SN/api/x_casemgmt/case_status_lookup?number
 >
 > **What you can do instead.** Open the reports directly — *Reports → View / Run*, filter on the
 > `x_casemgmt_case` or `x_casemgmt_case_task` table — and they render live from the real data. Be aware of a
-> second, independent defect while you do: **all 8 `sys_report` rows commit with an empty `group_by`** although
-> the artifacts specify one, so *All Cases by Status* renders grouped by *Assigned Agent* rather than by status
-> until that is corrected.
+> second, independent defect while you do: the six **chart** reports arrive with **no grouping column**, so
+> *All Cases by Status* renders grouped by *Assigned Agent* rather than by status until that is corrected. Root
+> cause, measured by the QA-remediation pass: the artifacts specify `<group_by>status</group_by>`, but
+> **`group_by` is not a column on `sys_report`** on this release (its columns are `field`, `sumfield`, `group`
+> and `additional_groupby`), so the element is silently discarded on import. The column a chart report groups on
+> is `field`. The two single-score reports are unaffected — *Average Time to Close* was fixed by that pass and
+> renders a real duration on a cold load, and *Cases Opened in Last 30 Days* is a `COUNT`, which needs no
+> aggregated column.
 
-The dashboards are *intended* to be reached via **Self-Service → Dashboards** (or `$pa_dashboard.do`):
+The dashboards are *intended* to be reached via **Self-Service → Dashboards** (or `$pa_dashboard.do`). One
+mechanical note if you go by URL: **`$pa_dashboard.do?sysparm_dashboard=` takes the dashboard's `sys_id`, not
+its name** — passing the name renders *"Can't display this dashboard."* / *"The dashboard with ID
+`x_casemgmt_agent_workspace` was not found."*, which is easy to misread as the dashboard being absent when both
+rows are present and `Active`. Look the sys_id up in `pa_dashboards_list.do?sysparm_query=sys_scope.scope=x_casemgmt`.
 
 - **Agent Workspace** (`x_casemgmt_agent_workspace`): *My open cases* (list), *My overdue tasks* (list),
   *Case count by status* (donut). The "my" lists are user-relative — impersonating `x_casemgmt_demo_agent` is
@@ -309,7 +326,8 @@ Open Cases, All Cases by Type, All Cases by Priority*.
 |---|---|
 | Resolve attempted with an open task (**enforced and blocking on the form**) | `All tasks must be closed before resolving this case.` |
 | Any → Draft attempted (enforced) | `Cases cannot be returned to Draft.` |
-| Edit/transition a Closed case attempted (enforced) | `Closed cases are terminal and cannot be modified.` |
+| Edit/transition a Closed case attempted (enforced — both a status move out of Closed and a field-only edit) | `Closed cases are terminal and cannot be modified.` |
+| A status change that is not an edge of the matrix (enforced) | `A case cannot go from <from> to <to>. From <from> the only valid next status is <next>.` — and for the one state with two successors, `From In Progress the valid next statuses are Pending or Resolved.` |
 | Agent not in the assigned group (enforced when an agent is set) | `Assigned agent must be a member of the assigned group.` |
 | Portal lookup, unknown number (enforced) | `No case found with that number.` |
 | Portal submit, success (enforced) | `Your case has been submitted` |

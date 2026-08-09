@@ -217,12 +217,35 @@
         prevents accidental exposure of internal duration metrics
         to external requesters via any future portal-widget that
         might call `GlideRecord.next()` and iterate columns.)
-      - virtual=true: function fields are virtual (NOT stored in
-        the underlying database column). The platform computes the
-        value at query time from the input fields. Virtual fields
-        do NOT trigger insert/update business rules, do NOT
-        consume disk space on the case row, and do NOT participate
-        in record-level audit history.
+      - virtual=false: THIS IS LOAD-BEARING AND COUNTER-INTUITIVE.
+        A function field is not stored on the row, but its
+        dictionary entry must still carry virtual=false. The
+        `virtual` flag means "this column's value comes from a
+        virtual_type provider (a script)"; a function field's value
+        comes from the DATABASE, which evaluates
+        function_definition inside the query. Setting virtual=true
+        with no virtual_type and no calculation therefore tells the
+        platform to ask a provider that does not exist, and the
+        column returns EMPTY for every row.
+
+        *** DO NOT SET virtual=true HERE ***
+        This field shipped with virtual=true and, as a direct
+        result, `duration_to_close` read EMPTY on every Closed case
+        - including demo CASE0000984, an 18-day span - so the
+        "Average Time to Close" single-score widget had nothing to
+        average. The fix was measured against the platform's own
+        function fields: pa_dm_task_telemetry.duration and
+        cmdb_data_management_policy_execution.execution_time both
+        carry function_field=true with virtual=false and an
+        identical `glidefunction:datediff(end, start)` shape. With
+        virtual=false this field immediately returned 18 Days and
+        14 Days on the two Closed demo cases.
+
+        The rest of the original rationale still holds: the value
+        is not stored in a database column, it does NOT trigger
+        insert/update business rules, it consumes no disk space on
+        the case row, and it does not participate in record-level
+        audit history.
       - function_field=true: marks this dictionary entry as a
         ServiceNow Function Field (NOT a Calculated Value field).
         This is what makes the field reportable.
@@ -299,7 +322,7 @@
         <choice_field/>
         <choice_table/>
         <column_label>Duration to Close</column_label>
-        <comments>Virtual Duration function field on x_casemgmt_case computed at query time as glidefunction:datediff(closed_date,opened_date). Used by ../reports/x_casemgmt_avg_time_to_close.xml as the aggregation_source for the Manager View dashboard's "Average Time to Close" single-score widget (AAP Section 0.4.4 Widget 4). Resolves QA Checkpoint 4 Issue #1: implements Option A (function field) so the widget renders an actual Duration AVG instead of the "No data" placeholder. Not stored on the row (virtual=true); not displayed on form/list (display=false); not auditable (audit=false). Read-only by definition for function fields.</comments>
+        <comments>Virtual Duration function field on x_casemgmt_case computed at query time as glidefunction:datediff(closed_date,opened_date). Used by ../reports/x_casemgmt_avg_time_to_close.xml as the aggregation_source for the Manager View dashboard's "Average Time to Close" single-score widget (AAP Section 0.4.4 Widget 4). Resolves QA Checkpoint 4 Issue #1: implements Option A (function field) so the widget renders an actual Duration AVG instead of the "No data" placeholder. Not stored in a database column - the database evaluates the expression inside the query - but the dictionary row MUST carry virtual=false: `virtual` means the value comes from a virtual_type script provider, and setting it true with no provider makes the column return EMPTY for every row, which is exactly what happened before this was corrected. Not displayed on form/list (display=false); not auditable (audit=false). Read-only by definition for function fields.</comments>
         <create_roles/>
         <default_value/>
         <defaultsort/>
@@ -352,7 +375,7 @@
         <use_dependent_field>false</use_dependent_field>
         <use_dynamic_default>false</use_dynamic_default>
         <use_reference_qualifier>simple</use_reference_qualifier>
-        <virtual>true</virtual>
+        <virtual>false</virtual>
         <virtual_type/>
         <widget/>
         <write_roles/>

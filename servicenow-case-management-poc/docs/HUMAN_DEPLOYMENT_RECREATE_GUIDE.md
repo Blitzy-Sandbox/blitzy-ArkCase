@@ -47,9 +47,9 @@
 > problems: the two dashboards **install but render 0 tabs and 0 widgets** (each names three child tables this
 > release does not have — `pa_tab`, `pa_dashboard_widgets` and `pa_dashboard_role`), the portal **pages render
 > blank** (their Service Portal layout records were never authored, so only the REST endpoints work), and the
-> case form has **no related lists** (no `sys_ui_related_list` row exists for the scope). Separately, all 8
-> reports commit with an empty `group_by`. Fixing any of these means changing the artifacts and re-exporting,
-> not adjusting the install.
+> case form has **no related lists** (no `sys_ui_related_list` row exists for the scope). Separately, the six
+> **chart** reports arrive with no grouping column — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6). Fixing any of these
+> means changing the artifacts and re-exporting, not adjusting the install.
 >
 > The same procedure with its measured evidence, per defect, is
 > **[`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step)**.
@@ -94,7 +94,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,618,378 bytes (≈3.45 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`. Verify the digest before uploading. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
+| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,643,389 bytes (≈3.47 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`. Verify the digest before uploading. (The immediately previous revision was 3,618,378 bytes / `7272edfc…`; the QA-remediation pass re-synced 9 payloads and left the block count and every other byte unchanged.) (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -792,5 +792,5 @@ suite by hand if an instance refuses the serialized records.
 | Manager/agent/viewer denied everything | ACL role-links missing (Defect 9) | Run **5f** — step 6 of the primary procedure — then confirm **exactly 27** links, distributed manager 14 / agent 10 / viewer 3 |
 | Resolve allowed with open tasks, or any precondition not blocking | **Check the enforcement chain, in this order.** (1) Are the 7 flows `active=true` and `status=published`? They were measured so; a Draft flow enforces nothing. (2) Is the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** present and active? It is the component that calls the subflow and then issues `gs.addErrorMessage()` + `setAbortAction(true)` — **without it the flows still run but nothing blocks**. (3) Is `CaseTransitionValidator` present? The rule and the flows both call it | The earlier "flow guards are dead shells" (Defect F) diagnosis applied to a previous revision and no longer describes this package — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` for that history |
 | Dashboards open but show no widgets | Packaging: three child table names that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) | Not remediable by installing differently. Fix the artifacts and re-export |
-| A chart is grouped by the wrong field | Packaging: all 8 `sys_report` rows commit with an empty `group_by` | Same — fix `reports/*.xml` and re-export |
+| A chart is grouped by the wrong field | Packaging: the six chart reports carry their grouping in `<group_by>`, which is **not a column** on `sys_report` on this release, so it is discarded on import; the column a chart groups on is `field` (register §0.6) | Same — rename the element to `field` in `reports/*.xml` and its six payloads, then re-export |
 | Portal pages are blank | Packaging: the Service Portal layout records (container / row / column / instance) were never authored | Same. The REST endpoints work and can be used to demonstrate the contract |

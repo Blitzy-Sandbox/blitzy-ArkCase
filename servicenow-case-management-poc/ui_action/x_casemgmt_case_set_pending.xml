@@ -45,11 +45,17 @@
              `g_form.setValue('pending_reason', reason)` so the server
              script can read it as `current.pending_reason`.
           7) `gsftSubmit(null, g_form.getFormElement(),
-                          'sysverb_x_casemgmt_case_set_pending')`
-             is called. This is the standard ServiceNow form-submit verb
-             pattern: the platform serializes the form state, posts it to
-             the server, and re-evaluates the UI Action script in a
-             server-side sandbox.
+                          'x_casemgmt_case_set_pending')`
+             is called with this action's OWN action_name. The platform
+             resolves that name in sys_ui_action for this table,
+             serializes the form state, posts it to the server, and
+             re-evaluates the UI Action script in a server-side sandbox.
+             The name MUST NOT be prefixed with `sysverb_`: that prefix
+             is reserved for the platform's stock verbs, and an earlier
+             revision that used it made this button 100% non-functional
+             (the platform answered "Unable to find UI Action with name
+             'sysverb_x_casemgmt_case_set_pending' on table
+             'x_casemgmt_case'" and the server half never ran).
           8) `onClickSetPending` returns false to suppress the default
              form submit (since gsftSubmit already submitted).
 
@@ -119,15 +125,46 @@
 
     BUTTON VISIBILITY CONDITION (the <condition> field):
 
-        The button is shown when ALL of the following are true:
-          1) current.status == 'In Progress'   (the source state of the
-             In Progress -> Pending transition)
+        The <condition> is a single call into the shared Script Include:
+
+            new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'In Progress')
+
+        WHY A SCRIPT INCLUDE CALL AND NOT THE EXPRESSION ITSELF. The
+        expression this replaces was 264-271 characters long, and
+        sys_dictionary declares sys_ui_action.condition as a
+        `condition_string` with max_length 254 - a hard platform limit. On
+        import the platform silently TRUNCATED it mid-expression (the
+        Resolve condition ended `...isMemberOf(current.assigned_grou`), a
+        truncated condition cannot evaluate, and its failure mode is to
+        FAIL OPEN with nothing written to the server log. The measured
+        consequence: this button, and three of its siblings, rendered on
+        every one of the six statuses for every identity - including the
+        read-only x_casemgmt_case_viewer, whose form carries no Update
+        button at all. The two sibling actions whose conditions fit
+        (x_casemgmt_case_open at 76 characters, x_casemgmt_case_close at
+        79) were correct throughout and keep their inline expressions.
+        The call above is well under the limit and cannot be truncated.
+
+        A second reason the condition must carry the WHOLE guard: on this
+        release sys_ui_action has no `roles` column - UI Action role
+        restrictions live in the m2m table sys_ui_action_role - so the
+        <roles> element in this payload is inert on import and grants no
+        gating at all. The condition is the only guard the platform
+        honours here.
+
+        canShowAction() implements exactly the rule the inline expression
+        did, unchanged:
+          1) current.status == 'In Progress'   (the source state of this
+             transition)
           2) The current user holds at least one of:
              - x_casemgmt_case_manager   (always permitted)
              - x_casemgmt_case_agent AND (current.assigned_agent ==
                 gs.getUserID() OR current user is a member of
                 current.assigned_group)
              (per AAP Section 0.5.6 "Assigned only" rule for case_agent)
+        and it fails CLOSED - a missing record or missing status argument
+        returns false - which is the opposite of the truncation behaviour
+        it replaces.
 
         The visibility check runs server-side (the <condition> field is
         evaluated by the platform when rendering the form). The
@@ -336,7 +373,7 @@
         <active>true</active>
         <client>true</client>
         <comments>UI Action that transitions an In Progress case to Pending status. Visible to x_casemgmt_case_manager (always) and x_casemgmt_case_agent (only when assigned to the case via assigned_agent or member of assigned_group, per AAP Section 0.5.6 Assigned-only rule). Prompts the user for pending_reason (Awaiting Info / Awaiting Third Party / Other) on the client via a hybrid client+server pattern, then performs the transition on the server with defense-in-depth re-validation of role, status, assignment, and pending_reason. Per AAP Section 0.5.5 row 3 verbatim: "In Progress -&gt; Pending: None; sets pending_reason (Awaiting Info / Awaiting Third Party / Other)". Companion to ../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml which clears pending_reason on the reverse transition, and ../flows/sub_flows/validate_pending_transition.xml which handles the same transition at the Flow Designer workflow layer. Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'In Progress' && (gs.getUser().hasRole('x_casemgmt_case_manager') || (gs.getUser().hasRole('x_casemgmt_case_agent') && (current.assigned_agent == gs.getUserID() || (current.assigned_group && gs.getUser().isMemberOf(current.assigned_group.toString())))))]]></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowAction(current, 'In Progress')]]></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>
@@ -434,14 +471,29 @@
     // legal even if the field was previously empty.
     g_form.setValue('pending_reason', reason);
 
-    // Submit the form via the standard ServiceNow UI-Action verb pattern.
-    // The verb name is derived from the UI Action's sys_name:
-    //   'sysverb_' + sys_name = 'sysverb_x_casemgmt_case_set_pending'
-    // The platform recognizes this verb, serializes the form state,
-    // posts it to the server, and re-evaluates this <script> body in
-    // a server-side sandbox where the `if (typeof window == 'undefined')`
-    // guard becomes true and serverSetPending() is invoked.
-    gsftSubmit(null, g_form.getFormElement(), 'sysverb_x_casemgmt_case_set_pending');
+    // Submit the form so the server half of this UI Action runs.
+    //
+    // The third argument is this UI Action's OWN action_name, exactly as
+    // it appears in the <action_name> element below:
+    //   'x_casemgmt_case_set_pending'
+    // The platform looks that name up in sys_ui_action for this table,
+    // serializes the form state, posts it, and re-evaluates this <script>
+    // body in a server-side sandbox where the
+    // `if (typeof window == 'undefined')` guard becomes true and
+    // serverSetPending() is invoked.
+    //
+    // *** DO NOT PREFIX THIS WITH sysverb_ ***
+    // An earlier revision passed 'sysverb_x_casemgmt_case_set_pending'.
+    // The sysverb_ prefix is reserved for the platform's own stock verbs
+    // (sysverb_update, sysverb_cancel, sysverb_delete...), so the lookup
+    // could never resolve a custom action and the platform answered:
+    //   "Unable to find UI Action with name
+    //    'sysverb_x_casemgmt_case_set_pending' on table 'x_casemgmt_case'"
+    // serverSetPending() was therefore NEVER reached and the button was
+    // 100% non-functional - while the client-side validation above kept
+    // working convincingly, which is what made the failure easy to miss.
+    // Measured: sys_mod_count stayed 0 on every attempt.
+    gsftSubmit(null, g_form.getFormElement(), 'x_casemgmt_case_set_pending');
 
     // Suppress the default form-submit handler. gsftSubmit already
     // submitted the form; allowing the default to fire would cause a

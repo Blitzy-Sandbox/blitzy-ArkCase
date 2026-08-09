@@ -93,7 +93,18 @@ Per AAP Section 0.4.4, the Manager View dashboard's Widget 4 ("Average Time to C
 
 | Field | Type | Constraints |
 | --- | --- | --- |
-| duration_to_close | Function Field (`glide_duration`) | Virtual / read-only / not displayed; `glidefunction:datediff(closed_date,opened_date)` |
+| duration_to_close | Function Field (`glide_duration`) | Not stored / read-only / not displayed; `glidefunction:datediff(closed_date,opened_date)`; dictionary flag `virtual = false` (see the note below) |
+
+**One dictionary flag on this field is load-bearing and counter-intuitive: `virtual` must be `false`.** The value
+is genuinely not stored on the row, but `virtual = true` means something narrower — "this column's value comes from a
+`virtual_type` provider", i.e. a script. A function field's value comes from the *database*, which evaluates
+`function_definition` inside the query. The field shipped with `virtual = true` and no provider, and the measured
+consequence was that `duration_to_close` returned **empty for every Closed case** — including demo `CASE0000984`,
+an 18-day span — so the "Average Time to Close" widget had nothing to average. Every function field the platform
+itself ships (for example `pa_dm_task_telemetry.duration`) carries `function_field = true` with `virtual = false`.
+With `virtual = false` the field immediately returned `18 Days` and `14 Days` on the two Closed demo cases.
+`post_import_remediation.js` now carries the same three attributes in its field spec and compares them on every
+run, so this cannot silently regress on an install.
 
 The dictionary record file is [`../dictionary/x_casemgmt_case_duration_to_close.xml`](../dictionary/x_casemgmt_case_duration_to_close.xml). The field is consumed exclusively by [`../reports/x_casemgmt_avg_time_to_close.xml`](../reports/) and surfaced on [`../dashboards/pa_dashboards_x_casemgmt_manager_view.xml`](../dashboards/) Widget 4. See [`dashboards.md`](./dashboards.md) Widget 4 details for the full implementation rationale, including why a Function Field (not a Calculated Value field) is required for `sys_report` aggregation and how this satisfies AAP Section 0.7.2 Minimal-Change Clause (no new module, workflow, portal page, parent table, or external integration — only a query-time derivation from existing AAP-enumerated columns `opened_date` and `closed_date`).
 
