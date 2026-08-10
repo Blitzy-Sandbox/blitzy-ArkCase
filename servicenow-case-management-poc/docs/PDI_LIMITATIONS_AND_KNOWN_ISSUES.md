@@ -1459,6 +1459,22 @@ document ran them together:**
 | Steps | **180 of 180 `Success`** across those 20 children |
 | Status | **`Success`** — "Suite passed" |
 
+> **⚠️ These row identifiers are perishable — re-measure, do not cite.** Re-measured on **2026-08-10**: `TES0001015`
+> (`c557b49a…638`) and `TES0001014` (`f2f7770a…680`) **no longer exist on the instance** — a REST `GET` on either
+> answers *"No Record found"* — and at the start of that pass all three ATF result tables
+> (`sys_atf_test_suite_result`, `sys_atf_test_result`, `sys_atf_test_result_step`) held **0 rows**. Table Cleaner
+> (`sys_auto_flush`, 30 days) does not explain a ~1.5-day-old disappearance and `sys_audit_delete` holds nothing for
+> those tables, so treat suite-result rows on this shared instance as transient by default.
+>
+> **What has been re-measured since, and is the current evidence:** two independent runs of the same 20 tests, each
+> **20 Success / 0 Failure / 0 Error / 0 Skipped with 180 of 180 step results Success** —
+> `TES0001016` (`5ff9036a…6b8`, 2026-08-10 04:56:34) and `TES0001017` (`b5ff076a…6a5`, 2026-08-10 05:22:41,
+> `run_time 00:03:28`, dispatched through the product UI with a browser runner attached, `UI Batches Executed` 0 → 3,
+> `user_agents` populated on exactly `ATF 15`/`16`/`17`). That pass also recomputed the rollup from the children
+> rather than trusting `rolled_up_*`, and proved the suite can fail by inverting one expectation per area and
+> observing three genuine `Failure` verdicts before restoring them. **The claim in this section therefore stands and
+> has been reproduced twice — but quote the seven post-import checks in §8.5, not a `TES…` number.**
+
 Per-test verdicts and run times, read from the 20 child rows: `ATF 01` Success 3 s · `02` Success 8 s ·
 `03` Success 6 s · `04` Success 3 s · `05` Success 7 s · `06` Success 12 s · `07` Success 6 s ·
 `08` Success 10 s · `09` Success 13 s · `10` Success 3 s · `11` Success 5 s · `12` Success 9 s ·
@@ -1484,13 +1500,64 @@ exactly one batch per `ATF 15/16/17`.
 > documentation-truthfulness passes changed the package. **The security pass did touch ATF records:** it rewrote
 > `ATF 18`'s anonymous leg (to a non-mutating one, §9.6a P6) and `ATF 19`'s setup, which changed **10 packaged
 > blocks** — 2 `Test`, 4 `Test Step` and 4 `Value` — and the two artifacts
-> `atf/x_casemgmt_atf_18_*.xml` and `atf/x_casemgmt_atf_19_*.xml` on disk. The ATF range has been byte-unchanged
-> **from that pass onward** (0 content-differing blocks between it and HEAD; the only later ATF edit is a header
-> comment in `atf/x_casemgmt_atf_03_*.xml`, which the package does not carry), and the range has held at exactly
-> **761** blocks throughout, with nothing added or removed. So `TES0001014` **predates the current form of those
+> `atf/x_casemgmt_atf_18_*.xml` and `atf/x_casemgmt_atf_19_*.xml` on disk. The range has held at exactly **761**
+> blocks throughout, with nothing added or removed. So `TES0001014` **predates the current form of those
 > two tests**, which is a further reason the serialized re-load re-run is outstanding rather than a formality.
 > An earlier revision of this paragraph asserted that nothing in either pass touched an ATF record; that was
 > measured and is false for precisely `ATF 18` and `ATF 19`. Closing the gap is recommended next step 2 (§10.0).
+>
+> **One ATF payload changed again after that pass, and the instance was never told.** An earlier revision of this
+> paragraph also claimed the ATF range had been "byte-unchanged from that pass onward (0 content-differing blocks
+> between it and HEAD; the only later ATF edit is a header comment in `atf/x_casemgmt_atf_03_*.xml`, which the
+> package does not carry)". **That was stale and is corrected here.** The later ATF edit is in
+> **`atf/x_casemgmt_atf_18_portal_submit_contract.xml`**, it is the `Value` block for `sys_variable_value`
+> `7b1f7b99514155cc7d085e3926b42cbe` (`ATF 18` step 9, *Run Server Side Script*), and **the package does carry
+> it** — HEAD commit `f8a7f46e1b` edited the artifact and the matching `<payload>` together. Measured, twice, and
+> re-measured for this entry:
+>
+> | | Package + artifact (they agree) | Live row on the instance |
+> |---|---|---|
+> | length | **9,500** chars | **8,931** chars |
+> | md5 of the whole value | `b7bc890521ce3b122cd01f0bf4509ed8` | `d3bbf6f2a5a6…` |
+> | md5 with `//` comments and blank lines stripped | **`91822682b141`** | **`91822682b141`** |
+> | unified diff | **17 changed lines, every one a `//` comment — 0 non-comment lines** | |
+>
+> So the executable code is **identical** and the delta is **behaviourally inert**: the currently-installed copy of
+> `ATF 18` step 9 is one comment revision behind the package, and nothing else in the suite differs. A full
+> re-diff of the packaged `sys_variable_value` blocks against the live rows returns **539 of 540 byte-identical, 1
+> differing (this one), 0 only-in-package, 0 only-in-live**. Consequently any suite verdict taken on this instance
+> is a verdict on the package's *code* for all 540 inputs and on the package's *bytes* for 539 of them.
+>
+> **And the delta-carrying test was re-run to confirm it, rather than argued about.** `ATF 18`
+> (`a4fab153ebcda77e4c2d7b8905f7d19e`, 10 steps) was dispatched from its own form through the product UI on
+> 2026-08-10: **Status `Success`, 10 of 10 steps Success, 15 seconds**, no `Pick a Browser` prompt and
+> `user_agents` empty — all four batches were server batches. The submit step answered **`201 Created`** with
+> `{"result":{"number":"CASE0001218","message":"Your case has been submitted"}}` and `X-Is-Logged-In: false`; the
+> step whose script carries the delta, **step 9**, reported
+> `anonymous POST [] -> 400 {"result":{"error":"Invalid payload."}}` and
+> `genuinely anonymous, non-mutating portal probe: checks=12 failures=0`; step 10 reported
+> `submissions removed=1 | deletes reporting failure=0 | residue rows=0`. Afterwards `subject STARTSWITH ATF-PORTAL`
+> was **0 rows** and the case table was back to **10**. The same pass re-confirmed the provenance from the UI as
+> well as the API: **Show Latest Update** on step 9 resolves to a single Customer Update in
+> `x_casemgmt_case_management v1.0.0` with **`Updates = 0`**, **Compare to Current** reports *"There are no
+> differences found"*, and the installed script's comment-stripped md5 was independently recomputed as
+> `91822682b141…` — the package's value.
+>
+> **The delta has deliberately not been closed by writing to the instance.** Two reasons, both measured. First, the
+> row is not writable through the Table API — a `PATCH` on `sys_variable_value/7b1f7b99…` answers
+> `403 ACL Exception Update Failed due to security constraints` — so closing it means a background script or the
+> ATF UI. Second, and decisively, overwriting it would cost the provenance property this section leans on: all
+> **20** tests, **180** steps and the suite still carry `sys_mod_count = 0` with the package's
+> `2025-01-01 00:00:00` stamps, which is what proves a run is a run of the *as-installed package records* rather
+> than of something hand-edited afterwards. Trading that away for 17 comment lines is a bad exchange. The correct
+> close is a re-load of the shipped artifacts (§10.0 item 2), which restores the bytes *and* the provenance in one
+> operation.
+>
+> Three `sys_variable_value` rows do carry `sys_mod_count = 2` and a `2026-08-10 06:19:00` stamp:
+> `8038165c…` (`ATF 20`), `96b00e8a…` (`ATF 04`) and `f460249a…` (`ATF 13`). Those are the three negative controls
+> of the test-execution QA pass — inverted, observed to fail, and restored — and their **values are byte-identical
+> to the package** (they are among the 539). Two writes each, one out and one back, is exactly what
+> `sys_mod_count = 2` records.
 
 > **History, kept because it matters.** The immediately preceding run of the same suite, `TES0001013`
 > (`0fd7ebc2936a4b10830ef82bdd03d6e7`, 2026-08-08 10:50), was **19 / 1** — `ATF 03` failed at step 8 with
@@ -2357,7 +2424,7 @@ to §10.5 under its original number. One item remains here.
 
 | # | Work | Why | Estimate |
 |---|---|---|---|
-| 2 | **Re-run the ATF suite after re-loading every `atf/*.xml` artifact** into the instance, and record the result alongside `TES0001015` | `TES0001015` proves the **live** assets; `TES0001014` proves a **serialized re-load** of a *pre-security* revision. The security pass rewrote `ATF 18` and `ATF 19` (10 packaged blocks), so `TES0001014` predates those two tests' current serialized form; the range has been byte-unchanged since, which makes a pass *expected* — but expectation is not measurement (§8.3) | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
+| 2 | **Re-load every `atf/*.xml` artifact into the instance and re-run the suite**, recording the verdict against the re-loaded bytes | Still open, but **much narrower than earlier revisions of this row implied**, and the residual risk is now quantified rather than assumed. What has been measured (§8.3): a full re-diff of the packaged `sys_variable_value` blocks against the live rows returns **539 of 540 byte-identical, 1 differing, 0 only-in-package, 0 only-in-live**; the one difference is `ATF 18` step 9 and is **17 `//` comment lines with 0 non-comment lines changed** (comment-stripped md5 `91822682b141` on both sides), so the **executable code of all 540 inputs is identical to the package**. Provenance is measured too: all 20 tests, all 180 steps and the suite carry `sys_mod_count = 0` with the package's `2025-01-01 00:00:00` stamps, and **180 / 180 `step_config` plus 540 / 540 input `variable` references resolve** to live rows with **0** zero-input steps and **0** duplicate `(document_key, variable)` pairs — i.e. the green verdicts already recorded were taken on the as-installed package records, not on hand-edited copies. What remains unmeasured is narrow and specific: a re-load performed *on the current bytes*, followed by a suite run, which would close both the one comment-only delta and the last of the "expectation is not measurement" gap in one operation. Note also that the delta cannot be closed by patching the row — `PATCH sys_variable_value/7b1f7b99…` answers `403 ACL Exception Update Failed due to security constraints` — and should not be, since a hand-write would destroy the `sys_mod_count = 0` provenance above | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
 
 ### 10.1 Blocking — the application is not demonstrable through its intended UI without these
 
