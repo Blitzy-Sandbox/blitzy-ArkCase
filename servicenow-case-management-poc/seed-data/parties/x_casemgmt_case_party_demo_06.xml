@@ -1,5 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This party row carries the pinned number PARTY9000006 and belongs to the
+    demo case pinned as CASE9000008.
+
+    This row uses BOTH of the package's two reference shapes, and which
+    one a column gets is decided by measurement, not by taste:
+
+      A. case (the parent x_casemgmt_case)
+         -> key in the display_value ATTRIBUTE, element body EMPTY.
+         A body holding a number or a display name makes preview report
+         "Could not find a record in <table> for column <column>", and it
+         does so EVEN WHEN the target row already exists on the instance,
+         because the previewer accepts only a sys_id in a body. The
+         attribute-only shape previews CLEAN, but the column then commits
+         EMPTY - the attribute is a display hint, not a resolvable value.
+         So these links are completed AFTER commit by
+         ../../scripts/seed_demo_data.js, the documented post-commit step,
+         which ADOPTS this row by its pinned number, fills only the
+         columns it finds empty (case by number)
+         and never overwrites a populated value - so a second run repairs
+         nothing and inserts nothing.
+
+      B. person (a sys_user)
+         -> key in the display_value attribute AND in the element body.
+         sys_user and sys_user_group reference bodies are never checked by
+         preview (a deliberately bogus user_name produced no problem), and
+         the import engine DOES resolve them: the demo users, the demo
+         group and the three sys_user_has_role rows all landed on the
+         instance under these artifacts' own sys_ids with their user and
+         role references correctly resolved. These columns therefore
+         commit LINKED (person by user_name)
+         and need no post-commit repair.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    Both shapes above carry the key, never a sys_id, so both comply.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Party 06 - Person Requester on case 08 (In Progress Complaint)
     ====================================================================
 
@@ -187,12 +228,11 @@
               x_casemgmt_case_party_*.xml
             * The choice record sys_choice_case_party_party_type.xml
             * The parent case at
-              ../cases/x_casemgmt_case_demo_08.xml  (case field resolves
-              by number lookup; that case must exist before this party
+              ../cases/x_casemgmt_case_demo_08.xml  (the case field ships empty and is linked after commit by ../../scripts/seed_demo_data.js via number lookup; that case must exist before this party
               can reference it)
             * The demo manager user at
               ../users/sys_user_x_casemgmt_demo_manager.xml  (person
-              field resolves by user_name lookup; that user must exist
+              field is linked after commit by ../../scripts/seed_demo_data.js via user_name lookup; that user must exist
               before this party can reference it)
             * Any role and ACL records that gate read/write access at
               import time
@@ -253,43 +293,57 @@
         empty). This file establishes the canonical Person-branch
         invariant on the Complaint flow's In Progress case.
 
-      Rule 4 - Reference resolution by stable human-readable key (AAP
-              Section 0.7.2 "NO sys_id literals anywhere"):
-        case   : <case display_value="CASE0000008">CASE0000008</case>
-                 resolves to demo case 08 by the case table's
-                 idempotent number lookup. CASE0000008 is the auto-
-                 numbered value the platform generates for demo case
-                 08 since cases 01 through 08 import in order with
-                 the CASE0000001-format auto-number counter (case 01
-                 -> CASE0000001, case 02 -> CASE0000002, ..., case 08
-                 -> CASE0000008). This party's parent therefore
-                 resolves to the demo case 08 record at
-                 ../cases/x_casemgmt_case_demo_08.xml.
-        person : <person display_value="x_casemgmt_demo_manager">
-                 x_casemgmt_demo_manager</person> resolves to the
-                 synthetic demo manager by the sys_user table's
-                 user_name lookup. The same user is referenced by
-                 party 01 on case 03 (also a Requester) - the lookup
-                 resolves to the SAME sys_user row in both files,
-                 demonstrating user-on-multiple-cases pattern.
+      Rule 4 - Reference fields (AAP Section 0.7.2 "NO sys_id literals
+               anywhere"). Two classes, distinguished by MEASUREMENT on a
+               live PDI - not by convention:
 
-        Both cross-reference fields use the display_value attribute
-        AND the element text content set to the same human-readable
-        key. ServiceNow's Update Set engine resolves the target
-        sys_id from this key at import time via the table's
-        idempotent-key lookup. NO sys_id literals appear in any
-        cross-reference slot per AAP Section 0.7.2. Note that the
-        agent prompt's "Exact XML Structure" example included sys_id
-        literals as illustrative placeholders for cross-reference
-        targets; per AAP Section 0.7.2's absolute-precedence directive
-        those literals are replaced here with their corresponding
-        human-readable lookup keys (CASE0000008 for the case number,
-        x_casemgmt_demo_manager for the user_name, x_casemgmt for the
-        scope's source name) - an interpretation consistent with how
-        sibling parties 07 and 08 were authored.
+        CLASS 1 - key in the display_value ATTRIBUTE, body EMPTY:
+          <case display_value="CASE9000008"/>
+
+          A reference BODY holding a case number or a company name is
+          reported by preview as "Could not find a record ..." EVEN WHEN
+          the target row exists, because the previewer only accepts a body
+          that is a sys_id. Carrying the key in the display_value
+          attribute with an EMPTY body previews clean; the column then
+          commits EMPTY, so the link is completed AFTER commit by the
+          documented post-commit step ../../scripts/seed_demo_data.js:
+            case           -> x_casemgmt_case by number
+
+        CLASS 2 - key in BOTH the display_value attribute and the body:
+          <person display_value="x_casemgmt_demo_manager">x_casemgmt_demo_manager</person>
+
+          sys_user and sys_user_group reference bodies are NOT checked by
+          preview (a deliberately bogus user_name produced no problem) and
+          the import engine DOES resolve them: the demo users, the demo
+          group and the three sys_user_has_role rows all arrived on the
+          instance carrying these artifacts' own sys_ids with correctly
+          resolved user/role references. These therefore commit LINKED and
+          need no post-commit repair; seed_demo_data.js only fills a
+          reference it finds empty, so it is a no-op for them:
+            person         -> sys_user by user_name
+
+        Deliberately empty (not applicable to this row): <organization/>
+
+        Adoption key: the pinned <number> PARTY9000006 below. It sits in the
+        9,000,000 band the project already uses for pinned fixtures, so it
+        cannot collide with a counter-issued number, and it lets
+        seed_demo_data.js ADOPT and repair this packaged row instead of
+        inserting a duplicate. Re-running that script is a no-op
+        (verified twice on a live PDI: 0 repairs, 0 duplicates).
+
+        Platform-managed metadata columns - NOT domain references, and
+        serialized exactly as ServiceNow itself exports a scoped record:
+          <sys_scope display_value="Case Management">
+              82b99028936f74320d74d6f88357a5af</sys_scope>
+          (body = the scoped application's own sys_scope sys_id)
+          <sys_package display_value="Case Management" source="x_casemgmt">
+              x_casemgmt</sys_package>
+        The <sys_id> below is this record's OWN primary key (deterministic
+        MD5), which the AAP rule permits - it is not a reference to another
+        record.
 
       Rule 5 - All mandatory case_party fields populated:
-        case        - mandatory parent reference - CASE0000008
+        case        - mandatory parent reference - CASE9000008
         party_type  - mandatory Choice           - "Person"
         person      - conditional Reference (required when
                       party_type=Person)         - "x_casemgmt_demo_manager"
@@ -324,7 +378,7 @@
 
       Rule 7 - Idempotency anchor:
         The party's idempotent key is the (case, party_type, role_label,
-        person) tuple: (CASE0000008, Person, Requester,
+        person) tuple: (CASE9000008, Person, Requester,
         x_casemgmt_demo_manager). The companion seed script
         ../../scripts/seed_demo_data.js ensureParty() helper queries
         x_casemgmt_case_party by this 4-tuple BEFORE inserting; the
@@ -348,8 +402,7 @@
         UTF-8 encoding declared in XML prolog.
         Element ordering: alphabetical (matching the established peer
         convention used by sys_user_*, sys_user_group_*, sys_user_has_
-        role_*, role records, all 10 case demo records, all 8 task
-        demo records, parties 07 + 08, and dictionary entries across
+        role_*, role records, all 10 case demo records, all 10 task demo records, parties 07 + 08, and dictionary entries across
         the scoped Update Set).
         Unix-style line endings (LF) per AAP file authoring conventions.
 
@@ -430,7 +483,7 @@
         phone-number patterns) both pass. The deterministic sys_id
         ensures byte-identical re-export across agent rebuilds.
       - No-PII grep returns zero matches: the synthetic identifiers
-        ("x_casemgmt_demo_manager", "CASE0000008", "Requester",
+        ("x_casemgmt_demo_manager", "CASE9000008", "Requester",
         "Person") do not include any real user names, real email
         addresses, real phone numbers, or real organizational
         identifiers.
@@ -445,8 +498,8 @@
         party's own primary key); NO sys_id literals appear in any
         cross-reference field; <case>, <person>, <sys_scope>, and
         <sys_package> all use human-readable lookup keys
-        (CASE0000008, x_casemgmt_demo_manager, x_casemgmt, x_casemgmt)
-        as both the display_value attribute AND the text content.
+        (CASE9000008, x_casemgmt_demo_manager, x_casemgmt, x_casemgmt)
+        as the display_value attribute, with an empty element body.
       - Scope-identifier validation: the concrete scope identifier `casemgmt` is used verbatim in the sys_class_name, sys_update_name,
         all reference values, and the file path.
 
@@ -511,7 +564,8 @@
 -->
 <record_update table="x_casemgmt_case_party">
     <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000008">CASE0000008</case>
+        <case display_value="CASE9000008"/>
+        <number>PARTY9000006</number>
         <organization/>
         <party_type>Person</party_type>
         <person display_value="x_casemgmt_demo_manager">x_casemgmt_demo_manager</person>

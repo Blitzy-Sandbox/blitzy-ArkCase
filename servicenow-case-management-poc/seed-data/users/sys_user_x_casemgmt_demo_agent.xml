@@ -34,8 +34,7 @@
         (General Inquiry: In Progress / Pending / Resolved / Closed) and
         on demo cases 08, 09, 10 (Complaint: In Progress / Resolved /
         Closed) — i.e., on every demo case that has progressed past Open.
-        This user is also the `assigned_to` on every one of the 8 demo
-        tasks. The pattern is intentional: the demo agent is the primary
+        This user is also the `assigned_to` on every one of the 10 demo tasks. The pattern is intentional: the demo agent is the primary
         case worker; the demo manager approves / closes; the demo viewer
         observes. This separation reinforces the operational personas in
         the validation walkthrough.
@@ -123,7 +122,7 @@
       demo group by <name> = "x_casemgmt_demo_team".
 
     Why this user IS used as `assigned_agent` on cases 03-06 and 08-10
-    AND `assigned_to` on every one of the 8 demo tasks (per the agent
+    AND `assigned_to` on every one of the 10 demo tasks (per the agent
     prompt and the seed-script's case table):
       The demo agent's operational role is to BE the case worker, and
       the seed data must demonstrate every case status with a populated
@@ -137,7 +136,7 @@
       the Complaint-type analog of case 02: assigned_group set, no
       assigned_agent yet. Cases 08, 09, 10 are the In Progress,
       Resolved, Closed Complaints; all have this demo agent as
-      assigned_agent. Tasks: every one of the 8 demo tasks has this
+      assigned_agent. Tasks: every one of the 10 demo tasks has this
       user as assigned_to, since the agent is the case worker and the
       tasks are children of the in-flight cases.
 
@@ -218,8 +217,7 @@
           - ../cases/x_casemgmt_case_demo_03.xml through demo_06.xml and
             demo_08.xml through demo_10.xml  (assigned_agent field
             resolves THIS user by user_name lookup; 7 cases total)
-          - ../tasks/x_casemgmt_case_task_demo_*.xml  (assigned_to field
-            resolves THIS user by user_name lookup; 8 tasks total)
+          - ../tasks/x_casemgmt_case_task_demo_*.xml  (assigned_to ships empty and is linked to THIS user after commit by seed_demo_data.js via user_name lookup; 10 tasks total)
           - ../parties/x_casemgmt_case_party_demo_*.xml  (person field on
             Person-type parties for case 04 Witness and case 09 Witness
             resolves THIS user by user_name lookup)
@@ -279,7 +277,7 @@
           assigned_agent = this user)
         - ../cases/x_casemgmt_case_demo_10.xml  (Closed, Complaint —
           assigned_agent = this user)
-        - all 8 demo task records under
+        - all 10 demo task records under
           ../tasks/x_casemgmt_case_task_demo_*.xml  (assigned_to = this
           user on every demo task)
         - Person-type demo party records under
@@ -305,19 +303,16 @@
               ../groups/  (which adds THIS user as a member by user_name
               lookup)
             * the role assignment at ../role_assignments/
-              sys_user_has_role_x_casemgmt_demo_agent.xml  (resolves
-              <user> by user_name lookup — needs this user to exist)
-            * cases 03-06 and 08-10 under ../cases/  (assigned_agent
-              field resolves by user_name lookup)
-            * all 8 demo task records under ../tasks/  (assigned_to
-              field resolves by user_name lookup)
+              sys_user_has_role_x_casemgmt_demo_agent.xml  (resolves <user> by user_name lookup at import time — needs this user to exist)
+            * cases 03-06 and 08-10 under ../cases/  (assigned_agent ships empty and is linked after commit by seed_demo_data.js via user_name lookup)
+            * all 10 demo task records under ../tasks/  (assigned_to ships empty and is linked after commit by seed_demo_data.js via user_name lookup)
             * the Person-type demo party records under ../parties/
               that use this user as the `person` reference (cases 04
               and 09 Witness parties)
 
     Cascade-impact note (per the agent prompt key insight #6):
       This is the MOST-REFERENCED of the three demo users — referenced
-      by 7 cases, 8 tasks, multiple parties, the demo group, the role
+      by 7 cases, 10 tasks, multiple parties, the demo group, the role
       assignment, and the seed script. If this record fails to load
       during Update Set commit (e.g., due to a malformed XML, an
       unresolvable scope, or a duplicate user_name collision on the

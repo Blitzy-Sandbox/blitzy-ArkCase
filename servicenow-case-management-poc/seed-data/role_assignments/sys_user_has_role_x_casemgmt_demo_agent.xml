@@ -210,7 +210,7 @@
           application record - the sole scope authority in this package, so
           <sys_scope> and <sys_package> both resolve against it)
         - ../users/sys_user_x_casemgmt_demo_agent.xml (the demo agent
-          user — resolves <user> by user_name lookup)
+          user — resolves <user> by user_name lookup at import time)
         - ../../roles/sys_user_role_x_casemgmt_case_agent.xml (the
           scoped role — resolves <role> by name lookup)
 
@@ -245,7 +245,7 @@
           tests. Without this grant, all seven cases would fail to
           render for the impersonated agent regardless of the assigned_agent
           relation, masking the actual ACL behavior.
-        - The 8 demo tasks at ../tasks/x_casemgmt_case_task_demo_*.xml —
+        - The 10 demo tasks at ../tasks/x_casemgmt_case_task_demo_*.xml —
           each task references the demo agent via assigned_to. The
           "All tasks must be closed before resolving this case." gate in
           ../../flows/sub_flows/validate_resolved_transition.xml fires

@@ -325,7 +325,7 @@
         <consumes>application/json</consumes>
         <consumes_customized>true</consumes_customized>
         <default_operation_uri>/api/x_casemgmt/case_submit</default_operation_uri>
-        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
+        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error } plus a { fields } map naming the offending public input fields; a body that is not valid JSON is caught here and answered as HTTP 400 rather than escaping as an HTTP 500. When the Script Include's anonymous flood guard refuses the submission the handler answers HTTP 429 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
         <enforce_acl/>
         <http_method>POST</http_method>
         <name>Case Submit POST</name>
@@ -358,7 +358,24 @@
     //    { error: 'Invalid payload.' } which this handler translates to
     //    HTTP 400.
     // ----------------------------------------------------------------------
-    var payload = request.body && request.body.data ? request.body.data : null;
+    //    The access itself is wrapped in try/catch: `request.body.data`
+    //    parses the raw body lazily, so touching it with a syntactically
+    //    invalid JSON body THROWS out of this operation script. Left
+    //    unguarded the platform turned that throw into HTTP 500 with
+    //    "Exception while reading request" (measured: a body of
+    //    `{"subject":"s",,}` produced 500 and a JavaScript evaluation error
+    //    in syslog). A malformed body is a client fault, so it must be a
+    //    4xx: the catch answers 400 with a clear message, matching the
+    //    already-correct 415 for a wrong Content-Type and 405 for a method
+    //    mismatch.
+    var payload = null;
+    try {
+        payload = request.body && request.body.data ? request.body.data : null;
+    } catch (bodyParseError) {
+        response.setStatus(400);
+        response.setBody({ error: 'Request body must be valid JSON.' });
+        return;
+    }
 
     // ----------------------------------------------------------------------
     // 2. Delegate to the Script Include. The Script Include is the single
@@ -382,7 +399,22 @@
     var result = svc.submitCase(payload);
 
     // ----------------------------------------------------------------------
-    // 3. Validation failure -> HTTP 400 Bad Request.
+    // 3a. Flood guard refusal -> HTTP 429 Too Many Requests.
+    //
+    //    The Script Include sets throttled=true when its anonymous flood
+    //    guard refuses the submission. 429 is the correct status for that
+    //    condition: the request was well formed and would have been
+    //    accepted at another time, so answering 400 would mislead the
+    //    caller into "fix your payload".
+    // ----------------------------------------------------------------------
+    if (result && result.error && result.throttled) {
+        response.setStatus(429);
+        response.setBody({ error: String(result.error) });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 3b. Validation failure -> HTTP 400 Bad Request.
     //
     //    The Script Include returns { error: 'Invalid payload.' } when
     //    the payload is null/non-object/array, and
@@ -391,6 +423,17 @@
     //    mandatory field). Both surface as HTTP 400 to give the calling
     //    widget actionable feedback.
     //
+    //    When the payload failed the field-level validation gate the
+    //    Script Include also returns a `fields` map naming the offending
+    //    inputs (subject, description, requester_name, requester_email,
+    //    type) with a caller-facing reason for each. Those five names are
+    //    the endpoint's own public input contract - the portal form posts
+    //    exactly them - so echoing them back leaks nothing an anonymous
+    //    caller cannot already read in the widget source, and it turns a
+    //    blanket rejection into an actionable one. No INTERNAL field name
+    //    is ever echoed, because the Script Include only ever puts those
+    //    five keys in the map.
+    //
     //    String() coercion on result.error defends against a future
     //    refactor that returns a non-string error value (e.g., an Error
     //    object); the JSON serializer would otherwise produce
@@ -398,7 +441,11 @@
     // ----------------------------------------------------------------------
     if (result && result.error) {
         response.setStatus(400);
-        response.setBody({ error: String(result.error) });
+        var errorBody = { error: String(result.error) };
+        if (result.fields) {
+            errorBody.fields = result.fields;
+        }
+        response.setBody(errorBody);
         return;
     }
 
@@ -460,7 +507,7 @@
         <requires_acl_authorization>false</requires_acl_authorization>
         <requires_authentication>false</requires_authentication>
         <requires_snc_internal_role>false</requires_snc_internal_role>
-        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error } on validation failure, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
+        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error, fields } on validation failure or on a body that is not valid JSON, HTTP 429 with { error } when the anonymous flood guard refuses the submission, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
         <sys_class_name>sys_ws_operation</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-30 12:00:00</sys_created_on>

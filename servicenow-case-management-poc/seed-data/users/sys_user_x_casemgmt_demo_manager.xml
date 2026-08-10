@@ -213,8 +213,7 @@
           scope's source).
         - This record MUST be loaded BEFORE:
             * the role assignment at ../role_assignments/
-              sys_user_has_role_x_casemgmt_demo_manager.xml (resolves
-              <user> by user_name lookup — needs this user to exist)
+              sys_user_has_role_x_casemgmt_demo_manager.xml (resolves <user> by user_name lookup at import time — needs this user to exist)
             * any Person-type demo party that references this user as
               `person` by user_name lookup (cases 03 and 08 Requester
               parties)

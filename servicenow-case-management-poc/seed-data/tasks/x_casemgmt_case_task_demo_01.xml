@@ -1,5 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This task row carries the pinned number TASK9000001 and belongs to the
+    demo case pinned as CASE9000003.
+
+    This row uses BOTH of the package's two reference shapes, and which
+    one a column gets is decided by measurement, not by taste:
+
+      A. case (the parent x_casemgmt_case)
+         -> key in the display_value ATTRIBUTE, element body EMPTY.
+         A body holding a number or a display name makes preview report
+         "Could not find a record in <table> for column <column>", and it
+         does so EVEN WHEN the target row already exists on the instance,
+         because the previewer accepts only a sys_id in a body. The
+         attribute-only shape previews CLEAN, but the column then commits
+         EMPTY - the attribute is a display hint, not a resolvable value.
+         So these links are completed AFTER commit by
+         ../../scripts/seed_demo_data.js, the documented post-commit step,
+         which ADOPTS this row by its pinned number, fills only the
+         columns it finds empty (case by number)
+         and never overwrites a populated value - so a second run repairs
+         nothing and inserts nothing.
+
+      B. assigned_to (a sys_user)
+         -> key in the display_value attribute AND in the element body.
+         sys_user and sys_user_group reference bodies are never checked by
+         preview (a deliberately bogus user_name produced no problem), and
+         the import engine DOES resolve them: the demo users, the demo
+         group and the three sys_user_has_role rows all landed on the
+         instance under these artifacts' own sys_ids with their user and
+         role references correctly resolved. These columns therefore
+         commit LINKED (assigned_to by user_name)
+         and need no post-commit repair.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    Both shapes above carry the key, never a sys_id, so both comply.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Task 01 - Investigate request scope (Open / Investigation)
     ====================================================================
 
@@ -256,10 +297,9 @@
               values must be registered as accepted choices)
             * The demo agent user record at
               ../users/sys_user_x_casemgmt_demo_agent.xml  (assigned_to
-              resolves by user_name lookup)
+              is linked after commit by ../../scripts/seed_demo_data.js via user_name lookup)
             * The parent case at
-              ../cases/x_casemgmt_case_demo_03.xml  (case field
-              resolves by number lookup; CASE0000003 is the parent
+              ../cases/x_casemgmt_case_demo_03.xml  (the case field ships empty and is linked after commit by ../../scripts/seed_demo_data.js via number lookup; CASE9000003 is the parent
               case's auto-generated number when loaded in order on a
               fresh PDI)
         - This record may be loaded in any order relative to:
@@ -279,7 +319,7 @@
       [x] NO <sys_id> literal references in any cross-reference field
           (the <sys_id> element below is THIS record's primary key, NOT
           a reference; references TO OTHER records all use display_value
-          / inner-text canonical-key lookup patterns: <case>,
+          attribute-only canonical-key patterns: <case>,
           <assigned_to>, <sys_scope>, <sys_package>)
       [x] <status>Open</status>  (capital O, Title Case, NOT "open" or
           "OPEN" - matches the choice list registered in
@@ -292,12 +332,12 @@
           NO timezone suffix - per AAP Section 0.5.7 due_date is a Date
           field, not a DateTime; the value 2026-05-06 is computed at
           file generation time as today (2026-05-01) + 5 days)
-      [x] <case> references CASE0000003  (display_value attribute and
-          inner text both equal CASE0000003 - the parent case 03's
+      [x] <case> references CASE9000003  (display_value attribute and
+          element body is empty while the display_value attribute carries CASE9000003 - the parent case 03\'s
           auto-generated number when loaded in order on a fresh PDI;
           no sys_id literal)
       [x] <assigned_to> references demo agent  (display_value attribute
-          and inner text both equal x_casemgmt_demo_agent - the demo
+          carries x_casemgmt_demo_agent with an empty element body - the demo
           agent user's user_name; no sys_id literal)
       [x] NO PII  (the subject "Investigate request scope" is generic;
           no real names, no real emails, no real organizations; the
@@ -309,7 +349,7 @@
       [x] Unix-style line endings  (LF, not CRLF; ensured by the file
           authoring tool)
       [x] Idempotency-key validation: (case, subject) =
-          (CASE0000003, "Demo task 01: Investigate request scope") is
+          (CASE9000003, "Demo task 01: Investigate request scope") is
           unique across the 8-task dataset - no other task on case 03
           has subject "Demo task 01: Investigate request scope"
           (sibling task 02 is on case 03 but with a different subject)
@@ -349,12 +389,12 @@
          negative-test fixture for the My Overdue Tasks widget,
          demonstrating that the report's date filter excludes future-
          dated active tasks rather than flagging them as overdue.
-      5. THE <case> REFERENCE USES display_value=CASE0000003. This is
+      5. THE <case> REFERENCE USES display_value=CASE9000003. This is
          the predictable auto-generated number when cases are loaded
          in order on a fresh PDI per AAP Section 0.5.2. The inner
-         text equals the display_value (CASE0000003) for canonical-
+         body is EMPTY and only the display_value \(CASE9000003\) carries the key, for canonical-
          key resolution; the resolve mechanism on a fresh PDI is
-         "find x_casemgmt_case where number = CASE0000003" performed
+         "find x_casemgmt_case where number = CASE9000003" performed
          at import time by the platform.
       6. THE Date FORMAT IS YYYY-MM-DD. Per AAP Section 0.5.7,
          due_date is a Date, NOT a DateTime. ServiceNow's GlideDate
@@ -435,8 +475,9 @@
 <record_update table="x_casemgmt_case_task">
     <x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000003">CASE0000003</case>
+        <case display_value="CASE9000003"/>
         <due_date>2026-05-06</due_date>
+        <number>TASK9000001</number>
         <status>Open</status>
         <subject>Demo task 01: Investigate request scope</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>

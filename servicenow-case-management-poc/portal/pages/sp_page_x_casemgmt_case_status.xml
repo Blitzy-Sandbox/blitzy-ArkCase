@@ -37,7 +37,7 @@
 
     THE PAGE IS THE SHELL, THE WIDGET IS THE CONTENT:
       This file authors ONLY page-level metadata: URL slug, title, anonymous-
-      access flags, behavioral toggles (omit_watcher, hide_for_kb), and the
+      access flags and behavioral toggles (omit_watcher); the layout lives in
       page layout JSON that embeds ONE widget (the case lookup widget). All
       interactive UI elements (case-number input, lookup button, REST call,
       result-panel rendering, verbatim no-case-found message) live in the
@@ -53,7 +53,7 @@
         anonymous user navigates to
           [instance URL]/x_casemgmt_case_portal?id=x_casemgmt_case_status
           -> THIS page record renders
-          -> page's <page_internal> JSON embeds the lookup widget
+          -> the page's layout chain in ../layout/ embeds the lookup widget
           -> lookup widget renders 1-input form (case number) + result panel
           -> user enters case number + clicks Lookup
           -> widget GETs /api/x_casemgmt/case_status_lookup?number=<value>
@@ -156,47 +156,38 @@
       of scope-prefixing all sp_page <id> values authored by a scoped
       application.
 
-    PAGE LAYOUT (page_internal JSON):
-      ServiceNow's Service Portal page layout is JSON stored in the
-      <page_internal> field. The JSON describes a Bootstrap-style structure
-      of containers, rows, columns (size 1-12), and widget instances. For
-      this simple lookup page, a SINGLE container with ONE row and ONE
-      full-width column embedding ONE widget (the lookup widget) is
-      sufficient.
+    PAGE LAYOUT (four separate records, NOT a field on this record):
+      A Service Portal page renders only what its layout chain places on it:
 
-      The widget is referenced BY ITS `id` FIELD VALUE
-      (x_casemgmt_case_lookup_widget) in the JSON's widget_id /
-      widgetReference fields - NOT by sys_id. This honors the no-hardcoded-
-      sys_id rule (AAP Section 0.7.2). The widget id resolves at render time
-      against the sp_widget record at
-      ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml.
+          sp_page <- sp_container <- sp_row <- sp_column <- sp_instance -> sp_widget
 
-      The widget instance options object is empty ({}) because the lookup
-      widget does not accept configuration parameters from the page; all
-      interactive state (case-number input value, REST response handling,
-      result-panel display logic, verbatim no-case-found message) lives
-      within the widget itself. The widget does NOT transitively embed
-      another widget (unlike the submission widget, which embeds the
-      confirmation widget on success - the lookup widget renders results
-      INLINE in its own template via ng-if/ng-show conditions on
-      response.found vs response.error states).
+      Those four records live in ../layout/sp_page_layout_x_casemgmt_case_status.xml
+      and place the lookup widget in a single full-width column. THIS
+      record is only the shell: slug, title, anonymous-access flags and
+      behavioural toggles.
 
-      The container/row/column ids (container_main, row_lookup, col_lookup,
-      instance_lookup_widget) are local to this page record and are used by
-      Service Portal for DOM ids at render time. They do NOT need scope
-      prefixes because they are not cross-referenced by any other record -
-      they exist purely within this page's layout JSON.
-
-      JSON is wrapped in CDATA to allow angle brackets and ampersands etc.
-      without XML-escaping. The CDATA section's ABSOLUTE constraint is that
-      the CDATA-end-marker sequence (right-bracket-right-bracket-greater-
-      than) must NOT appear inside the JSON; verified - no such sequence
-      is present.
+      An earlier revision of this file tried to express the layout as JSON
+      in an element called `page_internal`. `sp_page` HAS NO SUCH COLUMN on
+      this release - its columns are category, css, draft,
+      dynamic_title_structure, human_readable_url_structure, id, internal,
+      omit_watcher, public, roles, seo_script, short_description, title,
+      use_seo_script - so the platform discarded that element silently and
+      the page rendered a completely blank viewport (measured: 0 forms,
+      0 inputs, 0 buttons, and `GET /api/now/sp/page?id=x_casemgmt_case_status`
+      answering `containers: []`). Two neighbouring elements were inert for
+      the same reason and have also been removed: `hide_for_kb` (not a
+      column; the Knowledge Base integration is out of scope per AAP
+      Section 0.3.2 and nothing links this page to it) and
+      `page_specific_css` (the real column is `css`, authored empty below).
+      `description` has been corrected to the real column
+      `short_description`, which is String(100) on this release - the long
+      narrative that element used to carry now lives in this comment, which
+      is where documentation belongs.
 
     DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
     treatment: ServiceNow Experience Portal default theme. No custom CSS,
     no custom branding."):
-      <page_specific_css/> is intentionally an empty self-closing element.
+      <css/> is intentionally an empty self-closing element.
       No custom CSS rules are authored or referenced by this page record.
       The platform's default Service Portal theme (inherited from the parent
       portal record, which itself uses the platform default theme with empty
@@ -213,9 +204,6 @@
         is sufficient; no dynamic title fragments (e.g., per-case-number
         substituted titles like "Status of CASE0000123") are needed for a
         generic anonymous lookup page.
-      <hide_for_kb>true</hide_for_kb> - the page is NOT exposed to the
-        Knowledge Base integration. Knowledge-base integration is OUT OF
-        SCOPE per AAP Section 0.3.2.
       <omit_watcher>true</omit_watcher> - no automatic watchers are added
         when anonymous users land on this page. Anonymous users have no
         sys_user record to add as a watcher anyway, but setting this
@@ -263,9 +251,9 @@
           (`x_casemgmt`).
         - <sys_package> resolves against the sys_app record's <scope>
           (`x_casemgmt`).
-        - The widget reference inside <page_internal> JSON
-          (x_casemgmt_case_lookup_widget) resolves against the sp_widget
-          record's <id> field at
+        - The widget placement lives in ../layout/sp_page_layout_x_casemgmt_case_status.xml
+          (sp_container -> sp_row -> sp_column -> sp_instance), whose
+          sp_instance references the sp_widget record authored at
           ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml.
 
       The ONLY sys_id literal in this file is <sys_id> itself (THIS record's
@@ -396,11 +384,10 @@
       THIS RECORD SHOULD LOAD AFTER (but ServiceNow's two-pass import
       tolerates any order within the same Update Set, since references
       resolve by name):
+        - ../layout/sp_page_layout_x_casemgmt_case_status.xml (the four
+          layout records that place the lookup widget on this page)
         - ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml (the widget
-          embedded in this page's <page_internal> layout JSON; cross-
-          reference resolves against this record's <id> field at render
-          time, but the platform tolerates any ordering within an Update
-          Set because the JSON-embedded widget reference is resolved
+          those layout records place here; the reference is resolved
           lazily during page render, not during XML import)
 
       THIS RECORD IS REFERENCED BY:
@@ -420,7 +407,7 @@
           'No case found with that number.' for invalid number." The page's
           <public>true</public> flag and <internal>false</internal> setting
           plus the empty <roles/> together permit anonymous callers to
-          render the page. The <page_internal> layout JSON embeds the
+          render the page. The layout records in ../layout/ embed the
           lookup widget which renders the form, calls the REST endpoint,
           and triggers the case status query. Without this page record,
           anonymous users would have no entry-point to the case status
@@ -435,46 +422,17 @@
 <record_update table="sp_page">
     <sp_page action="INSERT_OR_UPDATE">
         <category/>
-        <description>Unauthenticated Service Portal page for case status lookup. Embeds the case lookup widget (sp_widget_x_casemgmt_case_lookup_widget) which renders a single case-number input plus result panel showing ONLY status, subject, opened_date on match, or the verbatim text 'No case found with that number.' on no-match. Reachable via direct URL [instance URL]/x_casemgmt_case_portal?id=x_casemgmt_case_status. Member of the x_casemgmt_case_portal Experience Portal but NOT its homepage (the submission page is the homepage). Replaces ArkCase's GetCaseByNumberService and PortalRequestService.getRequestStatus anonymous-status-lookup pattern. Per AAP Sections 0.4.4 and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <css/>
         <draft>false</draft>
         <dynamic_title_structure/>
-        <hide_for_kb>true</hide_for_kb>
+        <human_readable_url_structure/>
         <id>x_casemgmt_case_status</id>
         <internal>false</internal>
         <omit_watcher>true</omit_watcher>
-        <page_internal><![CDATA[
-{
-    "containers": [
-        {
-            "id": "container_main",
-            "containerClass": "container",
-            "rows": [
-                {
-                    "id": "row_lookup",
-                    "columns": [
-                        {
-                            "id": "col_lookup",
-                            "size": 12,
-                            "instances": [
-                                {
-                                    "id": "instance_lookup_widget",
-                                    "widget_id": "x_casemgmt_case_lookup_widget",
-                                    "widgetReference": "x_casemgmt_case_lookup_widget",
-                                    "title": "Case Status Lookup",
-                                    "options": {}
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-]]></page_internal>
-        <page_specific_css/>
         <public>true</public>
         <roles/>
+        <seo_script/>
+        <short_description>Unauthenticated case status lookup page. Renders the Case Lookup Widget.</short_description>
         <sys_class_name>sp_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -488,5 +446,6 @@
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <title>Case Status Lookup</title>
+        <use_seo_script>false</use_seo_script>
     </sp_page>
 </record_update>

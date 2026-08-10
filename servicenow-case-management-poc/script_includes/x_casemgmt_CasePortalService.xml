@@ -79,6 +79,36 @@
           on success. The number generator is configured in
           ../numbers/sys_number_x_casemgmt_case.xml.
 
+      submitCase INPUT VALIDATION (AAP Section 0.5.7 field constraints):
+        - subject, description and requester_name are MANDATORY: a payload
+          in which any of them is absent, null or whitespace-only is
+          REFUSED, and no row is created. The dictionary mandatory flag
+          alone does not achieve this - mandatory is enforced on forms and
+          through ACLs, not on a scoped GlideRecord.insert() - so this
+          method is the only place the constraint can hold for the
+          anonymous write path.
+        - subject / description / requester_name / requester_email are
+          capped at their declared 255 / 4000 / 100 / 100 lengths. The
+          description cap must be applied in script: the platform stores
+          string columns longer than 255 in a TEXT column that does not
+          truncate, so a 6006-character description was previously stored
+          in full against a declared 4000.
+        - requester_email stays OPTIONAL per AAP Section 0.5.7, but a
+          supplied value must look like an address.
+        - type stays OPTIONAL at the dictionary level (choice=3), but a
+          supplied value MUST be a live choice of x_casemgmt_case.type,
+          read from sys_choice so the "extensible" part of the AAP
+          Section 0.5.7 contract keeps working. Values outside the list
+          are refused instead of stored verbatim.
+        - Rejections name only the five public input fields; internal
+          field names never appear in a validation response.
+        - A coarse flood guard bounds the unauthenticated write path: once
+          the endpoint has created SUBMIT_WINDOW_LIMIT cases inside the
+          trailing SUBMIT_WINDOW_SECONDS the next submission is refused
+          with throttled=true, which the REST operation answers as HTTP
+          429. Internal case creation is never counted, so it is never
+          throttled.
+
       lookupCase whitelist (OUTPUT side - prevents PII / internal-data leak):
         - Returns ONLY: status, subject, opened_date.
         - NEVER returns: assigned_group, assigned_agent, description,
@@ -230,7 +260,7 @@
         <api_name>x_casemgmt.CasePortalService</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase returns {number} on success or {error} on failure; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and capped at 255/4000/100, requester_email must look like an address when supplied, type must be a live choice of x_casemgmt_case.type - and a coarse flood guard bounds the unauthenticated write path; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
         <name>CasePortalService</name>
         <script><![CDATA[var CasePortalService = Class.create();
 CasePortalService.prototype = {
@@ -269,8 +299,11 @@ CasePortalService.prototype = {
      * @param {Object} payload - request payload from the scripted REST
      *     endpoint, as parsed from the JSON request body.
      * @return {Object} { number: 'CASE0000001' } on success; or
-     *     { error: '<message>' } on failure (invalid payload, insert
-     *     rejected by validation business rule, post-insert lookup failed).
+     *     { error: '<message>', fields: { <field>: '<reason>' } } when the
+     *     payload fails validation (the REST operation answers HTTP 400);
+     *     or { error: '<message>', throttled: true } when the anonymous
+     *     flood guard refuses the request (HTTP 429); or
+     *     { error: '<message>' } when the insert itself fails.
      */
     submitCase: function(payload) {
         // Defensive null/type check. The scripted REST endpoint should
@@ -279,6 +312,50 @@ CasePortalService.prototype = {
         // all of those without leaking implementation details to the caller.
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             return { error: 'Invalid payload.' };
+        }
+
+        // ------------------------------------------------------------------
+        // VALIDATION GATE (AAP Section 0.5.7 constraints, enforced here
+        // because nothing else on this write path enforces them).
+        //
+        // The dictionary marks subject, description and requester_name
+        // Mandatory, but a scoped GlideRecord.insert() performed by this
+        // Script Include does NOT run the platform's mandatory-field UI
+        // validation: mandatory is a form/ACL-time construct, so an insert
+        // carrying empty strings succeeds silently. Likewise, ServiceNow
+        // backs string columns longer than 255 with a TEXT column that does
+        // NOT truncate, so the declared 4000-character description limit is
+        // only real if this method enforces it. Both gaps were reproduced
+        // against the live endpoint (blank mandatory fields accepted with
+        // HTTP 201; a 6006-character description stored in full), so the
+        // guard below is the fix for them, and for a `type` value outside
+        // the declared choice list.
+        //
+        // Validation runs BEFORE any GlideRecord is initialized so a
+        // rejected submission cannot leave a partial row behind.
+        // ------------------------------------------------------------------
+        var validated = this._validateSubmission(payload);
+        if (validated.error) {
+            return validated;
+        }
+
+        // ------------------------------------------------------------------
+        // ANONYMOUS FLOOD GUARD. The submit endpoint is reachable without
+        // credentials from the public Internet, so an unbounded caller can
+        // otherwise create cases without limit. The guard counts the rows
+        // this path has created inside the trailing window and refuses once
+        // the ceiling is reached; it never blocks a legitimate single
+        // submission (see SUBMIT_WINDOW_LIMIT).
+        // ------------------------------------------------------------------
+        var admission = this._admitAnonymousSubmission();
+        if (!admission.allowed) {
+            gs.warn('CasePortalService.submitCase: submission refused by the anonymous flood guard; ' +
+                'recent=' + admission.recent + ' limit=' + admission.limit +
+                ' window_seconds=' + admission.windowSeconds);
+            return {
+                error: 'Too many submissions were received in a short period. Please try again in a minute.',
+                throttled: true
+            };
         }
 
         var caseGr = new GlideRecord('x_casemgmt_case');
@@ -292,21 +369,14 @@ CasePortalService.prototype = {
         // Any other key in the payload is silently dropped - we do not
         // even acknowledge unrecognized keys via an error response, so a
         // probing client cannot enumerate internal field names.
+        //
+        // The values written are the VALIDATED, trimmed and length-capped
+        // values produced by _validateSubmission(), never the raw payload.
         var WHITELIST = ['subject', 'type', 'description', 'requester_name', 'requester_email'];
         for (var i = 0; i < WHITELIST.length; i++) {
             var fieldName = WHITELIST[i];
-            // hasOwnProperty guards against prototype-pollution edge cases;
-            // the != null check (loose equality) excludes both null AND
-            // undefined while still allowing empty strings to pass through
-            // (an empty-string requester_email is a valid "I do not wish
-            // to provide email" answer that the dictionary marks optional).
-            if (Object.prototype.hasOwnProperty.call(payload, fieldName) && payload[fieldName] != null) {
-                // String() coercion normalizes any non-string primitive
-                // (number, boolean) into a string before the GlideRecord
-                // setValue call - GlideRecord.setValue expects strings
-                // for string-typed columns and the platform's behavior
-                // for non-string inputs is release-dependent.
-                caseGr.setValue(fieldName, String(payload[fieldName]));
+            if (Object.prototype.hasOwnProperty.call(validated.values, fieldName)) {
+                caseGr.setValue(fieldName, validated.values[fieldName]);
             }
         }
 
@@ -475,6 +545,252 @@ CasePortalService.prototype = {
             status:      String(caseGr.getValue('status') || ''),
             subject:     String(caseGr.getValue('subject') || ''),
             opened_date: String(caseGr.getValue('opened_date') || '')
+        };
+    },
+
+    /**
+     * Validate an anonymous submission payload against the AAP Section 0.5.7
+     * constraints for the five whitelisted input fields, returning the
+     * cleaned values to write.
+     *
+     * Contract per field:
+     *   subject         MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then capped at 255
+     *                   characters (the declared String(255) length).
+     *   description     MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then capped at 4000
+     *                   characters. The cap MUST be applied here: the
+     *                   platform stores >255-character string columns in a
+     *                   TEXT column that does not truncate, so the database
+     *                   alone does not enforce the declared limit.
+     *   requester_name  MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then capped at 100.
+     *   requester_email OPTIONAL (AAP Section 0.5.7 marks it optional).
+     *                   When supplied non-empty it must look like an
+     *                   address - one '@', no whitespace, a dot-bearing
+     *                   domain - and is capped at 100. An empty or absent
+     *                   value is accepted and stored as an empty string.
+     *   type            OPTIONAL at the dictionary level (choice=3, the
+     *                   platform's "Dropdown with -- None --"), so an
+     *                   absent value is legal and stored empty. A SUPPLIED
+     *                   value must match one of the live choices for
+     *                   x_casemgmt_case.type, resolved case-insensitively
+     *                   and normalised to the canonical stored value, so a
+     *                   value outside the choice list can never be stored.
+     *
+     * The error response names the offending fields. Those five names are
+     * already public - the portal form posts them - so naming them leaks
+     * nothing an anonymous caller cannot read in the widget source, while
+     * making the endpoint usable by any client. No INTERNAL field name
+     * (status, assigned_group, assigned_agent, closed_date, ...) ever
+     * appears in a validation response.
+     *
+     * @param {Object} payload - the parsed request body (already checked
+     *     to be a non-array object by the caller).
+     * @return {Object} { values: { <field>: <cleaned string> } } when the
+     *     payload is valid, or { error: '<message>', fields: { <field>:
+     *     '<reason>' } } when it is not.
+     */
+    _validateSubmission: function(payload) {
+        var MANDATORY_TEXT_FIELDS = [
+            { name: 'subject',        label: 'Subject',    maxLength: 255 },
+            { name: 'description',    label: 'Description', maxLength: 4000 },
+            { name: 'requester_name', label: 'Your name',  maxLength: 100 }
+        ];
+        var values = {};
+        var fieldErrors = {};
+        var i;
+
+        for (i = 0; i < MANDATORY_TEXT_FIELDS.length; i++) {
+            var spec = MANDATORY_TEXT_FIELDS[i];
+            var raw = this._readString(payload, spec.name);
+            if (raw === '') {
+                fieldErrors[spec.name] = spec.label + ' is required.';
+                continue;
+            }
+            values[spec.name] = raw.length > spec.maxLength ? raw.substring(0, spec.maxLength) : raw;
+        }
+
+        // requester_email - optional, but validated when present so the
+        // stored value is always either empty or plausibly deliverable.
+        var email = this._readString(payload, 'requester_email');
+        if (email === '') {
+            values.requester_email = '';
+        } else if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email)) {
+            fieldErrors.requester_email = 'Email must be a valid address.';
+        } else {
+            values.requester_email = email.length > 100 ? email.substring(0, 100) : email;
+        }
+
+        // type - optional, but constrained to the choice list when present.
+        var type = this._readString(payload, 'type');
+        if (type === '') {
+            values.type = '';
+        } else {
+            var canonical = this._resolveCaseTypeChoice(type);
+            if (canonical === null) {
+                fieldErrors.type = 'Type must be one of: ' + this._caseTypeChoices().join(', ') + '.';
+            } else {
+                values.type = canonical;
+            }
+        }
+
+        for (var key in fieldErrors) {
+            if (Object.prototype.hasOwnProperty.call(fieldErrors, key)) {
+                return {
+                    error: 'The submission could not be accepted because one or more fields are invalid.',
+                    fields: fieldErrors
+                };
+            }
+        }
+        return { values: values };
+    },
+
+    /**
+     * Read one payload key as a trimmed string.
+     *
+     * Absent keys, null, undefined, objects and arrays all collapse to the
+     * empty string so the caller can treat "not usable" uniformly; scalar
+     * non-strings (a JSON number or boolean) are coerced, matching the
+     * String() coercion this class has always applied before writing to a
+     * string column.
+     *
+     * @param {Object} payload - the parsed request body.
+     * @param {String} key - the field name to read.
+     * @return {String} the trimmed value, or '' when unusable.
+     */
+    _readString: function(payload, key) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) {
+            return '';
+        }
+        var value = payload[key];
+        if (value === null || value === undefined) {
+            return '';
+        }
+        if (typeof value === 'object') {
+            // An object or array where a scalar belongs is not a usable
+            // value; treating it as empty makes it fail the mandatory
+            // check rather than storing "[object Object]".
+            return '';
+        }
+        return String(value).trim();
+    },
+
+    /**
+     * The live choice values for x_casemgmt_case.type, in the order the
+     * platform presents them.
+     *
+     * Read from sys_choice rather than hardcoded so the "extensible" part
+     * of the AAP Section 0.5.7 contract ("General Inquiry, Complaint -
+     * extensible") keeps working: an administrator who adds a choice does
+     * not have to touch this Script Include for the endpoint to accept it.
+     * Inactive choices are excluded - an inactive choice must not be
+     * storable through the public endpoint.
+     *
+     * @return {Array} array of choice value strings (possibly empty when
+     *     the choice list has not been created yet).
+     */
+    _caseTypeChoices: function() {
+        var choices = [];
+        var gr = new GlideRecord('sys_choice');
+        gr.addQuery('name', 'x_casemgmt_case');
+        gr.addQuery('element', 'type');
+        gr.addQuery('inactive', false);
+        gr.orderBy('sequence');
+        gr.query();
+        while (gr.next()) {
+            var value = String(gr.getValue('value') || '');
+            if (value !== '' && choices.indexOf(value) === -1) {
+                choices.push(value);
+            }
+        }
+        return choices;
+    },
+
+    /**
+     * Resolve a caller-supplied case type to its canonical stored value.
+     *
+     * Matching is exact first, then case-insensitive, so 'general inquiry'
+     * is accepted and stored as 'General Inquiry' while 'NOT_A_REAL_TYPE'
+     * is refused. When the choice list cannot be read at all (it has not
+     * been created on this instance yet) the value is refused rather than
+     * stored unchecked: refusing is the fail-closed answer, and the choice
+     * list is a Gate 1 requirement, so its absence is an installation
+     * fault rather than a reason to relax the contract.
+     *
+     * @param {String} supplied - a non-empty trimmed candidate value.
+     * @return {String|null} the canonical choice value, or null when the
+     *     candidate is not a live choice.
+     */
+    _resolveCaseTypeChoice: function(supplied) {
+        var choices = this._caseTypeChoices();
+        var i;
+        for (i = 0; i < choices.length; i++) {
+            if (choices[i] === supplied) {
+                return choices[i];
+            }
+        }
+        var lowered = supplied.toLowerCase();
+        for (i = 0; i < choices.length; i++) {
+            if (choices[i].toLowerCase() === lowered) {
+                return choices[i];
+            }
+        }
+        return null;
+    },
+
+    /**
+     * Coarse flood guard for the unauthenticated submit path.
+     *
+     * The endpoint accepts writes with no credentials, so without a ceiling
+     * a single caller can create cases indefinitely (measured: six parallel
+     * anonymous submits all accepted, with no throttling of any kind). The
+     * guard counts the cases this path has created inside the trailing
+     * window and refuses further submissions once the ceiling is reached.
+     *
+     * Why it counts rows instead of tracking callers: the scoped
+     * application owns exactly three tables per the AAP Section 0.5.7 data
+     * model, so there is nowhere to persist per-caller counters without
+     * adding an artifact the AAP does not define (Section 0.7.2
+     * Minimal-Change Clause). Counting the endpoint's own recent rows
+     * needs no new storage, keeps no client identifier and therefore
+     * stores no PII, and still bounds the damage an abusive caller can do.
+     * The trade-off is deliberate and documented: the ceiling is global to
+     * the endpoint rather than per-IP, so a flood suppresses other
+     * anonymous submissions for the remainder of the window.
+     *
+     * Rows created by the endpoint are identified by their creator: an
+     * unauthenticated call runs as the platform's guest user, so
+     * sys_created_by on those rows is that user name and never a real
+     * internal user. Internal case creation through the native form is
+     * therefore never counted and never throttled.
+     *
+     * @return {Object} { allowed: Boolean, recent: Number, limit: Number,
+     *     windowSeconds: Number }
+     */
+    _admitAnonymousSubmission: function() {
+        var SUBMIT_WINDOW_SECONDS = 60;
+        var SUBMIT_WINDOW_LIMIT = 10;
+        var ANONYMOUS_USER_NAME = 'guest';
+
+        var windowStart = new GlideDateTime();
+        windowStart.addSeconds(-SUBMIT_WINDOW_SECONDS);
+
+        var recent = 0;
+        var agg = new GlideAggregate('x_casemgmt_case');
+        agg.addQuery('sys_created_by', ANONYMOUS_USER_NAME);
+        agg.addQuery('sys_created_on', '>=', windowStart);
+        agg.addAggregate('COUNT');
+        agg.query();
+        if (agg.next()) {
+            recent = parseInt(agg.getAggregate('COUNT'), 10) || 0;
+        }
+
+        return {
+            allowed: recent < SUBMIT_WINDOW_LIMIT,
+            recent: recent,
+            limit: SUBMIT_WINDOW_LIMIT,
+            windowSeconds: SUBMIT_WINDOW_SECONDS
         };
     },
 

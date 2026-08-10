@@ -132,6 +132,28 @@ All other fields on the case table are NOT accepted by the submission endpoint a
 
 - Missing mandatory field → 400 Bad Request with field-level error message rendered next to the offending input.
 - Invalid `type` value → 400 Bad Request with "Invalid case type".
+
+> **Implemented and measured, not just specified.** The `submitCase()` gate in
+> `../script_includes/x_casemgmt_CasePortalService.xml` runs **before** any `GlideRecord` is initialised, and the
+> operation script in `../portal/rest/sys_ws_operation_x_casemgmt_case_submit_post.xml` maps its result onto the
+> status codes below. Verified with anonymous `curl` against the live PDI, no credentials:
+>
+> | Request | Response |
+> |---|---|
+> | `{}` — every field absent | **400**, field-level `{error, fields}` body, and **no row created** |
+> | no body at all | **400** |
+> | `subject` / `description` / `requester_name` blank or whitespace-only | **400** (values are trimmed first) |
+> | `description` of 6,006 characters | **201** — an over-length value is **truncated to the column bound, not rejected**: measured `description` stored at exactly 4,000 characters, and a 300-character `subject` stored at exactly 255. `requester_name` and `requester_email` cap at 100 the same way. The cap is applied deliberately rather than left to the platform, because a column longer than 255 is TEXT and would otherwise store the whole oversized value |
+> | `type` = `NOT_A_REAL_TYPE` | **400** — the value is checked against the **live** `sys_choice` list for `x_casemgmt_case.type`, so the AAP's "extensible" choice contract keeps working, and an unreadable list fails closed. Matching is exact first, then case-insensitive |
+> | `type` omitted entirely | **201**, and the column is stored **empty** — `type` carries no mandatory constraint in AAP §0.5.7, and no default is invented. The submission **page** always sends one, because its Type control is `required` |
+> | `requester_email` present but malformed | **400** |
+> | body that is not valid JSON | **400** `Request body must be valid JSON.` — previously this threw inside the operation script and escaped as **HTTP 500** |
+> | body that is a JSON array | **400** `Invalid payload.` (verbatim — an ATF step asserts this exact string) |
+> | more than 10 anonymous submissions inside 60 s | **429** — a flood guard that counts `sys_created_by='guest'` rows in the trailing minute, so it cannot block a legitimate single submission |
+> | wrong `Content-Type` | **415** |
+> | `GET` / `PUT` / `DELETE` on the submit path | **405** |
+> | a valid submission | **201** `{"number":"CASE…","message":"Your case has been submitted"}`, row `status=Draft` |
+
 - Server-side error → 500 Internal Server Error with generic "Submission failed; please try again." (do NOT expose internal stack traces).
 
 ## Page 2: Case Status Lookup

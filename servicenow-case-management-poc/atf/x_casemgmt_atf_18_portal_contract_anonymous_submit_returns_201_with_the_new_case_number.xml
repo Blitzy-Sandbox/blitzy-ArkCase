@@ -780,11 +780,18 @@
     //      for one. A JSON array is the body used, because submitCase() rejects any
     //      non-object payload before it touches GlideRecord - see
     //      ../script_includes/x_casemgmt_CasePortalService.xml - so nothing can be
-    //      written. The alternatives were measured and rejected: a bare string, a
-    //      number or unparseable text is refused by the platform's body parser with
-    //      HTTP 500 BEFORE the operation script runs, proving nothing about the
-    //      handler, and an EMPTY body parses to no payload at all, which this
-    //      endpoint accepts - it WOULD create a row.
+    //      written. A JSON array remains the chosen body because it is the ONE
+    //      rejection whose message the handler owns verbatim: submitCase() answers a
+    //      non-object payload with exactly 'Invalid payload.', asserted below. The
+    //      alternatives all changed after the validation gate was added to
+    //      submitCase() and the body parse was guarded in the operation script: an
+    //      EMPTY body and a body missing any mandatory field are now both refused
+    //      with HTTP 400 and create nothing (they used to be accepted and WOULD have
+    //      created a row), and unparseable text is now caught by the operation
+    //      script and answered HTTP 400 'Request body must be valid JSON.' instead of
+    //      escaping as HTTP 500. Their messages are the field-level validation
+    //      envelope rather than a single verbatim string, so they are less precise to
+    //      assert on than the array.
     //   2. The case step 2 submitted, read back through the anonymous lookup endpoint
     //      with no credentials: the portal round trip is reachable end to end by an
     //      unauthenticated caller, and the three-field whitelist holds for one.

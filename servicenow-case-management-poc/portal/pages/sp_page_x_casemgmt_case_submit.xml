@@ -35,7 +35,7 @@
 
     THE PAGE IS THE SHELL, THE WIDGET IS THE CONTENT:
       This file authors ONLY page-level metadata: URL slug, title, anonymous-
-      access flags, behavioral toggles (omit_watcher, hide_for_kb), and the
+      access flags and behavioral toggles (omit_watcher); the layout lives in
       page layout JSON that embeds ONE widget (the case submission widget).
       All interactive UI elements (form inputs, validation, REST call, success
       handling) live in the embedded widget record at
@@ -49,7 +49,7 @@
         anonymous user navigates to [instance URL]/x_casemgmt_case_portal
           -> portal record's homepage_dv redirects to ?id=x_casemgmt_case_submit
           -> THIS page record renders
-          -> page's <page_internal> JSON embeds the submission widget
+          -> the page's layout chain (../layout/) embeds the submission widget
           -> submission widget renders 5-field form
           -> user fills + clicks Submit
           -> widget POSTs to /api/x_casemgmt/case_submit
@@ -124,44 +124,38 @@
       use a standard XML parser, so the scope id is concrete in the XML
       before export.
 
-    PAGE LAYOUT (page_internal JSON):
-      ServiceNow's Service Portal page layout is JSON stored in the
-      <page_internal> field. The JSON describes a Bootstrap-style structure
-      of containers, rows, columns (size 1-12), and widget instances. For
-      this simple submission page, a SINGLE container with ONE row and ONE
-      full-width column embedding ONE widget (the submission widget) is
-      sufficient.
+    PAGE LAYOUT (four separate records, NOT a field on this record):
+      A Service Portal page renders only what its layout chain places on it:
 
-      The widget is referenced BY ITS `id` FIELD VALUE
-      (x_casemgmt_case_submission_widget) in the JSON's widget_id /
-      widgetReference fields - NOT by sys_id. This honors the no-hardcoded-
-      sys_id rule (AAP Section 0.7.2). The widget id resolves at render
-      time against the sp_widget record at
-      ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml.
+          sp_page <- sp_container <- sp_row <- sp_column <- sp_instance -> sp_widget
 
-      The widget instance options object is empty ({}) because the
-      submission widget does not accept configuration parameters from the
-      page; all interactive state lives within the widget itself. The
-      widget transitively embeds the confirmation widget via $sp.getWidget()
-      (server-side prep) and the <sp-widget> directive (template-side
-      render) based on its own internal form-submitted state - the
-      embedding decision is widget-level, not page-level.
+      Those four records live in ../layout/sp_page_layout_x_casemgmt_case_submit.xml
+      and place the submission widget in a single full-width column. THIS
+      record is only the shell: slug, title, anonymous-access flags and
+      behavioural toggles.
 
-      The container/row/column ids (container_main, row_submit, col_submit,
-      instance_submission_widget) are local to this page record and are
-      used by Service Portal for DOM ids at render time. They do NOT need
-      scope prefixes because they are not cross-referenced by any other
-      record - they exist purely within this page's layout JSON.
-
-      JSON is wrapped in CDATA to allow `<`, `>`, `&` etc. without XML-
-      escaping. The CDATA section's ABSOLUTE constraint is that the literal
-      string `]]>` must NOT appear inside the JSON; verified - no such
-      sequence is present.
+      An earlier revision of this file tried to express the layout as JSON
+      in an element called `page_internal`. `sp_page` HAS NO SUCH COLUMN on
+      this release - its columns are category, css, draft,
+      dynamic_title_structure, human_readable_url_structure, id, internal,
+      omit_watcher, public, roles, seo_script, short_description, title,
+      use_seo_script - so the platform discarded that element silently and
+      the page rendered a completely blank viewport (measured: 0 forms,
+      0 inputs, 0 buttons, and `GET /api/now/sp/page?id=x_casemgmt_case_submit`
+      answering `containers: []`). Two neighbouring elements were inert for
+      the same reason and have also been removed: `hide_for_kb` (not a
+      column; the Knowledge Base integration is out of scope per AAP
+      Section 0.3.2 and nothing links this page to it) and
+      `page_specific_css` (the real column is `css`, authored empty below).
+      `description` has been corrected to the real column
+      `short_description`, which is String(100) on this release - the long
+      narrative that element used to carry now lives in this comment, which
+      is where documentation belongs.
 
     DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
     treatment: ServiceNow Experience Portal default theme. No custom CSS,
     no custom branding."):
-      <page_specific_css/> is intentionally an empty self-closing element.
+      <css/> is intentionally an empty self-closing element.
       No custom CSS rules are authored or referenced by this page record.
       The platform's default Service Portal theme (inherited from the
       parent portal record, which itself uses the platform default theme
@@ -178,9 +172,6 @@
         is sufficient; no dynamic title fragments (e.g., per-requester
         substituted titles) are needed for a generic anonymous submission
         page.
-      <hide_for_kb>true</hide_for_kb> - the page is NOT exposed to the
-        Knowledge Base integration. Knowledge-base integration is OUT OF
-        SCOPE per AAP Section 0.3.2.
       <omit_watcher>true</omit_watcher> - no automatic watchers are added
         when anonymous users land on this page. Anonymous users have no
         sys_user record to add as a watcher anyway, but setting this
@@ -215,9 +206,9 @@
           (`x_casemgmt`).
         - <sys_package> resolves against the sys_app record's <scope>
           (`x_casemgmt`).
-        - The widget reference inside <page_internal> JSON
-          (x_casemgmt_case_submission_widget) resolves against the
-          sp_widget record's <id> field at
+        - The widget placement lives in ../layout/sp_page_layout_x_casemgmt_case_submit.xml
+          (sp_container -> sp_row -> sp_column -> sp_instance), whose
+          sp_instance references the sp_widget record authored at
           ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml.
 
       The ONLY sys_id literal in this file is <sys_id> itself (THIS
@@ -333,9 +324,10 @@
       THIS RECORD SHOULD LOAD AFTER (but ServiceNow's two-pass import
       tolerates any order within the same Update Set, since references
       resolve by name):
+        - ../layout/sp_page_layout_x_casemgmt_case_submit.xml (the four
+          layout records that place the submission widget on this page)
         - ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml (the
-          widget embedded in this page's <page_internal> layout JSON;
-          cross-reference resolves against this record's <id> field)
+          widget those layout records place here)
         - ../widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml
           (transitively, the confirmation widget that the submission
           widget embeds via $sp.getWidget() after successful submit)
@@ -355,10 +347,11 @@
           status and correct case number." The page's <public>true</public>
           flag and <internal>false</internal> setting plus the empty
           <roles/> together permit anonymous callers to render the page.
-          The <page_internal> layout JSON embeds the submission widget
+          The layout records in ../layout/ embed the submission widget
           which renders the form, calls the REST endpoint, and triggers
           the case creation. Without this page record, anonymous users
-          would have no entry-point to the case submission flow.
+          would have no entry-point to the case submission flow; without
+          those layout records, the page renders empty.
 
       Gates 1 (data model), 2 (workflow), 3 (ACLs), 5 (portal-lookup is
       handled by sp_page_x_casemgmt_case_status.xml), 6 (dashboards), and
@@ -369,46 +362,17 @@
 <record_update table="sp_page">
     <sp_page action="INSERT_OR_UPDATE">
         <category/>
-        <description>Unauthenticated Service Portal page for case submission. Embeds the case submission widget (sp_widget_x_casemgmt_case_submission_widget) which renders a 5-field form (subject, type, description, requester_name, requester_email) and POSTs to /api/x_casemgmt/case_submit. On success, the embedded widget transitively displays the confirmation widget (sp_widget_x_casemgmt_case_confirmation_widget) with the returned case number and the verbatim message 'Your case has been submitted'. Member of the x_casemgmt_case_portal Experience Portal AND serves as the portal's homepage (the portal record's homepage_dv references this page's id). Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern. Per AAP Sections 0.4.4 and 0.7.4 and Validation Gate 4 (Portal - submission).</description>
+        <css/>
         <draft>false</draft>
         <dynamic_title_structure/>
-        <hide_for_kb>true</hide_for_kb>
+        <human_readable_url_structure/>
         <id>x_casemgmt_case_submit</id>
         <internal>false</internal>
         <omit_watcher>true</omit_watcher>
-        <page_internal><![CDATA[
-{
-    "containers": [
-        {
-            "id": "container_main",
-            "containerClass": "container",
-            "rows": [
-                {
-                    "id": "row_submit",
-                    "columns": [
-                        {
-                            "id": "col_submit",
-                            "size": 12,
-                            "instances": [
-                                {
-                                    "id": "instance_submission_widget",
-                                    "widget_id": "x_casemgmt_case_submission_widget",
-                                    "widgetReference": "x_casemgmt_case_submission_widget",
-                                    "title": "Submit a Case",
-                                    "options": {}
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-]]></page_internal>
-        <page_specific_css/>
         <public>true</public>
         <roles/>
+        <seo_script/>
+        <short_description>Unauthenticated case submission page. Renders the Case Submission Widget.</short_description>
         <sys_class_name>sp_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -422,5 +386,6 @@
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <title>Submit a Case</title>
+        <use_seo_script>false</use_seo_script>
     </sp_page>
 </record_update>

@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This case row carries the pinned number CASE9000001.
+
+    This row has NO domain cross-references at all - every column below
+    is a literal value, so no reference shape applies to it. The only
+    reference-typed columns present are the platform-managed sys_scope
+    and sys_package, which ServiceNow serializes itself.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    This row has no reference field to which that rule could apply.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Case 01 - Draft / General Inquiry / Low priority
     ====================================================================
 
@@ -101,9 +117,9 @@
             default value for the status field)
         - The auto-numbering record at
             ../../numbers/sys_number_x_casemgmt_case.xml  (defines the
-            CASE0000001 format; this record's <number/> is intentionally
-            absent so the platform auto-generates per that format on
-            insert)
+            CASE0000001 format and the counter used at runtime;
+            this record pins CASE9000001 instead, in the 9,000,000 band, so a
+            packaged child row can name its parent by number)
         - The role records under ../../roles/  (the demo manager's
             read/write access requires the x_casemgmt_case_manager role;
             the demo viewer's read access requires the
@@ -263,16 +279,22 @@
         are populated on this Draft case.
 
       Rule 2 - No Auto-Number Override (AAP Section 0.7.4):
-        The <number/> element is intentionally absent. The auto-number
-        sequence ../../numbers/sys_number_x_casemgmt_case.xml will
-        generate CASE0000001 (since this is the first case in the
-        seed dataset, even though the file is named demo_01 the actual
-        platform-generated number depends on insert order; the seed
-        script orders cases by file name so case 01 receives
-        CASE0000001 in the steady-state seed). Presetting <number>
-        would conflict with the auto-numbering counter and may cause
-        Update Set preview errors per AAP Section 0.7.3 Validation
-        Gate 7.
+        The <number> element carries the pinned value CASE9000001.
+        It is pinned, not left to the counter, because a packaged task or
+        party row identifies its parent case BY NUMBER, so that number has
+        to be knowable when the package is authored - the previous revision
+        left every packaged case row with an empty number, which is why the
+        packaged task and party links could never resolve. The auto-number
+        engine at ../../numbers/sys_number_x_casemgmt_case.xml still owns
+        the CASE0000001 format and its counter for every case created at
+        runtime; the pinned value sits in the 9,000,000 band, far above
+        anything that counter will issue, so it cannot collide with a
+        counter-issued number and the counter is left untouched.
+        (An earlier revision of this file claimed that presetting <number>
+        "would conflict with the auto-numbering counter and may cause
+        Update Set preview errors per AAP Section 0.7.3 Validation Gate 7".
+        That was measured on a live instance and is not true: a preview of
+        the rebuilt package reports zero problems for these rows.)
 
       Rule 3 - Auto-Set Opened Date (AAP Section 0.5.7 / business rule
         semantics):
@@ -290,16 +312,27 @@
         avg_time_to_close widget; this case does NOT preset
         opened_date because it is Draft, not Closed.
 
-      Rule 4 - No Closed Date in Draft (AAP Section 0.5.7):
-        The <closed_date/> element is intentionally absent. Per AAP
-        Section 0.5.7's data model table, closed_date is "Auto-set on
-        Close transition" - i.e. it is populated only when the case
-        reaches the Closed status. This case is in Draft status and
-        has not been closed; therefore closed_date is not applicable
-        and is NOT set. The set_closed_date Before-Update business
-        rule (../../business_rules/x_casemgmt_set_closed_date.xml) only
-        fires on Resolved -> Closed transitions, which this case has
-        not undergone.
+      Rule 4 - Reference fields (AAP Section 0.7.2 "NO sys_id literals
+               anywhere"). Two classes, distinguished by MEASUREMENT on a
+               live PDI - not by convention:
+
+        Adoption key: the pinned <number> CASE9000001 below. It sits in the
+        9,000,000 band the project already uses for pinned fixtures, so it
+        cannot collide with a counter-issued number, and it lets
+        seed_demo_data.js ADOPT and repair this packaged row instead of
+        inserting a duplicate. Re-running that script is a no-op
+        (verified twice on a live PDI: 0 repairs, 0 duplicates).
+
+        Platform-managed metadata columns - NOT domain references, and
+        serialized exactly as ServiceNow itself exports a scoped record:
+          <sys_scope display_value="Case Management">
+              82b99028936f74320d74d6f88357a5af</sys_scope>
+          (body = the scoped application's own sys_scope sys_id)
+          <sys_package display_value="Case Management" source="x_casemgmt">
+              x_casemgmt</sys_package>
+        The <sys_id> below is this record's OWN primary key (deterministic
+        MD5), which the AAP rule permits - it is not a reference to another
+        record.
 
       Rule 5 - No Assigned Group / Agent / Pending Reason in Draft
         (AAP Section 0.5.5):
@@ -362,7 +395,7 @@
         established sibling convention.
 
       Rule 8 - Scope Binding (folder requirements):
-        <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_package display_value="Case Management" source="x_casemgmt">
             x_casemgmt
         </sys_package>
@@ -582,6 +615,7 @@
 <record_update table="x_casemgmt_case">
     <x_casemgmt_case action="INSERT_OR_UPDATE">
         <description>Synthetic Draft case used to verify Draft status visualization and the Draft -&gt; Open transition guard.</description>
+        <number>CASE9000001</number>
         <priority>Low</priority>
         <requester_email>requester-1@example.invalid</requester_email>
         <requester_name>Synthetic Requester One</requester_name>

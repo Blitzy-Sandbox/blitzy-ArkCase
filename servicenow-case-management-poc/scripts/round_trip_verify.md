@@ -16,7 +16,7 @@ Before starting this procedure, all of the following MUST hold. If ANY prerequis
 - On the **source PDI**, all of Validation Gates 1–6 have passed (per [`../docs/validation-gates.md`](../docs/validation-gates.md)).
 - On the **source PDI**, both Flow Designer flows (`general_inquiry_state_machine` and `complaint_state_machine`) are **Active** (not Draft).
 - On the **source PDI**, all 10+ demo cases are visible in the case list spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), per AAP Section 0.7.4 minimum demo-data thresholds.
-- The seed data situation is understood before you start: the packaged seed rows commit as **data**, and they arrive with `number` empty on all 10 demo cases. **No seed data is generated automatically on import** — a Fix Script in an Update Set is installed, not executed. The verifier must delete the number-less rows and re-run [`./seed_demo_data.js`](./seed_demo_data.js) in scope on the verification PDI (Phase 4).
+- The seed data situation is understood before you start. The 28 packaged seed rows commit as **data**, and each one now carries a **pinned, deterministic number** — `CASE9000001`-`CASE9000010`, `TASK9000001`-`TASK9000010`, `PARTY9000001`-`PARTY9000008`, chosen in the 9,000,000 band so they cannot collide with anything the CASE/TASK/PARTY counters issue, and leaving the counters untouched. Two of their reference columns arrive **empty** by design — `case` (on tasks and parties) and `organization` (on Organization parties) — because Update Set preview rejects a reference whose element body holds a number or a company name, so those keys travel in the `display_value` attribute instead. The `sys_user` and `sys_user_group` references (`assigned_group`, `assigned_agent`, `assigned_to`, `person`) arrive **already linked**, because the import engine does resolve those bodies. **No seed data is generated automatically on import** — a Fix Script in an Update Set is installed, not executed. So after commit you run `scripts/seed_demo_data.js` **in scope `x_casemgmt`**, which **adopts** the packaged rows by their pinned numbers and fills only the columns it finds empty. Do **not** delete the packaged rows first: deleting them and re-seeding produces counter-issued numbers instead of the pinned ones, and a second run of the script repairs nothing (verified twice on a live PDI: 0 repairs, 0 duplicates).
 - A **fresh, separate PDI** is available with an admin account ready (the verification PDI must NOT be the same instance as the source PDI). Re-importing on the source PDI does not exercise the portability gate as strongly.
 
   > **What was actually done, and why.** A second PDI was not available for this build, so the round trip was
@@ -67,14 +67,15 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 - State = Loaded.
 - Application name matches the scoped application (`x_casemgmt Case Management`).
 - No upload error message displayed.
-- **The child `sys_update_xml` count is exactly 913.** Assert this, do not eyeball it — see the warning below
+- **The child `sys_update_xml` count is exactly 925.** Assert this, do not eyeball it — see the warning below
   for why it is the one number that catches the most common mistake in this procedure.
 
 > ⚠️ **Uploading this file onto an instance that already holds it REUSES the same Retrieved Update Set row and
 > APPENDS its children — it does not replace them.** Measured directly: the `<sys_remote_update_set>` descriptor
 > in this file hard-codes `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, so the loader matches on it. Two
 > successive uploads onto a row that already carried one committed batch took the child count
-> **913 → 1,826 → 2,739**, and the second upload silently reset the row's state from `previewed` back to
+> **913 → 1,826 → 2,739** (observed on the 913-block revision; the multiples track whatever the current
+> block count is — 925 today), and the second upload silently reset the row's state from `previewed` back to
 > `loaded`, discarding the first preview. `sys_updated_on` cannot tell the loads apart, because each load stamps
 > it back to the file's literal `2026-04-30 12:00:00`.
 >
@@ -83,7 +84,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 >   3 × 34 — the same 34 problems repeated per batch, not new defects. If you must read absolute counts, attribute
 >   each problem to its originating batch through `remote_update` → that child's `sys_created_on`.
 > - **This procedure's zero-problem criterion is only meaningful from a clean slate**, which is what Phase 0's
->   teardown is for. On a fresh PDI that has never seen this application, the count is 913 and the question does
+>   teardown is for. On a fresh PDI that has never seen this application, the count is 925 and the question does
 >   not arise.
 >
 > Related trap when diffing two loads: **preview rewrites `sys_update_xml.name`**, re-canonicalising a
@@ -131,7 +132,7 @@ The most frequent failure mode in this gate is **hard-coded `sys_id` references*
 
 | Symptom (Preview Problem text) | Likely Cause | Remediation |
 | --- | --- | --- |
-| `"Could not find a record in <table> for ..."` | A reference field in a flow / ACL / seed record points at a sys_id that exists on the source PDI but not on the verification PDI. | Open the offending source record on the source PDI; replace the sys_id reference with a `GlideRecord` lookup by `name` / `user_name` / `number` / `role_label` (per AAP Section 0.5.2 reference resolution rules); re-export. |
+| `"Could not find a record in <table> for ..."` | **Measured on Australia Patch 3, and narrower than it looks: Update Set preview accepts a reference element BODY only when that body is a sys_id that already exists in the target database.** A body holding a display value or a number is rejected *even when the target row exists* — `case` = `CASE0000981` and `organization` = `Synthetic Org Alpha` both errored against rows that were present. An intra-set sys_id resolves only if the target record travels in a canonically named `<table>_<sys_id>` block. An **empty** body is clean, and so is a body that is empty with the key carried in a `display_value` **attribute**. `sys_user`, `sys_user_group` and `sys_user_role` reference bodies are not checked at all (a deliberately bogus `user_name` produced no problem) **and the import engine resolves them**, which is why the demo users, the demo group and the three `sys_user_has_role` rows land correctly linked. | For a reference whose target is created by the same Update Set — or is a scoped table or `core_company` — carry the key in the `display_value` attribute with an **empty** element body, and complete the link after commit by key lookup (that is exactly what the 28 seed rows and `seed_demo_data.js` do). For `sys_user` / `sys_user_group` references, keep the key in the body. Never substitute a literal `sys_id` — AAP Section 0.7.2 forbids it. |
 | `"Found in update set but missing in target"` | A child artifact (subflow, choice list, dictionary entry) was referenced by another artifact but was not itself captured in the Update Set. | On the source PDI, open the Update Set's Customer Updates list; verify the missing artifact's table appears; if not, manually add the artifact to the Update Set and re-export. |
 | `"Has been changed by ... in the target instance"` | A global-scope record was modified, violating the "no global-scope writes" constraint (AAP Section 0.7.1). | Identify the global record on the source PDI and revert the change; the scoped application MUST live entirely in `x_casemgmt` namespace. |
 | `"Found a local update that is newer than this one"` — the verbatim text this instance emits, and it is typed **`error`**, not `warning` (measured on Australia Patch 3; its count equals the record's `Collisions` field exactly). An earlier revision of this row quoted it as `"Skipped — newer version in target"` and called it an acceptable warning; both were wrong. | The verification PDI already holds this record and its local copy is newer — a re-run of the same Update Set, or a record edited directly on the instance after the file was produced. | Expected on re-runs and NOT a package defect, but it **does** block the commit, so it cannot simply be ignored: reset the verification PDI (Phase 0 teardown) for a clean test, and be aware that a bare re-upload appends children rather than replacing them (see the Phase 1 warning). |
@@ -195,8 +196,14 @@ the checklist a round-trip verifier needs.
 - [ ] Confirm independently of the log that **exactly 27** `sys_security_acl_role` rows exist in the scope,
       distributed manager 14 / agent 10 / viewer 3. A number other than 27 means it has not converged; the script
       removes surplus links as well as creating missing ones.
-- [ ] Delete the 10 number-less packaged `Demo case …` rows, their orphan tasks and parties, and the dangling
-      `sys_user_grmember` row; then run `scripts/seed_demo_data.js` **in scope `x_casemgmt`** (not Global).
+- [ ] Run `scripts/seed_demo_data.js` **in scope `x_casemgmt`** (not Global). **Do not delete the packaged
+      seed rows first** — that instruction belonged to an earlier revision whose rows committed with `number`
+      empty. They now carry pinned numbers (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+), and the script
+      ADOPTS them: it matches on the pinned number, fills only the columns that are still empty (`case` on
+      tasks and parties, `organization` on Organization parties), and never overwrites a populated value.
+      Expect `cases inserted=0 adopted=10 …` on a committed install, and a second run to report
+      `repaired=0`. Then confirm the census is 10 cases / 10 tasks / 8 parties with no duplicates, and clear
+      the dangling `sys_user_grmember` row if one is present.
 - [ ] Record every command you ran here. **This is the residual manual footprint**, and it must appear in the
       round-trip report rather than being absorbed into a pass.
 
@@ -204,7 +211,7 @@ the checklist a round-trip verifier needs.
 
 The Update Set is committed but not yet **delivered**. The final step is to re-run each functional gate on the verification PDI to confirm the application behaves identically to the source PDI. This catches any subtle deployment differences (missing seed data, broken references, role assignment gaps).
 
-**A Fix Script inside an Update Set does not execute on commit.** Committing a Fix Script installs the record and nothing more — the platform does not run it, and neither does anything else in this package, which contains **no auto-execute record of any kind**. So no seed data appears by itself: run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script **in scope `x_casemgmt`**, after Phase 4's remediation, before re-verifying the gates below. Delete the 10 number-less packaged `Demo case …` rows first, or the script will match them by `subject` and leave them unnumbered.
+**A Fix Script inside an Update Set does not execute on commit.** Committing a Fix Script installs the record and nothing more — the platform does not run it, and neither does anything else in this package, which contains **no auto-execute record of any kind**. So no seed data appears by itself: run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script **in scope `x_casemgmt`**, after Phase 4's remediation, before re-verifying the gates below. Do **not** delete the packaged `Demo case …` rows first — every packaged seed row now carries a pinned number (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+) and the script matches on that number, ADOPTS the row and fills only the reference columns that ship empty (`case` on tasks and parties, `organization` on Organization parties). Expect `inserted=0 adopted=10/10/8` on a committed install, and `repaired=0` on a second run.
 
 The package's one Fix Script, `x_casemgmt Post-Import Remediation`, is subject to the same rule and to one more: running it from *System Definition → Fix Scripts → Run Fix Script* executes it **in the application scope**, where the privileged calls it needs are refused. Run its source, `post_import_remediation.js`, from *Scripts - Background* with **"In scope" = Global** instead.
 
@@ -332,9 +339,12 @@ onto unrelated deployments.
 Add these to any future round trip — each one caught a real defect that Phases 1–4 do not detect:
 
 - [ ] **Portal pages, not just endpoints.** Open the submit and status-lookup pages as an anonymous visitor and
-      confirm a form actually renders. **Result: ❌ both render blank** — `GET /api/now/sp/page` returns
-      `containers: []`; the Service Portal layout records were never authored. Testing only the REST endpoints
-      hides this completely.
+      confirm a form actually renders, **and that a successful submit shows the confirmation rather than an
+      error**. This check caught two defects that Phases 1-4 cannot see, both now fixed: no Service Portal
+      layout records existed (`GET /api/now/sp/page` returned `containers: []`, pages pure white), and both
+      widgets read `response.data.<field>` where a Scripted REST body is nested under `result`, so a 201
+      rendered "Submission failed". **Result now: ✅ both pages render and work anonymously.** Keep this step —
+      testing only the REST endpoints hides both classes of defect completely.
 - [ ] **Dashboards actually render.** Do not stop at "does the `pa_dashboards` record exist" — open both
       dashboards and count the tabs and widgets on screen. **Result: ❌ both render 0 tabs and 0 widgets**, with
       the platform's empty state, "Add widgets using the widget picker.", and 0 console errors. Each composite
@@ -399,7 +409,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
       0 Skipped, with 180 of 180 step results Success, in about 4 minutes, leaving no test residue.** An earlier
       run scored 16 Success / 4 Failure across three identical runs; those four failures were the child-table ACL
       condition (ATF 07) and the three form-level assertions (ATF 15-17), both root causes since fixed, and that
-      result is history rather than status. The suite serializes to **761** of the package's 913 blocks —
+      result is history rather than status. The suite serializes to **761** of the package's 925 blocks —
       20 tests, 180 steps, **540** step inputs, 1 suite and 20 suite-member links.
 - [ ] Confirm the re-imported ATF records still **run**, not merely exist — the Defect-F failure mode applies
       to any relationally-compiled construct. Check that no test has zero steps and no step has zero
@@ -425,13 +435,19 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 7. §6.6 — The regression harness returns the same count after the round trip as before it, per assertion, and any
    test-suite failure is reported rather than relaxed.
 
-> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the revision of this
-> deliverable immediately preceding the one that ships today: 913 blocks, 3,618,378 bytes, SHA-256 `7272edfc…`.
-> **Today's bytes are 913 blocks, 3,643,389 bytes, SHA-256 `89638c17…`** — the same file with 9 payloads
-> re-synced by the QA-remediation pass, measured **preview-neutral** against the revision below by a matched A/B
-> upload-and-preview against one instance state (identical problem signatures: 34 problems each, the same
-> 18 / 13 / 3 on the same target records, 0 descriptions present in one and not the other; see
-> [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)).
+> **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
+> 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is two revisions behind the one that ships today.
+> **Today's bytes are 925 blocks, 3,698,577 bytes, SHA-256 `e49a7654…`.** They differ from the intermediate
+> 913-block `89638c17…` revision in the 28 re-shaped seed records (parent key in the `display_value`
+> attribute with an empty element body, plus deterministic pinned numbers `CASE9000001-10` /
+> `TASK9000001-10` / `PARTY9000001-08`) and 12 added blocks (8 portal-layout rows, 1 List Layout, 1 UI Policy
+> with 2 actions). That change is **not** preview-neutral, and deliberately so: the 21 package-intrinsic
+> `Could not find a record` problems the previous revision carried are **eliminated**. Measured on today's
+> bytes against an already-populated instance: upload as a fresh retrieved update set with the child count
+> asserted at **925**, then preview → **31 problems, every one
+> `Found a local update that is newer than this one`, ZERO `Could not find a record`** (63 → 0), with all 31
+> targets confirmed to hold a local `sys_update_version` in state `current`. **Phases 1-3 have NOT been
+> re-executed on today's bytes** — no teardown, and no commit, because the verification instance is shared.
 > Phases 1-3 were executed on the `7272edfc…` bytes after a proven teardown —
 > `state=loaded` with the child count asserted at exactly 913; preview problems **41 → 298 → 0 of any type**,
 > the 298 being the teardown's own deletions captured as newer local updates and the 0 confirmed by the

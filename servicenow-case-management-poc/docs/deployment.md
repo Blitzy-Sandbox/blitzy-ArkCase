@@ -6,16 +6,22 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
-> **Status of the zero-preview-error requirement stated above.** It has been met on the 913-block,
-> **3,618,378-byte**, SHA-256
-> `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` revision. The bytes that ship today are
-> 913 blocks, **3,643,389 bytes**, SHA-256 `89638c17…` — the same file with 9 payloads re-synced by the
-> QA-remediation pass, measured preview-neutral against the revision below by a matched A/B preview (identical
-> problem signatures, 0 descriptions present in one and not the other). This procedure was run end to
-> end: **41** preview problems against an already-populated instance, **298** on the first pass after a proven
-> teardown (all `Found a local update that is newer than this one` — the teardown's own deletions captured as
-> local updates), and **0 problems of any type** once that local capture was purged at source, confirmed through
-> the platform's own `unresolvedProblems=false` predicate, then committed to `state=committed`. An earlier
+> **Status of the zero-preview-error requirement stated above — two results, not one.** Zero problems of
+> **any** type was reached on the 913-block, **3,618,378-byte**, SHA-256
+> `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` revision: **41** preview problems against
+> an already-populated instance, **298** on the first pass after a proven teardown (all
+> `Found a local update that is newer than this one` — the teardown's own deletions captured as local updates),
+> and **0 problems of any type** once that local capture was purged at source, confirmed through the platform's
+> own `unresolvedProblems=false` predicate, then committed to `state=committed`.
+> The bytes that ship today are **925 blocks, 3,698,577 bytes, SHA-256 `e49a7654…`**. They have been uploaded
+> as a fresh retrieved update set (925 children asserted) and previewed against an already-populated instance:
+> **31 problems, all `Found a local update that is newer than this one`, and ZERO `Could not find a record`
+> problems** — the 21 package-intrinsic reference problems present in the previous 913-block `89638c17…`
+> revision are gone (63 reference errors → 0), because the 28 seed records now carry their parent key in the
+> `display_value` attribute with an empty element body and pinned deterministic numbers. Every one of the 31
+> was confirmed to have a local `sys_update_version` in state `current`, so all 31 are the instance's own
+> history and cannot occur on a fresh PDI. **Commit was withheld on these bytes** — the verification instance
+> is shared — so "0 of any type" remains proven only on `7272edfc…`. An earlier
 > 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as
 > history in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of that
 > document is the current record. **Verify the digest before you upload, so you know which artifact you are
@@ -31,7 +37,7 @@ The following prerequisites MUST hold before starting the export step. They alig
 - All seed data has been committed via the seed script in [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
 - All 7 Flow Designer flows are **Active** *and* **Published** (not Draft) — the 2 parent flows `general_inquiry_state_machine` and `complaint_state_machine` and the 5 `validate_*_transition` subflows. Confirm both columns: a flow that is active but unpublished does not enforce. Equally important, confirm the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** is present and active — it is what converts a subflow's refusal into a blocking form error, and without it the flows run but nothing blocks.
 - Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references. **This item cannot be checked on the verification instance and is a known failure.** Both `pa_dashboards` records commit and open, but each renders **0 tabs and 0 widgets** with the platform's empty state, "Add widgets using the widget picker." Each composite block names **three child tables that do not exist on this release** — `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8 widget placements and the role grants are dropped on commit. Renaming one element is **not** sufficient; supplying a tab was tested and the dashboards stayed blank. Separately, all 8 `sys_report` records commit with an **empty `group_by`** although the artifacts specify one, so the charts would not aggregate as designed even once placed. See [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5 and §0.6](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
-- Portal submission and lookup behave correctly on the source PDI. **On the verification instance this holds at the REST layer only, and the two portal pages render blank** (the page API returns `containers: []`; their Service Portal layout records were never authored). Verify the contract with the endpoints directly: anonymous `POST /api/x_casemgmt/case_submit` returns **201** with an auto-generated number in `CASE0000001` format, `GET /api/x_casemgmt/case_status_lookup?number=<valid>` returns exactly `status` / `subject` / `opened_date`, and an unknown number returns **404** with the verbatim text `No case found with that number.`
+- Portal submission and lookup behave correctly, **at both the REST layer and the page layer**. The two portal pages used to render blank because their Service Portal layout records had never been authored and both widgets mis-read the Scripted REST response envelope; both defects are fixed and the pages were re-verified anonymously in a browser.
 - No hard-coded `sys_id` literals exist in any Update Set artifact. Search via Studio → Find: regex `[a-f0-9]{32}` across the scoped application; zero matches inside flow scripts, ACL conditions, business rules, script includes, scripted REST handlers, UI policies, UI actions, and seed records.
 - All artifacts are in scope `x_casemgmt`, with **exactly one disclosed and approved exception** — the installer Fix Script `x_casemgmt Post-Import Remediation`, which is authored **global** because the `GlideTableDescriptor` and `GlideSecurityManager` calls it needs are refused in scoped execution. See the Rules Compliance note at the end of this document for the full rationale. Verify by filtering `sys_app=x_casemgmt Case Management` on every record type listed in the [Step 1](#step-1-export-the-update-set) artifact inventory; the Fix Script is the only record expected to differ, and global tables must show **data** inserts only, never schema changes.
 - The current Update Set (top-right Update Set picker) is the scoped application Update Set, not the Default or another in-flight set. All in-progress edits since the last export must be on this Update Set.
@@ -59,7 +65,7 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
    - **7 Business Rules**, in execution order — `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)**, `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), `set_closed_date` (500). The order-250 rule is the one that invokes the transition subflow and turns its verdict into a blocking form error; the order-500 rule is the only writer of `closed_date`. Earlier revisions of this inventory listed six and omitted `enforce_forward_transitions`.
    - **6 UI Actions** — the state-transition buttons under `ui_action/`.
    - **1 Fix Script** — `x_casemgmt Post-Import Remediation`, carrying the post-import remediation body verbatim. It is authored **global** by design (see the note in Step 2) and **does not execute by itself**.
-   - **761 ATF records** — 20 test definitions, 180 test steps, 540 step inputs (539 `sys_variable_value` + 1 variable value), 1 test suite and 20 suite-member links. This is by far the largest part of the package: 761 of its 913 blocks.
+   - **761 ATF records** — 20 test definitions, 180 test steps, 540 step inputs (539 `sys_variable_value` + 1 variable value), 1 test suite and 20 suite-member links. This is by far the largest part of the package: 761 of its 925 blocks.
    - **1 UI Policy** — `case_party_conditional_fields` (shows `person` when `party_type=Person`; shows `organization` when `party_type=Organization`).
    - **1 sp_portal record + 2 pages + 3 widgets + 2 sys_ws_definition records** — the Experience Portal record, the case-submit and case-status pages, the submission/lookup/confirmation widgets, and the two scripted REST endpoints (`/api/x_casemgmt/case_submit`, `/api/x_casemgmt/case_status_lookup`).
    - **2 pa_dashboards records + 8 sys_report records** — Agent Workspace, Manager View, plus the eight reports enumerated in [`dashboards.md`](./dashboards.md).
@@ -131,8 +137,7 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
 > install requires the Update Set to be committed a **second** time, because rebuilding the tables cascades the
 > ACLs away.
 >
-> **Three of the sub-steps below cannot pass on the verification instance, and that is expected:** step 5 (the
-> portal pages render blank — use the REST endpoints instead, steps 6-8 in `curl` form), steps 9-10 (both
+> **Two of the sub-steps below cannot pass on the verification instance, and that is expected:** steps 9-10 (both
 > dashboards render 0 tabs and 0 widgets), and the related-lists clause of step 11 (no `sys_ui_related_list` row
 > exists for the scope, and the form's related-lists wrapper measures 0 pixels tall). Each is a packaging defect
 > recorded in `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5-§0.6, not something a different install sequence

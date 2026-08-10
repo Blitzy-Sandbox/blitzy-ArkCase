@@ -190,7 +190,7 @@
           application record - the sole scope authority in this package, so
           <sys_scope> and <sys_package> both resolve against it)
         - ../users/sys_user_x_casemgmt_demo_manager.xml (the demo manager
-          user — resolves <user> by user_name lookup)
+          user — resolves <user> by user_name lookup at import time)
         - ../../roles/sys_user_role_x_casemgmt_case_manager.xml (the
           scoped role — resolves <role> by name lookup)
 

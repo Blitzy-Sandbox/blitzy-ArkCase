@@ -1,5 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This party row carries the pinned number PARTY9000002 and belongs to the
+    demo case pinned as CASE9000003.
+
+    The package uses two reference shapes, decided by measurement rather
+    than taste. This row uses shape A only:
+
+      A. case (the parent x_casemgmt_case), organization (a core_company)
+         -> key in the display_value ATTRIBUTE, element body EMPTY.
+         A body holding a number or a display name makes preview report
+         "Could not find a record in <table> for column <column>", and it
+         does so EVEN WHEN the target row already exists on the instance,
+         because the previewer accepts only a sys_id in a body. The
+         attribute-only shape previews CLEAN, but the column then commits
+         EMPTY - the attribute is a display hint, not a resolvable value.
+         So these links are completed AFTER commit by
+         ../../scripts/seed_demo_data.js, the documented post-commit step,
+         which ADOPTS this row by its pinned number, fills only the
+         columns it finds empty (case by number, organization by name)
+         and never overwrites a populated value - so a second run repairs
+         nothing and inserts nothing.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    The shape above carries the key, never a sys_id, so it complies.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Party 02 - Organization Respondent on case 03 (In Progress General Inquiry)
     ====================================================================
 
@@ -151,7 +181,7 @@
         - ../../scripts/seed_demo_data.js  (creates the synthetic
              "Synthetic Org Alpha" row in the platform's core_company
              table during Phase F of the seed script's idempotent
-             execution; <organization> below resolves by name lookup
+             execution; <organization> below is linked after commit by ../../scripts/seed_demo_data.js via group-name lookup
              against that core_company row. The seed script runs
              BEFORE the Update Set's seed-data segment per AAP Section
              0.5.2; alternatively the script may be run separately
@@ -205,14 +235,13 @@
               x_casemgmt_case_party_*.xml
             * The choice record sys_choice_case_party_party_type.xml
             * The parent case at
-              ../cases/x_casemgmt_case_demo_03.xml  (case field resolves
-              by number lookup; that case must exist before this party
+              ../cases/x_casemgmt_case_demo_03.xml  (the case field ships empty and is linked after commit by ../../scripts/seed_demo_data.js via number lookup; that case must exist before this party
               can reference it)
             * Any role and ACL records that gate read/write access at
               import time
             * The seed_demo_data.js execution that creates the
               "Synthetic Org Alpha" row in core_company (the
-              <organization> field resolves by name lookup against
+              <organization> field is linked after commit by ../../scripts/seed_demo_data.js via group-name lookup against
               that row; if the row does not exist at Update Set apply
               time, the reference resolution silently leaves the slot
               empty - which would fail Validation Gate 1)
@@ -282,39 +311,46 @@
         case AS THE FIRST EXEMPLAR of the Organization branch in
         the load sequence.
 
-      Rule 4 - Reference resolution by stable human-readable key (AAP
-              Section 0.7.2 "NO sys_id literals anywhere"):
-        case         : <case display_value="CASE0000003">CASE0000003</case>
-                       resolves to demo case 03 by the case table's
-                       idempotent number lookup. CASE0000003 is the
-                       auto-numbered value the platform generates for
-                       demo case 03 since cases 01 through 03 import
-                       in order with the CASE0000001-format auto-number
-                       counter (case 01 -> CASE0000001, case 02 ->
-                       CASE0000002, case 03 -> CASE0000003). This
-                       party's parent therefore resolves to the demo
-                       case 03 record at
-                       ../cases/x_casemgmt_case_demo_03.xml.
-        organization : <organization display_value="Synthetic Org Alpha"
-                       >Synthetic Org Alpha</organization> resolves to
-                       the synthetic company by the core_company
-                       table's name lookup. This is the FIRST Update
-                       Set record that references Synthetic Org Alpha;
-                       party 07 on case 08 references the SAME company
-                       (same Respondent on a different case), and the
-                       lookup resolves to the same core_company row in
-                       both files - demonstrating the organization-on-
-                       multiple-cases pattern.
+      Rule 4 - Reference fields (AAP Section 0.7.2 "NO sys_id literals
+               anywhere"). Two classes, distinguished by MEASUREMENT on a
+               live PDI - not by convention:
 
-        Both cross-reference fields use the display_value attribute
-        AND the element text content set to the same human-readable
-        key. ServiceNow's Update Set engine resolves the target sys_id
-        from this key at import time via the table's idempotent-key
-        lookup. NO sys_id literals appear in any cross-reference
-        slot per AAP Section 0.7.2.
+        CLASS 1 - key in the display_value ATTRIBUTE, body EMPTY:
+          <case display_value="CASE9000003"/>
+          <organization display_value="Synthetic Org Alpha"/>
+
+          A reference BODY holding a case number or a company name is
+          reported by preview as "Could not find a record ..." EVEN WHEN
+          the target row exists, because the previewer only accepts a body
+          that is a sys_id. Carrying the key in the display_value
+          attribute with an EMPTY body previews clean; the column then
+          commits EMPTY, so the link is completed AFTER commit by the
+          documented post-commit step ../../scripts/seed_demo_data.js:
+            case           -> x_casemgmt_case by number
+            organization   -> core_company by name
+
+        Deliberately empty (not applicable to this row): <person/>
+
+        Adoption key: the pinned <number> PARTY9000002 below. It sits in the
+        9,000,000 band the project already uses for pinned fixtures, so it
+        cannot collide with a counter-issued number, and it lets
+        seed_demo_data.js ADOPT and repair this packaged row instead of
+        inserting a duplicate. Re-running that script is a no-op
+        (verified twice on a live PDI: 0 repairs, 0 duplicates).
+
+        Platform-managed metadata columns - NOT domain references, and
+        serialized exactly as ServiceNow itself exports a scoped record:
+          <sys_scope display_value="Case Management">
+              82b99028936f74320d74d6f88357a5af</sys_scope>
+          (body = the scoped application's own sys_scope sys_id)
+          <sys_package display_value="Case Management" source="x_casemgmt">
+              x_casemgmt</sys_package>
+        The <sys_id> below is this record's OWN primary key (deterministic
+        MD5), which the AAP rule permits - it is not a reference to another
+        record.
 
       Rule 5 - All mandatory case_party fields populated:
-        case        - mandatory parent reference - CASE0000003
+        case        - mandatory parent reference - CASE9000003
         party_type  - mandatory Choice           - "Organization"
         person      - conditional Reference (NOT required when
                       party_type=Organization)   - EMPTY (correct)
@@ -349,7 +385,7 @@
 
       Rule 7 - Idempotency anchor:
         The party's idempotent key is the (case, party_type, role_label,
-        organization) tuple: (CASE0000003, Organization, Respondent,
+        organization) tuple: (CASE9000003, Organization, Respondent,
         Synthetic Org Alpha). The companion seed script
         ../../scripts/seed_demo_data.js ensureParty() helper queries
         x_casemgmt_case_party by this 4-tuple BEFORE inserting; the
@@ -372,8 +408,7 @@
         UTF-8 encoding declared in XML prolog.
         Element ordering: alphabetical (matching the established peer
         convention used by sys_user_*, sys_user_group_*, sys_user_has_
-        role_*, role records, all 10 case demo records, all 8 task
-        demo records, parties 03 through 08, and dictionary entries
+        role_*, role records, all 10 case demo records, all 10 task demo records, parties 03 through 08, and dictionary entries
         across the scoped Update Set).
         Unix-style line endings (LF) per AAP file authoring conventions.
 
@@ -484,7 +519,7 @@
         phone-number patterns) both pass. The deterministic sys_id
         ensures byte-identical re-export across agent rebuilds.
       - No-PII grep returns zero matches: the synthetic identifiers
-        ("Synthetic Org Alpha", "CASE0000003", "Respondent",
+        ("Synthetic Org Alpha", "CASE9000003", "Respondent",
         "Organization") do not include any real user names, real
         email addresses, real phone numbers, or real organizational
         identifiers.
@@ -500,8 +535,8 @@
         party's own primary key); NO sys_id literals appear in any
         cross-reference field; <case>, <organization>, <sys_scope>,
         and <sys_package> all use human-readable lookup keys
-        (CASE0000003, Synthetic Org Alpha, x_casemgmt, x_casemgmt) as
-        both the display_value attribute AND the text content.
+        (CASE9000003, Synthetic Org Alpha, x_casemgmt, x_casemgmt) as
+        the display_value attribute, with an empty element body.
       - Scope-identifier validation: the concrete scope identifier `casemgmt` is used verbatim in the sys_class_name, sys_update_name,
         all reference values, and the file path.
 
@@ -573,8 +608,9 @@
 -->
 <record_update table="x_casemgmt_case_party">
     <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000003">CASE0000003</case>
-        <organization display_value="Synthetic Org Alpha">Synthetic Org Alpha</organization>
+        <case display_value="CASE9000003"/>
+        <number>PARTY9000002</number>
+        <organization display_value="Synthetic Org Alpha"/>
         <party_type>Organization</party_type>
         <person/>
         <role_label>Respondent</role_label>

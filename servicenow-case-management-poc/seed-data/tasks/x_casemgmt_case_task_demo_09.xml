@@ -1,5 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This task row carries the pinned number TASK9000009 and belongs to the
+    demo case pinned as CASE9000004.
+
+    This row uses BOTH of the package's two reference shapes, and which
+    one a column gets is decided by measurement, not by taste:
+
+      A. case (the parent x_casemgmt_case)
+         -> key in the display_value ATTRIBUTE, element body EMPTY.
+         A body holding a number or a display name makes preview report
+         "Could not find a record in <table> for column <column>", and it
+         does so EVEN WHEN the target row already exists on the instance,
+         because the previewer accepts only a sys_id in a body. The
+         attribute-only shape previews CLEAN, but the column then commits
+         EMPTY - the attribute is a display hint, not a resolvable value.
+         So these links are completed AFTER commit by
+         ../../scripts/seed_demo_data.js, the documented post-commit step,
+         which ADOPTS this row by its pinned number, fills only the
+         columns it finds empty (case by number)
+         and never overwrites a populated value - so a second run repairs
+         nothing and inserts nothing.
+
+      B. assigned_to (a sys_user)
+         -> key in the display_value attribute AND in the element body.
+         sys_user and sys_user_group reference bodies are never checked by
+         preview (a deliberately bogus user_name produced no problem), and
+         the import engine DOES resolve them: the demo users, the demo
+         group and the three sys_user_has_role rows all landed on the
+         instance under these artifacts' own sys_ids with their user and
+         role references correctly resolved. These columns therefore
+         commit LINKED (assigned_to by user_name)
+         and need no post-commit repair.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    Both shapes above carry the key, never a sys_id, so both comply.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Task 09 - Initial intake review for Pending case (Closed / Review)
     ====================================================================
 
@@ -142,7 +183,7 @@
          "Review" (Title Case "R") match the registered choice
          values verbatim.
       7. Audit-trail consideration: this task's parent case
-         (CASE0000004) is currently in Pending status. The fact
+         (CASE9000004) is currently in Pending status. The fact
          that a Closed Review task exists for this case correctly
          models a real-world workflow: an agent typically performs
          an INITIAL REVIEW of a new case (this Closed task) BEFORE
@@ -152,8 +193,9 @@
 <record_update table="x_casemgmt_case_task">
     <x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000004">CASE0000004</case>
+        <case display_value="CASE9000004"/>
         <due_date>2026-04-29</due_date>
+        <number>TASK9000009</number>
         <status>Closed</status>
         <subject>Demo task 09: Initial intake review for Pending case</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>

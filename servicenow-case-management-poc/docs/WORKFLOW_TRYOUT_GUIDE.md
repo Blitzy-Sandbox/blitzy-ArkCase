@@ -27,15 +27,16 @@
 | 2 | Tasks linked to a case; "resolve blocked until tasks closed" | ✅ Yes — enforced and blocking on the form |
 | 3 | Associate Person / Organization parties (polymorphic) | ✅ Yes (UI policy) — but you must open the party **list** or a party record; the case form shows **no related lists** (§2) |
 | 4 | Role-based access: manager / agent / viewer | ✅ Yes, on all three tables |
-| 5 | External portal: submit a case and look up its status | ⚠️ **REST endpoints only.** Both portal **pages render blank** — §5 shows you the `curl` calls that do work |
+| 5 | External portal: submit a case and look up its status | ✅ **Yes — both pages and both REST endpoints.** §7 walks the pages; §5 keeps the `curl` equivalents |
 | 6 | Dashboards: Agent Workspace + Manager View | ❌ **Neither renders.** Both open and show 0 tabs and 0 widgets — §6 |
 
-> **Read this before you start, so you do not spend time diagnosing known defects.** Three surfaces of this POC
-> do not work, all measured, all packaging defects rather than anything about your instance:
+> **Read this before you start, so you do not spend time diagnosing known defects.** Two surfaces of this POC
+> do not work, both measured, both packaging defects rather than anything about your instance:
 >
-> - **Both portal pages render blank.** The routes answer HTTP 200 anonymously, but the page API returns
->   `containers: []` and the pages contain 0 inputs and 0 buttons. The two scripted **REST endpoints** behind
->   them work correctly, and §5 uses those.
+> - **The portal pages are no longer among them.** They used to render blank — the page API returned
+>   `containers: []` because the Service Portal layout records had never been authored, and a response-envelope
+>   bug in both widgets made a successful 201 display "Submission failed". Both are fixed, and both pages now
+>   render and work for an anonymous visitor. §7 walks them; §5 keeps the `curl` equivalents, which also work.
 > - **Both dashboards render 0 tabs and 0 widgets**, showing the platform's own empty state, "Add widgets using
 >   the widget picker." Each names three child tables this release does not have. Separately, the six chart
 >   reports arrive with no grouping column, so a chart opened directly groups by the wrong field or draws
@@ -231,30 +232,28 @@ Impersonate each demo user (Section 1) and observe the access posture (validated
 
 ## 7. Scenario 5 — External portal (no login required)
 
-> ### ⚠️ The portal pages render blank — use the API route in §7.3
+> ### ✅ Both portal pages work — §7.1 and §7.2 are live exercises, and §7.3 is the `curl` equivalent
 >
-> The portal URL below resolves anonymously with no login wall, but **both pages are empty**: the page API
-> returns `containers: []`, and the rendered pages contain 0 inputs and 0 buttons (verified pure white, with 0
-> console errors). Their Service Portal layout records were never authored. An out-of-the-box page on the same
-> portal and the same anonymous session renders normally, so neither the portal nor anonymous access is at fault.
->
-> **§7.3 is therefore the real exercise of this scenario, not an optional extra** — the two scripted REST
-> endpoints behind the pages are fully working and enforce the exact specified contract. §7.1 and §7.2 below
-> describe the intended page behaviour and are retained so that the specification is on record; they cannot be
-> performed today.
+> Earlier revisions of this guide told you to skip straight to the API because both pages came up empty. That
+> was a real defect and it is fixed: the pages' Service Portal layout records had never been authored (so the
+> page API returned `containers: []`), and both widgets read `response.data.<field>` where a Scripted REST body
+> is nested under `result`, which made a successful 201 display "Submission failed". Verified since, anonymously
+> in a browser: 5 inputs and a working Submit on the submission page, a confirmation panel carrying the verbatim
+> message and the new case number, and a lookup page returning exactly Status / Subject / Opened Date or the
+> verbatim not-found literal — with 0 console errors and no request ≥ 400.
 
 Open the public portal (incognito window, **not** logged in):
 
 **`https://dev379024.service-now.com/x_casemgmt_case_portal`**
 
-### 7.1 Submit a case *(intended page behaviour — page currently renders blank)*
+### 7.1 Submit a case
 1. Go to the **Submit a Case** page.
 2. Fill in **subject**, **type**, **description**, **requester_name**, and optionally **requester_email**.
 3. Submit → you get a confirmation showing the new **case number** and the message
    **"Your case has been submitted"**. The case is created internally with status **Draft**.
    (Internally verifiable: the new `CASE…` number appears in `x_casemgmt_case.list` with Draft status.)
 
-### 7.2 Look up a case status *(intended page behaviour — page currently renders blank)*
+### 7.2 Look up a case status
 1. Go to the **Case Status** page.
 2. Enter a valid case number → it returns only **status, subject, and opened_date** (no internal fields such as
    assignment, description, or requester data are exposed, and not the number either).

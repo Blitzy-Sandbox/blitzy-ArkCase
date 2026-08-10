@@ -407,9 +407,30 @@
 
         $http.get(url).then(function(response) {
             // Success path (HTTP 200). The server's REST operation
-            // returns { status, subject, opened_date } per its contract.
+            // returns { status, subject, opened_date } per its contract -
+            // but a ServiceNow Scripted REST API wraps whatever the
+            // operation script passes to response.setBody() inside a
+            // `result` envelope before it reaches the wire. Measured
+            // against the live endpoint, a 200 body is
+            //   {"result":{"status":"Draft","subject":"...","opened_date":"..."}}
+            // so the three whitelisted values live at
+            // response.data.result.*, and reading response.data.* yields
+            // undefined - which would have painted a result panel with
+            // three blank rows instead of the case's status.
+            //
+            // The unwrap below prefers the envelope and falls back to the
+            // bare body, so it is correct whether or not the envelope is
+            // applied (the platform can be configured either way, and a
+            // caller may append sysparm_no_envelope).
             c.loading = false;
-            if (response && response.data) {
+            var body = (response && response.data && response.data.result) ?
+                response.data.result :
+                (response ? response.data : null);
+            // `status` is mandatory on every case, so its presence is the
+            // signal that a real record came back. An empty or
+            // status-less body is treated as not-found rather than
+            // rendered as a panel of blanks.
+            if (body && body.status) {
                 // Strict 3-field whitelist (defense-in-depth). Extract
                 // ONLY status, subject, opened_date from the response
                 // body. Even if the server were misconfigured to return
@@ -418,14 +439,15 @@
                 // the template renders an empty cell rather than the
                 // literal text "undefined" or "null".
                 c.result = {
-                    status:      String(response.data.status      || ''),
-                    subject:     String(response.data.subject     || ''),
-                    opened_date: String(response.data.opened_date || '')
+                    status:      String(body.status      || ''),
+                    subject:     String(body.subject     || ''),
+                    opened_date: String(body.opened_date || '')
                 };
                 c.notFound = false;
             } else {
-                // Defensive: empty response body but HTTP 200. Treat as
-                // not-found rather than rendering an empty result panel.
+                // Defensive: empty or status-less response body on HTTP
+                // 200. Treat as not-found rather than rendering an empty
+                // result panel.
                 // This should not occur in practice (the server always
                 // returns a body on 200) but guards against unexpected
                 // upstream behavior.

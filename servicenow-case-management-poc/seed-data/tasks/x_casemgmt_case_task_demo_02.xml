@@ -1,5 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This task row carries the pinned number TASK9000002 and belongs to the
+    demo case pinned as CASE9000003.
+
+    This row uses BOTH of the package's two reference shapes, and which
+    one a column gets is decided by measurement, not by taste:
+
+      A. case (the parent x_casemgmt_case)
+         -> key in the display_value ATTRIBUTE, element body EMPTY.
+         A body holding a number or a display name makes preview report
+         "Could not find a record in <table> for column <column>", and it
+         does so EVEN WHEN the target row already exists on the instance,
+         because the previewer accepts only a sys_id in a body. The
+         attribute-only shape previews CLEAN, but the column then commits
+         EMPTY - the attribute is a display hint, not a resolvable value.
+         So these links are completed AFTER commit by
+         ../../scripts/seed_demo_data.js, the documented post-commit step,
+         which ADOPTS this row by its pinned number, fills only the
+         columns it finds empty (case by number)
+         and never overwrites a populated value - so a second run repairs
+         nothing and inserts nothing.
+
+      B. assigned_to (a sys_user)
+         -> key in the display_value attribute AND in the element body.
+         sys_user and sys_user_group reference bodies are never checked by
+         preview (a deliberately bogus user_name produced no problem), and
+         the import engine DOES resolve them: the demo users, the demo
+         group and the three sys_user_has_role rows all landed on the
+         instance under these artifacts' own sys_ids with their user and
+         role references correctly resolved. These columns therefore
+         commit LINKED (assigned_to by user_name)
+         and need no post-commit repair.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    Both shapes above carry the key, never a sys_id, so both comply.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Task 02 - Initial review complete (Closed / Review)
     ====================================================================
 
@@ -245,10 +286,9 @@
               values must be registered as accepted choices)
             * The demo agent user record at
               ../users/sys_user_x_casemgmt_demo_agent.xml  (assigned_to
-              resolves by user_name lookup)
+              is linked after commit by ../../scripts/seed_demo_data.js via user_name lookup)
             * The parent case at
-              ../cases/x_casemgmt_case_demo_03.xml  (case field
-              resolves by number lookup; that case must exist before
+              ../cases/x_casemgmt_case_demo_03.xml  (the case field ships empty and is linked after commit by ../../scripts/seed_demo_data.js via number lookup; that case must exist before
               this task can reference it)
         - This record can be loaded BEFORE or AFTER its sibling task
           records (01, 03-08) since they are mutually independent
@@ -310,41 +350,55 @@
                   2026-05-01) - 3 days, evaluated at this file's
                   generation time)
 
-      Rule 4 - Reference resolution by lookup key (AAP Section 0.5.2,
-        no-hard-coded-sys_id constraint, AAP Section 0.7.2):
-        <case>          resolves by number lookup against
-                        x_casemgmt_case.number; display_value is the
-                        canonical number "CASE0000003" of the parent
-                        case (case 03); the inner text is the same
-                        canonical number, NOT a sys_id literal; the
-                        update set engine resolves the reference at
-                        import time by querying for x_casemgmt_case
-                        records with number = CASE0000003 (the parent
-                        case 03 record was loaded earlier in the
-                        update set, ensuring the lookup succeeds)
-        <assigned_to>   resolves by user_name lookup against
-                        sys_user.user_name; display_value is the
-                        synthetic user_name "x_casemgmt_demo_agent";
-                        the inner text is the same synthetic
-                        user_name, NOT a sys_id literal; the update
-                        set engine resolves the reference at import
-                        time by querying for sys_user records with
-                        user_name = x_casemgmt_demo_agent (the demo
-                        agent record was loaded earlier in the update
-                        set, ensuring the lookup succeeds)
-        <sys_scope>     resolves by scope identifier; display_value
-                        is the human-readable application name "Case
-                        Management"; the inner text is the scope
-                        identifier "x_casemgmt" which is the
-                        scoped application's canonical scope name
-                        (NOT a sys_id literal; the scope identifier
-                        is human-readable and stable across PDIs)
-        <sys_package>   resolves the same way; the source attribute
-                        is "x_casemgmt" indicating the scope from
-                        which this package is derived
+      Rule 4 - Reference fields (AAP Section 0.7.2 "NO sys_id literals
+               anywhere"). Two classes, distinguished by MEASUREMENT on a
+               live PDI - not by convention:
+
+        CLASS 1 - key in the display_value ATTRIBUTE, body EMPTY:
+          <case display_value="CASE9000003"/>
+
+          A reference BODY holding a case number or a company name is
+          reported by preview as "Could not find a record ..." EVEN WHEN
+          the target row exists, because the previewer only accepts a body
+          that is a sys_id. Carrying the key in the display_value
+          attribute with an EMPTY body previews clean; the column then
+          commits EMPTY, so the link is completed AFTER commit by the
+          documented post-commit step ../../scripts/seed_demo_data.js:
+            case           -> x_casemgmt_case by number
+
+        CLASS 2 - key in BOTH the display_value attribute and the body:
+          <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
+
+          sys_user and sys_user_group reference bodies are NOT checked by
+          preview (a deliberately bogus user_name produced no problem) and
+          the import engine DOES resolve them: the demo users, the demo
+          group and the three sys_user_has_role rows all arrived on the
+          instance carrying these artifacts' own sys_ids with correctly
+          resolved user/role references. These therefore commit LINKED and
+          need no post-commit repair; seed_demo_data.js only fills a
+          reference it finds empty, so it is a no-op for them:
+            assigned_to    -> sys_user by user_name
+
+        Adoption key: the pinned <number> TASK9000002 below. It sits in the
+        9,000,000 band the project already uses for pinned fixtures, so it
+        cannot collide with a counter-issued number, and it lets
+        seed_demo_data.js ADOPT and repair this packaged row instead of
+        inserting a duplicate. Re-running that script is a no-op
+        (verified twice on a live PDI: 0 repairs, 0 duplicates).
+
+        Platform-managed metadata columns - NOT domain references, and
+        serialized exactly as ServiceNow itself exports a scoped record:
+          <sys_scope display_value="Case Management">
+              82b99028936f74320d74d6f88357a5af</sys_scope>
+          (body = the scoped application's own sys_scope sys_id)
+          <sys_package display_value="Case Management" source="x_casemgmt">
+              x_casemgmt</sys_package>
+        The <sys_id> below is this record's OWN primary key (deterministic
+        MD5), which the AAP rule permits - it is not a reference to another
+        record.
 
       Rule 5 - Mandatory fields all populated (AAP Section 0.5.7):
-        case          - mandatory; populated with CASE0000003 reference
+        case          - mandatory; populated with CASE9000003 reference
         subject       - mandatory; populated with synthetic subject
         type          - mandatory; populated with "Review" choice
         status        - mandatory; populated with "Closed" choice
@@ -383,7 +437,7 @@
         preserved).
 
       Rule 7 - Idempotency anchor:
-        The (case, subject) pair (CASE0000003,
+        The (case, subject) pair (CASE9000003,
         "Demo task 02: Initial review complete") is the idempotent
         key. No other task in the 8-task dataset shares this pair.
         The deterministic sys_id (md5 of the subject) ensures that
@@ -392,25 +446,25 @@
         sys_id and applies the action="INSERT_OR_UPDATE" semantic
         correctly. (case, subject) idempotency uniqueness check
         across the 8-task dataset:
-          - Task 01: (CASE0000003, "Demo task 01: Investigate
+          - Task 01: (CASE9000003, "Demo task 01: Investigate
             requester history")
-          - Task 02: (CASE0000003,
+          - Task 02: (CASE9000003,
             "Demo task 02: Initial review complete")  ## THIS FILE
-          - Task 03: (CASE0000004, "Demo task 03: Follow up with
+          - Task 03: (CASE9000004, "Demo task 03: Follow up with
             requester")
-          - Task 04: (CASE0000005, "Demo task 04: Final review for
+          - Task 04: (CASE9000005, "Demo task 04: Final review for
             resolution")
-          - Task 05: (CASE0000005, "Demo task 05: Post-resolution
+          - Task 05: (CASE9000005, "Demo task 05: Post-resolution
             archive")
-          - Task 06: (CASE0000008, "Demo task 06: Complaint
+          - Task 06: (CASE9000008, "Demo task 06: Complaint
             investigation")
-          - Task 07: (CASE0000008, "Demo task 07: Witness interview
+          - Task 07: (CASE9000008, "Demo task 07: Witness interview
             prep")
-          - Task 08: (CASE0000009, "Demo task 08: Final complaint
+          - Task 08: (CASE9000009, "Demo task 08: Final complaint
             review")
-        The pair (CASE0000003, "Demo task 02: Initial review
+        The pair (CASE9000003, "Demo task 02: Initial review
         complete") is unique - tasks 01 and 02 share the same parent
-        case (CASE0000003) but have different subjects, ensuring
+        case (CASE9000003) but have different subjects, ensuring
         idempotency of each within the dataset.
 
       Rule 8 - Scoped Update Set XML conventions:
@@ -432,29 +486,27 @@
       [x] <due_date>2026-04-28</due_date> is past-dated (~3 days ago
           from build env today 2026-05-01) and Date format
           (YYYY-MM-DD, not DateTime YYYY-MM-DDTHH:MM:SS)
-      [x] <case display_value="CASE0000003">CASE0000003</case>
+      [x] <case display_value="CASE9000003"/>
           references the parent case 03 by its canonical CASE-prefixed
-          number (resolved by number lookup at import time)
-      [x] <assigned_to display_value="x_casemgmt_demo_agent">
-          x_casemgmt_demo_agent</assigned_to> references the demo
-          agent by user_name (resolved by user_name lookup at import
-          time)
+          number (the import engine does NOT resolve this; ../../scripts/seed_demo_data.js links it after commit by number lookup)
+      [x] <assigned_to display_value="x_casemgmt_demo_agent"/> references the demo
+          agent by user_name (the import engine does NOT resolve this; ../../scripts/seed_demo_data.js links it after commit by user_name lookup)
       [x] NO PII anywhere - all fields use synthetic generic values
           ("Demo task", "Initial review complete", numeric ordinals,
           synthetic user_name "x_casemgmt_demo_agent", synthetic case
-          number "CASE0000003")
+          number "CASE9000003")
       [x] NO sys_id literals in reference fields - the only sys_id
           appearing in this record is the deterministic md5-of-
           subject value used as THIS record's own sys_id (which is
           allowed because action="INSERT_OR_UPDATE" requires the
           record to assert its own sys_id; references TO OTHER
-          records all use display_value/inner-text canonical-key
+          records all use display_value attribute-only canonical-key
           lookup patterns)
       [x] casemgmt placeholder preserved verbatim in
           sys_class_name, sys_update_name, all reference values, and
           the file path
       [x] Idempotency-key validation: (case, subject) =
-          (CASE0000003, "Demo task 02: Initial review complete") is
+          (CASE9000003, "Demo task 02: Initial review complete") is
           unique across the 8-task dataset - no other task on case 03
           has subject "Demo task 02: Initial review complete"
           (task 01 is on case 03 but with a different subject).
@@ -533,8 +585,9 @@
 <record_update table="x_casemgmt_case_task">
     <x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000003">CASE0000003</case>
+        <case display_value="CASE9000003"/>
         <due_date>2026-04-28</due_date>
+        <number>TASK9000002</number>
         <status>Closed</status>
         <subject>Demo task 02: Initial review complete</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>

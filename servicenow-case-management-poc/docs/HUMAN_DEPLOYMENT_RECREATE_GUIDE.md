@@ -43,11 +43,12 @@
 > - **The demo data needs preparation.** The packaged seed rows must be deleted before
 >   `scripts/seed_demo_data.js` can populate anything.
 >
-> Three things this guide cannot remediate, all measured and all packaging defects rather than instance
+> Two things this guide cannot remediate, both measured and both packaging defects rather than instance
 > problems: the two dashboards **install but render 0 tabs and 0 widgets** (each names three child tables this
-> release does not have — `pa_tab`, `pa_dashboard_widgets` and `pa_dashboard_role`), the portal **pages render
-> blank** (their Service Portal layout records were never authored, so only the REST endpoints work), and the
-> case form has **no related lists** (no `sys_ui_related_list` row exists for the scope). Separately, the six
+> release does not have — `pa_tab`, `pa_dashboard_widgets` and `pa_dashboard_role`), and the
+> case form has **no related lists** (no `sys_ui_related_list` row exists for the scope). The portal **pages**
+> were a third item here and are now fixed — their Service Portal layout records are authored and packaged, and
+> a response-envelope bug in both widgets was corrected, so both pages render and work anonymously. Separately, the six
 > **chart** reports arrive with no grouping column — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6). Fixing any of these
 > means changing the artifacts and re-exporting, not adjusting the install.
 >
@@ -72,7 +73,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 - **7 Flow Designer flows** — 2 parent flows (`general_inquiry_state_machine`, `complaint_state_machine`) and 5 subflows (`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`) — plus **1 Custom Action** (`x_casemgmt_transition_guard_action`) and **1 shared flow logic block**.
 - **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards**, **1 Experience/Service Portal** with 2 pages and 3 widgets, **1 UI policy**, **6 UI Actions**, and **number counters**.
 - **1 Fix Script** (`x_casemgmt Post-Import Remediation`) carrying the post-import remediation body. It does not run by itself.
-- **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **Do not expect specific case numbers.** Numbers are allocated by the instance counter when the seed script runs, so they differ on every install; the numbers `CASE0000013`–`CASE0000022` quoted in older revisions of this guide were simply what one particular run produced. On the verification instance the counter has since moved well past them (the current demo cases are `CASE0000979`–`CASE0000988`), and the current census is **10 cases, 10 tasks and 8 parties**. Identify demo records by `subject`, `status` and `type`, never by number.
+- **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **The packaged rows now carry pinned, deterministic numbers** — `CASE9000001`-`CASE9000010`, `TASK9000001`-`TASK9000010`, `PARTY9000001`-`PARTY9000008` — chosen in the 9,000,000 band so they cannot collide with counter-issued numbers, and `scripts/seed_demo_data.js` adopts those rows rather than inserting duplicates, so a committed install is number-identical to any other. **Numbers differ from the pinned set only if you seed WITHOUT committing the package** (the script then inserts fresh rows and the instance counter allocates the numbers) or if you delete the packaged rows before seeding — which you should not do. The numbers `CASE0000013`-`CASE0000022` quoted in older revisions of this guide were simply what one counter-allocated run produced.
 
 > **The flows work — an earlier revision of this guide said they did not, and that is now out of date.** All
 > **7 flows are `active=true` and `status=published`** on the verification instance (last measured directly
@@ -94,7 +95,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,643,389 bytes (≈3.47 MiB)**, **913 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`. Verify the digest before uploading. (The immediately previous revision was 3,618,378 bytes / `7272edfc…`; the QA-remediation pass re-synced 9 payloads and left the block count and every other byte unchanged.) (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
+| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,698,577 bytes (≈3.53 MiB)**, **925 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`. Verify the digest before uploading. (The immediately previous revision was 3,618,378 bytes / `7272edfc…`; the QA-remediation pass re-synced 9 payloads and left the block count and every other byte unchanged.) (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -307,7 +308,7 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > | 4 | **Run the remediation in scope `Global`** — *first pass* | *System Definition → **Scripts - Background***, set **"In scope" = Global**, paste `scripts/post_import_remediation.js`, run. This pass builds the three tables' physical storage, their fields and their choice lists. It does the `sys_db_object` work itself; **you do not delete anything and you do not touch the application picker** | §5a |
 > | 5 | **Commit the same Update Set a second time** | The rebuild in step 4 **cascades away all 26 ACLs**, the seed rows, the demo users and the role grants; a second commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports ~25 `sys_dictionary` collisions from the rows step 4 wrote moments earlier; accepting the remote is correct **for `sys_dictionary` only**, because the package now carries the corrected `display` and `defaultsort` values itself. **Never ignore a collision on any other table** | §4 again |
 > | 6 | **Run the remediation in scope `Global`** — *second pass* | Same invocation as step 4. This is the pass that creates the **27** `sys_security_acl_role` links and flushes the security cache. Without it you have 26 ACLs with **0** role links, and on a high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
-> | 7 | **Repair the demo data** | Delete the 10 number-less `Demo case …` rows, their orphan tasks and parties, and the dangling `sys_user_grmember` row, then run `scripts/seed_demo_data.js` **in scope** (not Global) | §5g |
+> | 7 | **Seed the demo data** | Run `scripts/seed_demo_data.js` **in scope** (not Global). Do **not** delete the packaged rows — they carry pinned numbers now and the script adopts them. Clear the dangling `sys_user_grmember` row if one is present | §5g |
 >
 > Run the remediation like this — **in `global`, never in scope**:
 >
@@ -615,10 +616,15 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 /tmp/bg.sh servicenow-case-management-poc/scripts/seed_demo_data.js 82b99028936f74320d74d6f88357a5af
 ```
 
-Delete the 10 number-less packaged `Demo case …` rows, their orphan tasks and parties, and the dangling
-`sys_user_grmember` row **before** running it: `ensureCase()` keys on `subject`, so the number-less rows match and
-the script leaves them as they are. The case numbers it allocates come from the instance counter and will not
-match any numbers quoted in this guide.
+Do **not** delete the packaged seed rows first — that instruction belonged to an earlier revision. Every
+packaged row now carries a pinned number (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+), and `ensureCase()` /
+`ensureTask()` / `ensureParty()` match on that number **first**, adopt the row, and fill only the columns that
+are still empty (`case` on tasks and parties, `organization` on Organization parties — the two reference classes
+that Update Set preview forces to ship empty). Nothing already populated is overwritten, so a second run
+reports `repaired=0` and inserts nothing. Expect `cases inserted=0 adopted=10 …` on a committed install; you
+will see `inserted=10` only if you run the script on an instance where the package was never committed, in
+which case the instance counter allocates the numbers instead. Clear the dangling `sys_user_grmember` row if
+one is present.
 
 ---
 
@@ -703,11 +709,16 @@ curl -s -w "\nlookup HTTP %{http_code}\n" "$SN/api/x_casemgmt/case_status_lookup
 
 Portal UI: `https://dev379024.service-now.com/x_casemgmt_case_portal`.
 
-> **The two portal pages render blank — do not treat that as an install error you have caused.** All three
-> routes answer HTTP 200 with no login wall, but the page API returns **`containers: []`** and the pages contain
-> 0 inputs and 0 buttons. Their Service Portal layout records were never authored, which is a packaging defect
-> (an out-of-box page on the same portal renders normally, so the portal and the anonymous path are both fine).
-> The `curl` checks above are therefore the real and only test of the portal contract on this package.
+> **Both portal pages render and work anonymously.** Earlier revisions of this guide warned that they came up
+> blank; that was a real packaging defect and it is fixed. Two things were wrong: the Service Portal layout
+> records (`sp_container` / `sp_row` / `sp_column` / `sp_instance`) had never been authored, so
+> `GET /api/now/sp/page` returned `containers: []`; and both widgets read `response.data.<field>` where a
+> Scripted REST body is nested under `result`, so a successful 201 displayed "Submission failed". The package now
+> carries the layout chain for both pages (`portal/layout/`) and both widgets unwrap defensively. Open
+> `?id=x_casemgmt_case_submit` and `?id=x_casemgmt_case_status` in a private window: the first offers the five
+> fields and returns a confirmation panel with the new `CASE…` number, the second returns Status / Subject /
+> Opened Date or the verbatim `No case found with that number.` The `curl` checks above remain valid and are the
+> quickest smoke test.
 
 > Remember to delete any smoke-test cases afterward so the demo dataset does not drift. The current census on the
 > verification instance is **10 cases, 10 tasks and 8 parties** — the extra smoke-test case that made it 11 in an

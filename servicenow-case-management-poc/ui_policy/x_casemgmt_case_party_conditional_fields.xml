@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    ServiceNow Update Set record-definition for the SINGLE `sys_ui_policy`
-    row that enforces conditional polymorphic field rendering on the
-    `x_casemgmt_case_party` custom table inside the scoped application
-    `x_casemgmt`.
+    ServiceNow Update Set record-definitions for the conditional
+    polymorphic field rendering on the `x_casemgmt_case_party` custom
+    table inside the scoped application `x_casemgmt`.
 
-    This file produces THE SINGLE UI Policy record in the entire scoped
-    application per AAP Section 0.4.1 (Refactored Structure Planning) and
-    AAP Section 0.4.3 (Polymorphic association via single-table choice +
-    UI Policy). The agent prompt's Phase 9 Insight 1 confirms exactly
-    one record total in this XML file.
+    This file produces FOUR records - two `sys_ui_policy` rows and their
+    two `sys_ui_policy_action` children - which together implement AAP
+    Section 0.4.3 ("Polymorphic association via single-table choice +
+    UI Policy") and the `ui_policy/` entry of AAP Section 0.4.1.
 
     PURPOSE (AAP Section 0.4.3):
       Implement the ServiceNow-native equivalent of ArkCase's JPA
@@ -24,64 +22,78 @@
       and conditionally requires the `person` (Reference -> sys_user)
       and `organization` (Reference -> core_company) reference fields.
 
-    BEHAVIOR MATRIX (the imperative onCondition script enforces this for
-    all three party_type states):
+    BEHAVIOR MATRIX (the two reversible policies produce exactly these
+    three states, on form load AND on every change of `party_type`):
 
         Case 1: party_type == "Person"
-            person field        : visible = true,  mandatory = true
-            organization field  : visible = false, mandatory = false
+            Person policy condition TRUE  -> person       : visible, mandatory
+            Organization policy FALSE     -> organization : hidden, not mandatory
 
         Case 2: party_type == "Organization"
-            person field        : visible = false, mandatory = false
-            organization field  : visible = true,  mandatory = true
+            Person policy condition FALSE -> person       : hidden, not mandatory
+            Organization policy TRUE      -> organization : visible, mandatory
 
         Case 3: party_type == "" (empty, new record)
-            person field        : visible = false, mandatory = false
-            organization field  : visible = false, mandatory = false
+            Both conditions FALSE         -> person       : hidden, not mandatory
+                                          -> organization : hidden, not mandatory
 
-    The "empty" case (new record before user picks party_type) keeps
-    BOTH reference fields hidden and not mandatory. The user picks
-    party_type first (which is itself mandatory at the dictionary level
-    per ../dictionary/x_casemgmt_case_party_party_type.xml), and only
-    then does the appropriate reference field appear. Per the agent
-    prompt's Phase 9 Insight 2, the empty branch has DISTINCT semantics
-    that differ from any populated value - it must not be consolidated
-    with another branch.
+    ARCHITECTURE DECISION - WHY DECLARATIVE, AND WHY ONE FIELD PER POLICY:
 
-    ARCHITECTURE DECISION (agent prompt's REVISED ARCHITECTURE):
-      The agent prompt initially considered two competing approaches:
+      An earlier revision of this file shipped ONE policy with
+      `run_scripts=true`, an imperative `onCondition()` script, ZERO
+      `sys_ui_policy_action` children, and the condition string
+      `party_typeISNOTEMPTY^ORparty_typeISEMPTY^EQ`.
 
-        Option A (declarative): TWO `sys_ui_policy` records each with
-          TWO `sys_ui_policy_action` children, both with
-          reverse_if_false=true. The agent prompt's analysis found an
-          unavoidable order-conflict in the empty-state case: when
-          neither policy's forward condition is true, both policies
-          reverse simultaneously, and within a single load cycle their
-          conflicting reversed states for the same field must be
-          tie-broken by the `order` field. Last-writer-wins semantics
-          produce the WRONG empty-case result (one of the reference
-          fields appears as visible+mandatory instead of hidden) per
-          the agent prompt's Phase 4 analysis.
+      That condition is a tautology with a trailing malformed `^EQ`
+      separator: it is true for every possible value of `party_type`,
+      so the policy carried no meaningful discriminator predicate. It
+      was measured on the running instance to apply the correct state at
+      form LOAD and then never re-apply it when `party_type` changed, so
+      a user could not complete a polymorphic party through the form UI -
+      picking "Person" on a new record left the `person` field hidden.
 
-        Option B (imperative): ONE `sys_ui_policy` record with
-          run_scripts=true and a script_true block that imperatively
-          handles all three branches deterministically.
+      The fix is declarative, and the key design point is that EACH
+      POLICY OWNS EXACTLY ONE FIELD:
 
-      The agent prompt's Phase 9 Insight 1 selects Option B as the
-      ONLY way to cleanly handle all three states without ordering
-      ambiguity. This file therefore contains EXACTLY ONE record:
-      a single `sys_ui_policy` with the script_true entry point.
+        - "Case Party Conditional Fields - Person" watches
+          `party_type=Person` and acts ONLY on `person`.
+        - "Case Party Conditional Fields - Organization" watches
+          `party_type=Organization` and acts ONLY on `organization`.
 
-    REQUIRED FIELDS HANDLED IMPERATIVELY (NOT at dictionary level):
+      Because no field is written by more than one policy, the two
+      policies can never contend for the same field and the evaluation
+      ORDER between them is irrelevant. That is what makes the
+      empty-state case deterministic: both conditions are false, both
+      policies reverse, and each reverses its own single field to
+      hidden + not mandatory. (The order-conflict hazard that the
+      previous revision documented applies only to the different design
+      where both policies act on BOTH fields; this file does not do
+      that.)
+
+      `reverse_if_false=true` on both policies is what supplies the
+      "on change" behaviour the previous revision lacked: the platform
+      registers `party_type` as a watched field from the condition
+      itself, re-evaluates on every change, and applies either the
+      forward actions or their reverse. `on_load=true` additionally
+      applies the correct state when an existing party record is
+      opened.
+
+      `run_scripts` is FALSE on both policies and both script bodies are
+      empty: there is no imperative logic left to maintain, and no dead
+      script is carried. Field values are never cleared (`cleared=false`
+      on both actions), so toggling `party_type` back and forth never
+      destroys data the user already entered.
+
+    REQUIRED FIELDS HANDLED BY POLICY (NOT at dictionary level):
       Per the parent dictionary entries
         ../dictionary/x_casemgmt_case_party_person.xml
         ../dictionary/x_casemgmt_case_party_organization.xml
       the dictionary-level `<mandatory>false</mandatory>` is INTENTIONAL.
-      The conditional mandatory state is enforced HERE in the UI Policy
-      via g_form.setMandatory(...) at form runtime. This is the canonical
+      The conditional mandatory state is enforced HERE by the
+      `mandatory=true` action plus its reverse. This is the canonical
       ServiceNow pattern for polymorphic mandatory: the dictionary
       declares the column as nullable, and the UI Policy enforces
-      conditional required-ness based on the discriminator value. This
+      conditional required-ness based on the discriminator value. That
       design is documented in those dictionary entries' `<comments>`
       element.
 
@@ -137,200 +149,110 @@
         - A `role_label` String(100) field replacing the legacy
           `personType`/`personToOrganizationAssociationType` Strings
 
-      THIS UI POLICY is the ONLY mechanism that enforces the polymorphism
-      at the form layer. Without it, the form would always show BOTH
-      `person` and `organization` reference fields, which would confuse
-      users and allow inconsistent records (e.g., a row with
-      party_type=Person but `organization` populated). The UI Policy
-      is therefore THE structural integrity guard for the polymorphic
-      design at the UX layer.
+      THESE UI POLICIES are the ONLY mechanism that enforces the
+      polymorphism at the form layer. Without them the form would always
+      show BOTH `person` and `organization` reference fields, which would
+      confuse users and allow inconsistent records (e.g. a row with
+      party_type=Person but `organization` populated).
 
-    ENTRY-POINT FUNCTION CONTRACT:
-      The script_true block contains a single function named
-      `onCondition()`. ServiceNow's UI Policy framework looks for this
-      EXACT function name as the entry point when run_scripts=true.
-      The function takes NO arguments and returns nothing. It uses the
-      globally-available `g_form` object (provided by ServiceNow's
-      GlideForm runtime) to query the current value of `party_type`
-      and to mutate the visibility and mandatory state of the
-      `person` and `organization` fields. The function executes
-      client-side in the user's browser - NEVER server-side.
-
-    CRITICAL SCRIPT PROHIBITIONS (agent prompt's Phase 5 CRITICAL
-    Script Rules):
-      - NO g_form.clearValue('person') or g_form.clearValue('organization'):
-        clearing on toggle would destroy user data on accidental
-        party_type changes. The UI Policy preserves the underlying
-        value; only visibility and mandatory flags change.
-      - NO gs.eventQueue or any server-side calls: UI Policy scripts
-        are client-side only.
-      - NO console.log, alert(), or any developer-debug output:
-        production UI Policy scripts are silent.
-      - NO g_form.submit() or g_form.save(): UI Policy scripts adjust
-        UI state, never persist.
-      - NO == (loose equality): the strict-equality === avoids
-        type-coercion bugs (e.g., if g_form.getValue ever returned 0
-        or false in some edge case).
-      - NO g_form.setVisible: deprecated/non-canonical in modern
-        ServiceNow. Use g_form.setDisplay.
+    CONDITION STRINGS:
+      Person policy       : party_type=Person
+      Organization policy : party_type=Organization
+      Both are single-term encoded queries against the discriminator
+      field. The right-hand literals MUST match the `<value>` of the
+      corresponding records in
+      ../choices/sys_choice_case_party_party_type.xml byte-for-byte.
 
     XML CONVENTIONS HONORED (matching sibling files in this app):
       - Wrapper element: `<unload unload_date="2025-01-01 00:00:00">`
-        per the agent prompt's Phase 1 specification, matching the
-        sibling pattern used by `../choices/sys_choice_*.xml`.
-      - Element ordering: alphabetical within the record (matching
-        sibling-file convention).
-      - Indentation: 4 spaces for record fields, 0 spaces for the
-        record element under `<unload>` (matching the choice file
-        pattern in this scoped app).
-      - sys_scope text-node value: `x_casemgmt` (NOT
-        `x_casemgmt_case_management`). The actual scope record's
-        `<name>` is `x_casemgmt` per ../app/sys_app/x_casemgmt_case_management.xml,
-        and ALL sibling XMLs in this scoped app reference the scope
-        by that name. Update Set re-import resolves cross-references
-        by matching `<sys_scope>` text against the scope record's
-        `<name>`/`<source>` fields, so this MUST match the actual
-        sibling-file convention to avoid preview errors.
-      - sys_package text-node value: `x_casemgmt` with
-        `source="x_casemgmt"` attribute, matching the sys_app record's
-        `<scope>x_casemgmt</scope>` per ../app/sys_app/x_casemgmt_case_management.xml.
-      - Deterministic 32-char lowercase hex sys_id: computed as
-        MD5("x_casemgmt_case_party.ui_policy.conditional_fields") =
-        854295ebb4c8309eea6a52aa788ec8a9. This makes re-generation
-        of this XML byte-identical (no random UUIDs) and re-import
-        idempotent. The MD5 input is documented adjacent to the
-        record below.
-      - English-only `<sys_domain>global</sys_domain>`: domain
-        separation is not used by this scoped application.
-      - No PII: the script handles structural state only; no
-        personal data referenced.
-      - No hardcoded sys_id references to OTHER records: the only
-        sys_id literal is THIS record's own deterministic primary
-        key. The `<sys_scope>` and `<sys_package>` cross-references
-        resolve by name, not by sys_id.
-      - No smart quotes, no leading/trailing whitespace, no BOM.
-        Strict XML conformance for ServiceNow Update Set re-import
-        preview (AAP Section 0.7.3 validation gate 7).
+        matching the sibling pattern used by `../choices/sys_choice_*.xml`.
+      - Element ordering: alphabetical within each record.
+      - Only columns that actually exist on the target tables are
+        emitted. `sys_ui_policy` has no `name` column (its `sys_name` is
+        derived from `short_description`), so no `<name>` element is
+        written; `sys_ui_policy_action` has no `sys_domain` or
+        `sys_overrides` column, so neither is written on the action rows.
+      - `<sys_scope>` carries the scoped application's sys_id with a
+        `display_value` attribute, which is the convention every other
+        record in this package uses (see ../portal/sp_portal_*.xml,
+        ../portal/rest/sys_ws_operation_*.xml).
+      - `<ui_policy>` on each action carries its parent policy's sys_id
+        with a `display_value` attribute. Both parents are defined in
+        THIS file and are carried in the same Update Set, and the
+        preview resolver matches an intra-set reference through the
+        target block's canonical `<table>_<sys_id>` update name, so the
+        reference previews clean on a fresh instance.
+      - sys_id values:
+          854295ebb4c8309eea6a52aa788ec8a9  Person policy - a pinned
+            constant carried forward unchanged from the previous
+            revision of this file, so that the already-deployed row and
+            its Update Set block keep their identity. It is a fixed
+            literal in this file, not a hash of any string.
+          507da6cb683691d5a09285ab09297b22  Organization policy
+            = md5("x_casemgmt_case_party.ui_policy.conditional_fields.organization")
+          3ec2d72d2b69e11d331037a908ea9fa4  Person action
+            = md5("x_casemgmt_case_party.ui_policy_action.person")
+          4f52dd6c0ce634ba474075b15f28ce39  Organization action
+            = md5("x_casemgmt_case_party.ui_policy_action.organization")
+        The three hashes are recomputable, e.g.
+          printf '%s' 'x_casemgmt_case_party.ui_policy_action.person' \
+              | md5sum | cut -c1-32
+        so re-generating this file is byte-deterministic.
+      - No PII: these records carry structural state only.
 
     CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
-      THIS RECORD MUST LOAD AFTER:
+      THESE RECORDS MUST LOAD AFTER:
         - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
-          application record - the sole scope authority in this package, so
-          <sys_scope> and <sys_package> both resolve against it)
-        - ../tables/x_casemgmt_case_party.xml (parent table; the UI
-          Policy targets this table by name)
+          application record, against which <sys_scope>/<sys_package>
+          resolve)
+        - ../tables/x_casemgmt_case_party.xml (parent table; both
+          policies and both actions target this table by name)
         - ../dictionary/x_casemgmt_case_party_party_type.xml (the
-          discriminator field; the script reads this field via
-          g_form.getValue('party_type'))
-        - ../dictionary/x_casemgmt_case_party_person.xml (the
-          conditional reference field; the script toggles its
-          visibility and mandatory state via g_form.setDisplay
-          and g_form.setMandatory)
+          discriminator field named by both conditions)
+        - ../dictionary/x_casemgmt_case_party_person.xml (the field the
+          Person action operates on)
         - ../dictionary/x_casemgmt_case_party_organization.xml (the
-          conditional reference field; the script toggles its
-          visibility and mandatory state via g_form.setDisplay
-          and g_form.setMandatory)
-        - ../choices/sys_choice_case_party_party_type.xml (the
-          discriminator value enumeration; the script's string
-          literals 'Person' and 'Organization' MUST match the
-          `<label>` and `<value>` of those records byte-for-byte)
+          field the Organization action operates on)
+        - ../choices/sys_choice_case_party_party_type.xml (supplies the
+          'Person' and 'Organization' condition literals)
+      Within this file, each `sys_ui_policy` MUST load before the
+      `sys_ui_policy_action` that references it; the records are written
+      in that order.
 
-      THIS RECORD MUST LOAD BEFORE:
-        - ../seed-data/parties/x_casemgmt_case_party_demo_*.xml (the
-          UI Policy ensures the synthetic demo parties render with
-          the correct field-visibility state when opened in the form
-          post-import; see AAP Section 0.4.1 for the synthetic seed
-          data thresholds)
+      THESE RECORDS MUST LOAD BEFORE:
+        - ../seed-data/parties/x_casemgmt_case_party_demo_*.xml (so the
+          synthetic demo parties render with the correct field-visibility
+          state when opened in the form post-import)
 
-      Loading order is enforced by the alphabetical Update Set preview
-      ordering plus the record-by-record dependency-resolution pass.
-
-    THE MD5 INPUT for this record's <sys_id> (per the agent prompt's
-    Phase 9 Insight 7):
-        MD5("x_casemgmt_case_party.ui_policy.conditional_fields") =
-            854295ebb4c8309eea6a52aa788ec8a9
-    Recomputable via:
-        printf '%s' 'x_casemgmt_case_party.ui_policy.conditional_fields' \
-            | md5sum | cut -c1-32
-    The hash is recomputable from the AAP-mandated canonical input,
-    guaranteeing deterministic XML re-generation across all build runs.
-
-    AAP COMPLIANCE SUMMARY (agent prompt's Phase 11):
+    AAP COMPLIANCE SUMMARY:
       - Scoped-namespace exclusivity (AAP 0.7.2): `<sys_scope>`,
-        `<sys_package>`, and `<table>` all reference `x_casemgmt_*`.
-      - No hardcoded sys_id of other records (AAP 0.7.2): all
-        cross-record references use `display_value`/`source` attributes
-        plus name resolution; only THIS record's own sys_id is a
-        literal hex value.
-      - No PII (AAP 0.7.2): the script handles structural state only.
-      - No email notifications (AAP 0.7.2): no gs.eventQueue, no
-        notification rules created.
-      - Single Update Set deliverable (AAP 0.7.2): this file becomes
-        one record in the Update Set XML upon export.
-      - `casemgmt` placeholder preserved literally throughout.
-      - Polymorphic UI Policy per AAP 0.4.3: the onCondition script
-        implements the discriminator pattern for `party_type`.
-      - Replicates ArkCase party-association model (AAP 0.1.1): the
+        `<sys_package>` and `<table>` all reference the scoped app and
+        its `x_casemgmt_*` table.
+      - No email notifications (AAP 0.7.2): no notification artefacts.
+      - Single Update Set deliverable (AAP 0.7.2): these four records
+        are carried as four blocks of the exported Update Set.
+      - Polymorphic UI Policy per AAP 0.4.3: `party_type` drives which
+        reference field is shown and required.
+      - Replicates ArkCase's party-association model (AAP 0.1.1): the
         Person/Organization branches replace ArkCase's two JPA entity
         classes (PersonAssociation, PersonOrganizationAssociation).
-      - Form runs on load (AAP 0.7 implicit form-correctness): the
-        on_load=true setting ensures existing case_party records
-        render with correct field state when opened.
-      - Empty-state handles polymorphic UX correctly: the `else`
-        branch of onCondition sets mandatory=false on both fields
-        so users are not blocked from saving a half-filled record
-        (the party_type field itself is mandatory at the dictionary
-        level so saving without picking one is impossible).
+      - Applies on load AND on change, so a party can be completed and
+        saved entirely through the form UI.
 -->
 <unload unload_date="2025-01-01 00:00:00">
 <sys_ui_policy action="INSERT_OR_UPDATE">
     <active>true</active>
-    <conditions>party_typeISNOTEMPTY^ORparty_typeISEMPTY^EQ</conditions>
-    <description>Polymorphic field-rendering UI Policy on x_casemgmt_case_party. Implements the ServiceNow-native equivalent of ArkCase's @DiscriminatorColumn(cm_class_name) single-table inheritance pattern from PersonAssociation.java and the dual-table @ManyToOne pattern from PersonOrganizationAssociation.java per AAP Section 0.4.3 ("Polymorphic association via single-table choice + UI Policy"). Uses run_scripts=true with an imperative onCondition script to deterministically set field visibility and mandatory state for all three party_type values: "Person" (show person + mandatory; hide organization), "Organization" (show organization + mandatory; hide person), and empty (hide both fields, both not mandatory). The script_true block is the sole logic path; no declarative actions are used because the declarative two-policy approach with reverse_if_false=true has an unavoidable order-conflict in the empty-state case. Runs on form load (on_load=true) so existing case_party records render correctly when opened. The party_type field itself is mandatory at the dictionary level (../dictionary/x_casemgmt_case_party_party_type.xml), so users cannot save a record without picking one; the mandatory state of person/organization is therefore conditional on party_type and enforced ONLY through this UI Policy.</description>
+    <conditions>party_type=Person</conditions>
+    <description>Polymorphic field-rendering UI Policy on x_casemgmt_case_party for the Person branch of the party_type discriminator. Implements the ServiceNow-native equivalent of ArkCase's @DiscriminatorColumn(cm_class_name) single-table inheritance pattern from PersonAssociation.java per AAP Section 0.4.3 ("Polymorphic association via single-table choice + UI Policy"). When party_type=Person the single sys_ui_policy_action child makes the person reference field visible and mandatory; because reverse_if_false=true, any other party_type value - including empty - reverses that action so person becomes hidden and not mandatory. This policy deliberately acts on the person field ONLY: the organization field is owned exclusively by the companion policy "Case Party Conditional Fields - Organization", so the two policies can never contend for the same field and their relative order is irrelevant. Declarative actions plus reverse_if_false give the platform a watched field (party_type, taken from the condition) so the state is re-evaluated on every change, not only at form load; on_load=true additionally applies the correct state when an existing party record is opened. run_scripts is false and both script bodies are empty - there is no imperative logic. cleared=false on the action so toggling party_type never destroys a value the user already entered. The person field is nullable at the dictionary level (../dictionary/x_casemgmt_case_party_person.xml) precisely so that its required-ness can be conditional here.</description>
     <global>true</global>
     <inherit>false</inherit>
-    <name>Case Party Conditional Fields</name>
     <on_load>true</on_load>
     <order>100</order>
-    <reverse_if_false>false</reverse_if_false>
-    <run_scripts>true</run_scripts>
+    <reverse_if_false>true</reverse_if_false>
+    <run_scripts>false</run_scripts>
     <script_false/>
-    <script_true><![CDATA[function onCondition() {
-    // ServiceNow-native equivalent of ArkCase's @DiscriminatorColumn pattern
-    // from PersonAssociation.java. The party_type Choice field acts as the
-    // discriminator that drives which reference field is shown and required.
-    // Replaces the dual JPA entities (PersonAssociation, PersonOrganizationAssociation)
-    // with a single ServiceNow polymorphic table per AAP Section 0.4.3.
-    var partyType = g_form.getValue('party_type');
-    if (partyType === 'Person') {
-        // Show person reference field, make it mandatory; hide organization.
-        // The 'Person' string literal MUST match the case-sensitive label
-        // declared in ../choices/sys_choice_case_party_party_type.xml byte-for-byte.
-        g_form.setDisplay('person', true);
-        g_form.setMandatory('person', true);
-        g_form.setDisplay('organization', false);
-        g_form.setMandatory('organization', false);
-    } else if (partyType === 'Organization') {
-        // Show organization reference field, make it mandatory; hide person.
-        // The 'Organization' string literal MUST match the case-sensitive label
-        // declared in ../choices/sys_choice_case_party_party_type.xml byte-for-byte.
-        g_form.setDisplay('person', false);
-        g_form.setMandatory('person', false);
-        g_form.setDisplay('organization', true);
-        g_form.setMandatory('organization', true);
-    } else {
-        // party_type is empty (new record before user picks). Hide both fields
-        // and clear mandatory overrides so user is not blocked from saving
-        // a half-filled record. The party_type field itself is mandatory at
-        // the dictionary level so the user cannot save without selecting one
-        // (per ../dictionary/x_casemgmt_case_party_party_type.xml).
-        g_form.setDisplay('person', false);
-        g_form.setMandatory('person', false);
-        g_form.setDisplay('organization', false);
-        g_form.setMandatory('organization', false);
-    }
-}]]></script_true>
-    <short_description>Polymorphic field rendering: show person+mandatory when party_type=Person, show organization+mandatory when party_type=Organization, hide both when party_type is empty.</short_description>
+    <script_true/>
+    <short_description>Case Party Conditional Fields - Person: show person and make it mandatory when party_type=Person; reverse (hide, not mandatory) for every other value including empty.</short_description>
     <sys_class_name>sys_ui_policy</sys_class_name>
     <sys_created_by>admin</sys_created_by>
     <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -346,4 +268,76 @@
     <ui_type>0</ui_type>
     <view/>
 </sys_ui_policy>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>ignore</disabled>
+    <field>person</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>true</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>3ec2d72d2b69e11d331037a908ea9fa4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case_party</table>
+    <ui_policy display_value="Case Party Conditional Fields - Person">854295ebb4c8309eea6a52aa788ec8a9</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>true</visible>
+</sys_ui_policy_action>
+<sys_ui_policy action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <conditions>party_type=Organization</conditions>
+    <description>Polymorphic field-rendering UI Policy on x_casemgmt_case_party for the Organization branch of the party_type discriminator. Companion to "Case Party Conditional Fields - Person" and the ServiceNow-native equivalent of ArkCase's dual-table @ManyToOne pattern from PersonOrganizationAssociation.java per AAP Section 0.4.3. When party_type=Organization the single sys_ui_policy_action child makes the organization reference field visible and mandatory; because reverse_if_false=true, any other party_type value - including empty - reverses that action so organization becomes hidden and not mandatory. This policy deliberately acts on the organization field ONLY, which is why the empty-party_type state is deterministic: both policies reverse, and each reverses its own single field. Declarative actions plus reverse_if_false give the platform a watched field (party_type, taken from the condition) so the state is re-evaluated on every change, not only at form load; on_load=true additionally applies the correct state when an existing party record is opened. run_scripts is false and both script bodies are empty. cleared=false on the action so toggling party_type never destroys a value the user already entered. The organization field is nullable at the dictionary level (../dictionary/x_casemgmt_case_party_organization.xml) precisely so that its required-ness can be conditional here.</description>
+    <global>true</global>
+    <inherit>false</inherit>
+    <on_load>true</on_load>
+    <order>110</order>
+    <reverse_if_false>true</reverse_if_false>
+    <run_scripts>false</run_scripts>
+    <script_false/>
+    <script_true/>
+    <short_description>Case Party Conditional Fields - Organization: show organization and make it mandatory when party_type=Organization; reverse (hide, not mandatory) for every other value including empty.</short_description>
+    <sys_class_name>sys_ui_policy</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>507da6cb683691d5a09285ab09297b22</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case_party</table>
+    <ui_type>0</ui_type>
+    <view/>
+</sys_ui_policy>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>ignore</disabled>
+    <field>organization</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>true</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>4f52dd6c0ce634ba474075b15f28ce39</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case_party</table>
+    <ui_policy display_value="Case Party Conditional Fields - Organization">507da6cb683691d5a09285ab09297b22</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>true</visible>
+</sys_ui_policy_action>
 </unload>

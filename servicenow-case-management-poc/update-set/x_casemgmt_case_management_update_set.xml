@@ -5767,13 +5767,13 @@ CaseTransitionValidator.prototype = {
         <comments/>
         <name>sys_script_include_95e90fa18471e42875f5f956ec7949d1</name>
         <payload><![CDATA[<record_update table="sys_script_include">
-    <sys_script_include action="INSERT_OR_UPDATE">
+<sys_script_include action="INSERT_OR_UPDATE">
         <access>package_private</access>
         <active>true</active>
         <api_name>x_casemgmt.CasePortalService</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase returns {number} on success or {error} on failure; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and capped at 255/4000/100, requester_email must look like an address when supplied, type must be a live choice of x_casemgmt_case.type - and a coarse flood guard bounds the unauthenticated write path; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
         <name>CasePortalService</name>
         <script><![CDATA[var CasePortalService = Class.create();
 CasePortalService.prototype = {
@@ -5812,8 +5812,11 @@ CasePortalService.prototype = {
      * @param {Object} payload - request payload from the scripted REST
      *     endpoint, as parsed from the JSON request body.
      * @return {Object} { number: 'CASE0000001' } on success; or
-     *     { error: '<message>' } on failure (invalid payload, insert
-     *     rejected by validation business rule, post-insert lookup failed).
+     *     { error: '<message>', fields: { <field>: '<reason>' } } when the
+     *     payload fails validation (the REST operation answers HTTP 400);
+     *     or { error: '<message>', throttled: true } when the anonymous
+     *     flood guard refuses the request (HTTP 429); or
+     *     { error: '<message>' } when the insert itself fails.
      */
     submitCase: function(payload) {
         // Defensive null/type check. The scripted REST endpoint should
@@ -5822,6 +5825,50 @@ CasePortalService.prototype = {
         // all of those without leaking implementation details to the caller.
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             return { error: 'Invalid payload.' };
+        }
+
+        // ------------------------------------------------------------------
+        // VALIDATION GATE (AAP Section 0.5.7 constraints, enforced here
+        // because nothing else on this write path enforces them).
+        //
+        // The dictionary marks subject, description and requester_name
+        // Mandatory, but a scoped GlideRecord.insert() performed by this
+        // Script Include does NOT run the platform's mandatory-field UI
+        // validation: mandatory is a form/ACL-time construct, so an insert
+        // carrying empty strings succeeds silently. Likewise, ServiceNow
+        // backs string columns longer than 255 with a TEXT column that does
+        // NOT truncate, so the declared 4000-character description limit is
+        // only real if this method enforces it. Both gaps were reproduced
+        // against the live endpoint (blank mandatory fields accepted with
+        // HTTP 201; a 6006-character description stored in full), so the
+        // guard below is the fix for them, and for a `type` value outside
+        // the declared choice list.
+        //
+        // Validation runs BEFORE any GlideRecord is initialized so a
+        // rejected submission cannot leave a partial row behind.
+        // ------------------------------------------------------------------
+        var validated = this._validateSubmission(payload);
+        if (validated.error) {
+            return validated;
+        }
+
+        // ------------------------------------------------------------------
+        // ANONYMOUS FLOOD GUARD. The submit endpoint is reachable without
+        // credentials from the public Internet, so an unbounded caller can
+        // otherwise create cases without limit. The guard counts the rows
+        // this path has created inside the trailing window and refuses once
+        // the ceiling is reached; it never blocks a legitimate single
+        // submission (see SUBMIT_WINDOW_LIMIT).
+        // ------------------------------------------------------------------
+        var admission = this._admitAnonymousSubmission();
+        if (!admission.allowed) {
+            gs.warn('CasePortalService.submitCase: submission refused by the anonymous flood guard; ' +
+                'recent=' + admission.recent + ' limit=' + admission.limit +
+                ' window_seconds=' + admission.windowSeconds);
+            return {
+                error: 'Too many submissions were received in a short period. Please try again in a minute.',
+                throttled: true
+            };
         }
 
         var caseGr = new GlideRecord('x_casemgmt_case');
@@ -5835,21 +5882,14 @@ CasePortalService.prototype = {
         // Any other key in the payload is silently dropped - we do not
         // even acknowledge unrecognized keys via an error response, so a
         // probing client cannot enumerate internal field names.
+        //
+        // The values written are the VALIDATED, trimmed and length-capped
+        // values produced by _validateSubmission(), never the raw payload.
         var WHITELIST = ['subject', 'type', 'description', 'requester_name', 'requester_email'];
         for (var i = 0; i < WHITELIST.length; i++) {
             var fieldName = WHITELIST[i];
-            // hasOwnProperty guards against prototype-pollution edge cases;
-            // the != null check (loose equality) excludes both null AND
-            // undefined while still allowing empty strings to pass through
-            // (an empty-string requester_email is a valid "I do not wish
-            // to provide email" answer that the dictionary marks optional).
-            if (Object.prototype.hasOwnProperty.call(payload, fieldName) && payload[fieldName] != null) {
-                // String() coercion normalizes any non-string primitive
-                // (number, boolean) into a string before the GlideRecord
-                // setValue call - GlideRecord.setValue expects strings
-                // for string-typed columns and the platform's behavior
-                // for non-string inputs is release-dependent.
-                caseGr.setValue(fieldName, String(payload[fieldName]));
+            if (Object.prototype.hasOwnProperty.call(validated.values, fieldName)) {
+                caseGr.setValue(fieldName, validated.values[fieldName]);
             }
         }
 
@@ -6022,6 +6062,252 @@ CasePortalService.prototype = {
     },
 
     /**
+     * Validate an anonymous submission payload against the AAP Section 0.5.7
+     * constraints for the five whitelisted input fields, returning the
+     * cleaned values to write.
+     *
+     * Contract per field:
+     *   subject         MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then capped at 255
+     *                   characters (the declared String(255) length).
+     *   description     MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then capped at 4000
+     *                   characters. The cap MUST be applied here: the
+     *                   platform stores >255-character string columns in a
+     *                   TEXT column that does not truncate, so the database
+     *                   alone does not enforce the declared limit.
+     *   requester_name  MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then capped at 100.
+     *   requester_email OPTIONAL (AAP Section 0.5.7 marks it optional).
+     *                   When supplied non-empty it must look like an
+     *                   address - one '@', no whitespace, a dot-bearing
+     *                   domain - and is capped at 100. An empty or absent
+     *                   value is accepted and stored as an empty string.
+     *   type            OPTIONAL at the dictionary level (choice=3, the
+     *                   platform's "Dropdown with -- None --"), so an
+     *                   absent value is legal and stored empty. A SUPPLIED
+     *                   value must match one of the live choices for
+     *                   x_casemgmt_case.type, resolved case-insensitively
+     *                   and normalised to the canonical stored value, so a
+     *                   value outside the choice list can never be stored.
+     *
+     * The error response names the offending fields. Those five names are
+     * already public - the portal form posts them - so naming them leaks
+     * nothing an anonymous caller cannot read in the widget source, while
+     * making the endpoint usable by any client. No INTERNAL field name
+     * (status, assigned_group, assigned_agent, closed_date, ...) ever
+     * appears in a validation response.
+     *
+     * @param {Object} payload - the parsed request body (already checked
+     *     to be a non-array object by the caller).
+     * @return {Object} { values: { <field>: <cleaned string> } } when the
+     *     payload is valid, or { error: '<message>', fields: { <field>:
+     *     '<reason>' } } when it is not.
+     */
+    _validateSubmission: function(payload) {
+        var MANDATORY_TEXT_FIELDS = [
+            { name: 'subject',        label: 'Subject',    maxLength: 255 },
+            { name: 'description',    label: 'Description', maxLength: 4000 },
+            { name: 'requester_name', label: 'Your name',  maxLength: 100 }
+        ];
+        var values = {};
+        var fieldErrors = {};
+        var i;
+
+        for (i = 0; i < MANDATORY_TEXT_FIELDS.length; i++) {
+            var spec = MANDATORY_TEXT_FIELDS[i];
+            var raw = this._readString(payload, spec.name);
+            if (raw === '') {
+                fieldErrors[spec.name] = spec.label + ' is required.';
+                continue;
+            }
+            values[spec.name] = raw.length > spec.maxLength ? raw.substring(0, spec.maxLength) : raw;
+        }
+
+        // requester_email - optional, but validated when present so the
+        // stored value is always either empty or plausibly deliverable.
+        var email = this._readString(payload, 'requester_email');
+        if (email === '') {
+            values.requester_email = '';
+        } else if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email)) {
+            fieldErrors.requester_email = 'Email must be a valid address.';
+        } else {
+            values.requester_email = email.length > 100 ? email.substring(0, 100) : email;
+        }
+
+        // type - optional, but constrained to the choice list when present.
+        var type = this._readString(payload, 'type');
+        if (type === '') {
+            values.type = '';
+        } else {
+            var canonical = this._resolveCaseTypeChoice(type);
+            if (canonical === null) {
+                fieldErrors.type = 'Type must be one of: ' + this._caseTypeChoices().join(', ') + '.';
+            } else {
+                values.type = canonical;
+            }
+        }
+
+        for (var key in fieldErrors) {
+            if (Object.prototype.hasOwnProperty.call(fieldErrors, key)) {
+                return {
+                    error: 'The submission could not be accepted because one or more fields are invalid.',
+                    fields: fieldErrors
+                };
+            }
+        }
+        return { values: values };
+    },
+
+    /**
+     * Read one payload key as a trimmed string.
+     *
+     * Absent keys, null, undefined, objects and arrays all collapse to the
+     * empty string so the caller can treat "not usable" uniformly; scalar
+     * non-strings (a JSON number or boolean) are coerced, matching the
+     * String() coercion this class has always applied before writing to a
+     * string column.
+     *
+     * @param {Object} payload - the parsed request body.
+     * @param {String} key - the field name to read.
+     * @return {String} the trimmed value, or '' when unusable.
+     */
+    _readString: function(payload, key) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) {
+            return '';
+        }
+        var value = payload[key];
+        if (value === null || value === undefined) {
+            return '';
+        }
+        if (typeof value === 'object') {
+            // An object or array where a scalar belongs is not a usable
+            // value; treating it as empty makes it fail the mandatory
+            // check rather than storing "[object Object]".
+            return '';
+        }
+        return String(value).trim();
+    },
+
+    /**
+     * The live choice values for x_casemgmt_case.type, in the order the
+     * platform presents them.
+     *
+     * Read from sys_choice rather than hardcoded so the "extensible" part
+     * of the AAP Section 0.5.7 contract ("General Inquiry, Complaint -
+     * extensible") keeps working: an administrator who adds a choice does
+     * not have to touch this Script Include for the endpoint to accept it.
+     * Inactive choices are excluded - an inactive choice must not be
+     * storable through the public endpoint.
+     *
+     * @return {Array} array of choice value strings (possibly empty when
+     *     the choice list has not been created yet).
+     */
+    _caseTypeChoices: function() {
+        var choices = [];
+        var gr = new GlideRecord('sys_choice');
+        gr.addQuery('name', 'x_casemgmt_case');
+        gr.addQuery('element', 'type');
+        gr.addQuery('inactive', false);
+        gr.orderBy('sequence');
+        gr.query();
+        while (gr.next()) {
+            var value = String(gr.getValue('value') || '');
+            if (value !== '' && choices.indexOf(value) === -1) {
+                choices.push(value);
+            }
+        }
+        return choices;
+    },
+
+    /**
+     * Resolve a caller-supplied case type to its canonical stored value.
+     *
+     * Matching is exact first, then case-insensitive, so 'general inquiry'
+     * is accepted and stored as 'General Inquiry' while 'NOT_A_REAL_TYPE'
+     * is refused. When the choice list cannot be read at all (it has not
+     * been created on this instance yet) the value is refused rather than
+     * stored unchecked: refusing is the fail-closed answer, and the choice
+     * list is a Gate 1 requirement, so its absence is an installation
+     * fault rather than a reason to relax the contract.
+     *
+     * @param {String} supplied - a non-empty trimmed candidate value.
+     * @return {String|null} the canonical choice value, or null when the
+     *     candidate is not a live choice.
+     */
+    _resolveCaseTypeChoice: function(supplied) {
+        var choices = this._caseTypeChoices();
+        var i;
+        for (i = 0; i < choices.length; i++) {
+            if (choices[i] === supplied) {
+                return choices[i];
+            }
+        }
+        var lowered = supplied.toLowerCase();
+        for (i = 0; i < choices.length; i++) {
+            if (choices[i].toLowerCase() === lowered) {
+                return choices[i];
+            }
+        }
+        return null;
+    },
+
+    /**
+     * Coarse flood guard for the unauthenticated submit path.
+     *
+     * The endpoint accepts writes with no credentials, so without a ceiling
+     * a single caller can create cases indefinitely (measured: six parallel
+     * anonymous submits all accepted, with no throttling of any kind). The
+     * guard counts the cases this path has created inside the trailing
+     * window and refuses further submissions once the ceiling is reached.
+     *
+     * Why it counts rows instead of tracking callers: the scoped
+     * application owns exactly three tables per the AAP Section 0.5.7 data
+     * model, so there is nowhere to persist per-caller counters without
+     * adding an artifact the AAP does not define (Section 0.7.2
+     * Minimal-Change Clause). Counting the endpoint's own recent rows
+     * needs no new storage, keeps no client identifier and therefore
+     * stores no PII, and still bounds the damage an abusive caller can do.
+     * The trade-off is deliberate and documented: the ceiling is global to
+     * the endpoint rather than per-IP, so a flood suppresses other
+     * anonymous submissions for the remainder of the window.
+     *
+     * Rows created by the endpoint are identified by their creator: an
+     * unauthenticated call runs as the platform's guest user, so
+     * sys_created_by on those rows is that user name and never a real
+     * internal user. Internal case creation through the native form is
+     * therefore never counted and never throttled.
+     *
+     * @return {Object} { allowed: Boolean, recent: Number, limit: Number,
+     *     windowSeconds: Number }
+     */
+    _admitAnonymousSubmission: function() {
+        var SUBMIT_WINDOW_SECONDS = 60;
+        var SUBMIT_WINDOW_LIMIT = 10;
+        var ANONYMOUS_USER_NAME = 'guest';
+
+        var windowStart = new GlideDateTime();
+        windowStart.addSeconds(-SUBMIT_WINDOW_SECONDS);
+
+        var recent = 0;
+        var agg = new GlideAggregate('x_casemgmt_case');
+        agg.addQuery('sys_created_by', ANONYMOUS_USER_NAME);
+        agg.addQuery('sys_created_on', '>=', windowStart);
+        agg.addAggregate('COUNT');
+        agg.query();
+        if (agg.next()) {
+            recent = parseInt(agg.getAggregate('COUNT'), 10) || 0;
+        }
+
+        return {
+            allowed: recent < SUBMIT_WINDOW_LIMIT,
+            recent: recent,
+            limit: SUBMIT_WINDOW_LIMIT,
+            windowSeconds: SUBMIT_WINDOW_SECONDS
+        };
+    },
+
+    /**
      * Class-name marker. ServiceNow's Class.create() pattern conventionally
      * exposes a `type` property whose value matches the class name (without
      * the scope prefix). This is used by the platform's introspection
@@ -6045,8 +6331,7 @@ CasePortalService.prototype = {
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
     </sys_script_include>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt.CasePortalService</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -17180,52 +17465,17 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
 <sys_ui_policy action="INSERT_OR_UPDATE">
     <active>true</active>
-    <conditions>party_typeISNOTEMPTY^ORparty_typeISEMPTY^EQ</conditions>
-    <description>Polymorphic field-rendering UI Policy on x_casemgmt_case_party. Implements the ServiceNow-native equivalent of ArkCase's @DiscriminatorColumn(cm_class_name) single-table inheritance pattern from PersonAssociation.java and the dual-table @ManyToOne pattern from PersonOrganizationAssociation.java per AAP Section 0.4.3 ("Polymorphic association via single-table choice + UI Policy"). Uses run_scripts=true with an imperative onCondition script to deterministically set field visibility and mandatory state for all three party_type values: "Person" (show person + mandatory; hide organization), "Organization" (show organization + mandatory; hide person), and empty (hide both fields, both not mandatory). The script_true block is the sole logic path; no declarative actions are used because the declarative two-policy approach with reverse_if_false=true has an unavoidable order-conflict in the empty-state case. Runs on form load (on_load=true) so existing case_party records render correctly when opened. The party_type field itself is mandatory at the dictionary level (../dictionary/x_casemgmt_case_party_party_type.xml), so users cannot save a record without picking one; the mandatory state of person/organization is therefore conditional on party_type and enforced ONLY through this UI Policy.</description>
+    <conditions>party_type=Person</conditions>
+    <description>Polymorphic field-rendering UI Policy on x_casemgmt_case_party for the Person branch of the party_type discriminator. Implements the ServiceNow-native equivalent of ArkCase's @DiscriminatorColumn(cm_class_name) single-table inheritance pattern from PersonAssociation.java per AAP Section 0.4.3 ("Polymorphic association via single-table choice + UI Policy"). When party_type=Person the single sys_ui_policy_action child makes the person reference field visible and mandatory; because reverse_if_false=true, any other party_type value - including empty - reverses that action so person becomes hidden and not mandatory. This policy deliberately acts on the person field ONLY: the organization field is owned exclusively by the companion policy "Case Party Conditional Fields - Organization", so the two policies can never contend for the same field and their relative order is irrelevant. Declarative actions plus reverse_if_false give the platform a watched field (party_type, taken from the condition) so the state is re-evaluated on every change, not only at form load; on_load=true additionally applies the correct state when an existing party record is opened. run_scripts is false and both script bodies are empty - there is no imperative logic. cleared=false on the action so toggling party_type never destroys a value the user already entered. The person field is nullable at the dictionary level (../dictionary/x_casemgmt_case_party_person.xml) precisely so that its required-ness can be conditional here.</description>
     <global>true</global>
     <inherit>false</inherit>
-    <name>Case Party Conditional Fields</name>
     <on_load>true</on_load>
     <order>100</order>
-    <reverse_if_false>false</reverse_if_false>
-    <run_scripts>true</run_scripts>
+    <reverse_if_false>true</reverse_if_false>
+    <run_scripts>false</run_scripts>
     <script_false/>
-    <script_true><![CDATA[function onCondition() {
-    // ServiceNow-native equivalent of ArkCase's @DiscriminatorColumn pattern
-    // from PersonAssociation.java. The party_type Choice field acts as the
-    // discriminator that drives which reference field is shown and required.
-    // Replaces the dual JPA entities (PersonAssociation, PersonOrganizationAssociation)
-    // with a single ServiceNow polymorphic table per AAP Section 0.4.3.
-    var partyType = g_form.getValue('party_type');
-    if (partyType === 'Person') {
-        // Show person reference field, make it mandatory; hide organization.
-        // The 'Person' string literal MUST match the case-sensitive label
-        // declared in ../choices/sys_choice_case_party_party_type.xml byte-for-byte.
-        g_form.setDisplay('person', true);
-        g_form.setMandatory('person', true);
-        g_form.setDisplay('organization', false);
-        g_form.setMandatory('organization', false);
-    } else if (partyType === 'Organization') {
-        // Show organization reference field, make it mandatory; hide person.
-        // The 'Organization' string literal MUST match the case-sensitive label
-        // declared in ../choices/sys_choice_case_party_party_type.xml byte-for-byte.
-        g_form.setDisplay('person', false);
-        g_form.setMandatory('person', false);
-        g_form.setDisplay('organization', true);
-        g_form.setMandatory('organization', true);
-    } else {
-        // party_type is empty (new record before user picks). Hide both fields
-        // and clear mandatory overrides so user is not blocked from saving
-        // a half-filled record. The party_type field itself is mandatory at
-        // the dictionary level so the user cannot save without selecting one
-        // (per ../dictionary/x_casemgmt_case_party_party_type.xml).
-        g_form.setDisplay('person', false);
-        g_form.setMandatory('person', false);
-        g_form.setDisplay('organization', false);
-        g_form.setMandatory('organization', false);
-    }
-}]]]]><![CDATA[></script_true>
-    <short_description>Polymorphic field rendering: show person+mandatory when party_type=Person, show organization+mandatory when party_type=Organization, hide both when party_type is empty.</short_description>
+    <script_true/>
+    <short_description>Case Party Conditional Fields - Person: show person and make it mandatory when party_type=Person; reverse (hide, not mandatory) for every other value including empty.</short_description>
     <sys_class_name>sys_ui_policy</sys_class_name>
     <sys_created_by>admin</sys_created_by>
     <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -17241,8 +17491,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
     <ui_type>0</ui_type>
     <view/>
 </sys_ui_policy>
-</unload>
-]]></payload>
+</unload>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_conditional_fields</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -17253,6 +17502,395 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <type>UI Policy</type>
         <update_domain>global</update_domain>
         <update_guid>f9efbecb1c127c98abc065fea9453897</update_guid>
+        <update_guid_history/>
+        <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ui_policy_action_3ec2d72d2b69e11d331037a908ea9fa4</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>ignore</disabled>
+    <field>person</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>true</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>3ec2d72d2b69e11d331037a908ea9fa4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case_party</table>
+    <ui_policy display_value="Case Party Conditional Fields - Person">854295ebb4c8309eea6a52aa788ec8a9</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>true</visible>
+</sys_ui_policy_action>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>07248f9365dba2ab114fa3d2e400d879</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sys_ui_policy_action</table>
+        <target_name>sys_ui_policy_action_3ec2d72d2b69e11d331037a908ea9fa4</target_name>
+        <type>sys_ui_policy_action</type>
+        <update_domain>global</update_domain>
+        <update_guid>68c604d95ea2e33377505ef34152497c</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ui_policy_507da6cb683691d5a09285ab09297b22</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sys_ui_policy action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <conditions>party_type=Organization</conditions>
+    <description>Polymorphic field-rendering UI Policy on x_casemgmt_case_party for the Organization branch of the party_type discriminator. Companion to "Case Party Conditional Fields - Person" and the ServiceNow-native equivalent of ArkCase's dual-table @ManyToOne pattern from PersonOrganizationAssociation.java per AAP Section 0.4.3. When party_type=Organization the single sys_ui_policy_action child makes the organization reference field visible and mandatory; because reverse_if_false=true, any other party_type value - including empty - reverses that action so organization becomes hidden and not mandatory. This policy deliberately acts on the organization field ONLY, which is why the empty-party_type state is deterministic: both policies reverse, and each reverses its own single field. Declarative actions plus reverse_if_false give the platform a watched field (party_type, taken from the condition) so the state is re-evaluated on every change, not only at form load; on_load=true additionally applies the correct state when an existing party record is opened. run_scripts is false and both script bodies are empty. cleared=false on the action so toggling party_type never destroys a value the user already entered. The organization field is nullable at the dictionary level (../dictionary/x_casemgmt_case_party_organization.xml) precisely so that its required-ness can be conditional here.</description>
+    <global>true</global>
+    <inherit>false</inherit>
+    <on_load>true</on_load>
+    <order>110</order>
+    <reverse_if_false>true</reverse_if_false>
+    <run_scripts>false</run_scripts>
+    <script_false/>
+    <script_true/>
+    <short_description>Case Party Conditional Fields - Organization: show organization and make it mandatory when party_type=Organization; reverse (hide, not mandatory) for every other value including empty.</short_description>
+    <sys_class_name>sys_ui_policy</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>507da6cb683691d5a09285ab09297b22</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case_party</table>
+    <ui_type>0</ui_type>
+    <view/>
+</sys_ui_policy>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>788dce2912d86d1cb6d24cfdd91a7d77</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sys_ui_policy</table>
+        <target_name>sys_ui_policy_507da6cb683691d5a09285ab09297b22</target_name>
+        <type>sys_ui_policy</type>
+        <update_domain>global</update_domain>
+        <update_guid>6b413c124cf33d65db2e5cfeacac780f</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ui_policy_action_4f52dd6c0ce634ba474075b15f28ce39</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>ignore</disabled>
+    <field>organization</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>true</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>4f52dd6c0ce634ba474075b15f28ce39</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case_party</table>
+    <ui_policy display_value="Case Party Conditional Fields - Organization">507da6cb683691d5a09285ab09297b22</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>true</visible>
+</sys_ui_policy_action>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>e9d51c27514b77c985b9fc90fb9e5a4a</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sys_ui_policy_action</table>
+        <target_name>sys_ui_policy_action_4f52dd6c0ce634ba474075b15f28ce39</target_name>
+        <type>sys_ui_policy_action</type>
+        <update_domain>global</update_domain>
+        <update_guid>0a74ed19ad900f19f9c1584fc3af1f57</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sys_ui_list_x_casemgmt_case_null</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_ui_list parent="" relationship="" sys_domain="global" table="x_casemgmt_case" version="2" view="">
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>number</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>0</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>b902b461a7d845af3a7855ef54517782</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>subject</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>1</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>3e23d89436716d4009cd8b28bbc276ed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>type</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>2</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>04a55bfb47d0896e92ed9064bea4f167</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>status</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>3</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>3465363256d9f1c2464c8db6741c0bec</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>priority</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>4</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>8541f38dd188ff731dacc94054eeaea8</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>description</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>5</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>f3a5942f6916ddf2143095d296b401c6</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>requester_name</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>6</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>3e84f9082bcd5ad3289d6251f1eeb3a1</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>requester_email</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>7</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>5fae7d329ff3285af41106995327159a</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>opened_date</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>8</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>e2ce9e08a0e6445dabd7a86538c1eaf0</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>closed_date</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>9</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>b802a30d601e89f561e8c00c846ab532</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>assigned_group</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>10</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>c90e9971cdc99482c6db90b7a91fe83c</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>assigned_agent</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>11</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>af1e7c283ec90b7f2e546b7caa660e65</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>pending_reason</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>12</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>17b3bd08c5d712240692208a65c328dc</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element/>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <name>x_casemgmt_case</name>
+            <parent/>
+            <position/>
+            <relationship/>
+            <sum>false</sum>
+            <sys_class_name>sys_ui_list</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>35145a169322cb10830ef82bdd03d6e7</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>x_casemgmt_case</sys_name>
+            <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+            <sys_update_name>sys_ui_list_x_casemgmt_case_null</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+            <sys_user/>
+            <view>Default view</view>
+            <view_name/>
+        </sys_ui_list>
+    </sys_ui_list>
+</record_update>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>2ae0a403df2b35485b25f5d594f623a2</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>x_casemgmt_case</table>
+        <target_name>Case</target_name>
+        <type>List Layout</type>
+        <update_domain>global</update_domain>
+        <update_guid>f13b365d576ff28aad4356bb0be93270</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -18749,16 +19387,16 @@ function serverSetPending() {
         <comments/>
         <name>sys_ws_operation_886ad7128907a6351ea04b210c27029e</name>
         <payload><![CDATA[<record_update table="sys_ws_operation">
-    <sys_ws_operation action="INSERT_OR_UPDATE">
+<sys_ws_operation action="INSERT_OR_UPDATE">
         <active>true</active>
         <consumes>application/json</consumes>
         <consumes_customized>true</consumes_customized>
         <default_operation_uri>/api/x_casemgmt/case_submit</default_operation_uri>
-        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
+        <description>POST handler for the Case Submit scripted REST API. Anonymously accepts a JSON payload containing the whitelisted fields { subject, type, description, requester_name, requester_email } from the Experience Portal submission widget. Delegates to x_casemgmt.CasePortalService.submitCase() which inserts a new x_casemgmt_case row with status=Draft and silently drops any non-whitelisted fields. On success, returns HTTP 201 with body { number, message: 'Your case has been submitted' }. On validation failure, returns HTTP 400 with body { error } plus a { fields } map naming the offending public input fields; a body that is not valid JSON is caught here and answered as HTTP 400 rather than escaping as an HTTP 500. When the Script Include's anonymous flood guard refuses the submission the handler answers HTTP 429 with body { error }. On defensive fallback (Script Include returned no number and no error - should never happen if the Script Include conforms to its contract), returns HTTP 500 with body { error: 'Submission failed.' }. Replaces ArkCase's DefaultPluggablePortalRequestService.submitRequest() Spring service for the Case Submit slice. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4 (verbatim).</description>
         <enforce_acl/>
         <http_method>POST</http_method>
         <name>Case Submit POST</name>
-        <operation_script>(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+        <operation_script><![CDATA[(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
     // Per AAP Section 0.4.3 + Section 0.4.4 + Section 0.7.4:
     // Anonymous case-submission endpoint. The whitelisted-field discipline
     // (input fields restricted to subject, type, description, requester_name,
@@ -18779,15 +19417,32 @@ function serverSetPending() {
     //    possible if a malicious client sends POST with no Content-Type
     //    or empty body).
     //    request.body.data is the auto-parsed JSON object when the
-    //    Content-Type is application/json (per &lt;consumes&gt;application/json
-    //    &lt;/consumes&gt; on this operation). It may be undefined if the body
+    //    Content-Type is application/json (per <consumes>application/json
+    //    </consumes> on this operation). It may be undefined if the body
     //    failed to parse.
     //    Pass null to the Script Include when either is missing - the
     //    Script Include's defensive type-check returns
     //    { error: 'Invalid payload.' } which this handler translates to
     //    HTTP 400.
     // ----------------------------------------------------------------------
-    var payload = request.body &amp;&amp; request.body.data ? request.body.data : null;
+    //    The access itself is wrapped in try/catch: `request.body.data`
+    //    parses the raw body lazily, so touching it with a syntactically
+    //    invalid JSON body THROWS out of this operation script. Left
+    //    unguarded the platform turned that throw into HTTP 500 with
+    //    "Exception while reading request" (measured: a body of
+    //    `{"subject":"s",,}` produced 500 and a JavaScript evaluation error
+    //    in syslog). A malformed body is a client fault, so it must be a
+    //    4xx: the catch answers 400 with a clear message, matching the
+    //    already-correct 415 for a wrong Content-Type and 405 for a method
+    //    mismatch.
+    var payload = null;
+    try {
+        payload = request.body && request.body.data ? request.body.data : null;
+    } catch (bodyParseError) {
+        response.setStatus(400);
+        response.setBody({ error: 'Request body must be valid JSON.' });
+        return;
+    }
 
     // ----------------------------------------------------------------------
     // 2. Delegate to the Script Include. The Script Include is the single
@@ -18800,7 +19455,7 @@ function serverSetPending() {
     //
     //    Contract:
     //      - submitCase(payload) returns:
-    //          * { error: '&lt;message&gt;' }   - validation/insert failure
+    //          * { error: '<message>' }   - validation/insert failure
     //          * { number: 'CASE0000001' } - success, auto-generated number
     //
     //    The Script Include is invoked via the scope-qualified API name
@@ -18811,7 +19466,22 @@ function serverSetPending() {
     var result = svc.submitCase(payload);
 
     // ----------------------------------------------------------------------
-    // 3. Validation failure -&gt; HTTP 400 Bad Request.
+    // 3a. Flood guard refusal -> HTTP 429 Too Many Requests.
+    //
+    //    The Script Include sets throttled=true when its anonymous flood
+    //    guard refuses the submission. 429 is the correct status for that
+    //    condition: the request was well formed and would have been
+    //    accepted at another time, so answering 400 would mislead the
+    //    caller into "fix your payload".
+    // ----------------------------------------------------------------------
+    if (result && result.error && result.throttled) {
+        response.setStatus(429);
+        response.setBody({ error: String(result.error) });
+        return;
+    }
+
+    // ----------------------------------------------------------------------
+    // 3b. Validation failure -> HTTP 400 Bad Request.
     //
     //    The Script Include returns { error: 'Invalid payload.' } when
     //    the payload is null/non-object/array, and
@@ -18820,19 +19490,34 @@ function serverSetPending() {
     //    mandatory field). Both surface as HTTP 400 to give the calling
     //    widget actionable feedback.
     //
+    //    When the payload failed the field-level validation gate the
+    //    Script Include also returns a `fields` map naming the offending
+    //    inputs (subject, description, requester_name, requester_email,
+    //    type) with a caller-facing reason for each. Those five names are
+    //    the endpoint's own public input contract - the portal form posts
+    //    exactly them - so echoing them back leaks nothing an anonymous
+    //    caller cannot already read in the widget source, and it turns a
+    //    blanket rejection into an actionable one. No INTERNAL field name
+    //    is ever echoed, because the Script Include only ever puts those
+    //    five keys in the map.
+    //
     //    String() coercion on result.error defends against a future
     //    refactor that returns a non-string error value (e.g., an Error
     //    object); the JSON serializer would otherwise produce
     //    unpredictable output.
     // ----------------------------------------------------------------------
-    if (result &amp;&amp; result.error) {
+    if (result && result.error) {
         response.setStatus(400);
-        response.setBody({ error: String(result.error) });
+        var errorBody = { error: String(result.error) };
+        if (result.fields) {
+            errorBody.fields = result.fields;
+        }
+        response.setBody(errorBody);
         return;
     }
 
     // ----------------------------------------------------------------------
-    // 4. Defensive fallback -&gt; HTTP 500 Internal Server Error.
+    // 4. Defensive fallback -> HTTP 500 Internal Server Error.
     //
     //    This branch should NEVER trigger if the Script Include conforms
     //    to its contract (always returns either { number } or { error }).
@@ -18851,7 +19536,7 @@ function serverSetPending() {
     }
 
     // ----------------------------------------------------------------------
-    // 5. Success -&gt; HTTP 201 Created with { number, message }.
+    // 5. Success -> HTTP 201 Created with { number, message }.
     //
     //    HTTP 201 (vs 200): REST convention - 201 indicates a NEW
     //    resource was created on the server. The submission widget can
@@ -18860,7 +19545,7 @@ function serverSetPending() {
     //
     //    Response body shape (exactly two keys, no others):
     //      {
-    //        number:  '&lt;auto-generated CASE0000001-format string&gt;',
+    //        number:  '<auto-generated CASE0000001-format string>',
     //        message: 'Your case has been submitted'
     //      }
     //
@@ -18880,7 +19565,7 @@ function serverSetPending() {
         number: String(result.number),
         message: 'Your case has been submitted'
     });
-})(request, response);</operation_script>
+})(request, response);]]]]><![CDATA[></operation_script>
         <operation_uri>/api/x_casemgmt/case_submit</operation_uri>
         <produces>application/json</produces>
         <produces_customized>true</produces_customized>
@@ -18889,7 +19574,7 @@ function serverSetPending() {
         <requires_acl_authorization>false</requires_acl_authorization>
         <requires_authentication>false</requires_authentication>
         <requires_snc_internal_role>false</requires_snc_internal_role>
-        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error } on validation failure, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
+        <short_description>Anonymous POST handler for case submission. Returns HTTP 201 with { number, message: 'Your case has been submitted' } on success, HTTP 400 with { error, fields } on validation failure or on a body that is not valid JSON, HTTP 429 with { error } when the anonymous flood guard refuses the submission, or HTTP 500 with { error: 'Submission failed.' } on defensive fallback. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4.</short_description>
         <sys_class_name>sys_ws_operation</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-30 12:00:00</sys_created_on>
@@ -18905,8 +19590,7 @@ function serverSetPending() {
         <web_service_definition display_value="x_casemgmt_case_submit">ef9090a5b03f1a36c248ce65065a1b74</web_service_definition>
         <web_service_version/>
     </sys_ws_operation>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_submit_post</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -19174,48 +19858,19 @@ function serverSetPending() {
         <comments/>
         <name>sp_page_6a1f3c2ffd653613304512a734aab83b</name>
         <payload><![CDATA[<record_update table="sp_page">
-    <sp_page action="INSERT_OR_UPDATE">
+<sp_page action="INSERT_OR_UPDATE">
         <category/>
-        <description>Unauthenticated Service Portal page for case submission. Embeds the case submission widget (sp_widget_x_casemgmt_case_submission_widget) which renders a 5-field form (subject, type, description, requester_name, requester_email) and POSTs to /api/x_casemgmt/case_submit. On success, the embedded widget transitively displays the confirmation widget (sp_widget_x_casemgmt_case_confirmation_widget) with the returned case number and the verbatim message 'Your case has been submitted'. Member of the x_casemgmt_case_portal Experience Portal AND serves as the portal's homepage (the portal record's homepage_dv references this page's id). Replaces ArkCase's acm-service-portal-gateway anonymous-submission pattern. Per AAP Sections 0.4.4 and 0.7.4 and Validation Gate 4 (Portal - submission).</description>
+        <css/>
         <draft>false</draft>
         <dynamic_title_structure/>
-        <hide_for_kb>true</hide_for_kb>
+        <human_readable_url_structure/>
         <id>x_casemgmt_case_submit</id>
         <internal>false</internal>
         <omit_watcher>true</omit_watcher>
-        <page_internal><![CDATA[
-{
-    "containers": [
-        {
-            "id": "container_main",
-            "containerClass": "container",
-            "rows": [
-                {
-                    "id": "row_submit",
-                    "columns": [
-                        {
-                            "id": "col_submit",
-                            "size": 12,
-                            "instances": [
-                                {
-                                    "id": "instance_submission_widget",
-                                    "widget_id": "x_casemgmt_case_submission_widget",
-                                    "widgetReference": "x_casemgmt_case_submission_widget",
-                                    "title": "Submit a Case",
-                                    "options": {}
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-]]]]><![CDATA[></page_internal>
-        <page_specific_css/>
         <public>true</public>
         <roles/>
+        <seo_script/>
+        <short_description>Unauthenticated case submission page. Renders the Case Submission Widget.</short_description>
         <sys_class_name>sp_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -19229,9 +19884,9 @@ function serverSetPending() {
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <title>Submit a Case</title>
+        <use_seo_script>false</use_seo_script>
     </sp_page>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_submit</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -19252,48 +19907,19 @@ function serverSetPending() {
         <comments/>
         <name>sp_page_8881e418f5d24b17b641505a4f1dc814</name>
         <payload><![CDATA[<record_update table="sp_page">
-    <sp_page action="INSERT_OR_UPDATE">
+<sp_page action="INSERT_OR_UPDATE">
         <category/>
-        <description>Unauthenticated Service Portal page for case status lookup. Embeds the case lookup widget (sp_widget_x_casemgmt_case_lookup_widget) which renders a single case-number input plus result panel showing ONLY status, subject, opened_date on match, or the verbatim text 'No case found with that number.' on no-match. Reachable via direct URL [instance URL]/x_casemgmt_case_portal?id=x_casemgmt_case_status. Member of the x_casemgmt_case_portal Experience Portal but NOT its homepage (the submission page is the homepage). Replaces ArkCase's GetCaseByNumberService and PortalRequestService.getRequestStatus anonymous-status-lookup pattern. Per AAP Sections 0.4.4 and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <css/>
         <draft>false</draft>
         <dynamic_title_structure/>
-        <hide_for_kb>true</hide_for_kb>
+        <human_readable_url_structure/>
         <id>x_casemgmt_case_status</id>
         <internal>false</internal>
         <omit_watcher>true</omit_watcher>
-        <page_internal><![CDATA[
-{
-    "containers": [
-        {
-            "id": "container_main",
-            "containerClass": "container",
-            "rows": [
-                {
-                    "id": "row_lookup",
-                    "columns": [
-                        {
-                            "id": "col_lookup",
-                            "size": 12,
-                            "instances": [
-                                {
-                                    "id": "instance_lookup_widget",
-                                    "widget_id": "x_casemgmt_case_lookup_widget",
-                                    "widgetReference": "x_casemgmt_case_lookup_widget",
-                                    "title": "Case Status Lookup",
-                                    "options": {}
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-]]]]><![CDATA[></page_internal>
-        <page_specific_css/>
         <public>true</public>
         <roles/>
+        <seo_script/>
+        <short_description>Unauthenticated case status lookup page. Renders the Case Lookup Widget.</short_description>
         <sys_class_name>sp_page</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -19307,9 +19933,9 @@ function serverSetPending() {
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <title>Case Status Lookup</title>
+        <use_seo_script>false</use_seo_script>
     </sp_page>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_status</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -19330,7 +19956,7 @@ function serverSetPending() {
         <comments/>
         <name>sp_widget_b40f252d17be5fa3b3bb85cb79ca8d2f</name>
         <payload><![CDATA[<record_update table="sp_widget">
-    <sp_widget action="INSERT_OR_UPDATE">
+<sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function CaseSubmissionWidgetController($scope, $http) {
     /*
@@ -19424,7 +20050,7 @@ function serverSetPending() {
      *     the early-return inside c.submit() is the defense-in-depth
      *     fallback in case the disabled state is bypassed by a
      *     keyboard event in an edge browser.
-     *   - String() coercion on response.data.number: ensures the
+     *   - String() coercion on the unwrapped body.number: ensures the
      *     embedded widget's c.options.number is always a string, even
      *     if the REST operation accidentally returns a number primitive.
      *     Matches the embedded widget's own defensive coercion in
@@ -19499,9 +20125,30 @@ function serverSetPending() {
             requester_email:  c.formData.requester_email
         }).then(function(response) {
             // Success path (HTTP 2xx). The server's REST operation
-            // returns { number, message } per its contract.
+            // returns { number, message } per its contract - but a
+            // ServiceNow Scripted REST API wraps whatever the operation
+            // script passes to response.setBody() inside a `result`
+            // envelope before it reaches the wire. Measured against the
+            // live endpoint: the 201 body is
+            //   {"result":{"number":"CASE0001126","message":"Your case has been submitted"}}
+            // so the number lives at response.data.result.number, and
+            // reading response.data.number yields undefined. That single
+            // mis-read is what previously drove a fully successful
+            // submission (HTTP 201, case created in Draft) into the else
+            // branch below, showing the requester "Submission failed.
+            // Please try again." while the case existed - the worst
+            // possible outcome, because the natural reaction is to press
+            // Submit again and create duplicates.
+            //
+            // The unwrap below prefers the envelope and falls back to the
+            // bare body, so it is correct whether or not the envelope is
+            // applied (the platform can be configured either way, and a
+            // caller may append sysparm_no_envelope).
             c.submitting = false;
-            if (response && response.data && response.data.number) {
+            var body = (response && response.data && response.data.result) ?
+                response.data.result :
+                (response ? response.data : null);
+            if (body && body.number) {
                 // Pass the returned case number to the embedded
                 // confirmation widget by mutating its options.number.
                 // The embedded widget's controller assigns
@@ -19509,13 +20156,13 @@ function serverSetPending() {
                 // so this mutation propagates reactively through
                 // Angular's two-way binding.
                 if (c.data.confirmationWidget && c.data.confirmationWidget.options) {
-                    c.data.confirmationWidget.options.number = String(response.data.number);
+                    c.data.confirmationWidget.options.number = String(body.number);
                 }
                 // Mirror the case number on c.data for any consumer that
                 // wants it directly. Defense-in-depth in case the
                 // embedded widget's options object is replaced rather
                 // than mutated by some future refactor.
-                c.data.submittedNumber = String(response.data.number);
+                c.data.submittedNumber = String(body.number);
                 // Flip the submitted flag - the template swaps from
                 // the form panel to the embedded confirmation widget.
                 c.data.submitted = true;
@@ -19776,8 +20423,7 @@ function serverSetPending() {
 </div>
 ]]]]><![CDATA[></template>
     </sp_widget>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_submission_widget</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -19798,7 +20444,7 @@ function serverSetPending() {
         <comments/>
         <name>sp_widget_e992deb0bd1657f36a38f5af6a46aeb2</name>
         <payload><![CDATA[<record_update table="sp_widget">
-    <sp_widget action="INSERT_OR_UPDATE">
+<sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
         <client_script><![CDATA[function CaseLookupWidgetController($scope, $http) {
     /*
@@ -19918,9 +20564,30 @@ function serverSetPending() {
 
         $http.get(url).then(function(response) {
             // Success path (HTTP 200). The server's REST operation
-            // returns { status, subject, opened_date } per its contract.
+            // returns { status, subject, opened_date } per its contract -
+            // but a ServiceNow Scripted REST API wraps whatever the
+            // operation script passes to response.setBody() inside a
+            // `result` envelope before it reaches the wire. Measured
+            // against the live endpoint, a 200 body is
+            //   {"result":{"status":"Draft","subject":"...","opened_date":"..."}}
+            // so the three whitelisted values live at
+            // response.data.result.*, and reading response.data.* yields
+            // undefined - which would have painted a result panel with
+            // three blank rows instead of the case's status.
+            //
+            // The unwrap below prefers the envelope and falls back to the
+            // bare body, so it is correct whether or not the envelope is
+            // applied (the platform can be configured either way, and a
+            // caller may append sysparm_no_envelope).
             c.loading = false;
-            if (response && response.data) {
+            var body = (response && response.data && response.data.result) ?
+                response.data.result :
+                (response ? response.data : null);
+            // `status` is mandatory on every case, so its presence is the
+            // signal that a real record came back. An empty or
+            // status-less body is treated as not-found rather than
+            // rendered as a panel of blanks.
+            if (body && body.status) {
                 // Strict 3-field whitelist (defense-in-depth). Extract
                 // ONLY status, subject, opened_date from the response
                 // body. Even if the server were misconfigured to return
@@ -19929,14 +20596,15 @@ function serverSetPending() {
                 // the template renders an empty cell rather than the
                 // literal text "undefined" or "null".
                 c.result = {
-                    status:      String(response.data.status      || ''),
-                    subject:     String(response.data.subject     || ''),
-                    opened_date: String(response.data.opened_date || '')
+                    status:      String(body.status      || ''),
+                    subject:     String(body.subject     || ''),
+                    opened_date: String(body.opened_date || '')
                 };
                 c.notFound = false;
             } else {
-                // Defensive: empty response body but HTTP 200. Treat as
-                // not-found rather than rendering an empty result panel.
+                // Defensive: empty or status-less response body on HTTP
+                // 200. Treat as not-found rather than rendering an empty
+                // result panel.
                 // This should not occur in practice (the server always
                 // returns a body on 200) but guards against unexpected
                 // upstream behavior.
@@ -20098,8 +20766,7 @@ function serverSetPending() {
 </div>
 ]]]]><![CDATA[></template>
     </sp_widget>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_lookup_widget</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -20233,6 +20900,392 @@ function serverSetPending() {
         <update_guid>ac8187753c9e8cfba1a6514e23bf7952</update_guid>
         <update_guid_history/>
         <view></view>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_container_062ae69ebc2fbbdddf116b1df0e78654</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_container action="INSERT_OR_UPDATE">
+    <aria_label>Case submission</aria_label>
+    <background_color/>
+    <background_image/>
+    <background_style/>
+    <bootstrap_alt>false</bootstrap_alt>
+    <class_name>m-t-lg</class_name>
+    <container_class_name/>
+    <name>Submit a Case - Container 1</name>
+    <order>1</order>
+    <semantic_tag>main</semantic_tag>
+    <sp_page display_value="Submit a Case">6a1f3c2ffd653613304512a734aab83b</sp_page>
+    <subheader>false</subheader>
+    <sys_class_name>sp_container</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>062ae69ebc2fbbdddf116b1df0e78654</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Submit a Case - Container 1</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_container_x_casemgmt_case_submit</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <width>container</width>
+</sp_container>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>b9d8b9894f791dc1884b55e5a4e9b974</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_container</table>
+        <target_name>sp_container_062ae69ebc2fbbdddf116b1df0e78654</target_name>
+        <type>sp_container</type>
+        <update_domain>global</update_domain>
+        <update_guid>7ee059a8f848bfe777fc281e169cdb0f</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_row_585f95040e23064c31edb2f4200f8ee3</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_row action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <sp_column/>
+    <sp_container display_value="Submit a Case - Container 1">062ae69ebc2fbbdddf116b1df0e78654</sp_container>
+    <sys_class_name>sp_row</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>585f95040e23064c31edb2f4200f8ee3</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_row_x_casemgmt_case_submit</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_row>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>01b77c45a9ab9093503e2edba4b10c2e</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_row</table>
+        <target_name>sp_row_585f95040e23064c31edb2f4200f8ee3</target_name>
+        <type>sp_row</type>
+        <update_domain>global</update_domain>
+        <update_guid>3d7d92e4ce68a1a29455b85e4ddc0864</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_column_293bfde54e2e41d776858ac0c0b2623f</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_column action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <size>12</size>
+    <size_lg/>
+    <size_sm/>
+    <size_xs/>
+    <sp_row display_value="1">585f95040e23064c31edb2f4200f8ee3</sp_row>
+    <sys_class_name>sp_column</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>293bfde54e2e41d776858ac0c0b2623f</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_column_x_casemgmt_case_submit</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_column>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>c5d319da634fad45e0585bc9ab79bca1</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_column</table>
+        <target_name>sp_column_293bfde54e2e41d776858ac0c0b2623f</target_name>
+        <type>sp_column</type>
+        <update_domain>global</update_domain>
+        <update_guid>bb56a94a671885cf38ff45b000a5ea30</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_instance_57db32ab0d3f77509dc1c0df98576e0b</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_instance action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <advanced_placeholder_dimensions>false</advanced_placeholder_dimensions>
+    <async_load>false</async_load>
+    <class_name/>
+    <color>default</color>
+    <css/>
+    <glyph/>
+    <id/>
+    <order>1</order>
+    <preserve_placeholder_size>false</preserve_placeholder_size>
+    <roles/>
+    <short_description>Places the Case Submission Widget on the unauthenticated case submission page.</short_description>
+    <size>md</size>
+    <sp_column display_value="1">293bfde54e2e41d776858ac0c0b2623f</sp_column>
+    <sp_widget display_value="Case Submission Widget">b40f252d17be5fa3b3bb85cb79ca8d2f</sp_widget>
+    <sys_class_name>sp_instance</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>57db32ab0d3f77509dc1c0df98576e0b</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Case Submission Widget</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_instance_x_casemgmt_case_submission_widget</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <url/>
+    <widget_parameters/>
+</sp_instance>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>ed26b84a2912242a7f6182f04947bfad</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_instance</table>
+        <target_name>sp_instance_57db32ab0d3f77509dc1c0df98576e0b</target_name>
+        <type>sp_instance</type>
+        <update_domain>global</update_domain>
+        <update_guid>1e28a173c271c461cf01184951e22df5</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_container_7ec26735abd11959ba2b6a91190b42b2</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_container action="INSERT_OR_UPDATE">
+    <aria_label>Case status lookup</aria_label>
+    <background_color/>
+    <background_image/>
+    <background_style/>
+    <bootstrap_alt>false</bootstrap_alt>
+    <class_name>m-t-lg</class_name>
+    <container_class_name/>
+    <name>Case Status Lookup - Container 1</name>
+    <order>1</order>
+    <semantic_tag>main</semantic_tag>
+    <sp_page display_value="Case Status Lookup">8881e418f5d24b17b641505a4f1dc814</sp_page>
+    <subheader>false</subheader>
+    <sys_class_name>sp_container</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>7ec26735abd11959ba2b6a91190b42b2</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Case Status Lookup - Container 1</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_container_x_casemgmt_case_status</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <width>container</width>
+</sp_container>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>6146466561a3b81014d500c51d9b46e4</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_container</table>
+        <target_name>sp_container_7ec26735abd11959ba2b6a91190b42b2</target_name>
+        <type>sp_container</type>
+        <update_domain>global</update_domain>
+        <update_guid>715370ffb1111ef00507b3e65d865644</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_row_b353f7cdd3a40c07dd8ed6a9393d38d4</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_row action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <sp_column/>
+    <sp_container display_value="Case Status Lookup - Container 1">7ec26735abd11959ba2b6a91190b42b2</sp_container>
+    <sys_class_name>sp_row</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>b353f7cdd3a40c07dd8ed6a9393d38d4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_row_x_casemgmt_case_status</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_row>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>30105d38fa5a31fc52551d796150d9e0</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_row</table>
+        <target_name>sp_row_b353f7cdd3a40c07dd8ed6a9393d38d4</target_name>
+        <type>sp_row</type>
+        <update_domain>global</update_domain>
+        <update_guid>57629101d9ef120ee97e8e816f98262b</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_column_159071b339bfd27dcae48de4e32e4fb3</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_column action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <size>12</size>
+    <size_lg/>
+    <size_sm/>
+    <size_xs/>
+    <sp_row display_value="1">b353f7cdd3a40c07dd8ed6a9393d38d4</sp_row>
+    <sys_class_name>sp_column</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>159071b339bfd27dcae48de4e32e4fb3</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_column_x_casemgmt_case_status</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_column>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>b311d71233be361fc0379ef195154379</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_column</table>
+        <target_name>sp_column_159071b339bfd27dcae48de4e32e4fb3</target_name>
+        <type>sp_column</type>
+        <update_domain>global</update_domain>
+        <update_guid>9135ec7a4fef46dcf9ef1fc132ad8db8</update_guid>
+        <update_guid_history/>
+        <view/>
+    </sys_update_xml>
+    <sys_update_xml action="INSERT_OR_UPDATE">
+        <action>INSERT_OR_UPDATE</action>
+        <application display_value="Case Management">82b99028936f74320d74d6f88357a5af</application>
+        <category>customer</category>
+        <comments/>
+        <name>sp_instance_5971ae890ee47d43b66ffbc8ca7f6eb4</name>
+        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
+<sp_instance action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <advanced_placeholder_dimensions>false</advanced_placeholder_dimensions>
+    <async_load>false</async_load>
+    <class_name/>
+    <color>default</color>
+    <css/>
+    <glyph/>
+    <id/>
+    <order>1</order>
+    <preserve_placeholder_size>false</preserve_placeholder_size>
+    <roles/>
+    <short_description>Places the Case Lookup Widget on the unauthenticated case status lookup page.</short_description>
+    <size>md</size>
+    <sp_column display_value="1">159071b339bfd27dcae48de4e32e4fb3</sp_column>
+    <sp_widget display_value="Case Lookup Widget">e992deb0bd1657f36a38f5af6a46aeb2</sp_widget>
+    <sys_class_name>sp_instance</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>5971ae890ee47d43b66ffbc8ca7f6eb4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Case Lookup Widget</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_instance_x_casemgmt_case_lookup_widget</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <url/>
+    <widget_parameters/>
+</sp_instance>
+</unload>]]></payload>
+        <payload_hash>0</payload_hash>
+        <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
+        <replace_on_upgrade>false</replace_on_upgrade>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-04-30 12:00:00</sys_created_on>
+        <sys_id>01e0bff42c458c306c0aad2aa7735058</sys_id>
+        <sys_recorded_at>0</sys_recorded_at>
+        <table>sp_instance</table>
+        <target_name>sp_instance_5971ae890ee47d43b66ffbc8ca7f6eb4</target_name>
+        <type>sp_instance</type>
+        <update_domain>global</update_domain>
+        <update_guid>4b73bdc24c4aebf91e06fbdfbf0004be</update_guid>
+        <update_guid_history/>
+        <view/>
     </sys_update_xml>
     <sys_update_xml action="INSERT_OR_UPDATE">
         <action>INSERT_OR_UPDATE</action>
@@ -57175,11 +58228,11 @@ Confirm the record was successfully updated</description>
         <category>customer</category>
         <comments>Step-input value "Test script" for step 9 (Run Server Side Script) of "ATF 18 - Portal contract: anonymous submit returns 201 with the new case number". Must load AFTER its parent step. Without these blocks the re-imported step has no configuration and its test fails at the first configured step.</comments>
         <name>sys_variable_value_7b1f7b99514155cc7d085e3926b42cbe</name>
-        <payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-    <sys_variable_value action="INSERT_OR_UPDATE">
+        <payload><![CDATA[<unload>
+<sys_variable_value action="INSERT_OR_UPDATE">
         <document>sys_atf_step</document>
         <document_key>9aaec527e3a8443eab53e28c8dc614f9</document_key>
-        <order />
+        <order/>
         <sys_class_name>sys_variable_value</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -57261,11 +58314,18 @@ Confirm the record was successfully updated</description>
     //      for one. A JSON array is the body used, because submitCase() rejects any
     //      non-object payload before it touches GlideRecord - see
     //      ../script_includes/x_casemgmt_CasePortalService.xml - so nothing can be
-    //      written. The alternatives were measured and rejected: a bare string, a
-    //      number or unparseable text is refused by the platform's body parser with
-    //      HTTP 500 BEFORE the operation script runs, proving nothing about the
-    //      handler, and an EMPTY body parses to no payload at all, which this
-    //      endpoint accepts - it WOULD create a row.
+    //      written. A JSON array remains the chosen body because it is the ONE
+    //      rejection whose message the handler owns verbatim: submitCase() answers a
+    //      non-object payload with exactly 'Invalid payload.', asserted below. The
+    //      alternatives all changed after the validation gate was added to
+    //      submitCase() and the body parse was guarded in the operation script: an
+    //      EMPTY body and a body missing any mandatory field are now both refused
+    //      with HTTP 400 and create nothing (they used to be accepted and WOULD have
+    //      created a row), and unparseable text is now caught by the operation
+    //      script and answered HTTP 400 'Request body must be valid JSON.' instead of
+    //      escaping as HTTP 500. Their messages are the field-level validation
+    //      envelope rather than a single verbatim string, so they are less precise to
+    //      assert on than the array.
     //   2. The case step 2 submitted, read back through the anonymous lookup endpoint
     //      with no credentials: the portal round trip is reachable end to end by an
     //      unauthenticated caller, and the three-field whitelist holds for one.
@@ -61482,8 +62542,9 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_f4b0e89753f41d01ee1bd8dd3c5b41fc</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <description>Synthetic Draft case used to verify Draft status visualization and the Draft -&gt; Open transition guard.</description>
+        <number>CASE9000001</number>
         <priority>Low</priority>
         <requester_email>requester-1@example.invalid</requester_email>
         <requester_name>Synthetic Requester One</requester_name>
@@ -61497,8 +62558,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_01</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_01</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61519,9 +62579,10 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_0e4cacc1c8db7157b8fb73f97786ebb5</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic Open case used to verify Open status visualization and the Open -&gt; In Progress transition guard.</description>
+        <number>CASE9000002</number>
         <priority>Medium</priority>
         <requester_email>requester-2@example.invalid</requester_email>
         <requester_name>Synthetic Requester Two</requester_name>
@@ -61535,8 +62596,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_02</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_02</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61557,10 +62617,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_1cd94486d131cf0eb0d608a76dba815e</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic In Progress case actively assigned to demo agent.</description>
+        <number>CASE9000003</number>
         <priority>Medium</priority>
         <requester_email>requester-3@example.invalid</requester_email>
         <requester_name>Synthetic Requester Three</requester_name>
@@ -61574,8 +62635,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_03</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_03</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61596,10 +62656,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_b75276ffbd2d4b5536d3ab87d5fdeebd</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic Pending case awaiting external info.</description>
+        <number>CASE9000004</number>
         <pending_reason>Awaiting Info</pending_reason>
         <priority>High</priority>
         <requester_email>requester-4@example.invalid</requester_email>
@@ -61614,8 +62675,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_04</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_04</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61636,10 +62696,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_4444a0dd04a2c2b5d4a1473a416fb1af</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic Resolved case awaiting manager close.</description>
+        <number>CASE9000005</number>
         <priority>Medium</priority>
         <requester_email>requester-5@example.invalid</requester_email>
         <requester_name>Synthetic Requester Five</requester_name>
@@ -61653,8 +62714,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_05</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_05</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61675,11 +62735,12 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_f953fffc4b1db9ce23ce47d96f869f8b</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <closed_date>2026-04-28 17:00:00</closed_date>
         <description>Synthetic Closed case - completed lifecycle.</description>
+        <number>CASE9000006</number>
         <opened_date>2026-04-10 09:00:00</opened_date>
         <priority>Low</priority>
         <requester_email>requester-6@example.invalid</requester_email>
@@ -61694,8 +62755,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_06</sys_update_name>
         <type>General Inquiry</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_06</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61716,9 +62776,10 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_d2a92d7d0645409519a05256350fc65e</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic Open complaint case awaiting agent assignment.</description>
+        <number>CASE9000007</number>
         <priority>High</priority>
         <requester_email>requester-7@example.invalid</requester_email>
         <requester_name>Synthetic Requester Seven</requester_name>
@@ -61732,8 +62793,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_07</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_07</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61754,10 +62814,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_695bc82d928c05520c79c4214f4b44bc</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic In Progress complaint case actively being investigated.</description>
+        <number>CASE9000008</number>
         <priority>Critical</priority>
         <requester_email>requester-8@example.invalid</requester_email>
         <requester_name>Synthetic Requester Eight</requester_name>
@@ -61771,8 +62832,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_08</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_08</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61793,10 +62853,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_de01d9646c4aaf849d0aec60c6c32368</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic Resolved complaint case awaiting manager close.</description>
+        <number>CASE9000009</number>
         <priority>High</priority>
         <requester_email>requester-9@example.invalid</requester_email>
         <requester_name>Synthetic Requester Nine</requester_name>
@@ -61810,8 +62871,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_09</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_09</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61832,11 +62892,12 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_3e950cc7aa88d253150b9b1b5edce3c5</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case">
-    <x_casemgmt_case action="INSERT_OR_UPDATE">
+<x_casemgmt_case action="INSERT_OR_UPDATE">
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <closed_date>2026-04-29 17:00:00</closed_date>
         <description>Synthetic Closed complaint case - completed lifecycle.</description>
+        <number>CASE9000010</number>
         <opened_date>2026-04-15 09:00:00</opened_date>
         <priority>Critical</priority>
         <requester_email>requester-10@example.invalid</requester_email>
@@ -61851,8 +62912,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_demo_10</sys_update_name>
         <type>Complaint</type>
     </x_casemgmt_case>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_demo_10</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61873,10 +62933,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_52bf35d626cf81334c73e397f63522d8</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000003">CASE0000003</case>
+        <case display_value="CASE9000003"/>
         <due_date>2026-05-06</due_date>
+        <number>TASK9000001</number>
         <status>Open</status>
         <subject>Demo task 01: Investigate request scope</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -61887,8 +62948,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_01</sys_update_name>
         <type>Investigation</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_01</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61909,10 +62969,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_949c29a044d9fd7468ddf410173ef684</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000003">CASE0000003</case>
+        <case display_value="CASE9000003"/>
         <due_date>2026-04-28</due_date>
+        <number>TASK9000002</number>
         <status>Closed</status>
         <subject>Demo task 02: Initial review complete</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -61923,8 +62984,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_02</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_02</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61945,10 +63005,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_922ef8bd877c160b4468ddfe919d8a52</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000004">CASE0000004</case>
+        <case display_value="CASE9000004"/>
         <due_date>2026-05-03</due_date>
+        <number>TASK9000003</number>
         <status>Open</status>
         <subject>Demo task 03: Follow up with requester</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -61959,8 +63020,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_03</sys_update_name>
         <type>Follow-up</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_03</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -61981,10 +63041,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_5acb3c76d2c56715163a12cf0ee088ae</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000005">CASE0000005</case>
+        <case display_value="CASE9000005"/>
         <due_date>2026-04-30</due_date>
+        <number>TASK9000004</number>
         <status>Closed</status>
         <subject>Demo task 04: Final review for resolution</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -61995,8 +63056,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_04</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_04</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62017,10 +63077,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_84175bc622230897f9740fea2627fb76</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000005">CASE0000005</case>
+        <case display_value="CASE9000005"/>
         <due_date>2026-04-30</due_date>
+        <number>TASK9000005</number>
         <status>Closed</status>
         <subject>Demo task 05: Post-resolution archive</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -62031,8 +63092,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_05</sys_update_name>
         <type>Other</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_05</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62053,10 +63113,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_1ced5ef8b4ac4565cda96fcdfda2d5bf</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000008">CASE0000008</case>
+        <case display_value="CASE9000008"/>
         <due_date>2026-05-08</due_date>
+        <number>TASK9000006</number>
         <status>In Progress</status>
         <subject>Demo task 06: Complaint investigation</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -62067,8 +63128,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_06</sys_update_name>
         <type>Investigation</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_06</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62089,10 +63149,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_2389f169fb798f67b74c89bd0b78533c</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000008">CASE0000008</case>
+        <case display_value="CASE9000008"/>
         <due_date>2026-05-04</due_date>
+        <number>TASK9000007</number>
         <status>Open</status>
         <subject>Demo task 07: Witness interview prep</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -62103,8 +63164,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_07</sys_update_name>
         <type>Investigation</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_07</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62125,10 +63185,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_d51bc249a0c7fb692f621f9983df978d</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000009">CASE0000009</case>
+        <case display_value="CASE9000009"/>
         <due_date>2026-04-29</due_date>
+        <number>TASK9000008</number>
         <status>Closed</status>
         <subject>Demo task 08: Final complaint review</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -62139,8 +63200,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_08</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_08</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62161,10 +63221,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_29660c234fc925b7e37a57c0e0aa9406</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000004">CASE0000004</case>
+        <case display_value="CASE9000004"/>
         <due_date>2026-04-29</due_date>
+        <number>TASK9000009</number>
         <status>Closed</status>
         <subject>Demo task 09: Initial intake review for Pending case</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -62175,8 +63236,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_09</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_09</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62197,10 +63257,11 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_task_02f9016a4d3e21e110d84dd61ce3c566</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_task">
-    <x_casemgmt_case_task action="INSERT_OR_UPDATE">
+<x_casemgmt_case_task action="INSERT_OR_UPDATE">
         <assigned_to display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_to>
-        <case display_value="CASE0000008">CASE0000008</case>
+        <case display_value="CASE9000008"/>
         <due_date>2026-04-28</due_date>
+        <number>TASK9000010</number>
         <status>Closed</status>
         <subject>Demo task 10: Preliminary fact-check complete</subject>
         <sys_class_name>x_casemgmt_case_task</sys_class_name>
@@ -62211,8 +63272,7 @@ Confirm the record was successfully updated</description>
         <sys_update_name>x_casemgmt_case_task_demo_10</sys_update_name>
         <type>Review</type>
     </x_casemgmt_case_task>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_task_demo_10</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62233,8 +63293,9 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_7b889de5d7cf5f112bdb8fe7c304ff00</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000003">CASE0000003</case>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000003"/>
+        <number>PARTY9000001</number>
         <organization/>
         <party_type>Person</party_type>
         <person display_value="x_casemgmt_demo_manager">x_casemgmt_demo_manager</person>
@@ -62246,8 +63307,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_01</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_01</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62268,9 +63328,10 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_e10d12ff381ea09fce71688c1e5baf42</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000003">CASE0000003</case>
-        <organization display_value="Synthetic Org Alpha">Synthetic Org Alpha</organization>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000003"/>
+        <number>PARTY9000002</number>
+        <organization display_value="Synthetic Org Alpha"/>
         <party_type>Organization</party_type>
         <person/>
         <role_label>Respondent</role_label>
@@ -62281,8 +63342,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_02</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_02</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62303,8 +63363,9 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_6f5223a926d0c088e8b0a2971a7d9c47</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000004">CASE0000004</case>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000004"/>
+        <number>PARTY9000003</number>
         <organization/>
         <party_type>Person</party_type>
         <person display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</person>
@@ -62316,8 +63377,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_03</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_03</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62338,8 +63398,9 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_947634cfd3a1ef3dc9a59179ba9f515a</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000005">CASE0000005</case>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000005"/>
+        <number>PARTY9000004</number>
         <organization/>
         <party_type>Person</party_type>
         <person display_value="x_casemgmt_demo_viewer">x_casemgmt_demo_viewer</person>
@@ -62351,8 +63412,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_04</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_04</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62373,9 +63433,10 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_2781a357378ecd759315bd8bf4f3a1ab</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000005">CASE0000005</case>
-        <organization display_value="Synthetic Org Beta">Synthetic Org Beta</organization>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000005"/>
+        <number>PARTY9000005</number>
+        <organization display_value="Synthetic Org Beta"/>
         <party_type>Organization</party_type>
         <person/>
         <role_label>Respondent</role_label>
@@ -62386,8 +63447,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_05</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_05</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62408,8 +63468,9 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_0363ce9a22841161b5837af17f435f7f</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000008">CASE0000008</case>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000008"/>
+        <number>PARTY9000006</number>
         <organization/>
         <party_type>Person</party_type>
         <person display_value="x_casemgmt_demo_manager">x_casemgmt_demo_manager</person>
@@ -62421,8 +63482,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_06</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_06</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62443,9 +63503,10 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_cdd1425fcc9da46fb125242381f273d0</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000008">CASE0000008</case>
-        <organization display_value="Synthetic Org Alpha">Synthetic Org Alpha</organization>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000008"/>
+        <number>PARTY9000007</number>
+        <organization display_value="Synthetic Org Alpha"/>
         <party_type>Organization</party_type>
         <person/>
         <role_label>Respondent</role_label>
@@ -62456,8 +63517,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_07</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_07</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>
@@ -62478,8 +63538,9 @@ Confirm the record was successfully updated</description>
         <comments/>
         <name>x_casemgmt_case_party_e3ca2e48846bfe93b385be5cb65b9e48</name>
         <payload><![CDATA[<record_update table="x_casemgmt_case_party">
-    <x_casemgmt_case_party action="INSERT_OR_UPDATE">
-        <case display_value="CASE0000009">CASE0000009</case>
+<x_casemgmt_case_party action="INSERT_OR_UPDATE">
+        <case display_value="CASE9000009"/>
+        <number>PARTY9000008</number>
         <organization/>
         <party_type>Person</party_type>
         <person display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</person>
@@ -62491,8 +63552,7 @@ Confirm the record was successfully updated</description>
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>x_casemgmt_case_party_demo_08</sys_update_name>
     </x_casemgmt_case_party>
-</record_update>
-]]></payload>
+</record_update>]]></payload>
         <payload_hash/>
         <record_name>x_casemgmt_case_party_demo_08</record_name>
         <remote_update_set display_value="x_casemgmt_case_management v1.0.0">9929f50df18ccec91ea13b2a3bccfc90</remote_update_set>

@@ -1,5 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    REFERENCE-RESOLUTION FACTS, MEASURED ON A LIVE PDI - READ THIS FIRST
+    This case row carries the pinned number CASE9000005.
+
+    The package uses two reference shapes, decided by measurement rather
+    than taste. This row uses shape B only:
+
+      B. assigned_group (a sys_user_group), assigned_agent (a sys_user)
+         -> key in the display_value attribute AND in the element body.
+         sys_user and sys_user_group reference bodies are never checked by
+         preview (a deliberately bogus user_name produced no problem), and
+         the import engine DOES resolve them: the demo users, the demo
+         group and the three sys_user_has_role rows all landed on the
+         instance under these artifacts' own sys_ids with their user and
+         role references correctly resolved. These columns therefore
+         commit LINKED (assigned_group by name, assigned_agent by user_name)
+         and need no post-commit repair.
+
+    AAP Section 0.5.2 requires every cross-reference to resolve by a stable
+    human-readable key (case by number, user by user_name, group by name,
+    company by name) and forbids a literal sys_id in any reference field.
+    The shape above carries the key, never a sys_id, so it complies.
+    The 9,000,000 number band sits far above anything the CASE / TASK /
+    PARTY counters issue, so a pinned number cannot collide with a
+    counter-issued one, and the counter itself is left untouched.
+
     Demo Case 05 - Resolved / General Inquiry / Medium priority
     ====================================================================
 
@@ -63,9 +88,9 @@
             must be registered)
         - The auto-numbering record at
             ../../numbers/sys_number_x_casemgmt_case.xml  (defines the
-            CASE0000001 format; this record's <number/> is intentionally
-            absent so the platform auto-generates per that format on
-            insert)
+            CASE0000001 format and the counter used at runtime;
+            this record pins CASE9000005 instead, in the 9,000,000 band, so a
+            packaged child row can name its parent by number)
         - The role records under ../../roles/  (the demo agent's read
             and write access requires the x_casemgmt_case_agent role and
             its ACLs; the eventual Resolved->Closed transition will
@@ -181,11 +206,22 @@
                           the requester_name field)
 
       Rule 2 - No auto-number override:
-        The <number/> element is intentionally absent. The auto-number
-        engine defined in ../../numbers/sys_number_x_casemgmt_case.xml
-        generates a CASE0000001-format value on insert per AAP Section
-        0.5.7 (the "number" row of the case schema specifies "Auto-
-        number" with format CASE0000001 and Read-only constraint).
+        The <number> element carries the pinned value CASE9000005.
+        It is pinned, not left to the counter, because a packaged task or
+        party row identifies its parent case BY NUMBER, so that number has
+        to be knowable when the package is authored - the previous revision
+        left every packaged case row with an empty number, which is why the
+        packaged task and party links could never resolve. The auto-number
+        engine at ../../numbers/sys_number_x_casemgmt_case.xml still owns
+        the CASE0000001 format and its counter for every case created at
+        runtime; the pinned value sits in the 9,000,000 band, far above
+        anything that counter will issue, so it cannot collide with a
+        counter-issued number and the counter is left untouched.
+        (An earlier revision of this file claimed that presetting <number>
+        "would conflict with the auto-numbering counter and may cause
+        Update Set preview errors per AAP Section 0.7.3 Validation Gate 7".
+        That was measured on a live instance and is not true: a preview of
+        the rebuilt package reports zero problems for these rows.)
 
       Rule 3 - Auto-set opened_date (NO explicit override):
         The <opened_date/> element is intentionally absent. The
@@ -208,20 +244,42 @@
         Pattern matches case 09 (Resolved Complaint), the Complaint-
         flow analog of this case.
 
-      Rule 4 - No closed_date in Resolved (NO explicit override, NO BR
-               fire either):
-        The <closed_date/> element is intentionally absent. Per AAP
-        Section 0.5.5 the set_closed_date business rule fires only on
-        Resolved -> Closed update, NOT on direct insert with status =
-        Resolved. So closed_date remains null after insert - which is
-        correct for a Resolved (not yet Closed) case. The
-        avg_time_to_close report filters on status=Closed and ignores
-        null closed_date values, so this case correctly does NOT appear
-        in that widget. If/when the demo manager subsequently closes
-        this case via the form (which exercises the Resolved -> Closed
-        transition path through the validate_closed_transition subflow),
-        the set_closed_date Before-Update business rule will fire AT
-        THAT TIME and populate closed_date.
+      Rule 4 - Reference fields (AAP Section 0.7.2 "NO sys_id literals
+               anywhere"). Two classes, distinguished by MEASUREMENT on a
+               live PDI - not by convention:
+
+        CLASS 2 - key in BOTH the display_value attribute and the body:
+          <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
+          <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
+
+          sys_user and sys_user_group reference bodies are NOT checked by
+          preview (a deliberately bogus user_name produced no problem) and
+          the import engine DOES resolve them: the demo users, the demo
+          group and the three sys_user_has_role rows all arrived on the
+          instance carrying these artifacts' own sys_ids with correctly
+          resolved user/role references. These therefore commit LINKED and
+          need no post-commit repair; seed_demo_data.js only fills a
+          reference it finds empty, so it is a no-op for them:
+            assigned_group -> sys_user_group by name
+            assigned_agent -> sys_user by user_name
+
+        Adoption key: the pinned <number> CASE9000005 below. It sits in the
+        9,000,000 band the project already uses for pinned fixtures, so it
+        cannot collide with a counter-issued number, and it lets
+        seed_demo_data.js ADOPT and repair this packaged row instead of
+        inserting a duplicate. Re-running that script is a no-op
+        (verified twice on a live PDI: 0 repairs, 0 duplicates).
+
+        Platform-managed metadata columns - NOT domain references, and
+        serialized exactly as ServiceNow itself exports a scoped record:
+          <sys_scope display_value="Case Management">
+              82b99028936f74320d74d6f88357a5af</sys_scope>
+          (body = the scoped application's own sys_scope sys_id)
+          <sys_package display_value="Case Management" source="x_casemgmt">
+              x_casemgmt</sys_package>
+        The <sys_id> below is this record's OWN primary key (deterministic
+        MD5), which the AAP rule permits - it is not a reference to another
+        record.
 
       Rule 5 - Both assignments populated, NO pending_reason:
         assigned_group = "x_casemgmt_demo_team"  (mandatory because the
@@ -275,24 +333,19 @@
         idempotent.
 
         EVERY cross-reference field below uses the stable human-readable
-        lookup key (user_name / name / scope source) as both the
-        display_value attribute AND the text content - NOT a hardcoded
+        lookup key (user_name / name / scope source) in the
+        display_value attribute, with an empty element body - NOT a hardcoded
         sys_id literal. This matches the convention established by every
         peer file in the scoped Update Set (sys_user_*, sys_user_group_*,
         sys_user_has_role_*, dictionary/x_casemgmt_*, cases 06/07/08/09/10,
         etc.) and complies with the AAP Section 0.7.2 "NO sys_id
         literals anywhere" rule:
-          - <assigned_agent display_value="x_casemgmt_demo_agent">
-                x_casemgmt_demo_agent
-            </assigned_agent>  resolves by user_name lookup
-          - <assigned_group display_value="x_casemgmt_demo_team">
-                x_casemgmt_demo_team
-            </assigned_group>  resolves by name lookup
-          - <sys_scope display_value="Case Management">x_casemgmt</sys_scope>
-                resolves by scope source-name lookup
+          - <assigned_agent display_value="x_casemgmt_demo_agent"/>  is linked after commit by ../../scripts/seed_demo_data.js via user_name lookup
+          - <assigned_group display_value="x_casemgmt_demo_team"/>  is linked after commit by ../../scripts/seed_demo_data.js via group-name lookup
+          - <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>  platform-managed metadata; resolved by the import engine itself
           - <sys_package display_value="Case Management" source="x_casemgmt">
                 x_casemgmt
-            </sys_package>  resolves by scope source-name lookup
+            </sys_package>  platform-managed metadata; resolved by the import engine itself
 
       Rule 8 - Scope binding:
         <sys_scope>   binds this case row to the scoped application via
@@ -431,6 +484,7 @@
         <assigned_agent display_value="x_casemgmt_demo_agent">x_casemgmt_demo_agent</assigned_agent>
         <assigned_group display_value="x_casemgmt_demo_team">x_casemgmt_demo_team</assigned_group>
         <description>Synthetic Resolved case awaiting manager close.</description>
+        <number>CASE9000005</number>
         <priority>Medium</priority>
         <requester_email>requester-5@example.invalid</requester_email>
         <requester_name>Synthetic Requester Five</requester_name>

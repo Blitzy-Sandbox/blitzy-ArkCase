@@ -7,7 +7,7 @@ This subdirectory contains the ServiceNow scoped application, delivered as a **s
 > **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and three things are open. Read this before planning around it:
 >
 > 1. **Two manual post-import steps are mandatory** — the physical table schema (Defect C) and the 27 ACL role-link records (Defect 9). The package ships the remediation body as a Fix Script but **ships no trigger and nothing that auto-executes**; an operator must run `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with **"In scope" = Global**.
-> 2. **Three user-facing surfaces do not work**: both portal **pages** render blank, both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The portal **REST endpoints** do work.
+> 2. **Two user-facing surfaces still do not work**: both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The two portal **pages** used to be on this list and now work — their missing Service Portal layout records were authored and a response-envelope bug in both widgets was fixed, so submission and status lookup both function anonymously in a browser, alongside the REST endpoints that always worked.
 > 3. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
 >
 > **Now closed, and previously listed here as open:** the clean-slate round trip **has** been run on this deliverable — on its 913-block, 3,618,378-byte, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` revision. Measured progression **41 → 298 → 0** preview problems, then `state=committed`, with the file byte-unchanged by the trip. The bytes that ship today are 913 blocks, 3,643,389 bytes, SHA-256 `89638c17…` — the same file with 9 payloads re-synced by the QA-remediation pass — and a matched A/B preview of the two revisions against the same instance state produced identical problem signatures, so the change is preview-neutral. AAP §0.7.1's zero-preview-error gate is therefore **met on the deliverable**, on the revision it was measured against. Detail in [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
@@ -72,7 +72,7 @@ Every directory is listed below with its exact file count, so the tree can be di
 servicenow-case-management-poc/
 ├── README.md                          (this file — overview and entry point)
 ├── update-set/                    [1] x_casemgmt_case_management_update_set.xml — THE deliverable
-│                                      (913 blocks · 3,643,389 bytes)
+│                                      (925 blocks · 3,698,577 bytes)
 ├── app/                           [1] app/sys_app/x_casemgmt_case_management.xml — the scoped
 │                                      application record. There is no separate sys_scope
 │                                      artifact: the platform derives sys_scope from sys_app
@@ -104,8 +104,9 @@ servicenow-case-management-poc/
 ├── ui_policy/                     [1] case_party conditional person/organization fields
 ├── ui_action/                     [6] the state-transition buttons
 ├── portal/                       [10] portal record + 2 pages + 3 widgets + 2 scripted REST
-│                                      endpoints + supporting records. The REST endpoints work;
-│                                      the two pages render blank (see docs/PDI_LIMITATIONS…).
+│                                      endpoints + supporting records. Both the REST endpoints and
+│                                      the two pages work; layout/ carries the sp_container ->
+│                                      sp_row -> sp_column -> sp_instance chain that makes them render.
 ├── dashboards/                    [2] Agent Workspace + Manager View. Both currently render
 │                                      with no tabs and no widgets (see docs/PDI_LIMITATIONS…).
 ├── reports/                       [8] the eight reports the dashboards are meant to show
@@ -113,7 +114,7 @@ servicenow-case-management-poc/
 │                                      assignments, 10 cases, tasks, parties
 ├── atf/                          [21] the Automated Test Framework suite: 20 test definitions
 │                                      (ATF 01-20) + x_casemgmt_atf_test_suite.xml. These
-│                                      serialize to 761 of the package's 913 blocks.
+│                                      serialize to 761 of the package's 925 blocks.
 ├── docs/                         [11] see the Documentation Index below
 └── scripts/                       [5] post_import_remediation.js — the mandatory Global
                                        post-import script (Defect C + Defect 9)
@@ -189,7 +190,7 @@ A non-displayed `pending_reason` (Choice: Awaiting Info, Awaiting Third Party, O
 2. **Zero hardcoded `sys_id`s** — anywhere; every cross-reference uses `GlideRecord` lookups by stable human-readable keys (`name`, `user_name`, `number`, `role_label`).
 3. **No PII** — synthetic demo data only; no real names, email addresses, phone numbers, or organization names.
 4. **Email-disabled** — no SMTP, notification rules, or email templates configured (notifications are disabled on the PDI).
-5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met, and AAP §0.7.1's zero-preview-error gate is proven on this deliverable — measured on its `7272edfc…` revision.** That file — 913 blocks / 3,618,378 bytes — was taken through a complete teardown → upload → preview → commit: **41** preview problems against the already-populated instance, **298** on the first clean-slate pass (all of them the teardown's own deletions captured as newer local updates), and **0 problems of any type** once that capture was purged at source, confirmed by the platform's own `unresolvedProblems=false` predicate, then `state=committed`. The file on disk is byte-unchanged by the trip. The bytes that ship today — 913 blocks / 3,643,389 bytes / SHA-256 `89638c17…` — are that same file with 9 payloads re-synced by the QA-remediation pass, and a matched A/B preview of the two revisions against one instance state produced identical problem signatures (34 problems each, same 18 / 13 / 3, same target records, 0 descriptions in one and not the other), so the change is preview-neutral. An earlier 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as history. Detail in [§0.3 and §0.3a of the limitations register](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+5. **Single Update Set deliverable** — the final scoped application is exported as one XML at `update-set/x_casemgmt_case_management_update_set.xml`. **The constraint is met. AAP §0.7.1's zero-preview-error gate is proven in full on the earlier `7272edfc…` revision (913 blocks / 3,618,378 bytes), which was taken through a complete teardown → upload → preview → commit run reaching 0 problems of any type; on the bytes that ship today it is proven for the reference class only** — previewed against an already-populated instance, today's 925-block file yields 31 problems, all of them `Found a local update that is newer than this one` (this instance's own change history, impossible on a fresh PDI) and **zero** `Could not find a record` problems. Commit was withheld on the shared verification instance. See [`docs/validation-gates.md`](docs/validation-gates.md) Gate 7.
 6. **Flow-Designer-exclusive workflow** — all transition logic lives in Flow Designer (with helper Script Includes and Business Rules at the entity level); no direct background scripts for workflow state management.
 7. **Repository minimality** — output confined to `servicenow-case-management-poc/`; the existing ArkCase repository structure is read-only context and is not refactored in place.
 8. **Tooling restriction** — App Engine Studio, Flow Designer, and UI Builder only; no paid Store applications; no alternative authoring path.
@@ -242,20 +243,30 @@ projected.
 
 **The package**
 
-- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **913 update blocks, 3,643,389 bytes,
-  SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`**. Quote these numbers and no
-  others; earlier revisions carried different ones — the immediately previous one was 3,618,378 bytes /
-  `7272edfc…`, and the QA-remediation pass re-synced 9 payloads into it without changing the block count.
-- **Round-trip status: CLOSED — measured on the bytes above.** Teardown proven complete (scope query `[]`, every
-  application census counter 0, all three tables moving from HTTP 200 to HTTP 400), upload with the child
-  `sys_update_xml` count asserted at **exactly 913**, then preview problems **by type**: **41** against the
-  already-populated instance → **298** on the first clean-slate pass, every one
-  `Found a local update that is newer than this one` (the teardown's own deletions) → **0 of any type** once that
-  local capture was purged at source, checked against the platform's own `state=previewed` /
+- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **925 update blocks, 3,698,577 bytes,
+  SHA-256 `e49a7654f8990287cee459eb4bec0245dc3f40588ebd63344b80cf16e0508361`**. Quote these numbers and no
+  others; earlier revisions carried different ones — 913 blocks / 3,643,389 bytes / `89638c17…` immediately
+  before this, and 913 blocks / 3,618,378 bytes / `7272edfc…` before that.
+- **Round-trip status: zero *reference* problems proven on these bytes; zero problems *of any type* proven on
+  the earlier `7272edfc…` revision.** Read those as two separate results, because they are.
+  On `7272edfc…` (913 blocks / 3,618,378 bytes) the full trip was measured: teardown proven complete (scope
+  query `[]`, every application census counter 0, all three tables moving from HTTP 200 to HTTP 400), upload
+  with the child `sys_update_xml` count asserted at **exactly 913**, then preview problems **by type**: **41**
+  against the already-populated instance → **298** on the first clean-slate pass, every one
+  `Found a local update that is newer than this one` (the teardown's own deletions) → **0 of any type** once
+  that local capture was purged at source, checked against the platform's own `state=previewed` /
   `unresolvedProblems=false` / `shouldDisplay=true` predicate rather than assumed. Then
-  `previewed → committing → committed`. The SHA-256 re-computed from the file afterwards is unchanged. AAP
-  §0.7.1's gate is therefore **met on what ships**. The earlier 916-block revision (3,448,009 bytes,
-  SHA-256 `32a064d6…`) reached the same zero result and is kept as history, not as the current status.
+  `previewed → committing → committed`.
+  On the bytes that ship today (925 blocks / 3,698,577 bytes): uploaded as a fresh retrieved update set with
+  **925** children asserted and previewed against an instance that already holds the schema and this
+  application's change history — **31 problems, every one `Found a local update that is newer than this one`,
+  and ZERO `Could not find a record` problems of any kind.** The 21 package-intrinsic reference problems that
+  an independent QA preview found in the previous revision are **eliminated** (63 reference errors → 0), and
+  all 31 remaining targets were confirmed to hold a local `sys_update_version` in state `current` — that is,
+  they are the instance's own history and cannot arise on a fresh PDI. **Commit was withheld on these bytes**
+  because the verification instance is shared with other work. AAP §0.7.1's gate is therefore met for the
+  reference class on what ships, and met in full only on `7272edfc…`. The earlier 916-block revision
+  (3,448,009 bytes, SHA-256 `32a064d6…`) reached the zero result too and is kept as history.
 - **Nothing in it fires on its own.** The package contains **no record that auto-executes, of any kind** — no
   Business Rule, no scheduled job, no `sys_trigger` row. (It does contain a Fix Script, which is a record; the
   point is that nothing *runs* it.) An earlier revision did ship one (the global Business
@@ -299,11 +310,18 @@ procedure. Do not substitute the Fix Script UI: it executes in the application s
 
 **Not working — also directly observed**
 
-- **Both portal pages render blank.** All three portal routes return HTTP 200 with no login wall, but the page
-  API reports **0 containers** and the rendered pages contain 0 forms, 0 inputs and 0 buttons — verified pure
-  white across every pixel, with 0 console errors. A control page on the same portal and session renders its
-  widgets normally, so the portal itself is sound: the two pages' Service Portal layout records
-  (container / row / column / instance) were never authored. The REST endpoints behind them work.
+- **Both portal pages now render and work** — this bullet used to read "both portal pages render blank", and
+  that was accurate until two defects were fixed. First, the pages' Service Portal layout records
+  (`sp_container` / `sp_row` / `sp_column` / `sp_instance`) had never been authored, so `GET /api/now/sp/page`
+  reported **0 containers** and the pages were pure white; the two `sp_page` artifacts had encoded their layout
+  in a `<page_internal>` JSON element, which is not a column on `sp_page` on this release. Second, both widgets
+  read `response.data.number` / `response.data.status`, but a Scripted REST response nests the body under
+  `result` — so even after the pages rendered, a **201 displayed "Submission failed"**. With the layout chain
+  packaged (`portal/layout/`) and both widgets unwrapping defensively, an anonymous visitor
+  (`window.NOW.user_display_name === "Guest"`) sees a 5-field submission form that returns a confirmation panel
+  with the verbatim `Your case has been submitted` and the new `CASE…` number, and a lookup page that shows
+  exactly Status / Subject / Opened Date or the verbatim `No case found with that number.` — 0 console errors,
+  no request ≥ 400, and a stored `<img src=x onerror=…>` subject rendered as inert text.
 - **Both dashboards render no tabs and no widgets** — the platform's empty state. Their composite blocks name
   three child tables that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`),
   so the tab, all 8 widget placements and the role grants are dropped on commit.
@@ -352,8 +370,8 @@ validation gates is in [`docs/validation-gates.md`](docs/validation-gates.md#mea
 > works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**
 > (*Scripts - Background*, "In scope" = Global — **not** the Fix Script UI, which runs in the application scope
 > and fails), commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to
-> confirm `verified=true` with exactly 27 role links, then delete the packaged number-less seed rows and run
-> `scripts/seed_demo_data.js` in scope. The single-display-field repair that this outline previously listed is
+> confirm `verified=true` with exactly 27 role links, then run `scripts/seed_demo_data.js` in scope — which
+> **adopts** the packaged seed rows by their pinned numbers rather than requiring you to delete them first. The single-display-field repair that this outline previously listed is
 > **no longer a manual step** — the package now ships one display field per table and the remediation verifies
 > it.
 

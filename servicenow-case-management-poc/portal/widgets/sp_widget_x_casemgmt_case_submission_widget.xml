@@ -146,9 +146,11 @@
         after a successful POST.
 
       The case number is passed into the embedded widget by mutating
-      its options object in the success callback:
+      its options object in the success callback, reading the number out
+      of the Scripted REST `result` envelope:
+            var body = response.data.result || response.data;
             c.data.confirmationWidget.options.number = String(
-                response.data.number
+                body.number
             );
       Because the embedded widget's controller assigns
       c.options = $scope.options, the mutation propagates reactively
@@ -209,7 +211,7 @@
           the browser console (forensics surface).
 
       A defensive guard also exists in the success callback: if HTTP 201
-      is received but response.data.number is missing or falsy (which
+      is received but the unwrapped body's number is missing or falsy (which
       should never happen if the REST operation conforms to its contract),
       the controller treats it as a failure and sets the same generic
       error message. This guards against partial or malformed success
@@ -501,7 +503,7 @@
      *     the early-return inside c.submit() is the defense-in-depth
      *     fallback in case the disabled state is bypassed by a
      *     keyboard event in an edge browser.
-     *   - String() coercion on response.data.number: ensures the
+     *   - String() coercion on the unwrapped body.number: ensures the
      *     embedded widget's c.options.number is always a string, even
      *     if the REST operation accidentally returns a number primitive.
      *     Matches the embedded widget's own defensive coercion in
@@ -576,9 +578,30 @@
             requester_email:  c.formData.requester_email
         }).then(function(response) {
             // Success path (HTTP 2xx). The server's REST operation
-            // returns { number, message } per its contract.
+            // returns { number, message } per its contract - but a
+            // ServiceNow Scripted REST API wraps whatever the operation
+            // script passes to response.setBody() inside a `result`
+            // envelope before it reaches the wire. Measured against the
+            // live endpoint: the 201 body is
+            //   {"result":{"number":"CASE0001126","message":"Your case has been submitted"}}
+            // so the number lives at response.data.result.number, and
+            // reading response.data.number yields undefined. That single
+            // mis-read is what previously drove a fully successful
+            // submission (HTTP 201, case created in Draft) into the else
+            // branch below, showing the requester "Submission failed.
+            // Please try again." while the case existed - the worst
+            // possible outcome, because the natural reaction is to press
+            // Submit again and create duplicates.
+            //
+            // The unwrap below prefers the envelope and falls back to the
+            // bare body, so it is correct whether or not the envelope is
+            // applied (the platform can be configured either way, and a
+            // caller may append sysparm_no_envelope).
             c.submitting = false;
-            if (response && response.data && response.data.number) {
+            var body = (response && response.data && response.data.result) ?
+                response.data.result :
+                (response ? response.data : null);
+            if (body && body.number) {
                 // Pass the returned case number to the embedded
                 // confirmation widget by mutating its options.number.
                 // The embedded widget's controller assigns
@@ -586,13 +609,13 @@
                 // so this mutation propagates reactively through
                 // Angular's two-way binding.
                 if (c.data.confirmationWidget && c.data.confirmationWidget.options) {
-                    c.data.confirmationWidget.options.number = String(response.data.number);
+                    c.data.confirmationWidget.options.number = String(body.number);
                 }
                 // Mirror the case number on c.data for any consumer that
                 // wants it directly. Defense-in-depth in case the
                 // embedded widget's options object is replaced rather
                 // than mutated by some future refactor.
-                c.data.submittedNumber = String(response.data.number);
+                c.data.submittedNumber = String(body.number);
                 // Flip the submitted flag - the template swaps from
                 // the form panel to the embedded confirmation widget.
                 c.data.submitted = true;

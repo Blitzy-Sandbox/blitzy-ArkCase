@@ -165,6 +165,94 @@ var CASE_SUBJECTS = {
     CMP_CLOSED:      'Demo case 10: Closed (Complaint)'
 };
 
+// PINNED holds the canonical, deterministic `number` of every demo row. These
+// are the SAME values the packaged seed XML under ../seed-data/ carries, so the
+// two delivery paths converge on one identity instead of two:
+//
+//   - When the Update Set is committed, each packaged row arrives already
+//     carrying its pinned number, and this script ADOPTS that row by number
+//     and repairs the fields the commit engine cannot populate (see the
+//     "Adoption" note on ensureCase/ensureTask/ensureParty below).
+//   - When this script runs on an instance that has never had the seed XML
+//     committed, it inserts the rows itself and writes the same pinned number,
+//     so a verifier can assert exact numbers either way.
+//
+// The 9,000,000 band is deliberately far above anything the CASE/TASK/PARTY
+// counters will issue, so a pinned number can never collide with a
+// counter-issued one. The project already uses this band for pinned fixtures
+// (docs/ATF_MANUAL_TEST_PLAN.md fixture F11 pins CASE9000019).
+var PINNED = {
+    CASES: {
+        GI_DRAFT:        'CASE9000001',
+        GI_OPEN:         'CASE9000002',
+        GI_IN_PROGRESS:  'CASE9000003',
+        GI_PENDING:      'CASE9000004',
+        GI_RESOLVED:     'CASE9000005',
+        GI_CLOSED:       'CASE9000006',
+        CMP_OPEN:        'CASE9000007',
+        CMP_IN_PROGRESS: 'CASE9000008',
+        CMP_RESOLVED:    'CASE9000009',
+        CMP_CLOSED:      'CASE9000010'
+    },
+    TASKS: {
+        T01: 'TASK9000001',
+        T02: 'TASK9000002',
+        T03: 'TASK9000003',
+        T04: 'TASK9000004',
+        T05: 'TASK9000005',
+        T06: 'TASK9000006',
+        T07: 'TASK9000007',
+        T08: 'TASK9000008',
+        T09: 'TASK9000009',
+        T10: 'TASK9000010'
+    },
+    PARTIES: {
+        P01: 'PARTY9000001',
+        P02: 'PARTY9000002',
+        P03: 'PARTY9000003',
+        P04: 'PARTY9000004',
+        P05: 'PARTY9000005',
+        P06: 'PARTY9000006',
+        P07: 'PARTY9000007',
+        P08: 'PARTY9000008'
+    }
+};
+
+// SEED_STATS accumulates what the run actually did, so the completion trace can
+// report inserted / adopted / repaired counts instead of a fixed sentence. A
+// row is "adopted" when it already existed (packaged by the Update Set or left
+// by a previous run) and "repaired" when adoption had to fill at least one
+// empty field on it. Both are normal on the commit path and both must fall to
+// zero repairs on a second consecutive run - that is the idempotency contract.
+var SEED_STATS = {
+    cases:   { inserted: 0, adopted: 0, repaired: 0 },
+    tasks:   { inserted: 0, adopted: 0, repaired: 0 },
+    parties: { inserted: 0, adopted: 0, repaired: 0 }
+};
+
+/**
+ * Fills a single field on an already-loaded GlideRecord ONLY when that field is
+ * currently empty, and records the field name in `changed`. Never overwrites a
+ * value a human (or an earlier run) already put there - repair is additive.
+ *
+ * @param {GlideRecord} gr - loaded record
+ * @param {String} field - column name
+ * @param {String} value - value to write when the column is empty
+ * @param {Array} changed - accumulator of changed column names
+ * @return {Boolean} true when the field was written
+ */
+function fillIfEmpty(gr, field, value, changed) {
+    if (value === null || value === undefined || value === '') {
+        return false;
+    }
+    if (String(gr.getValue(field) || '') !== '') {
+        return false;
+    }
+    gr.setValue(field, value);
+    changed.push(field);
+    return true;
+}
+
 
 // ============================================================================
 // Phase 3 - Helper Function Library
@@ -526,16 +614,34 @@ function ensureCompany(companyName, fields) {
  * tasks/parties back to the parent case by either key.
  *
  * Insert pipeline:
- *   1. Existence check by subject. On hit, return the existing row's
- *      identifiers; do NOT log (silent re-run path).
- *   2. On miss: initialize a fresh GlideRecord, set every in-scope
- *      field, optionally resolve assigned_group_name -> sys_user_group
- *      sys_id and assigned_agent_user_name -> sys_user sys_id via
- *      lookup helpers (no hard-coded sys_id literals).
- *   3. Call insert() - the platform's sys_number record auto-allocates
- *      the case `number` (CASE0000001, CASE0000002, ...) at this point.
- *      The set_opened_date Before-Insert business rule auto-populates
- *      opened_date = gs.nowDateTime().
+ *   1. Existence check on the pinned `number` OR the subject. On hit the row
+ *      is ADOPTED: every field the spec supplies that is still EMPTY on the
+ *      row is filled (including the pinned number itself, the two assignment
+ *      references resolved by group name / user_name, and the dates), the
+ *      repair is applied with setWorkflow(false), and one line is logged
+ *      naming exactly which columns were repaired. Nothing already populated
+ *      is ever overwritten, so a second consecutive run repairs nothing and
+ *      logs nothing - that is the idempotency contract. Adoption is what makes
+ *      the Update Set commit path work. The packaged XML carries
+ *      human-readable keys rather than sys_ids (AAP Section 0.5.2), in two
+ *      measured shapes: references to x_casemgmt_case and core_company carry
+ *      the key in a display_value ATTRIBUTE with an EMPTY body, because a body
+ *      holding a number or a company name makes Update Set preview report
+ *      "Could not find a record ..." - those columns therefore arrive EMPTY and
+ *      this function fills them. References to sys_user / sys_user_group carry
+ *      the key in the body as well, which preview does not check and the import
+ *      engine does resolve, so those arrive already LINKED and the repair below
+ *      is a no-op safety net for them.
+ *   2. On miss: initialize a fresh GlideRecord, set the pinned number, set
+ *      every in-scope field, optionally resolve assigned_group_name ->
+ *      sys_user_group sys_id and assigned_agent_user_name -> sys_user sys_id
+ *      via lookup helpers (no hard-coded sys_id literals).
+ *   3. Call insert(). Because the caller supplies the pinned number
+ *      (PINNED.CASES.*, in the CASE9000001+ band), the row keeps that number
+ *      instead of consuming a counter value, so script-seeded and
+ *      Update-Set-seeded instances are number-identical. The set_opened_date
+ *      Before-Insert business rule auto-populates opened_date =
+ *      gs.nowDateTime().
  *   4. If the caller provided opened_date and/or closed_date overrides
  *      (used by Closed seed cases 06 and 10 to give the
  *      avg_time_to_close dashboard non-trivial multi-day spans), perform
@@ -564,7 +670,12 @@ function ensureCompany(companyName, fields) {
  *     manager via the form).
  *
  * @param {Object} fields - {
- *     subject (String),                      idempotent key
+ *     number (String),                       pinned canonical number
+ *                                            (PINNED.CASES.*); primary
+ *                                            adoption key, and written on
+ *                                            insert so both delivery paths
+ *                                            produce the same identity
+ *     subject (String),                      secondary adoption key
  *     type (Choice: General Inquiry|Complaint),
  *     status (Choice: Draft|Open|In Progress|Pending|Resolved|Closed),
  *     priority (Choice: Low|Medium|High|Critical),
@@ -580,13 +691,77 @@ function ensureCompany(companyName, fields) {
  * @return {Object} { sys_id, number }
  */
 function ensureCase(fields) {
+    // Adoption: match on the pinned number FIRST (that is the identity a
+    // committed seed row arrives with) and fall back to subject (the identity a
+    // row created by an earlier run of this script has). Either way the row is
+    // adopted rather than duplicated, and every field the commit engine could
+    // not populate is repaired from the spec below.
     var c = new GlideRecord(TABLES.CASE);
-    c.addQuery('subject', fields.subject);
+    var q = c.addQuery('subject', fields.subject);
+    if (fields.number) {
+        q.addOrCondition('number', fields.number);
+    }
     c.query();
     if (c.next()) {
+        var changed = [];
+        fillIfEmpty(c, 'number', fields.number, changed);
+        fillIfEmpty(c, 'subject', fields.subject, changed);
+        fillIfEmpty(c, 'type', fields.type, changed);
+        fillIfEmpty(c, 'status', fields.status, changed);
+        fillIfEmpty(c, 'priority', fields.priority, changed);
+        fillIfEmpty(c, 'description', fields.description, changed);
+        fillIfEmpty(c, 'requester_name', fields.requester_name, changed);
+        fillIfEmpty(c, 'requester_email', fields.requester_email, changed);
+        fillIfEmpty(c, 'pending_reason', fields.pending_reason, changed);
+        // References are resolved by human-readable key per AAP Section 0.5.2:
+        // group by name, user by user_name. The packaged XML carries those two
+        // keys in the element body as well as the display_value attribute, and
+        // the import engine resolves sys_user / sys_user_group bodies - so on a
+        // committed row these are normally already linked and the fills below
+        // are a no-op. They still run because this same helper adopts rows that
+        // were created some other way (a partial seed run, or a row whose
+        // reference was cleared), and fillIfEmpty never overwrites a value.
+        if (fields.assigned_group_name && String(c.getValue('assigned_group') || '') === '') {
+            var adoptGroup = lookupGroupSysId(fields.assigned_group_name);
+            if (adoptGroup) {
+                fillIfEmpty(c, 'assigned_group', adoptGroup, changed);
+            } else {
+                gs.warn('ensureCase(adopt): assigned_group not found by name: ' +
+                        fields.assigned_group_name + ' (case ' + fields.subject + ')');
+            }
+        }
+        if (fields.assigned_agent_user_name && String(c.getValue('assigned_agent') || '') === '') {
+            var adoptAgent = lookupUserSysId(fields.assigned_agent_user_name);
+            if (adoptAgent) {
+                fillIfEmpty(c, 'assigned_agent', adoptAgent, changed);
+            } else {
+                gs.warn('ensureCase(adopt): assigned_agent not found by user_name: ' +
+                        fields.assigned_agent_user_name + ' (case ' + fields.subject + ')');
+            }
+        }
+        // Dates are relative to the run, never absolute in the package, so that
+        // the time-based dashboard widgets (avg time to close, cases opened in
+        // the last 30 days) keep working however long after authoring the
+        // Update Set is committed.
+        fillIfEmpty(c, 'opened_date', fields.opened_date, changed);
+        fillIfEmpty(c, 'closed_date', fields.closed_date, changed);
+        SEED_STATS.cases.adopted++;
+        if (changed.length) {
+            // setWorkflow(false) so repairing a Closed or Resolved row cannot
+            // trip the transition-guard business rules, which legitimately
+            // refuse to let a Closed case be modified.
+            c.setWorkflow(false);
+            c.update();
+            SEED_STATS.cases.repaired++;
+            gs.info('Adopted demo case: ' + fields.subject + ' (' +
+                    c.getValue('number') + ') - repaired: ' + changed.join(', '));
+        }
         return { sys_id: c.getUniqueValue(), number: c.getValue('number') };
     }
     c.initialize();
+    if (fields.number) {
+        c.number = fields.number;
+    }
     c.subject = fields.subject;
     c.type = fields.type;
     c.status = fields.status;
@@ -640,6 +815,7 @@ function ensureCase(fields) {
         }
     }
     var caseNumber = c.getValue('number');
+    SEED_STATS.cases.inserted++;
     gs.info('Inserted demo case: ' + fields.subject + ' (' +
             caseNumber + ', ' + fields.status + ')');
     return { sys_id: sysId, number: caseNumber };
@@ -659,7 +835,8 @@ function ensureCase(fields) {
  *   - assigned_to_user_name argument is resolved via lookupUserSysId.
  *
  * @param {Object} fields - {
- *     case_number (String, e.g. CASE0000003),
+ *     number (String, pinned - PINNED.TASKS.*; primary adoption key),
+ *     case_number (String, e.g. CASE9000003),
  *     subject (String 255),
  *     type (Choice: Investigation|Review|Follow-up|Other),
  *     status (Choice: Open|In Progress|Closed),
@@ -676,28 +853,66 @@ function ensureTask(fields) {
                 fields.subject + ')');
         return null;
     }
+    var assignedToSysId = lookupUserSysId(fields.assigned_to_user_name);
+    if (!assignedToSysId) {
+        gs.warn('ensureTask: assigned_to not found by user_name: ' +
+                fields.assigned_to_user_name + ' (task subject: ' +
+                fields.subject + ')');
+    }
+    // Adoption: a task packaged in the Update Set arrives with its `case`
+    // column EMPTY (the parent's sys_id is not knowable at authoring time, so
+    // the payload carries the parent's number as a display hint only). A query
+    // on (case, subject) therefore MISSES that row and would insert a
+    // duplicate. Match on the pinned number first, then on (case, subject) for
+    // rows an earlier run created, then on subject-with-empty-case to catch a
+    // committed row whose number was not pinned. Task subjects are globally
+    // unique in this seed, so the subject fallback cannot mis-match.
     var t = new GlideRecord(TABLES.CASE_TASK);
-    t.addQuery('case', caseSysId);
-    t.addQuery('subject', fields.subject);
-    t.query();
+    if (fields.number) {
+        t.addQuery('number', fields.number);
+        t.query();
+    }
+    if (!fields.number || !t.hasNext()) {
+        t = new GlideRecord(TABLES.CASE_TASK);
+        t.addQuery('subject', fields.subject);
+        var tq = t.addQuery('case', caseSysId);
+        tq.addOrCondition('case', '');
+        t.query();
+    }
     if (t.next()) {
+        var changed = [];
+        fillIfEmpty(t, 'number', fields.number, changed);
+        fillIfEmpty(t, 'case', caseSysId, changed);
+        fillIfEmpty(t, 'subject', fields.subject, changed);
+        fillIfEmpty(t, 'type', fields.type, changed);
+        fillIfEmpty(t, 'status', fields.status, changed);
+        fillIfEmpty(t, 'due_date', fields.due_date, changed);
+        fillIfEmpty(t, 'assigned_to', assignedToSysId, changed);
+        SEED_STATS.tasks.adopted++;
+        if (changed.length) {
+            t.setWorkflow(false);
+            t.update();
+            SEED_STATS.tasks.repaired++;
+            gs.info('Adopted demo task: ' + fields.subject + ' (' +
+                    t.getValue('number') + ') on case ' + fields.case_number +
+                    ' - repaired: ' + changed.join(', '));
+        }
         return t.getUniqueValue();
     }
     t.initialize();
+    if (fields.number) {
+        t.number = fields.number;
+    }
     t.setValue('case', caseSysId);
     t.subject = fields.subject;
     t.type = fields.type;
     t.status = fields.status;
     t.due_date = fields.due_date;
-    var assignedToSysId = lookupUserSysId(fields.assigned_to_user_name);
     if (assignedToSysId) {
         t.assigned_to = assignedToSysId;
-    } else {
-        gs.warn('ensureTask: assigned_to not found by user_name: ' +
-                fields.assigned_to_user_name + ' (task subject: ' +
-                fields.subject + ')');
     }
     var sysId = t.insert();
+    SEED_STATS.tasks.inserted++;
     gs.info('Inserted demo task: ' + fields.subject + ' on case ' +
             fields.case_number);
     return sysId;
@@ -728,7 +943,10 @@ function ensureTask(fields) {
  * party_type and leaves the other empty.
  *
  * @param {Object} fields - {
- *     case_number (String, e.g. CASE0000003),
+ *     number (String, pinned - PINNED.PARTIES.*; the ONLY key that can
+ *         identify a packaged party row, because (party_type, role_label)
+ *         is not unique across the demo set),
+ *     case_number (String, e.g. CASE9000003),
  *     party_type (Choice: Person|Organization),
  *     person_user_name (String, when party_type=Person),
  *     organization_company_name (String, when party_type=Organization),
@@ -767,21 +985,60 @@ function ensureParty(fields) {
             return null;
         }
     }
+    // Adoption: a party packaged in the Update Set arrives with `case` EMPTY,
+    // and an Organization party also arrives with `organization` EMPTY (both
+    // are attribute-only shapes; a Person party's `person` resolves at import
+    // because sys_user bodies do resolve), so the composite tuple below cannot
+    // find it. The pinned number is the only key that can,
+    // which is exactly why every packaged party row carries one: the tuple
+    // (party_type, role_label) is NOT unique across the demo set - parties 01
+    // and 06 are both Person/Requester and 02 and 07 are both
+    // Organization/Respondent, differing only in their parent case.
     var p = new GlideRecord(TABLES.CASE_PARTY);
-    p.addQuery('case', caseSysId);
-    p.addQuery('party_type', fields.party_type);
-    p.addQuery('role_label', fields.role_label);
-    if (personSysId) {
-        p.addQuery('person', personSysId);
+    if (fields.number) {
+        p.addQuery('number', fields.number);
+        p.query();
     }
-    if (orgSysId) {
-        p.addQuery('organization', orgSysId);
+    if (!fields.number || !p.hasNext()) {
+        p = new GlideRecord(TABLES.CASE_PARTY);
+        p.addQuery('party_type', fields.party_type);
+        p.addQuery('role_label', fields.role_label);
+        var pq = p.addQuery('case', caseSysId);
+        pq.addOrCondition('case', '');
+        if (personSysId) {
+            var pp = p.addQuery('person', personSysId);
+            pp.addOrCondition('person', '');
+        }
+        if (orgSysId) {
+            var po = p.addQuery('organization', orgSysId);
+            po.addOrCondition('organization', '');
+        }
+        p.query();
     }
-    p.query();
     if (p.next()) {
+        var changed = [];
+        fillIfEmpty(p, 'number', fields.number, changed);
+        fillIfEmpty(p, 'case', caseSysId, changed);
+        fillIfEmpty(p, 'party_type', fields.party_type, changed);
+        fillIfEmpty(p, 'role_label', fields.role_label, changed);
+        fillIfEmpty(p, 'person', personSysId, changed);
+        fillIfEmpty(p, 'organization', orgSysId, changed);
+        SEED_STATS.parties.adopted++;
+        if (changed.length) {
+            p.setWorkflow(false);
+            p.update();
+            SEED_STATS.parties.repaired++;
+            gs.info('Adopted demo party: ' + p.getValue('number') + ' case=' +
+                    fields.case_number + ', type=' + fields.party_type +
+                    ', role=' + fields.role_label +
+                    ' - repaired: ' + changed.join(', '));
+        }
         return p.getUniqueValue();
     }
     p.initialize();
+    if (fields.number) {
+        p.number = fields.number;
+    }
     p.setValue('case', caseSysId);
     p.party_type = fields.party_type;
     p.role_label = fields.role_label;
@@ -792,6 +1049,7 @@ function ensureParty(fields) {
         p.organization = orgSysId;
     }
     var sysId = p.insert();
+    SEED_STATS.parties.inserted++;
     gs.info('Inserted demo party: case=' + fields.case_number +
             ', type=' + fields.party_type +
             ', role=' + fields.role_label);
@@ -975,6 +1233,7 @@ function seedDemoData() {
     gs.info('Phase D: ensuring 10 demo cases.');
 
     ensureCase({
+        number: PINNED.CASES.GI_DRAFT,
         subject: CASE_SUBJECTS.GI_DRAFT,
         type: 'General Inquiry',
         status: 'Draft',
@@ -986,6 +1245,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.GI_OPEN,
         subject: CASE_SUBJECTS.GI_OPEN,
         type: 'General Inquiry',
         status: 'Open',
@@ -999,6 +1259,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.GI_IN_PROGRESS,
         subject: CASE_SUBJECTS.GI_IN_PROGRESS,
         type: 'General Inquiry',
         status: 'In Progress',
@@ -1011,6 +1272,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.GI_PENDING,
         subject: CASE_SUBJECTS.GI_PENDING,
         type: 'General Inquiry',
         status: 'Pending',
@@ -1024,6 +1286,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.GI_RESOLVED,
         subject: CASE_SUBJECTS.GI_RESOLVED,
         type: 'General Inquiry',
         status: 'Resolved',
@@ -1038,6 +1301,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.GI_CLOSED,
         subject: CASE_SUBJECTS.GI_CLOSED,
         type: 'General Inquiry',
         status: 'Closed',
@@ -1057,6 +1321,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.CMP_OPEN,
         subject: CASE_SUBJECTS.CMP_OPEN,
         type: 'Complaint',
         status: 'Open',
@@ -1068,6 +1333,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.CMP_IN_PROGRESS,
         subject: CASE_SUBJECTS.CMP_IN_PROGRESS,
         type: 'Complaint',
         status: 'In Progress',
@@ -1080,6 +1346,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.CMP_RESOLVED,
         subject: CASE_SUBJECTS.CMP_RESOLVED,
         type: 'Complaint',
         status: 'Resolved',
@@ -1092,6 +1359,7 @@ function seedDemoData() {
     });
 
     ensureCase({
+        number: PINNED.CASES.CMP_CLOSED,
         subject: CASE_SUBJECTS.CMP_CLOSED,
         type: 'Complaint',
         status: 'Closed',
@@ -1179,6 +1447,7 @@ function seedDemoData() {
 
     if (case03Number) {
         ensureTask({
+            number: PINNED.TASKS.T01,
             case_number: case03Number,
             subject: 'Demo task 01: Investigate request scope',
             type: 'Investigation',
@@ -1187,6 +1456,7 @@ function seedDemoData() {
             due_date: daysAgoDate(-5)  // 5 days in the future
         });
         ensureTask({
+            number: PINNED.TASKS.T02,
             case_number: case03Number,
             subject: 'Demo task 02: Initial review complete',
             type: 'Review',
@@ -1200,6 +1470,7 @@ function seedDemoData() {
 
     if (case04Number) {
         ensureTask({
+            number: PINNED.TASKS.T03,
             case_number: case04Number,
             subject: 'Demo task 03: Follow up with requester',
             type: 'Follow-up',
@@ -1215,6 +1486,7 @@ function seedDemoData() {
         // (a typical first-stage activity performed BEFORE the case was
         // placed in Pending status awaiting external input).
         ensureTask({
+            number: PINNED.TASKS.T09,
             case_number: case04Number,
             subject: 'Demo task 09: Initial intake review for Pending case',
             type: 'Review',
@@ -1228,6 +1500,7 @@ function seedDemoData() {
 
     if (case05Number) {
         ensureTask({
+            number: PINNED.TASKS.T04,
             case_number: case05Number,
             subject: 'Demo task 04: Final review for resolution',
             type: 'Review',
@@ -1236,6 +1509,7 @@ function seedDemoData() {
             due_date: daysAgoDate(1)   // 1 day in the past
         });
         ensureTask({
+            number: PINNED.TASKS.T05,
             case_number: case05Number,
             subject: 'Demo task 05: Post-resolution archive',
             type: 'Other',
@@ -1249,6 +1523,7 @@ function seedDemoData() {
 
     if (case08Number) {
         ensureTask({
+            number: PINNED.TASKS.T06,
             case_number: case08Number,
             subject: 'Demo task 06: Complaint investigation',
             type: 'Investigation',
@@ -1257,6 +1532,7 @@ function seedDemoData() {
             due_date: daysAgoDate(-7)  // 7 days in the future
         });
         ensureTask({
+            number: PINNED.TASKS.T07,
             case_number: case08Number,
             subject: 'Demo task 07: Witness interview prep',
             type: 'Investigation',
@@ -1272,6 +1548,7 @@ function seedDemoData() {
         // fact-check (a typical first-stage activity performed BEFORE
         // the deeper investigation captured by tasks 06 and 07).
         ensureTask({
+            number: PINNED.TASKS.T10,
             case_number: case08Number,
             subject: 'Demo task 10: Preliminary fact-check complete',
             type: 'Review',
@@ -1285,6 +1562,7 @@ function seedDemoData() {
 
     if (case09Number) {
         ensureTask({
+            number: PINNED.TASKS.T08,
             case_number: case09Number,
             subject: 'Demo task 08: Final complaint review',
             type: 'Review',
@@ -1345,12 +1623,14 @@ function seedDemoData() {
 
     if (case03Number) {
         ensureParty({
+            number: PINNED.PARTIES.P01,
             case_number: case03Number,
             party_type: 'Person',
             person_user_name: DEMO.USERS.MANAGER,
             role_label: 'Requester'
         });
         ensureParty({
+            number: PINNED.PARTIES.P02,
             case_number: case03Number,
             party_type: 'Organization',
             organization_company_name: COMPANIES.ALPHA,
@@ -1362,6 +1642,7 @@ function seedDemoData() {
 
     if (case04Number) {
         ensureParty({
+            number: PINNED.PARTIES.P03,
             case_number: case04Number,
             party_type: 'Person',
             person_user_name: DEMO.USERS.AGENT,
@@ -1373,12 +1654,14 @@ function seedDemoData() {
 
     if (case05Number) {
         ensureParty({
+            number: PINNED.PARTIES.P04,
             case_number: case05Number,
             party_type: 'Person',
             person_user_name: DEMO.USERS.VIEWER,
             role_label: 'Requester'
         });
         ensureParty({
+            number: PINNED.PARTIES.P05,
             case_number: case05Number,
             party_type: 'Organization',
             organization_company_name: COMPANIES.BETA,
@@ -1390,12 +1673,14 @@ function seedDemoData() {
 
     if (case08Number) {
         ensureParty({
+            number: PINNED.PARTIES.P06,
             case_number: case08Number,
             party_type: 'Person',
             person_user_name: DEMO.USERS.MANAGER,
             role_label: 'Requester'
         });
         ensureParty({
+            number: PINNED.PARTIES.P07,
             case_number: case08Number,
             party_type: 'Organization',
             organization_company_name: COMPANIES.ALPHA,
@@ -1407,6 +1692,7 @@ function seedDemoData() {
 
     if (case09Number) {
         ensureParty({
+            number: PINNED.PARTIES.P08,
             case_number: case09Number,
             party_type: 'Person',
             person_user_name: DEMO.USERS.AGENT,
@@ -1426,7 +1712,23 @@ function seedDemoData() {
     // path), only this single completion line appears - all helpers
     // silently observe "already exists" and do not log.
 
-    gs.info('Seed complete: 3 users, 1 group, 3 role assignments, 10 cases, 8 tasks, 8 parties, 2 companies (idempotent).');
+    // The canonical totals are fixed (3 users, 1 group, 3 role assignments,
+    // 10 cases, 10 tasks, 8 parties, 2 companies). What varies per run is HOW
+    // each row was reached, so report that too: on a fresh instance everything
+    // is inserted; on the commit path the packaged rows are adopted and
+    // repaired; on any second consecutive run repaired MUST be 0 for all three
+    // tables, which is the idempotency contract this trace makes checkable.
+    gs.info('Seed complete: 3 users, 1 group, 3 role assignments, 10 cases, ' +
+            '10 tasks, 8 parties, 2 companies (idempotent).');
+    gs.info('Seed detail: cases inserted=' + SEED_STATS.cases.inserted +
+            ' adopted=' + SEED_STATS.cases.adopted +
+            ' repaired=' + SEED_STATS.cases.repaired +
+            ' | tasks inserted=' + SEED_STATS.tasks.inserted +
+            ' adopted=' + SEED_STATS.tasks.adopted +
+            ' repaired=' + SEED_STATS.tasks.repaired +
+            ' | parties inserted=' + SEED_STATS.parties.inserted +
+            ' adopted=' + SEED_STATS.parties.adopted +
+            ' repaired=' + SEED_STATS.parties.repaired + '.');
 }
 
 // ============================================================================
