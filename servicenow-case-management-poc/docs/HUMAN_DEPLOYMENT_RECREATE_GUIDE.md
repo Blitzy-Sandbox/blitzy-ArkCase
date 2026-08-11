@@ -149,8 +149,12 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" -o /dev/null -w "reach
   "$SN/api/now/table/sys_remote_update_set?sysparm_limit=1"
 
 # 2.2 Instance not mid-upgrade  -> expect empty result array
+#     NOTE: sys_upgrade_history has NO `state` column on this release, and an invalid field in
+#     sysparm_query is silently IGNORED - so the `state=executing` condition published in the
+#     deployment instructions returns UNFILTERED rows and always looks like an upgrade is running.
+#     Query the columns that exist instead: started but not finished.
 curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
-  "$SN/api/now/table/sys_upgrade_history?sysparm_limit=1&sysparm_query=state=executing"
+  "$SN/api/now/table/sys_upgrade_history?sysparm_limit=1&sysparm_query=upgrade_startedISNOTEMPTY%5Eupgrade_finishedISEMPTY"
 
 # 2.3 Scope existence (clean install vs update)  -> zero records = clean
 curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
@@ -158,7 +162,14 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 ```
 
 - `200` on 2.1 → proceed. `401` → bad credentials. `403` → account lacks `admin`/`sys_remote_update_set`.
-- Any record on 2.2 → wait until upgrade completes.
+  If 2.1 returns `200` with a **5,904-byte HTML body titled "Instance Hibernating page"** instead of JSON, the PDI
+  is asleep: every route answers that way, and only the ServiceNow Developer Program account that owns the instance
+  can wake it (see [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Stop here
+  until it is awake — nothing below will work.
+- Any record on 2.2 → wait until upgrade completes. Use the predicate shown
+  (`upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY`), **not** `state=executing`: `state` is not a column on this
+  release, invalid fields in `sysparm_query` are silently dropped, and the published condition therefore returns
+  every historical upgrade row and reads as a false positive.
 - Records on 2.3 → an existing scope is present; the commit will update it (the preview step surfaces real conflicts).
 
 ---
@@ -785,7 +796,10 @@ it is the fastest way to know the install is sound.
 - **Run steps 4-7 of the primary procedure first.** Without physical tables and the 27 ACL role links, the suite
   fails wholesale and tells you nothing about the application.
 - **Expected result: 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180 step results Success**, in
-  roughly 4 minutes, leaving no test records behind. That is the measured verdict of run **`TES0001015`**. An
+  roughly 4 minutes, leaving no test records behind. That rollup was reproduced twice independently
+  (`TES0001016` and `TES0001017`). **Record your own rollup rather than looking for a particular `TES…` row:**
+  `sys_atf_test_suite_result` is not durable on this shared instance, and the `TES0001015` row this line used to
+  cite no longer resolves ([`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §8.3](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). An
   earlier run scored 16 / 4; those four failures were the child-table ACL condition and the three form-level
   assertions, both since fixed, so a 16 / 4 today means something in the install is incomplete rather than the
   suite being wrong.

@@ -67,15 +67,18 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 - State = Loaded.
 - Application name matches the scoped application (`x_casemgmt Case Management`).
 - No upload error message displayed.
-- **The child `sys_update_xml` count is exactly 925.** Assert this, do not eyeball it — see the warning below
-  for why it is the one number that catches the most common mistake in this procedure.
+- **The child `sys_update_xml` count is exactly 926.** Assert this, do not eyeball it — see the warning below
+  for why it is the one number that catches the most common mistake in this procedure. 926 is the block count of
+  the file that ships today (3,781,097 bytes, SHA-256 `7292a6fe…`); if you are verifying an archived revision,
+  assert *its* count instead — 925 for `e49a7654…`, 913 for `89638c17…` and for `7272edfc…`. Re-derive it from
+  the file rather than trusting this line: `grep -c '<sys_update_xml ' <the XML>`.
 
 > ⚠️ **Uploading this file onto an instance that already holds it REUSES the same Retrieved Update Set row and
 > APPENDS its children — it does not replace them.** Measured directly: the `<sys_remote_update_set>` descriptor
 > in this file hard-codes `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, so the loader matches on it. Two
 > successive uploads onto a row that already carried one committed batch took the child count
 > **913 → 1,826 → 2,739** (observed on the 913-block revision; the multiples track whatever the current
-> block count is — 925 today), and the second upload silently reset the row's state from `previewed` back to
+> block count is — 926 today, so expect 926 → 1,852 → 2,778), and the second upload silently reset the row's state from `previewed` back to
 > `loaded`, discarding the first preview. `sys_updated_on` cannot tell the loads apart, because each load stamps
 > it back to the file's literal `2026-04-30 12:00:00`.
 >
@@ -84,8 +87,8 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 >   3 × 34 — the same 34 problems repeated per batch, not new defects. If you must read absolute counts, attribute
 >   each problem to its originating batch through `remote_update` → that child's `sys_created_on`.
 > - **This procedure's zero-problem criterion is only meaningful from a clean slate**, which is what Phase 0's
->   teardown is for. On a fresh PDI that has never seen this application, the count is 925 and the question does
->   not arise.
+>   teardown is for. On a fresh PDI that has never seen this application, the count is the file's own block count —
+>   926 for the bytes that ship today — and the question does not arise.
 >
 > Related trap when diffing two loads: **preview rewrites `sys_update_xml.name`**, re-canonicalising a
 > `<table>_<sys_id>` name into a human-readable one (e.g. `sys_dictionary_0bf56c20…` →
@@ -426,8 +429,12 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 - [ ] Re-run the ATF suite through the client runner at `/atf_test_runner.do?sysparm_nostack=true`
       (`sn_atf.runner.enabled` must be `true`; `sn_atf.headless.enabled` cannot be enabled here, so a real
       browser runner must be registered *before* launching the suite). Report per-test verdicts, not just the
-      suite status. **Result: the final run, `TES0001015`, scored 20 ran / 20 Success / 0 Failure / 0 Error /
-      0 Skipped, with 180 of 180 step results Success, in about 4 minutes, leaving no test residue.** An earlier
+      suite status. **Result: 20 ran / 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180 step results
+      Success, in about 4 minutes, leaving no test residue — reproduced twice independently** (`TES0001016` and
+      `TES0001017`, both 2026-08-10, the second dispatched through the product UI with a browser runner attached).
+      **Record your own rollup rather than quoting a `TES…` number:** `sys_atf_test_suite_result` rows are not
+      durable on this shared instance, and the two rows this document previously cited — `TES0001015` and
+      `TES0001014` — no longer resolve on it (§8.3 of the limitations register). An earlier
       run scored 16 Success / 4 Failure across three identical runs; those four failures were the child-table ACL
       condition (ATF 07) and the three form-level assertions (ATF 15-17), both root causes since fixed, and that
       result is history rather than status. The suite serializes to **761** of the package's 926 blocks —
@@ -481,21 +488,39 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of
 > that document is the current record. Criterion 4
 > holds: `verified=true` with 27 of 27 links, after two remediation runs separated by a second commit.
-> Criterion 5 holds for Workflow, and for Data model and ACLs **on all three tables** after remediation; it does
-> **not** hold for Dashboards or for the portal pages. Criterion 6 is met in the second sense — the package is
+> Criterion 5 holds for Workflow, for Data model and ACLs **on all three tables** after remediation, **and now for
+> Dashboards and for both portal pages as well** — the packaging defects that made those three fail have each been
+> fixed and re-verified in a browser: both dashboards render every widget with the seed data (Agent Workspace 3 of
+> 3, Manager View 5 of 5), both portal pages render and work anonymously, and the case form shows its `case_task`
+> and `case_party` related lists
+> ([`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5, §0.6.1 and §0.6.2](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)).
+> Criterion 6 is met in the second sense — the package is
 > not self-sufficient, and the footprint is fully documented in
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Criterion 7
-> holds: 13 / 13 before and after, and the final ATF suite `TES0001015` scored 20 / 20.
+> holds: 13 / 13 before and after, and the ATF suite scored **20 / 20 tests and 180 / 180 steps**, reproduced twice
+> (`TES0001016`, `TES0001017` — record your own rollup, because suite-result rows are not durable here and the
+> `TES0001015` row this line used to cite no longer resolves).
+>
+> ⚠️ **Before you start, check the instance is awake.** The verification PDI has been hibernating since
+> 2026-08-11 — every route answers HTTP 200 with ServiceNow's 5,904-byte "Instance Hibernating page" — so this
+> procedure cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that
+> owns it. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
 ### Fail Criteria (Any One Triggers Fail)
 
 1. Any error in Phase 1 upload.
 2. ANY non-zero error count in Phase 2 preview.
 3. Any error in Phase 3 commit.
-4. ANY of Gates 1–6 fails to re-verify on the verification PDI **for a reason other than the three disclosed
-   packaging defects** (blank portal pages, non-rendering dashboards, absent related lists). Those three are
-   already-known failures with recorded root causes; re-discovering them is not a new fail, but silently counting
-   them as passes is prohibited.
+4. ANY of Gates 1–6 fails to re-verify on the verification PDI **for a reason other than the two remaining
+   disclosed install steps** — (a) the manual Defect C / Defect 9 remediation, without which the three tables have
+   no physical storage and all 26 ACLs have zero role links, and (b) the related-list cache, which only bites on an
+   instance that had already rendered the case form before the definition arrived and is cleared by opening a case,
+   *Configure ▸ Related Lists*, **Save**. Both are recorded with root causes in
+   [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) (item 7 covers
+   the cache); re-discovering either is not a new fail, but silently counting a gate as a pass is prohibited.
+   **The three packaging defects this criterion used to exempt have been fixed, so each of them is now a fail and
+   must be reported:** a portal page that renders blank, a dashboard that shows no widgets, or a case form missing
+   its child related lists.
 
 ### On Fail
 
