@@ -7,7 +7,7 @@ This subdirectory contains the ServiceNow scoped application, delivered as a **s
 > **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and three things are open. Read this before planning around it:
 >
 > 1. **Two manual post-import steps are mandatory** — the physical table schema (Defect C) and the 27 ACL role-link records (Defect 9). The package ships the remediation body as a Fix Script but **ships no trigger and nothing that auto-executes**; an operator must run `scripts/post_import_remediation.js` from *System Definition → Scripts - Background* with **"In scope" = Global**.
-> 2. **Two user-facing surfaces still do not work**: both **dashboards** render no tabs and no widgets, and the case form has **no related lists**. The two portal **pages** used to be on this list and now work — their missing Service Portal layout records were authored and a response-envelope bug in both widgets was fixed, so submission and status lookup both function anonymously in a browser, alongside the REST endpoints that always worked.
+> 2. **The user-facing surfaces all work now.** Three items that were listed here as broken have each been fixed and re-verified in a browser: both **dashboards** render every widget with the seed data, for the admin and for each entitled persona (Agent Workspace 3 of 3, Manager View 5 of 5); the case form renders its **related lists**, Case Tasks above Case Parties, with their child rows; and the four **chart reports** plot the dimension they were designed around instead of falling back to Assigned Agent. The two portal **pages** were fixed in an earlier pass and remain working, and their validation and accessibility behaviour has since been rebuilt — see Current Status. One operational caveat survives for the related lists: their definition is cached server side, so on an instance that rendered the case form before the definition existed they stay invisible until that cache is invalidated. [`docs/deployment.md`](docs/deployment.md) Step 3 item 12 has the symptom and the one-click remedy.
 > 3. **Running the ATF suite needs an instance setting** (`sn_atf.runner.enabled = true`) that is deliberately not captured into the package, plus a browser-attached client runner.
 >
 > **Now closed, and previously listed here as open:** the clean-slate round trip **has** been run on this deliverable — on its 913-block, 3,618,378-byte, SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` revision. Measured progression **41 → 298 → 0** preview problems, then `state=committed`, with the file byte-unchanged by the trip. The bytes that ship today are 913 blocks, 3,643,389 bytes, SHA-256 `89638c17…` — the same file with 9 payloads re-synced by the QA-remediation pass — and a matched A/B preview of the two revisions against the same instance state produced identical problem signatures, so the change is preview-neutral. AAP §0.7.1's zero-preview-error gate is therefore **met on the deliverable**, on the revision it was measured against. Detail in [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
@@ -72,7 +72,7 @@ Every directory is listed below with its exact file count, so the tree can be di
 servicenow-case-management-poc/
 ├── README.md                          (this file — overview and entry point)
 ├── update-set/                    [1] x_casemgmt_case_management_update_set.xml — THE deliverable
-│                                      (925 blocks · 3,698,577 bytes)
+│                                      (926 blocks · 3,781,097 bytes)
 ├── app/                           [1] app/sys_app/x_casemgmt_case_management.xml — the scoped
 │                                      application record. There is no separate sys_scope
 │                                      artifact: the platform derives sys_scope from sys_app
@@ -103,18 +103,31 @@ servicenow-case-management-poc/
 │                                      the only writer of closed_date).
 ├── ui_policy/                     [1] case_party conditional person/organization fields
 ├── ui_action/                     [6] the state-transition buttons
+├── list_layouts/                  [1] the case table's Default-view list layout (sys_ui_list),
+│                                      which is what puts subject, type and status into the case
+│                                      list in the AAP field order
+├── related_lists/                 [1] the case form's Default-view related lists
+│                                      (sys_ui_related_list + 2 entries): Case Tasks, then Case
+│                                      Parties. Read docs/deployment.md Step 3 item 12 before
+│                                      concluding they do not work - the definition is cached
+│                                      server side.
 ├── portal/                       [10] portal record + 2 pages + 3 widgets + 2 scripted REST
 │                                      endpoints + supporting records. Both the REST endpoints and
 │                                      the two pages work; layout/ carries the sp_container ->
 │                                      sp_row -> sp_column -> sp_instance chain that makes them render.
-├── dashboards/                    [2] Agent Workspace + Manager View. Both currently render
-│                                      with no tabs and no widgets (see docs/PDI_LIMITATIONS…).
+├── dashboards/                    [2] Agent Workspace (3 widgets) + Manager View (5 widgets).
+│                                      Each carries its full wiring: sys_portal_page ->
+│                                      sys_grid_canvas -> pa_tabs -> pa_m2m_dashboard_tabs, one
+│                                      sys_portal + sys_portal_preferences + sys_grid_canvas_pane
+│                                      triple per widget, and the pa_dashboards_permissions share
+│                                      rows. Verified rendering for the admin and for every
+│                                      entitled persona (see docs/dashboards.md).
 ├── reports/                       [8] the eight reports the dashboards are meant to show
 ├── seed-data/                     [35] synthetic demo data: 3 users, 1 group, 3 role
 │                                      assignments, 10 cases, tasks, parties
 ├── atf/                          [21] the Automated Test Framework suite: 20 test definitions
 │                                      (ATF 01-20) + x_casemgmt_atf_test_suite.xml. These
-│                                      serialize to 761 of the package's 925 blocks.
+│                                      serialize to 761 of the package's 926 blocks.
 ├── docs/                         [11] see the Documentation Index below
 └── scripts/                       [5] post_import_remediation.js — the mandatory Global
                                        post-import script (Defect C + Defect 9)
@@ -134,6 +147,7 @@ Each subfolder corresponds to a category of ServiceNow record definitions or sup
 - `tables/`, `dictionary/`, `choices/`, `numbers/` define the three custom tables, their fields, choice lists, and auto-numbering counters.
 - `roles/` and `acl/` define the three scoped roles and their table-level and field-level ACLs.
 - `flows/`, `script_includes/`, `business_rules/`, `ui_policy/`, `ui_action/` implement the case state-machine transition rules and form behavior.
+- `list_layouts/` and `related_lists/` configure the internal user experience the AAP asks for in Section 0.4.4: which columns the case list shows, and the two child lists the case form shows beneath its fields.
 - `portal/` holds the Experience Portal record, pages, widgets, and scripted REST endpoints powering external case submission and lookup.
 - `dashboards/` and `reports/` define the two POC dashboards and their eight underlying reports.
 - `seed-data/` contains synthetic demo data that exercises every status, both case types, and the full ACL matrix.
@@ -232,8 +246,8 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 ## Deliverables
 
 - **Update Set XML:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
-- **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation. **The URL resolves anonymously with no login wall, but both pages currently render blank** — see Current Status below.
-- **Dashboards:** Agent Workspace + Manager View records are in the package and **do install**, but they **cannot render** — both were observed with **0 tabs and 0 widgets**, showing the platform's empty state, "Add widgets using the widget picker." The cause is packaging, not the reports: each dashboard's composite block names **three child tables that do not exist on this release** — `pa_tab` (the real table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`), and `pa_dashboard_role` — so the tab, all 8 widget placements (3 on Agent Workspace, 5 on Manager View) and the role grants are all silently dropped on commit. See Current Status below.
+- **Portal URL:** `[instance URL]/x_casemgmt_case_portal` — this is the actual `<url_suffix>` declared in [`portal/sp_portal_x_casemgmt_case_portal.xml`](portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses the generic placeholder `[instance URL]/x_casemgmt_portal` ("or the equivalent portal URL chosen at portal-record creation time"); this Deliverables line uses the actual implementation slug so a verifier can navigate directly without further lookup. See [`docs/portal-pages.md`](docs/portal-pages.md) for the full discrepancy explanation. **The URL resolves anonymously with no login wall and both pages render and function** — submission returns a case number, lookup returns exactly status / subject / opened_date, and both forms report per-field validation accessibly. See Current Status below.
+- **Dashboards:** Agent Workspace (3 widgets) + Manager View (5 widgets), both installing **and rendering** with the seed data. Verified in a browser for the admin and for each persona the design entitles: the manager opens both, the agent opens Agent Workspace and sees exactly its own assigned cases in *My Open Cases*, and the agent and viewer are correctly refused the dashboards they are not bound to. An earlier revision of this line reported 0 tabs and 0 widgets; the cause was packaging, not the reports — each dashboard's composite named three child tables that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`), so the tab, all 8 widget placements and the role grants were silently dropped on commit. The artifacts now carry the platform's real wiring. See Current Status below and [`docs/dashboards.md`](docs/dashboards.md).
 - **Synthetic seed data:** at least 10 demo cases spanning all six statuses and both case types, plus 3 demo users (one per role) and 1 demo group. The packaged seed rows require one preparatory step before the seed script can populate them correctly — see Current Status below.
 
 ## Current Status
@@ -243,10 +257,11 @@ projected.
 
 **The package**
 
-- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **925 update blocks, 3,698,577 bytes,
-  SHA-256 `e49a7654f8990287cee459eb4bec0245dc3f40588ebd63344b80cf16e0508361`**. Quote these numbers and no
-  others; earlier revisions carried different ones — 913 blocks / 3,643,389 bytes / `89638c17…` immediately
-  before this, and 913 blocks / 3,618,378 bytes / `7272edfc…` before that.
+- **Identity:** `update-set/x_casemgmt_case_management_update_set.xml` — **926 update blocks, 3,781,097 bytes, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`**. Quote these numbers and no
+  others; earlier revisions carried different ones — 925 blocks / 3,698,577 bytes / `e49a7654…` immediately
+  before this, 913 blocks / 3,643,389 bytes / `89638c17…` before that, and 913 blocks / 3,618,378 bytes /
+  `7272edfc…` before that. The step from 925 to 926 blocks is the new Related Lists record; the byte growth is
+  that record plus the report, dashboard and portal-widget payload changes described below.
 - **Round-trip status: zero *reference* problems proven on these bytes; zero problems *of any type* proven on
   the earlier `7272edfc…` revision.** Read those as two separate results, because they are.
   On `7272edfc…` (913 blocks / 3,618,378 bytes) the full trip was measured: teardown proven complete (scope
@@ -257,16 +272,30 @@ projected.
   that local capture was purged at source, checked against the platform's own `state=previewed` /
   `unresolvedProblems=false` / `shouldDisplay=true` predicate rather than assumed. Then
   `previewed → committing → committed`.
-  On the bytes that ship today (925 blocks / 3,698,577 bytes): uploaded as a fresh retrieved update set with
+  On the **925-block / 3,698,577-byte / `e49a7654…`** revision: uploaded as a fresh retrieved update set with
   **925** children asserted and previewed against an instance that already holds the schema and this
   application's change history — **31 problems, every one `Found a local update that is newer than this one`,
   and ZERO `Could not find a record` problems of any kind.** The 21 package-intrinsic reference problems that
-  an independent QA preview found in the previous revision are **eliminated** (63 reference errors → 0), and
+  an independent QA preview found in the revision before that are **eliminated** (63 reference errors → 0), and
   all 31 remaining targets were confirmed to hold a local `sys_update_version` in state `current` — that is,
-  they are the instance's own history and cannot arise on a fresh PDI. **Commit was withheld on these bytes**
-  because the verification instance is shared with other work. AAP §0.7.1's gate is therefore met for the
-  reference class on what ships, and met in full only on `7272edfc…`. The earlier 916-block revision
+  they are the instance's own history and cannot arise on a fresh PDI. **Commit was withheld on those bytes**
+  because the verification instance is shared with other work. The earlier 916-block revision
   (3,448,009 bytes, SHA-256 `32a064d6…`) reached the zero result too and is kept as history.
+  **On the bytes that ship today (926 blocks / 3,781,097 bytes / `7292a6fe…`) no preview has been run, and that
+  is stated rather than glossed.** Re-uploading and previewing means loading a retrieved update set on a
+  verification instance shared with other work, which this pass declined to do. What changed since the previewed
+  revision is bounded and is listed here so the risk can be judged rather than guessed: the four chart reports
+  and their four siblings had `field`, `roles` and `user` set and two non-existent elements (`group_by`,
+  `format`) removed; the two dashboard composites were rewritten onto the platform's real child tables; the
+  three portal widgets had `template`, `client_script` and `description` rewritten and a non-existent element
+  (`pop_up`) removed; and **one block was added**, the Related Lists definition. Every one of those records was
+  applied to the live instance through the Table API and read back byte-identical to its artifact, so each is
+  known to be accepted by the platform; and every table and column named across all of them was checked against
+  `sys_db_object` and `sys_dictionary`, which is precisely the class of defect (`group_by`, `pa_tab`,
+  `pa_dashboard_widgets`, `pa_dashboard_role`, `pop_up`) that the previous revisions carried silently. **AAP
+  §0.7.1's zero-preview-error gate is therefore proven in full on `7272edfc…`, proven for the reference class on
+  `e49a7654…`, and not re-measured on what ships.** A verifier with a disposable PDI should re-run
+  [`scripts/round_trip_verify.md`](scripts/round_trip_verify.md) against these bytes before relying on them.
 - **Nothing in it fires on its own.** The package contains **no record that auto-executes, of any kind** — no
   Business Rule, no scheduled job, no `sys_trigger` row. (It does contain a Fix Script, which is a record; the
   point is that nothing *runs* it.) An earlier revision did ship one (the global Business
@@ -322,18 +351,40 @@ procedure. Do not substitute the Fix Script UI: it executes in the application s
   with the verbatim `Your case has been submitted` and the new `CASE…` number, and a lookup page that shows
   exactly Status / Subject / Opened Date or the verbatim `No case found with that number.` — 0 console errors,
   no request ≥ 400, and a stored `<img src=x onerror=…>` subject rendered as inert text.
-- **Both dashboards render no tabs and no widgets** — the platform's empty state. Their composite blocks name
-  three child tables that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`),
-  so the tab, all 8 widget placements and the role grants are dropped on commit.
-- **The six chart reports have no grouping column.** Each artifact specifies `<group_by>`, but **`group_by` is
-  not a column on `sys_report`** on this release, so the element is discarded on import and, for example, *All
-  Cases by Status* renders grouped by *Assigned Agent*. The column a chart groups on is `field`; the remedy is a
-  one-element rename in six artifacts and their six payloads. Root-caused by the QA-remediation pass while
-  fixing the *Average Time to Close* single-score report, which now renders correctly. Unrelated to the
-  dashboard defect above.
-- **The case form has no related lists.** `sys_ui_related_list` holds **0 rows** for this scope, and the form's
-  related-lists wrapper measures **exactly 0 pixels** tall. The reference fields make the relationship
-  available; the list placements were never authored.
+- **Both dashboards now render every widget** — this bullet used to read "both dashboards render no tabs and no
+  widgets", and that was accurate. Their composite blocks named three child tables that do not exist on this
+  release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`), so the tab, all 8 widget placements and the
+  role grants were dropped on commit — and supplying only a tab was proven insufficient, because the platform
+  auto-created one on first view and both dashboards stayed blank. The artifacts now carry the real wiring:
+  `sys_portal_page` → `sys_grid_canvas` → `pa_tabs` → `pa_m2m_dashboard_tabs`, one
+  `sys_portal` + `sys_portal_preferences` + `sys_grid_canvas_pane` triple per widget, and the
+  `pa_dashboards_permissions` share rows. Agent Workspace renders **3 of 3** and Manager View **5 of 5** with
+  the seed data. Getting a dashboard to open for a non-admin persona took three further gates that the platform's
+  refusal messages do not name — `sys_report.user` must be `GLOBAL`, `sys_report.roles` narrows who may read, and
+  the dashboard is gated by `pa_dashboards_permissions` plus `pa_dashboards.restrict_to_roles` (whose sibling
+  `pa_dashboards.roles`, labelled "Requires Roles", only narrows and grants nothing). All four are set.
+- **The four chart reports now plot the dimension they were designed around** — this bullet used to report them
+  grouping by *Assigned Agent*. Each artifact specified `<group_by>`, but **`group_by` is not a column on
+  `sys_report`** on this release, so the element was discarded on import and the builder fell back to the
+  alphabetically first field. The column a chart groups on is `field`, and all four now carry it: status renders
+  its six buckets, type its two, priority its four. An inert `<format>` element was removed at the same time for
+  the same reason, and the eight reports were shared with the three scoped roles. The two single-score reports
+  were always correct and still are.
+- **The case form now renders its related lists** — this bullet used to read "the case form has no related
+  lists", with `sys_ui_related_list` holding 0 rows for this scope and the wrapper measuring exactly 0 pixels
+  tall. The definition ships as `related_lists/sys_ui_related_list_x_casemgmt_case_default.xml` and the wrapper
+  measures **227 px** with Case Tasks above Case Parties, for the admin, the agent and the viewer alike. Be aware
+  of one caveat that looks exactly like the old defect and is not: the definition is cached server side, so on an
+  instance that rendered the case form before the definition existed the lists stay invisible, and the
+  configuration screen will meanwhile show them correctly selected. `docs/deployment.md` Step 3 item 12 has the
+  remedy.
+- **What remains genuinely open on the user-facing surfaces** is smaller and is bounded by the AAP rather than by
+  effort: the `organization` value on a Case Party is unreadable by every non-admin persona, because that would
+  need read access to the global out-of-box `core_company` table and AAP §0.3.2 forbids global changes by name;
+  the platform's list-action dropdown still offers Delete to a viewer as a cosmetic affordance, which is a global
+  UI Action and equally out of bounds, while the server-side ACL correctly denies it; and the portal's contrast
+  ratios and 34 px control heights are the default theme's, which AAP §0.4.4 mandates. Each is recorded with its
+  measurement in `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`.
 
 **No regressions.** The 13 transition-logic assertions that passed before this pass were re-measured with the
 same harness afterwards: **13 / 13 before, 13 / 13 after**, per assertion.
@@ -363,9 +414,13 @@ validation gates is in [`docs/validation-gates.md`](docs/validation-gates.md#mea
 
 > **These four steps are the AAP's deployment contract, reproduced as written. They are not sufficient on this
 > instance.** A commit alone leaves the three tables without physical storage and the 26 ACLs without their 27
-> role links. Step 3's dashboard check cannot pass either — the dashboards name three child tables that this
-> release does not have (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) — and its portal check will find
-> the URL live but the pages blank. Follow
+> role links. Step 3's **dashboard and portal checks now pass** — an earlier revision of this note warned that
+> neither could, because the dashboards named three child tables this release does not have (`pa_tab`,
+> `pa_dashboard_widgets`, `pa_dashboard_role`) and the portal pages had no layout records; both were packaging
+> defects and both are fixed. What still blocks a bare commit is the schema and the ACL role links, and one more
+> thing worth knowing before you start: if the target instance rendered the case form before this package's
+> related-list definition arrived, the case form's related lists stay invisible until *Configure ▸ Related Lists*
+> is opened and **Saved** once (`docs/deployment.md` step 12). Follow
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0 and §9.5](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) for the procedure that
 > works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**
 > (*Scripts - Background*, "In scope" = Global — **not** the Fix Script UI, which runs in the application scope
@@ -379,7 +434,7 @@ Detailed walkthrough in `docs/deployment.md`. Manual round-trip verification pro
 
 ## Validation Gates
 
-Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — **2 pass outright, 4 pass only with a qualification, 1 fails** (2 + 4 + 1 = 7) — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status). In brief: **Workflow** passes, and **Update Set** passes with zero preview problems of any type measured on the bytes that actually ship. **Data model** and **ACLs** are correct only after the documented manual post-import remediation. **Portal — submission** and **Portal — lookup** pass at the REST-contract level while their pages render blank. **Dashboards** fails. Counting the documented remediation as part of a normal install instead yields 4 pass · 2 qualified · 1 fail; both describe the same measured state, and this deliverable quotes the conservative one throughout.
+Detailed gate definitions live in `docs/validation-gates.md`. The seven gates below are the canonical pass/fail criteria for delivery, reproduced verbatim from AAP Section 0.7.3. For the **measured** outcome of each gate on the verification instance — **4 pass outright, 3 pass only with a qualification, 0 fail** (4 + 3 + 0 = 7) — see [`docs/validation-gates.md` → Measured Status](docs/validation-gates.md#measured-status). In brief: **Workflow**, **Portal — submission**, **Portal — lookup** and **Dashboards** pass outright, the two portal gates at both the REST-contract level and on the rendered pages, and Dashboards for the admin and for every persona the design entitles. **Data model** and **ACLs** are correct only after the documented manual post-import remediation. **Update Set** is qualified because its zero-problem preview was measured on an earlier byte revision and has not been re-run on what ships. Counting the documented remediation as part of a normal install instead yields 4 pass · 2 qualified · 1 fail; both describe the same measured state, and this deliverable quotes the conservative one throughout.
 
 | Gate | Criterion | Pass Condition |
 | --- | --- | --- |

@@ -233,7 +233,6 @@
         <link/>
         <name>Case Confirmation Widget</name>
         <option_schema>[{"name":"number","label":"Case Number","section":"Presentation","type":"string","default_value":""}]</option_schema>
-        <pop_up>false</pop_up>
         <public>true</public>
         <roles/>
         <script><![CDATA[(function() {

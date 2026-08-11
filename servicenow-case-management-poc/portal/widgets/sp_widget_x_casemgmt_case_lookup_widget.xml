@@ -114,15 +114,25 @@
       can accidentally expose internal data via the public lookup endpoint.
 
     HTTP-ERROR HARDENING (information-leakage prevention):
-      All HTTP errors (404 not-found, 500 internal-server-error, 400
-      bad-request, 0 network-error) are treated identically by the client:
-      c.notFound = true, the verbatim "No case found with that number."
-      message is shown.
+      Every 4xx - a 404 not-found and a 400 bad-request alike - is treated
+      identically by the client: c.notFound = true, and the verbatim
+      "No case found with that number." message is shown.
+
+      A 5xx, a network failure and an expired client-side deadline are
+      treated as a SERVICE FAILURE instead: c.errorMessage is set and a
+      separate panel says the service could not be reached.
 
       This is INTENTIONAL information-leakage hardening:
         - An attacker probing the lookup endpoint cannot distinguish
-          "case not found" from "API down" from "server error" from
-          "invalid input" - all show the same UX.
+          "case not found" from "invalid input" - every 4xx shows the
+          same UX, so there is no oracle for enumerating case numbers.
+        - The failure branch reveals only whether the service answered,
+          which the requester can already observe from the page and which
+          says nothing about any case. An earlier revision folded it into
+          the not-found branch, which meant an infrastructure outage told
+          a requester their case did not exist - a false statement about
+          their own case, and the one a requester is least equipped to
+          question. Truthfulness here costs no hardening.
         - The verbatim message is hardcoded in the template, NOT pulled
           from the server's error response body. The server's HTTP 404
           body is NEVER trusted by the client (defense against header
@@ -307,9 +317,16 @@
      *                  three whitelisted fields. null when no successful
      *                  lookup has occurred. Drives the result panel's
      *                  ng-if="c.result".
-     *   c.notFound   - boolean; true when an HTTP error occurred (404,
-     *                  500, 400, network error, etc.). Drives the not-
-     *                  found panel's ng-if="c.notFound".
+     *   c.notFound   - boolean; true when the case table was queried and
+     *                  held no case with that number - an HTTP 404, any
+     *                  other 4xx, or a 200 whose body carried no status.
+     *                  Drives the not-found panel's ng-if="c.notFound",
+     *                  which renders the AAP Section 0.7.4 verbatim text.
+     *   c.errorMessage - string; non-empty only when the lookup could not
+     *                  be ANSWERED: a 5xx, a network failure, or the
+     *                  client-side timeout expiring. Drives the separate
+     *                  service-failure panel. Mutually exclusive with both
+     *                  c.result and c.notFound.
      *   c.loading    - boolean; true while the in-flight $http.get
      *                  request is pending. Drives the button's
      *                  ng-disabled and the "Looking up..." text.
@@ -317,11 +334,13 @@
      * Exposed method (template-bound):
      *   c.lookup()   - executes the case-status lookup. Issues
      *                  GET /api/x_casemgmt/case_status_lookup?number=<encoded>
-     *                  via $http.get(). On success (HTTP 200), sets
-     *                  c.result with the strict 3-field whitelist. On
-     *                  any error (HTTP 4xx/5xx, network), sets
-     *                  c.notFound = true so the verbatim message is
-     *                  rendered.
+     *                  via $http.get() under a LOOKUP_TIMEOUT_MS deadline.
+     *                  On success (HTTP 200 with a status), sets c.result
+     *                  with the strict 3-field whitelist. On a 4xx, sets
+     *                  c.notFound = true so the verbatim not-found message
+     *                  is rendered. On a 5xx, a network failure or a
+     *                  timeout, sets c.errorMessage instead, because in
+     *                  those cases nothing was learned about the case.
      *
      * Design rationale:
      *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
@@ -346,22 +365,36 @@
      *     This controller deliberately does NOT pass error.data.error
      *     or error.statusText to the template - the server's error
      *     body is NEVER trusted by the client.
-     *   - Identical handling of all HTTP errors: information-leakage
-     *     hardening. 404 (not-found), 500 (server-error), 400 (bad-
-     *     request), and 0 (network-error) all set c.notFound = true.
-     *     An attacker cannot distinguish "case not found" from "API
-     *     down" from any other failure mode.
+     *   - Identical handling of every 4xx: information-leakage hardening.
+     *     404 (not-found) and 400 (bad-request) both set c.notFound =
+     *     true, so an attacker cannot distinguish "case not found" from
+     *     "invalid input" and gains no case-number enumeration oracle.
+     *     A 500, a network failure and an expired deadline set
+     *     c.errorMessage instead, because in those cases the case table
+     *     was never reached and the verbatim not-found text would be a
+     *     false statement about the requester's case.
      *   - c.loading flag: prevents double-lookup race conditions if
      *     the user clicks the button twice quickly, AND drives the
      *     "Looking up..." button text for clear UX feedback.
      */
     var c = this;
 
+    /*
+     * Deadline for the lookup request, in milliseconds. Chosen to sit well
+     * above any normal round trip to the scripted REST endpoint (measured in
+     * tens of milliseconds against the verification instance) while still
+     * failing fast enough that a requester is not left staring at a disabled
+     * button. See the comment at the $http.get call for why a deadline is
+     * appropriate on this read and inappropriate on the sibling widget's POST.
+     */
+    var LOOKUP_TIMEOUT_MS = 20000;
+
     // Lookup state. Initialize with safe defaults so the template's
     // ng-if expressions evaluate cleanly even before c.lookup() runs.
     c.caseNumber = '';
     c.result = null;
     c.notFound = false;
+    c.errorMessage = '';
     c.loading = false;
 
     /**
@@ -391,12 +424,13 @@
             return;
         }
 
-        // Reset state at the start of every lookup. The result panel
-        // and the not-found panel are mutually exclusive: only one of
-        // c.result and c.notFound can be truthy at any time.
+        // Reset state at the start of every lookup. The three outcome
+        // panels are mutually exclusive: at most one of c.result,
+        // c.notFound and c.errorMessage is truthy at any time.
         c.loading = true;
         c.result = null;
         c.notFound = false;
+        c.errorMessage = '';
 
         // Build the URL with defensive URL-encoding of the case number.
         // The server-side Script Include x_casemgmt.CasePortalService.
@@ -405,7 +439,21 @@
         // characters, or potentially malicious input safely.
         var url = '/api/x_casemgmt/case_status_lookup?number=' + encodeURIComponent(String(c.caseNumber).trim());
 
-        $http.get(url).then(function(response) {
+        // The deadline below is what stops a lookup hanging indefinitely.
+        // Without it, an unresponsive instance leaves c.loading true for as
+        // long as the browser is willing to wait, the button stays disabled
+        // reading "Looking up...", and the requester has no way to retry
+        // short of reloading the page. On expiry AngularJS rejects the
+        // promise with status 0, which the error handler reports as a
+        // service failure rather than as a missing case.
+        //
+        // A deadline is safe HERE because this request is a read: retrying it
+        // costs nothing and cannot duplicate anything. The sibling submission
+        // widget deliberately does NOT set one on its POST, because a
+        // submission that succeeds server-side just after the client gives up
+        // would tell the requester it failed and invite a second press, which
+        // is how duplicate cases get created.
+        $http.get(url, { timeout: LOOKUP_TIMEOUT_MS }).then(function(response) {
             // Success path (HTTP 200). The server's REST operation
             // returns { status, subject, opened_date } per its contract -
             // but a ServiceNow Scripted REST API wraps whatever the
@@ -455,16 +503,38 @@
                 c.notFound = true;
             }
         }, function(error) {
-            // Error path (HTTP 4xx, 5xx, or network failure / 0).
-            // ALL error types are treated identically per the
-            // information-leakage hardening discussed in the file
-            // header comment. The verbatim text "No case found with
-            // that number." (AAP Section 0.7.4) is rendered by the
-            // template; this function MUST NOT echo error.data.error,
-            // error.statusText, or any server-supplied content.
+            // Error path. Split in two, because a lookup that was ANSWERED
+            // and found nothing is a different fact from a lookup that was
+            // never answered.
+            //
+            //   4xx  -> the request reached the case table and no case with
+            //           that number came back. This is the not-found case,
+            //           and it renders the AAP Section 0.7.4 verbatim text.
+            //           EVERY 4xx maps here, not just 404, so a 400 and a
+            //           404 remain indistinguishable to the caller and no
+            //           case-number enumeration oracle is created.
+            //   5xx,
+            //   0/-1 -> the instance failed, the network failed, or the
+            //           deadline above expired. Nothing was learned about
+            //           the case, so claiming "No case found with that
+            //           number." would be a false statement about the
+            //           requester's case - and a costly one, because the
+            //           requester concludes their case does not exist. This
+            //           renders the separate service-failure panel instead.
+            //
+            // Neither branch echoes error.data.error, error.statusText or any
+            // other server-supplied content: both message strings are
+            // hardcoded, in this controller and in the template respectively.
             c.loading = false;
             c.result = null;
-            c.notFound = true;
+            var httpStatus = (error && typeof error.status === 'number') ? error.status : 0;
+            if (httpStatus >= 400 && httpStatus < 500) {
+                c.notFound = true;
+                c.errorMessage = '';
+            } else {
+                c.notFound = false;
+                c.errorMessage = 'The case service could not be reached. Please try again in a moment.';
+            }
         });
     };
 }
@@ -472,7 +542,7 @@
         <controller_as>c</controller_as>
         <css/>
         <data_table>sp_instance</data_table>
-        <description>Custom unauthenticated Service Portal widget for case status lookup. Renders a single case-number input field plus a Look Up Status button, GETs /api/x_casemgmt/case_status_lookup, and displays ONLY the whitelisted fields { status, subject, opened_date } on match or the verbatim text 'No case found with that number.' on no-match per AAP Section 0.7.4. Embedded by sp_page_x_casemgmt_case_status. No internal fields (assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, priority, type, pending_reason, audit fields) are exposed. All HTTP errors (404, 500, 400, network) render the same verbatim message for information-leakage hardening. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() and PortalRequestService.getRequestStatus() Spring services. No client-side or server-side database operations - all data flows through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <description>Custom unauthenticated Service Portal widget for case status lookup. Renders a single case-number input field plus a Look Up Status button, GETs /api/x_casemgmt/case_status_lookup, and displays ONLY the whitelisted fields { status, subject, opened_date } on match or the verbatim text 'No case found with that number.' on no-match per AAP Section 0.7.4. Embedded by sp_page_x_casemgmt_case_status. No internal fields (assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, priority, type, pending_reason, audit fields) are exposed. Every 4xx (404 not-found, 400 bad-request) renders the same verbatim no-case-found message, so no case-number enumeration oracle exists; a 5xx, a network failure or an expired 20-second client deadline renders a separate 'service could not be reached' panel instead, because in those cases nothing was learned about the case and the verbatim message would be false. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() and PortalRequestService.getRequestStatus() Spring services. No client-side or server-side database operations - all data flows through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
@@ -481,7 +551,6 @@
         <link/>
         <name>Case Lookup Widget</name>
         <option_schema>[]</option_schema>
-        <pop_up>false</pop_up>
         <public>true</public>
         <roles/>
         <script><![CDATA[(function() {
@@ -530,15 +599,53 @@
           novalidate
           ng-attr-aria-busy="{{c.loading ? 'true' : 'false'}}"
           ng-submit="c.lookup()">
-        <div class="form-group">
+        <div class="form-group" ng-class="{'has-error': caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched}">
             <label for="x-casemgmt-case-number">Case Number</label>
             <input type="text"
                    id="x-casemgmt-case-number"
+                   name="caseNumber"
                    class="form-control"
                    maxlength="20"
                    ng-model="c.caseNumber"
-                   placeholder="Enter your case number (e.g., CASE0000001)" />
+                   placeholder="Enter your case number (e.g., CASE0000001)"
+                   aria-required="true"
+                   aria-describedby="x-casemgmt-case-number-error"
+                   ng-attr-aria-invalid="{{(caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched) ? 'true' : 'false'}}"
+                   required />
+            <p class="help-block" id="x-casemgmt-case-number-error" role="alert"
+               ng-if="caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched">Enter a case number to look up.</p>
         </div>
+        <!--
+            On the two attributes above that look inconsistent with each other:
+
+            The input's aria-describedby names the message element
+            unconditionally, while the message element itself is ng-if'd and so
+            is absent whenever the field is valid or untouched. The reference
+            is therefore unresolved most of the time. That is deliberate and
+            permitted: WAI-ARIA requires an unresolvable IDREF to be ignored,
+            so nothing is announced incorrectly, and it is the price of leaving
+            the field's vertical rhythm untouched while the form is clean.
+
+            The button's hint paragraph below takes the opposite approach and
+            stays mounted permanently. The difference is that the hint has
+            something to say in EVERY state - which field is missing, or that
+            the form is ready - so mounting it always costs no extra space and
+            gives its aria-live region a stable host to update in place. A
+            per-field error has nothing to say while the field is valid, and
+            mounting an empty help-block for each field would add Bootstrap's
+            help-block margins to the form in its normal, valid state.
+
+            The `required` and aria-required attributes on the input are new,
+            and they change no behaviour: the button was already disabled while
+            the field was empty, through ng-disabled. What they add is the
+            PROGRAMMATIC state - without `required` the control is never
+            $invalid, so there is nothing for aria-invalid or has-error to
+            report, and a screen-reader user has only the disabled button to
+            infer from. The label deliberately carries no asterisk: this form
+            has a single field, so there is no ambiguity about which one is
+            needed, and adding one would be a visual change no requirement
+            asks for (AAP Section 0.4.4 specifies one input on this page).
+        -->
         <div class="form-group">
             <button type="submit"
                     class="btn btn-primary"
@@ -593,8 +700,11 @@
     </div>
 
     <!--
-        Not-found panel: rendered when c.notFound is true (i.e., the most
-        recent lookup returned HTTP 404 or any other error). Contains the
+        Not-found panel: rendered when c.notFound is true, which means the
+        case table WAS queried and held no case with that number - an HTTP
+        404, any other 4xx, or a 200 whose body carried no status. It is no
+        longer rendered for a failure that prevented the query from being
+        answered at all; that is the separate panel below. Contains the
         EXACT verbatim text required by AAP Section 0.7.4:
             "No case found with that number."
         Capital "N", lowercase elsewhere, trailing period, ASCII straight
@@ -605,6 +715,30 @@
     -->
     <div class="alert alert-warning" role="alert" ng-if="c.notFound">
         No case found with that number.
+    </div>
+
+    <!--
+        Service-failure panel: rendered when c.errorMessage is non-empty, which
+        happens only when the lookup could not be ANSWERED - a 5xx from the
+        instance, a network failure, or the client-side timeout expiring. It is
+        deliberately separate from the not-found panel above, because those two
+        outcomes are different facts and telling a requester "No case found
+        with that number." when the request never reached the case table is
+        simply false: the natural response is to conclude the case does not
+        exist, or to re-type a case number that was correct all along.
+
+        This does NOT weaken the information-leakage hardening described in the
+        file header. Every 4xx still renders the identical verbatim not-found
+        text, so a caller cannot distinguish "no such case" from "malformed
+        request" and cannot enumerate case numbers by comparing responses. What
+        is now distinguishable is only whether the service answered at all,
+        which a requester can already observe from the page and which reveals
+        nothing about any case. The message text is hardcoded here, exactly as
+        the not-found text is, and is never taken from the server's response
+        body.
+    -->
+    <div class="alert alert-danger" role="alert" ng-if="c.errorMessage">
+        {{c.errorMessage}}
     </div>
 </div>
 ]]></template>

@@ -30,7 +30,12 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 
 - Visible to: `x_casemgmt_case_manager`, `x_casemgmt_case_agent`
 - The `x_casemgmt_case_viewer` role is NOT bound to this dashboard. Per AAP Section 0.5.6 the viewer is a read-only audit role with no operational dashboard assignment; viewers retain platform-wide list/form read access governed by the ACL matrix in [`acl-matrix.md`](./acl-matrix.md).
-- Filtered behavior: All widgets that say "My ..." use `javascript:gs.getUserID()` so the dashboard self-personalizes per logged-in user. Because case_agent users are the natural audience for "My open cases" and "My overdue tasks", the dashboard is bound to `x_casemgmt_case_agent` and `x_casemgmt_case_manager` only. The two `pa_dashboard_role` records that materialize this binding are visible in [`../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml`](../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml) (records 8 and 9).
+- Filtered behavior: All widgets that say "My ..." use `javascript:gs.getUserID()` so the dashboard self-personalizes per logged-in user. Because case_agent users are the natural audience for "My open cases" and "My overdue tasks", the dashboard is bound to `x_casemgmt_case_agent` and `x_casemgmt_case_manager` only.
+- **How that binding is actually materialized.** Two records per role, not one, and neither is the field whose name suggests it:
+    - `pa_dashboards_permissions` — the dashboard's **share list**. One row per grantee with `type=1` (Role), `role` pointing at the scoped role, and `read=true`. This is the table that decides whether a user may open the dashboard at all; with no row for a user's roles the platform refuses with "The … dashboard has not been shared with you."
+    - `pa_dashboards.restrict_to_roles` — the **gate the renderer quotes** when it refuses, verbatim: "… is restricted to following roles: …". It ships from the platform pre-populated with `pa_viewer,pa_contributor`, so leaving it alone locks out every identity that does not hold a base Performance Analytics role. It is set here to this application's own scoped roles instead, which is what lets a `x_casemgmt_case_agent` open the dashboard without being granted a base PA role.
+    - `pa_dashboards.roles` is set to the same values for consistency, but note its label is **"Requires Roles"**: it *narrows*, it does not grant. Setting it alone changes nothing.
+  An earlier revision of this document described the binding as "two `pa_dashboard_role` records". **There is no `pa_dashboard_role` table on this release** — that element was silently discarded on import, which is why the dashboards were unreachable. See [`validation-gates.md`](./validation-gates.md) Gate 6 for the measured chain.
 
 ### Widgets
 
@@ -38,7 +43,7 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 | --- | --- | --- | --- | --- | --- |
 | 1 | My Open Cases | List | `x_casemgmt_my_open_cases.xml` | (none) | `assigned_agent = javascript:gs.getUserID() AND status NOT IN (Resolved, Closed)` |
 | 2 | My Overdue Tasks | List | `x_casemgmt_my_overdue_tasks.xml` | (none) | `assigned_to = javascript:gs.getUserID() AND due_date < javascript:gs.daysAgoStart(0) AND status != Closed` |
-| 3 | Case Count by Status | Pie/Donut | `x_casemgmt_case_count_by_status.xml` | `status` | (none — agent's full visible portfolio per ACL) |
+| 3 | Case Count by Status | Donut | `x_casemgmt_case_count_by_status.xml` | `status` | (none — agent's full visible portfolio per ACL) |
 
 #### Widget 1: My Open Cases
 
@@ -62,7 +67,7 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 
 #### Widget 3: Case Count by Status
 
-- **Type:** Pie/Donut chart — the source report uses `<type>pie</type>` (the platform's encoded query value) which is rendered in the donut/pie style by ServiceNow's chart engine. AAP Section 0.4.4 names the visual treatment "donut"; the platform's pie/donut rendering is interchangeable on the Reports + Dashboards stack.
+- **Type:** **Donut** chart — the source report ships `<type>donut</type>`, which is what AAP Section 0.4.4 and Section 0.5.1 both specify. Earlier revisions shipped `<type>pie</type>` and claimed the two were "interchangeable on the Reports + Dashboards stack"; that was **measured false and is withdrawn**. `donut` is a real `sys_report.type` value on this release (the active choice list offers `pie`, `donut` and `semi_donut`, and out-of-box reports use `donut`), and the type on the *report* is what decides the rendering — there is no widget-level promotion of a pie into a donut. Rendered as `pie`, the chart painted a solid disc: the Highcharts series carried no `innerSize` and the slice path's inner arc collapsed to `A 0 0 0 0 1 …`. Rendered as `donut` it carries `innerSize: "70%"` and a real inner arc (measured `innerR` 67.795 against `r` 96.85 in the dashboard widget, and 98.98 against 141.4 when the report is opened on its own — a 70% hole at both sizes).
 - **Source Report:** [`../reports/x_casemgmt_case_count_by_status.xml`](../reports/)
 - **Underlying Table:** `x_casemgmt_case`
 - **Group-By:** `status`
@@ -87,7 +92,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 | # | Widget Name | Type | Source Report | Group-By / Aggregate | Filter |
 | --- | --- | --- | --- | --- | --- |
 | 1 | All Cases by Status | Bar | `x_casemgmt_all_cases_by_status.xml` | `status` | (none) |
-| 2 | All Cases by Type | Pie/Donut | `x_casemgmt_all_cases_by_type.xml` | `type` | (none) |
+| 2 | All Cases by Type | Donut | `x_casemgmt_all_cases_by_type.xml` | `type` | (none) |
 | 3 | All Cases by Priority | Bar | `x_casemgmt_all_cases_by_priority.xml` | `priority` | (none) |
 | 4 | Average Time to Close | Single Score | `x_casemgmt_avg_time_to_close.xml` | `AVG(duration_to_close)` (Function Field; see Widget 4 details) | `status = Closed` |
 | 5 | Cases Opened (Last 30 Days) | Single Score | `x_casemgmt_cases_opened_30d.xml` | `COUNT(sys_id)` | `opened_date >= javascript:gs.daysAgoStart(30)` |
@@ -104,7 +109,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 
 #### Widget 2: All Cases by Type
 
-- **Type:** Pie/Donut chart — the source report uses `<type>pie</type>` (the platform's encoded query value) which is rendered in the donut/pie style by ServiceNow's chart engine. AAP Section 0.4.4 names the visual treatment "donut"; the platform's pie/donut rendering is interchangeable on the Reports + Dashboards stack.
+- **Type:** **Donut** chart — the source report ships `<type>donut</type>`, which is what AAP Section 0.4.4 and Section 0.5.1 both specify. Earlier revisions shipped `<type>pie</type>` and claimed the two were "interchangeable on the Reports + Dashboards stack"; that was **measured false and is withdrawn**. `donut` is a real `sys_report.type` value on this release (the active choice list offers `pie`, `donut` and `semi_donut`, and out-of-box reports use `donut`), and the type on the *report* is what decides the rendering — there is no widget-level promotion of a pie into a donut. Rendered as `pie`, the chart painted a solid disc: the Highcharts series carried no `innerSize` and the slice path's inner arc collapsed to `A 0 0 0 0 1 …`. Rendered as `donut` it carries `innerSize: "70%"` and a real inner arc (measured `innerR` 67.795 against `r` 96.85 in the dashboard widget, and 98.98 against 141.4 when the report is opened on its own — a 70% hole at both sizes).
 - **Source Report:** [`../reports/x_casemgmt_all_cases_by_type.xml`](../reports/)
 - **Underlying Table:** `x_casemgmt_case`
 - **Group-By:** `type`
@@ -170,10 +175,28 @@ The following row is preserved verbatim from AAP Section 0.7.3.
 Verification procedure (cross-reference [`validation-gates.md`](./validation-gates.md) Gate 6):
 
 1. Impersonate `x_casemgmt_demo_agent` → open Agent Workspace dashboard → confirm 3 widgets render with seed data
-2. Impersonate `x_casemgmt_demo_manager` → open Manager View dashboard → confirm all 5 widgets render with seed data. Widget 4 (Average Time to Close) renders a Duration AVG (e.g., "5 Days 03:42:11") computed across the Closed seed cases via the `duration_to_close` Function Field. If zero Closed seed cases have populated `closed_date`, the widget renders the platform's empty-state placeholder until seed data is loaded.
+2. Impersonate `x_casemgmt_demo_manager` → open Manager View dashboard → confirm all 5 widgets render with seed data. Widget 4 (Average Time to Close) renders a Duration AVG computed across the Closed seed cases via the `duration_to_close` Function Field. If zero Closed seed cases have populated `closed_date`, the widget renders the platform's empty-state placeholder until seed data is loaded.
 3. Confirm no widget shows "Report not found" or 500 error. All eight dashboard widgets reference reports that exist, are well-formed, and have valid aggregation sources — Validation Gate 6 ("All widgets display data; no broken report references") passes.
 4. Click into each list-widget row to confirm drill-through navigation works
 5. Click into each chart slice/bar to confirm filtered-list drill-through works
+
+### Measured outcome of that procedure
+
+Run in a browser against the verification instance with the seeded 10 cases / 10 tasks / 8 parties. Chart values
+were read from each chart's per-point accessibility labels rather than estimated from pixels.
+
+| Persona | Dashboard | Result |
+| --- | --- | --- |
+| `x_casemgmt_demo_manager` | Manager View | **5 of 5 widgets.** Status bar Draft 1, Open 2, In Progress 2, Pending 1, Resolved 2, Closed 2 · Type donut General Inquiry 6 (60%), Complaint 4 (40%) · Priority bar High 3, Medium 3, Critical 2, Low 2 · Average Time to Close **16 Days 0 Hours 0 Minutes** (the mean of an 18-day and a 14-day closed case) · Cases Opened in Last 30 Days **10** |
+| `x_casemgmt_demo_manager` | Agent Workspace | **3 of 3 widgets.** The two "My …" lists render real list frames with their column headers and "No records to display", which is the correct outcome for a manager holding no assignments; Case Count by Status draws the six-slice pie |
+| `x_casemgmt_demo_agent` | Agent Workspace | **3 of 3 widgets.** *My Open Cases* lists exactly the three cases this agent is assigned and that are not Resolved or Closed; a DOM-wide scan for case numbers returns only those three, so the row-level "Assigned only" ACL is visibly in force. *My Overdue Tasks* renders an empty list frame, correct because every open seed task is due in the future |
+| `x_casemgmt_demo_agent` | Manager View | **Correctly refused** — "has not been shared with you". The agent holds no `pa_dashboards_permissions` row on this dashboard |
+| `x_casemgmt_demo_viewer` | either | **Correctly refused.** This is the documented design recorded under Access above, not a defect |
+
+The empty-state string "Add widgets using the widget picker." is programmatically absent from both dashboards, and
+both render with 0 console errors and 0 network responses ≥ 400. Note that each dashboard's `<h1>` shows its
+internal name (`x_casemgmt_agent_workspace`, `x_casemgmt_manager_view`) because `pa_dashboards` has **no** `title`
+column on this release — cosmetic, and not something a caption in an artifact can change.
 
 ## Cross-References
 

@@ -13,20 +13,39 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > `Found a local update that is newer than this one` — the teardown's own deletions captured as local updates),
 > and **0 problems of any type** once that local capture was purged at source, confirmed through the platform's
 > own `unresolvedProblems=false` predicate, then committed to `state=committed`.
-> The bytes that ship today are **925 blocks, 3,698,577 bytes, SHA-256 `e49a7654…`**. They have been uploaded
+> The **31-problem** preview result that earlier revisions of this paragraph attributed to "the bytes that ship"
+> belongs to a **different revision — 925 blocks, 3,698,577 bytes, SHA-256 `e49a7654…`**. On those bytes, uploaded
 > as a fresh retrieved update set (925 children asserted) and previewed against an already-populated instance:
 > **31 problems, all `Found a local update that is newer than this one`, and ZERO `Could not find a record`
 > problems** — the 21 package-intrinsic reference problems present in the previous 913-block `89638c17…`
 > revision are gone (63 reference errors → 0), because the 28 seed records now carry their parent key in the
 > `display_value` attribute with an empty element body and pinned deterministic numbers. Every one of the 31
 > was confirmed to have a local `sys_update_version` in state `current`, so all 31 are the instance's own
-> history and cannot occur on a fresh PDI. **Commit was withheld on these bytes** — the verification instance
-> is shared — so "0 of any type" remains proven only on `7272edfc…`. An earlier
-> 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result and is retained as
-> history in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of that
-> document is the current record. **Verify the digest before you upload, so you know which artifact you are
-> testing** — and note that a bare commit is not sufficient on its own: the §9.5 install sequence below is
-> mandatory, because the commit creates the table metadata without physical storage.
+> history and cannot occur on a fresh PDI. **Commit was withheld on those bytes** — the verification instance
+> is shared — so "0 of any type" remains proven only on `7272edfc…`.
+>
+> **The bytes that ship today are 926 blocks, 3,781,097 bytes, SHA-256
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, and NO preview has been run on them.**
+> Be precise about which measurement belongs to which artifact, because five digests appear in this deliverable's
+> history (`32a064d6…`, `7272edfc…`, `89638c17…`, `e49a7654…` and today's `7292a6fe…`) and only two of them carry a
+> preview result. What changed from `e49a7654…` is small and fully enumerated: **13 payloads** re-synced
+> (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and **1 block added** (the case form's Related Lists
+> definition), all of it presentation-layer work resolving a QA report. What *has* been measured on the shipping
+> bytes: every one of those 14 records deployed to a live PDI and read back field-for-field identical to its
+> artifact; every table and column any of them names checked to exist in `sys_db_object` / `sys_dictionary`;
+> all 926 embedded payloads parsing; `xmllint --noout` clean; and the runtime outcome of each change verified in
+> a browser. What has **not** been measured is a preview or a commit of these bytes. The reason the risk is
+> bounded rather than unknown: 13 of the 14 records already existed in the previous revision under the same
+> `sys_id` in the same canonically named block, so they can only produce the local-history collision class
+> described above, and the one new block is a `sys_metadata` descendant whose only reference is to
+> `x_casemgmt_case`, which travels in the same set. That is a reasoned expectation, not a result — treat it as
+> such. An earlier
+> 916-block revision (3,448,009 bytes, SHA-256 `32a064d6…`) reached the same zero result as `7272edfc…` and is
+> retained as history in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md);
+> §0.3c of that document is the current record for the shipping bytes. **Verify the digest before you upload, so
+> you know which artifact you are testing** — and note that a bare commit is not sufficient on its own: the
+> §9.5 install sequence below is mandatory, because the commit creates the table metadata without physical
+> storage.
 
 ## Pre-Deployment Checklist
 
@@ -36,7 +55,7 @@ The following prerequisites MUST hold before starting the export step. They alig
 - Validation Gates 1–6 have all passed on the source PDI (see [`validation-gates.md`](./validation-gates.md)).
 - All seed data has been committed via the seed script in [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) and is visible in the case list. At minimum: 10 demo cases spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint), 3 demo users (one per role), 1 demo group, and an open + closed task mix on selected demo cases.
 - All 7 Flow Designer flows are **Active** *and* **Published** (not Draft) — the 2 parent flows `general_inquiry_state_machine` and `complaint_state_machine` and the 5 `validate_*_transition` subflows. Confirm both columns: a flow that is active but unpublished does not enforce. Equally important, confirm the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** is present and active — it is what converts a subflow's refusal into a blocking form error, and without it the flows run but nothing blocks.
-- Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references. **This item cannot be checked on the verification instance and is a known failure.** Both `pa_dashboards` records commit and open, but each renders **0 tabs and 0 widgets** with the platform's empty state, "Add widgets using the widget picker." Each composite block names **three child tables that do not exist on this release** — `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8 widget placements and the role grants are dropped on commit. Renaming one element is **not** sufficient; supplying a tab was tested and the dashboards stayed blank. Separately, all 8 `sys_report` records commit with an **empty `group_by`** although the artifacts specify one, so the charts would not aggregate as designed even once placed. See [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5 and §0.6](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+- Both dashboards (Agent Workspace, Manager View) render with synthetic data, with no broken report references. **This item now passes, and both defects behind its earlier failure are fixed.** Each dashboard composite block used to name **three child tables that do not exist on this release** — `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` (no equivalent) — so the tab, every widget placement and the role grants were dropped on commit and each dashboard rendered 0 tabs and 0 widgets. Both artifacts and both payloads have been re-authored onto the chain this release actually uses: `sys_portal_page` + `sys_grid_canvas` + `pa_tabs` + `pa_m2m_dashboard_tabs` + `pa_dashboards` (carrying `restrict_to_roles`) + `pa_dashboards_permissions` share rows + one `sys_portal` / `sys_portal_preferences` / `sys_grid_canvas_pane` trio per widget. **Measured after the fix: Agent Workspace renders 3 of 3 widgets and Manager View 5 of 5**, with live data and correct chart types, zero console errors, and correct persona behaviour — manager sees both, agent sees Agent Workspace only, viewer is refused both by design. The second defect was in the reports: the four chart reports specified `<group_by>`, which is **not a column on `sys_report`** (the column is `field`), and no report was readable by any persona because a report's read ACL only evaluates roles when `sys_report.user` is the literal `GLOBAL`. All 8 now ship `field` where applicable, `roles` and `user=GLOBAL`, and all four charts plot the intended dimension. See [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5 and §0.6.1](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 - Portal submission and lookup behave correctly, **at both the REST layer and the page layer**. The two portal pages used to render blank because their Service Portal layout records had never been authored and both widgets mis-read the Scripted REST response envelope; both defects are fixed and the pages were re-verified anonymously in a browser.
 - No hard-coded `sys_id` literals exist in any Update Set artifact. Search via Studio → Find: regex `[a-f0-9]{32}` across the scoped application; zero matches inside flow scripts, ACL conditions, business rules, script includes, scripted REST handlers, UI policies, UI actions, and seed records.
 - All artifacts are in scope `x_casemgmt`, with **exactly one disclosed and approved exception** — the installer Fix Script `x_casemgmt Post-Import Remediation`, which is authored **global** because the `GlideTableDescriptor` and `GlideSecurityManager` calls it needs are refused in scoped execution. See the Rules Compliance note at the end of this document for the full rationale. Verify by filtering `sys_app=x_casemgmt Case Management` on every record type listed in the [Step 1](#step-1-export-the-update-set) artifact inventory; the Fix Script is the only record expected to differ, and global tables must show **data** inserts only, never schema changes.
@@ -65,8 +84,9 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
    - **7 Business Rules**, in execution order — `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)**, `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), `set_closed_date` (500). The order-250 rule is the one that invokes the transition subflow and turns its verdict into a blocking form error; the order-500 rule is the only writer of `closed_date`. Earlier revisions of this inventory listed six and omitted `enforce_forward_transitions`.
    - **6 UI Actions** — the state-transition buttons under `ui_action/`.
    - **1 Fix Script** — `x_casemgmt Post-Import Remediation`, carrying the post-import remediation body verbatim. It is authored **global** by design (see the note in Step 2) and **does not execute by itself**.
-   - **761 ATF records** — 20 test definitions, 180 test steps, 540 step inputs (539 `sys_variable_value` + 1 variable value), 1 test suite and 20 suite-member links. This is by far the largest part of the package: 761 of its 925 blocks.
+   - **761 ATF records** — 20 test definitions, 180 test steps, 540 step inputs (539 `sys_variable_value` + 1 variable value), 1 test suite and 20 suite-member links. This is by far the largest part of the package: 761 of its 926 blocks.
    - **1 UI Policy** — `case_party_conditional_fields` (shows `person` when `party_type=Person`; shows `organization` when `party_type=Organization`).
+   - **1 List Layout + 1 Related Lists definition, both on the case table's Default view** — `sys_ui_list_x_casemgmt_case_null` under [`../list_layouts/`](../list_layouts/), which puts `subject`, `type` and `status` back into the case list in AAP field order, and `sys_ui_related_x_casemgmt_case_null` under [`../related_lists/`](../related_lists/), which is the definition plus the two entries (`x_casemgmt_case_task.case` at position 0, `x_casemgmt_case_party.case` at position 1) that make the case form show its own tasks and parties. Neither record type extends Application File at the child level, so each ships as one block carrying its children inline. See step 12 of Step 3 for the related-list cache caveat.
    - **1 sp_portal record + 2 pages + 3 widgets + 2 sys_ws_definition records** — the Experience Portal record, the case-submit and case-status pages, the submission/lookup/confirmation widgets, and the two scripted REST endpoints (`/api/x_casemgmt/case_submit`, `/api/x_casemgmt/case_status_lookup`).
    - **2 pa_dashboards records + 8 sys_report records** — Agent Workspace, Manager View, plus the eight reports enumerated in [`dashboards.md`](./dashboards.md).
    - **All seed data records** — under the scoped tables (`x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`) plus role-to-user assignments. User and group references resolve by `user_name` and `name` lookup respectively (no `sys_id` literals).
@@ -117,9 +137,11 @@ For the comprehensive manual round-trip verification procedure, see [`../scripts
 Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; Both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); Both dashboards accessible to users with correct roles; Synthetic demo data visible in case list."
 
 > **This walkthrough is the deliverable's idealized path and a commit alone does not reach it.** A clean-instance
-> round trip established that after commit the three tables exist as metadata with **no physical storage**, the
-> 26 ACLs have **0 of 27** role links, the dashboards' child records do not commit, and the portal pages render
-> blank.
+> round trip established that after commit the three tables exist as metadata with **no physical storage** and the
+> 26 ACLs have **0 of 27** role links. That same trip also found the dashboards' child records failing to commit
+> and the portal pages rendering blank; **both of those were packaging defects and both are fixed** (see the
+> *Steps 9-11 now pass* note below), so the two remaining shortfalls of a bare commit are the physical schema and
+> the ACL role links — the two that need the manual remediation run.
 >
 > **Nothing in the current package fires on its own.** It contains **no auto-execute record of any kind** — no
 > Business Rule, no scheduled job, no trigger. The remediation body ships as the Fix Script `x_casemgmt
@@ -137,11 +159,29 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
 > install requires the Update Set to be committed a **second** time, because rebuilding the tables cascades the
 > ACLs away.
 >
-> **Two of the sub-steps below cannot pass on the verification instance, and that is expected:** steps 9-10 (both
-> dashboards render 0 tabs and 0 widgets), and the related-lists clause of step 11 (no `sys_ui_related_list` row
-> exists for the scope, and the form's related-lists wrapper measures 0 pixels tall). Each is a packaging defect
-> recorded in `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5-§0.6, not something a different install sequence
-> fixes.
+> **Steps 9-11 now pass, and previously did not.** An earlier revision of this document warned that steps 9-10
+> could not pass because both dashboards rendered 0 tabs and 0 widgets, and that the related-lists clause of
+> step 11 could not pass because no `sys_ui_related_list` row existed for the scope and the form's
+> related-lists wrapper measured 0 pixels tall. Both were packaging defects in this package, both have been
+> fixed, and both were then re-verified in a browser against the running application:
+>
+> - **Dashboards.** The two dashboard artifacts described the widget wiring with three tables that do not exist
+>   on the platform (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`), so the dashboards committed as
+>   empty shells. They now carry the real wiring - `sys_portal_page`, `sys_grid_canvas`, `pa_tabs`,
+>   `pa_m2m_dashboard_tabs`, and one `sys_portal` + `sys_portal_preferences` + `sys_grid_canvas_pane` triple per
+>   widget - plus the two records that actually govern who may open a dashboard,
+>   `pa_dashboards_permissions` (the share list) and `pa_dashboards.restrict_to_roles` (the gate the renderer
+>   quotes when it refuses). Agent Workspace renders 3 of 3 widgets and Manager View 5 of 5, with the seed data,
+>   for the admin **and** for the personas step 9 and step 10 name.
+> - **Related lists.** The package now ships
+>   [`../related_lists/sys_ui_related_list_x_casemgmt_case_default.xml`](../related_lists/sys_ui_related_list_x_casemgmt_case_default.xml),
+>   and the case form renders Case Tasks above Case Parties with their child rows. **See step 12 below** for the
+>   one caveat: the definition is cached server side, so if the form was ever rendered before the definition
+>   existed, the lists stay invisible until that cache is invalidated.
+>
+> The still-open items are the ones `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.4 and §10.0 list. Its dashboard and
+> related-list entries have been retired: §0.5 and §0.6 now record both as fixed and keep the original
+> measurements as forensic history, which is why those sections still contain the old numbers in past tense.
 
 ### Detailed Sub-Procedure
 
@@ -171,9 +211,10 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
     - All Cases by Priority (bar)
     - Average Time to Close (single-score)
     - Cases Opened in Last 30 Days (single-score)
-11. Open the case list (`x_casemgmt_case.list`). Confirm at least 10 demo cases are visible spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint). Open one demo case, scroll to Related Lists, and confirm the case_task and case_party related lists render with seed records.
+11. Open the case list (`x_casemgmt_case.list`). Confirm at least 10 demo cases are visible spanning all 6 statuses (Draft, Open, In Progress, Pending, Resolved, Closed) and both case types (General Inquiry, Complaint). Open one demo case, scroll to Related Lists, and confirm the case_task and case_party related lists render with seed records. Expect two sections, **Case Tasks above Case Parties**; on a seeded instance a case such as `CASE0000981` shows one Open and one Closed task and one Person and one Organization party.
+12. **If step 11 shows no related lists at all, do this before treating it as a failure.** The platform caches the related-list definition for a (table, view) pair server side, and the cached answer is not invalidated when the definition arrives by a path other than the platform's own UI. The symptom is specific and misleading: **Configure → Related Lists** correctly lists `Case Task->Case` and `Case Party->Case` in its Selected column and the rows read back correctly from `sys_ui_related_list` / `sys_ui_related_list_entry`, yet the form renders `#related_lists_wrapper` at 0 px with no list markup in the document and issues no related-list request. To clear it, open the case form → hamburger menu → **Configure → Related Lists**, change nothing, and press **Save**. That processor reinserts the definition through the path that invalidates the cache; the lists appear immediately and persist across fresh loads. Flushing the instance cache (`/cache.do`) is the heavier alternative. Note that re-writing the same field values over the REST Table API does **not** help: an update that dirties no field is a no-op and fires no business rule. Re-saving through the UI also **replaces the three records' sys_ids**, because that processor deletes and reinserts rather than updating in place — harmless, since the definition is matched on `sys_update_name`, but worth knowing if you are comparing an instance against the shipped artifact.
 
-If any of steps 2–11 fails, do not proceed to Step 4. Instead, follow the [Rollback Procedure](#rollback-procedure) below, address the underlying issue on the source PDI, and restart from Step 1.
+If any of steps 2–11 fails, do not proceed to Step 4. Instead, follow the [Rollback Procedure](#rollback-procedure) below, address the underlying issue on the source PDI, and restart from Step 1. Step 12 is a remedy, not a gate: apply it and re-run step 11.
 
 ## Step 4: Deliver
 

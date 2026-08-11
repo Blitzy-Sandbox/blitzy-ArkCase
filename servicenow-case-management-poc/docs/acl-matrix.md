@@ -104,9 +104,19 @@ Read-only authority across all cases. Auditor-style role for users who need visi
 
 **Typical operations:**
 
-- View the Agent Workspace dashboard (the "My ..." widgets are empty for a viewer because they have no assignments)
-- Browse the case list and individual case forms in read-only mode
-- Inspect related lists (tasks, parties)
+- Browse the case list and individual case forms in read-only mode. Measured: the viewer reads all 10 seed cases,
+  all 10 tasks and all 8 parties; inline edit is refused by the platform with "Security prevents writing to this
+  field"; no **New** button renders on any of the three lists; every field on the case form is read-only; and no
+  state-transition UI Action is present.
+- Inspect the related lists on a case form (Case Tasks, Case Parties), read-only. The related-list definition is
+  a base definition with an empty `sys_user`, so it applies to the viewer exactly as it does to the manager and
+  the agent — verified rendering identically for all three.
+- **The viewer has no dashboard.** An earlier revision of this document listed "View the Agent Workspace
+  dashboard" here. That was wrong and has been retracted: the viewer is deliberately not bound to either
+  dashboard, as recorded under Access in [`dashboards.md`](./dashboards.md), and AAP Section 0.4.4 names only
+  `case_manager` and `case_agent` as the audiences for the aggregate views. Opening either dashboard as the
+  viewer is refused, and that refusal is the design. The viewer's read-all grant is over the record data, not
+  over the operational dashboards.
 
 ## Field-Level ACLs
 

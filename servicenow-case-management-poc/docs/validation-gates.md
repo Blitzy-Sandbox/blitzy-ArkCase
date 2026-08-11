@@ -45,11 +45,18 @@ interchangeable:**
   Update Set gate below is a conditional pass rather than an outright one. An earlier run of the same procedure
   on the **916-block `32a064d6…`** revision (3,448,009 bytes) is retained in §9.10 as history; the two are
   separate measurements and neither describes today's file.
-- **The preview of today's bytes** is a third, separate measurement: the 925-block / 3,698,577-byte /
-  `e49a7654…` file uploaded as a fresh retrieved update set and previewed against an instance that already
-  holds the schema and this application's change history. It yields **31 problems, all
+- **The preview of the 925-block `e49a7654…` revision** is a third, separate measurement: that file uploaded as
+  a fresh retrieved update set and previewed against an instance that already holds the schema and this
+  application's change history. It yields **31 problems, all
   `Found a local update that is newer than this one`, and zero `Could not find a record` problems**. It does
   **not** include a teardown or a commit, so it cannot be cited as a clean-slate result.
+- **On the bytes that ship — 926 blocks / 3,781,097 bytes / `7292a6fe…` — no preview has been run at all.** The
+  delta from `e49a7654…` is 13 re-synced payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and 1 added block
+  (the case form's Related Lists definition). What was measured on the shipping bytes instead: every one of those
+  14 records deployed live and read back field-for-field identical to its artifact, every table and column they
+  name confirmed to exist in `sys_db_object` / `sys_dictionary`, all 926 payloads parsing, and the runtime outcome
+  of each change verified in a browser. See
+  [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 - **Later verification runs on the committed application** produced the workflow, ACL, REST and ATF results.
   These were taken against the live application after remediation, not from the import.
 - **Browser observation** produced the portal-page, dashboard and related-list results.
@@ -63,41 +70,52 @@ Each row below names which of the three it rests on.
 | ACLs | ⚠️ **PASS on all three tables after remediation** — qualified only because the remediation is manual | A clean commit gives 26 ACLs with **0 of 27** `sys_security_acl_role` link rows; after running `scripts/post_import_remediation.js` in Global, **27 of 27**. The matrix is then correct on the case table by impersonation: manager 14/14 with Delete, agent 9/14 without Delete, viewer 14/14 read-only. Both halves of "Assigned only" proven, including group-only visibility and record-level denial by direct URL. **The child-table defect is fixed:** the agent's `case_task` / `case_party` read+write conditions previously could not compile (`current.case` — `case` is a JS reserved word) and denied every row; the mirror is now enforced correctly and **ATF 06 and ATF 07 both pass** in the final suite run. |
 | Portal — submission | ✅ **PASS — REST contract and portal page** | Anonymous `POST /api/x_casemgmt/case_submit` → **201** `{"number":"CASE…","message":"Your case has been submitted"}`, row lands `status=Draft` with `sys_created_by=guest`. **The page works too:** as a Guest (`window.NOW.user_display_name === "Guest"`, `x-is-logged-in: false`) it renders one form with the five controls `subject` / `type` / `description` / `requester_name` / `requester_email`, keeps Submit disabled while the form is invalid, and on submit replaces the form with a confirmation panel carrying the verbatim `Your case has been submitted` and the returned case number. 0 console errors, no request ≥ 400. The blank page recorded here in earlier revisions was two defects — no `sp_container`/`sp_row`/`sp_column`/`sp_instance` layout records, and both widgets reading `response.data.<field>` where a Scripted REST body is nested under `result` — both now fixed (§9.6 E8-P). |
 | Portal — lookup | ✅ **PASS — REST contract and portal page** | GET valid → exactly `{status, subject, opened_date}`, all seven internal fields absent from body and raw response. GET unknown → **404** with `No case found with that number.`, byte-identical to the required literal. **The page works too:** it renders one case-number input and a result panel with exactly three labelled values (Status / Subject / Opened Date, 3 `dt`/`dd` pairs); a whitelist audit of the rendered page for the seven internal field names returned zero matches; an unknown number replaces the panel with an alert whose `innerText` is the required literal, codepoint-verified at 31 characters; and a stored `<img src=x onerror=…>` subject renders as text (`&lt;img` in the raw HTML, 0 images, no script execution). |
-| Dashboards | ❌ **FAIL** | Browser-observed: both dashboards open, and both render **0 tabs and 0 widgets**, showing the platform's empty state, "Add widgets using the widget picker." — with 0 console errors and 0 failed network requests, so nothing is being blocked at runtime. The cause is packaging: each dashboard's composite block names **three child tables that do not exist on this release** — `pa_tab` (the real table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8 widget placements (3 Agent Workspace + 5 Manager View) and the role grants are dropped on commit, and a dashboard with no tab can render no widgets. **A second, independent defect compounds it:** all 8 `sys_report` rows commit with an **empty `group_by`** although every report artifact specifies one, so even once placed, *All Cases by Status* would render grouped by *Assigned Agent*. Both are packaging defects in the deliverable; see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5, §0.6 and §9.6 E5. The 8 report records themselves do commit, and a scoped report renders correctly when opened directly. |
+| Dashboards | ✅ **PASS — both dashboards, admin and every entitled persona** | Browser-observed after the two packaging defects behind the earlier FAIL were fixed. **Agent Workspace renders 3 of 3 widgets, Manager View 5 of 5**, one tab each, and the empty-state string "Add widgets using the widget picker." is programmatically **absent** from both. Values were read from each chart's per-point accessibility labels rather than estimated from pixels: status 2/2/2/2/1/1 across Closed / In Progress / Open / Resolved / Draft / Pending; type General Inquiry 6 (60%) and Complaint 4 (40%); priority High 3, Medium 3, Critical 2, Low 2; Average Time to Close `16 Days 0 Hours 0 Minutes` and Cases Opened in Last 30 Days `10`, both returned by `SingleScoreRunProcessor` with `"STATUS":"SUCCESS"`. **Persona access is enforced as designed:** the manager opens both; the agent opens Agent Workspace and reads exactly its own three cases in *My Open Cases* (a DOM-wide `CASE\d{7}` scan returns only those three, so row-level scoping holds) and is correctly refused Manager View; the viewer is correctly refused, which is the documented design in [`dashboards.md`](./dashboards.md) rather than a defect. 0 console errors and 0 responses ≥ 400 on all five loads. **What the earlier FAIL was:** each dashboard's composite named three child tables that do not exist on this release — `pa_tab`, `pa_dashboard_widgets` and `pa_dashboard_role` — so the tab, all 8 widget placements and the role grants were dropped on commit; and all 8 `sys_report` rows committed with no grouping column because `group_by` is not a `sys_report` column at all (the column is `field`). Both are fixed in the artifacts and their payloads; see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.5 and §0.6.1 for the full forensic record. |
 | Update Set | ⚠️ **CONDITIONAL PASS — zero problems of any type on a genuine clean slate (measured on the earlier `7272edfc…` revision); zero *reference* problems on the shipping bytes previewed against an instance that already holds the schema and the application history, with the remaining problems being that instance's own change history** | **Clean slate (earlier revision).** On the **913-block / 3,618,378-byte / SHA-256 `7272edfc…`** file: **before = 41 errors** previewed against the already-populated instance (20 local-update collisions + 18 `x_casemgmt_case`/`case` + 3 `core_company`/`organization` reference problems); then, after a staged teardown proven complete (scope query `[]`, every application census counter 0, all three tables moving from HTTP 200 to HTTP 400), an upload with the child `sys_update_xml` count asserted at **exactly 913**; **298** problems on the first clean-slate preview, every one `Found a local update that is newer than this one` — the teardown's own deletions captured locally; and **after = 0 problems of any type** once that local capture was purged at source. Checked against the platform's own predicate rather than assumed: `state=previewed`, `unresolvedProblems=false`, `shouldDisplay=true`. Then committed, `previewed → committing → committed`. **Progression 41 → 298 → 0.** **Populated instance (the case that used to fail).** The same procedure on the 913-block `89638c17…` revision left **21 package-intrinsic reference problems** — 18 × `Could not find a record in x_casemgmt_case for column case` and 3 × `Could not find a record in core_company for column organization` — because the 28 seed rows carried their parent key in the reference element **body**, and preview accepts only a sys_id there. **Shipping bytes.** After the seed rows were re-shaped (parent key in the `display_value` attribute with an empty body for `x_casemgmt_case` and `core_company`; deterministic pinned numbers `CASE9000001-10` / `TASK9000001-10` / `PARTY9000001-08`), the **925-block / 3,698,577-byte / `e49a7654…`** file was uploaded as a fresh retrieved update set (925 children asserted) and previewed against the same populated instance: **31 problems, all `Found a local update that is newer than this one`, and ZERO `Could not find a record` problems — 63 → 0.** Every one of the 31 targets was confirmed to hold a local `sys_update_version` in state `current`, so all 31 are this instance's own history; **no seed-data record appears among them.** **Not claimed:** these bytes have not been re-run through a full teardown trip, and **Commit was withheld** because the verification instance is shared. The install footprint also remains: a bare commit creates no physical storage, so the documented §9.5 sequence — two commits with a Global remediation run between and after them — is still required, and it completed with `verified=true`, `acl_links_total=27`, `errors=0`. The earlier **916-block `32a064d6…`** result (42 → 0) is retained in §9.2/§9.10 as the history of that revision. |
 
-> **Net: 3 gates pass outright · 3 pass only with a qualification · 1 fails** — 3 + 3 + 1 = 7.
+> **Net: 4 gates pass outright · 3 pass only with a qualification · 0 fail** — 4 + 3 + 0 = 7.
 >
 > | Verdict | Gates |
 > | --- | --- |
-> | ✅ Pass outright (3) | Workflow · Portal — submission *(REST contract **and** page)* · Portal — lookup *(REST contract **and** page)* |
-> | ⚠️ Qualified (3) | Data model *(needs the manual remediation)* · ACLs *(needs the manual remediation)* · Update Set *(zero problems of any type measured on the earlier `7272edfc…` revision; on the shipping bytes, zero `Could not find a record` problems with 31 local-history collisions remaining and commit withheld — §0.3b)* |
-> | ❌ Fail (1) | Dashboards |
+> | ✅ Pass outright (4) | Workflow · Portal — submission *(REST contract **and** page)* · Portal — lookup *(REST contract **and** page)* · Dashboards *(both, admin and every entitled persona)* |
+> | ⚠️ Qualified (3) | Data model *(needs the manual remediation)* · ACLs *(needs the manual remediation)* · Update Set *(zero problems of any type measured on the earlier `7272edfc…` revision; zero `Could not find a record` problems on the 925-block `e49a7654…` revision with 31 local-history collisions remaining and commit withheld; **no preview run on the shipping 926-block bytes** — §0.3b, §0.3c)* |
+> | ❌ Fail (0) | none |
 >
 > **On the count.** This is the conservative reading, and it is the one every document in this deliverable
 > quotes. Gates 1 and 3 carry **the same single qualification** — the documented manual post-import remediation,
 > which is an approved installer step rather than a defect in the data model or the ACL design — so a reader who
-> counts that step as part of a normal install will read gates 1, 2, 3, 4 and 5 as outright passes and arrive at
-> **4 pass · 2 qualified · 1 fail**. Both accountings describe the identical measured state. The Update Set gate
-> moved out of the qualified column when the round trip was measured on this deliverable rather than on a much
-> earlier revision of it; nothing else in this rollup changed. An earlier revision of this section claimed
-> "2 pass, 3 qualified, 1 fail", which does not sum to 7; any count that fails to sum to 7 is wrong on its face.
+> counts that step as part of a normal install will read gates 1, 2, 3, 4, 5 and 6 as outright passes and arrive
+> at **6 pass · 1 qualified · 0 fail**. Both accountings describe the identical measured state. The progression of
+> this line across revisions is `2+3+1` (wrong — sums to six), `2+4+1`, `1+5+1`, `3+3+1` and now **`4+3+0`**; the
+> last change is gate 6 alone. Any count that fails to sum to 7 is wrong on its face.
 >
-> **What the qualifications mean, because "qualified" must not be read as "fine".** The two portal gates pass at
-> the contract level and fail at the surface level: an anonymous caller can submit a case and look one up
-> through the REST endpoints exactly as specified, but a human visiting either portal page sees a blank screen,
-> so the gate's own wording — "Case created from unauthenticated portal **submission**" — is only satisfied
-> programmatically. Data model and ACLs are correct once an operator has run the Global remediation script, and
-> incorrect until then. The Update Set gate no longer carries a qualification: its zero-problem result was
-> measured on this deliverable's immediately previous revision, and the 9 payloads the QA-remediation pass
-> re-synced were separately measured to add no preview problem of any kind.
+> **What the qualifications mean, because "qualified" must not be read as "fine".** Data model and ACLs are
+> correct once an operator has run the Global remediation script, and **incorrect until then** — until that run
+> the three tables are metadata with no physical storage and all 26 ACLs have zero role links, which denies
+> everything. The Update Set gate's qualification is about *which bytes carry which proof*, not about a defect:
+> the zero-problems-of-any-type result belongs to the `7272edfc…` revision, the zero-reference-problems result to
+> `e49a7654…`, and **no preview has been run on the shipping `7292a6fe…` bytes at all**. An earlier revision of
+> this paragraph said the two portal gates *"pass at the contract level and fail at the surface level … a human
+> visiting either portal page sees a blank screen"*; that was true when written and is **withdrawn** — the
+> Service Portal layout records were authored and both pages render and work anonymously.
 >
-> The application logic is sound; the package is not self-installing, and the portal pages and dashboards are
-> not usable on this instance. The install procedure that does work, and the residual manual footprint per
-> defect, are in §9.5 of the limitations register. Two further AAP requirements outside these seven gates were
-> also measured and fail: §0.4.4's related lists for `case_task` and `case_party` were never authored
-> (`sys_ui_related_list` holds 0 rows for this scope and the form's related-lists wrapper measures 0 pixels
-> tall), and the six chart reports arrive with no grouping column — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6).
+> The application logic is sound; the package is not self-installing. The install procedure that does work, and
+> the residual manual footprint per defect, are in §9.5 of the limitations register. **The portal pages and both
+> dashboards are now usable on this instance**, and the two further AAP requirements outside these seven gates
+> that were previously measured as failing are now measured as passing:
+>
+> - **§0.4.4's related lists** for `case_task` and `case_party` were never authored — `sys_ui_related_list` held
+>   0 rows for this scope and the case form's related-lists wrapper measured 0 pixels tall. The definition now
+>   ships as [`../related_lists/sys_ui_related_list_x_casemgmt_case_default.xml`](../related_lists/sys_ui_related_list_x_casemgmt_case_default.xml)
+>   and the wrapper measures **227 px** with two sections, *Case Tasks* above *Case Parties*, each showing its
+>   child rows — identically for admin, the agent and the viewer, which is what proves the definition is a base
+>   definition applying to every user. One caveat is worth knowing before diagnosing it twice: the definition is
+>   cached server side, so if the form was ever rendered before the definition existed, the lists stay invisible
+>   until that cache is invalidated. Step 12 of [`deployment.md`](./deployment.md) Step 3 records the symptom and
+>   the remedy.
+> - **The chart reports' grouping column** arrived empty because `group_by` is **not a column** on `sys_report` on
+>   this release, so the element was discarded on import; the column a chart groups on is `field` (register §0.6.1).
+>   All four chart reports now carry `field` and plot the intended dimension.
 >
 > **Regression gate (outside the seven).** The 13 transition-logic assertions that were passing before this
 > pass were re-measured afterwards with the same harness, run verbatim: **13 / 13 before, 13 / 13 after**, per
@@ -224,18 +242,35 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
     6. Confirm all 5 widgets render: cases by status (bar), cases by type (donut), cases by priority (bar), avg time-to-close (single-score), cases-opened-30-days (single-score).
     7. Confirm each widget shows synthetic-data values consistent with the seed data.
 - **Cross-Reference Document:** [`dashboards.md`](./dashboards.md)
-- **What actually happens today, so nobody spends time diagnosing it twice:** steps 2 and 6 fail immediately.
-  Both dashboards open and show **0 tabs and 0 widgets** with the platform's empty state, "Add widgets using the
-  widget picker." There are no console errors and no failed requests. The reports are not the problem — opening a
-  scoped report directly renders it. **Two independent packaging defects** are:
-    1. each dashboard's composite block names three child tables that do not exist on this release — `pa_tab`
-       (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role` — so the tab, all 8
-       widget placements and the role grants are dropped on commit; and
-    2. the six chart reports arrive with **no grouping column** although the artifacts specify one, so the
-       charts would not aggregate as designed even once placed — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6).
-- **Failure Mode:** Fix the three child table names in `dashboards/*.xml`, and rename `<group_by>` to `<field>`
-  in the six chart `reports/*.xml` and their payloads, then re-export — **not** by hand-building the dashboards on the instance, which would leave
-  the deliverable still broken. Per AAP Section 0.7.2 Minimal-Change Clause, if a gap requires adding widgets beyond the eight reports defined in [`dashboards.md`](./dashboards.md), stop and report — do not substitute.
+- **What actually happens today:** steps 2 and 6 both pass. Agent Workspace renders 3 of 3 widgets and Manager
+  View 5 of 5, one tab each, with the seed data, 0 console errors and 0 responses ≥ 400. Step 4's drill-in works
+  because *My Open Cases* renders a real list frame with record links. Note that step 3's "or a clean No data
+  message" branch is the correct outcome for the two "My …" widgets when the signed-in user has no assignments:
+  the manager legitimately sees a populated list frame reading "No records to display", while the agent sees
+  exactly its own three cases.
+- **Two packaging defects had to be fixed to get here, and both are recorded in full because the symptom pointed
+  away from the cause:**
+    1. Each dashboard's composite named three child tables that **do not exist on this release** — `pa_tab`,
+       `pa_dashboard_widgets` and `pa_dashboard_role` — so the tab, all 8 widget placements and the role grants
+       were silently dropped on commit, and a dashboard with no tab can render no widgets. The real wiring is
+       `sys_portal_page` → `sys_grid_canvas` → `pa_tabs` → `pa_m2m_dashboard_tabs`, plus one
+       `sys_portal` + `sys_portal_preferences` + `sys_grid_canvas_pane` triple per widget. Supplying only a tab
+       is provably insufficient: the platform auto-created one on first view and both dashboards stayed blank.
+    2. The chart reports arrived with **no grouping column** although the artifacts specified one, because
+       `group_by` is not a `sys_report` column at all — the column a chart groups on is `field` (register §0.6.1).
+- **Getting a dashboard to open for a non-admin persona took three further gates, none of them obvious from the
+  refusal text, so they are named here:** `sys_report.user` must be `GLOBAL` before the report read ACL's role
+  branch is even evaluated; `sys_report.roles` then narrows which roles may read; and the dashboard itself is
+  gated by `pa_dashboards_permissions` (the share list, one row per role) **and** by
+  `pa_dashboards.restrict_to_roles`, which is the field the renderer quotes when it refuses. The similarly-named
+  `pa_dashboards.roles` is labelled "Requires Roles" and only narrows — it grants nothing. There is no per-widget
+  `report_view` gate on this application's content: that message was verified absent on every dashboard load, and
+  verified as a true negative rather than an unobserved one, because the same personas do receive it on the
+  platform's own `task`-table homepage widgets in the same session.
+- **Failure Mode:** if a future revision regresses this, fix the artifacts and their payloads and re-export —
+  **not** by hand-building the dashboards on the instance, which would leave the deliverable still broken. Per
+  AAP Section 0.7.2 Minimal-Change Clause, if a gap requires adding widgets beyond the eight reports defined in
+  [`dashboards.md`](./dashboards.md), stop and report — do not substitute.
 
 ### Gate 7 — Update Set
 
@@ -256,11 +291,13 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
   progression was **41 → 298 → 0**: 41 against the already-populated instance, 298 on the first clean-slate
   preview (all of them the teardown's own deletions captured as newer local updates), and 0 once that local
   capture was purged at source. It was also executed earlier, with the same zero result, on the **916-block
-  `32a064d6…`** revision. **On the bytes that ship today (925 blocks / `e49a7654…`) steps 1-4 only have been
+  `32a064d6…`** revision. **On the 925-block `e49a7654…` revision steps 1-4 only were
   executed** — upload as a fresh retrieved update set with the child count asserted at 925, then preview:
   **31 problems, all `Found a local update that is newer than this one`, zero `Could not find a record`.**
   Steps 5-8 (teardown, commit, re-run the gates) were **not** performed on those bytes because the
   verification instance is shared with other work and committing would have mutated a live application.
+  **On the bytes that ship — 926 blocks / `7292a6fe…` — not even steps 1-4 have been run;** §0.3c of the
+  limitations register states what was measured instead and bounds the difference.
   Step 8 was carried out on the `7272edfc…` install: all of gates 1–6 were re-measured on the
 freshly installed instance, and their outcomes are the ones in the Measured Status table above. Note that
   steps 7–8 require the §9.5 install sequence — a bare commit leaves the three tables without physical storage.

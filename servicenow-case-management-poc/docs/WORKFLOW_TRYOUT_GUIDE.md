@@ -25,10 +25,10 @@
 |---|---|---|
 | 1 | Drive a case through all six states in the internal UI | ✅ Yes — every transition guard is enforced; see per-transition notes |
 | 2 | Tasks linked to a case; "resolve blocked until tasks closed" | ✅ Yes — enforced and blocking on the form |
-| 3 | Associate Person / Organization parties (polymorphic) | ✅ Yes (UI policy) — but you must open the party **list** or a party record; the case form shows **no related lists** (§2) |
+| 3 | Associate Person / Organization parties (polymorphic) | ✅ Yes (UI policy). The case form now also shows a **Case Parties** related list with a **New** button, so you can work from either side |
 | 4 | Role-based access: manager / agent / viewer | ✅ Yes, on all three tables |
 | 5 | External portal: submit a case and look up its status | ✅ **Yes — both pages and both REST endpoints.** §7 walks the pages; §5 keeps the `curl` equivalents |
-| 6 | Dashboards: Agent Workspace + Manager View | ❌ **Neither renders.** Both open and show 0 tabs and 0 widgets — §6 |
+| 6 | Dashboards: Agent Workspace + Manager View | ✅ **Both render** — Agent Workspace 3 of 3 widgets, Manager View 5 of 5, with the seed data — §8 |
 
 > **Read this before you start, so you do not spend time diagnosing known defects.** Two surfaces of this POC
 > do not work, both measured, both packaging defects rather than anything about your instance:
@@ -37,13 +37,22 @@
 >   `containers: []` because the Service Portal layout records had never been authored, and a response-envelope
 >   bug in both widgets made a successful 201 display "Submission failed". Both are fixed, and both pages now
 >   render and work for an anonymous visitor. §7 walks them; §5 keeps the `curl` equivalents, which also work.
-> - **Both dashboards render 0 tabs and 0 widgets**, showing the platform's own empty state, "Add widgets using
->   the widget picker." Each names three child tables this release does not have. Separately, the six chart
->   reports arrive with no grouping column, so a chart opened directly groups by the wrong field or draws
->   nothing — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6).
-> - **The case form has no related lists.** `sys_ui_related_list` holds 0 rows for this scope, so the Tasks and
->   Parties lists are simply absent from the bottom of the form — the wrapper measures 0 pixels tall. The data is
->   there; open `x_casemgmt_case_task.list` and `x_casemgmt_case_party.list` and filter by case instead.
+> - **Both dashboards now render every widget** — Agent Workspace 3 of 3, Manager View 5 of 5, with the seed
+>   data. An earlier revision of this note said they rendered 0 tabs and 0 widgets, which was accurate: each
+>   composite block named three child tables this release does not have. Both artifacts were re-authored onto the
+>   real chain and re-verified in a browser, for the admin and for each persona. §8 walks the scenario, which is
+>   now completable.
+> - **The four chart reports now plot the dimension they were designed around.** They used to arrive with no
+>   grouping column, so a chart opened directly grouped by the wrong field: the artifacts specified `<group_by>`,
+>   but **`group_by` is not a column** on `sys_report` on this release, so the element was discarded on import.
+>   The column a chart groups on is `field`, and all four now carry it (register §0.6.1). A second gate had to be
+>   closed for a persona to open a report at all — `sys_report.user` must be the literal `GLOBAL` before the read
+>   ACL will even consider `roles`. All eight reports now ship both.
+> - **The case form now shows its related lists** — *Case Tasks* above *Case Parties*, with the child rows, for
+>   every user. `sys_ui_related_list` used to hold 0 rows for this scope and the wrapper measured 0 pixels tall.
+>   ⚠️ One caveat if you are installing this yourself rather than using the verification instance: on an instance
+>   that rendered the case form *before* the definition arrived, the server's cached related-list set keeps the
+>   form empty until *Configure ▸ Related Lists* is opened and **Saved** once (register §4 item 17).
 >
 > Everything else in this guide was exercised and works.
 
@@ -74,9 +83,12 @@
   smoke-test case that made it 11 in an earlier revision of this note no longer exists.
 - **Tasks:** `x_casemgmt_case_task.list`. **Parties:** `x_casemgmt_case_party.list`.
 - The case form shows fields in this order: subject, type, status, priority, description, requester_name,
-  requester_email, opened_date, closed_date, assigned_group, assigned_agent. **There are no Related Lists at the
-  bottom** — see the note in §0. To see a case's tasks or parties, open `x_casemgmt_case_task.list` or
-  `x_casemgmt_case_party.list` and filter on the `Case` column.
+  requester_email, opened_date, closed_date, assigned_group, assigned_agent. **At the bottom are two Related
+  Lists — `Case Tasks` then `Case Parties`** — each listing that case's own children with a **New** button (for
+  identities that may create; the viewer correctly gets none). An earlier revision of this bullet said there were
+  none, which was accurate before the definition was authored. The standalone lists
+  `x_casemgmt_case_task.list` and `x_casemgmt_case_party.list` still work and are the way in if you want to
+  filter across cases.
 
 > ### Do not go looking for specific case numbers
 >
@@ -163,9 +175,10 @@ priority. Save — it gets a `CASE…` number and `opened_date` is set automatic
 
 ## 4. Scenario 2 — Tasks and the resolve-blocking rule
 
-1. Find an **In Progress** case that has an open task. Because the case form shows no related lists (§0), do it
-   from the task side: open `x_casemgmt_case_task.list`, filter `Status != Closed`, and note the `Case` value on
-   one of the rows whose case is `In Progress`. Open that case.
+1. Find an **In Progress** case that has an open task. The quickest route is now the case form itself: open an
+   `In Progress` case and read its **Case Tasks** related list, which shows each task's status inline. (The
+   task-side route also works and is better for scanning across cases: open `x_casemgmt_case_task.list`, filter
+   `Status != Closed`, and note the `Case` value on one of the rows whose case is `In Progress`.)
 2. **Expected behavior:** changing the case **Status** to `Resolved` while a task is still open is blocked
    with **"All tasks must be closed before resolving this case."**
 3. **Try it.** Set Status to `Resolved` and click **Update**. Allow 8–10 seconds. You should see two red
@@ -195,9 +208,9 @@ priority. Save — it gets a `CASE…` number and `opened_date` is set automatic
 
 ## 5. Scenario 3 — Parties (Person / Organization polymorphism)
 
-1. **There is no Parties related list on the case form** (§0), so go in from the party table instead: open
-   `x_casemgmt_case_party.list` → **New**, and set **case** to the case you want. Everything else below is
-   unaffected — the UI Policy runs on the party form itself.
+1. Either route works. From the case: open the case and press **New** on its **Case Parties** related list,
+   which pre-fills `case` for you. From the party table: open `x_casemgmt_case_party.list` → **New** and set
+   **case** yourself. Everything else below is unaffected — the UI Policy runs on the party form itself.
 2. Set **party_type**:
    - Choose **Person** → the **person** field (→ `sys_user`) becomes visible/required and **organization** is
      hidden (UI Policy `x_casemgmt_case_party_conditional_fields`).
@@ -279,26 +292,38 @@ curl -s -w '\nHTTP %{http_code}\n' "$SN/api/x_casemgmt/case_status_lookup?number
 
 ## 8. Scenario 6 — Dashboards
 
-> ### ❌ Neither dashboard renders — this scenario cannot be completed
+> ### ✅ Both dashboards render — this scenario is completable, and here is what you should see
 >
-> Both dashboards exist, open, and are live in scope, and **both display 0 tabs and 0 widgets** with the
-> platform's own empty state, "Add widgets using the widget picker." There are 0 console errors and 0 failed
-> requests, so nothing is being blocked at runtime — this is a packaging defect in the deliverable. Each
-> dashboard's composite block names **three child tables that do not exist on this release**: `pa_tab` (the real
-> table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role`. The tab, all 8 widget
-> placements and the role grants are therefore dropped on commit. Supplying a tab is **not** the fix: the
-> platform auto-created one empty `pa_tabs` row per dashboard on first view and both stayed blank.
+> **Agent Workspace renders 3 of 3 widgets and Manager View 5 of 5**, with the seeded data. Measured values, read
+> from the rendered charts' own per-point labels: *All Cases by Status* — Closed 2 / In Progress 2 / Open 2 /
+> Resolved 2 / Draft 1 / Pending 1; *All Cases by Type* — General Inquiry 6 (60%) / Complaint 4 (40%);
+> *All Cases by Priority* — High 3 / Medium 3 / Critical 2 / Low 2; *Average Time to Close* —
+> `16 Days 0 Hours 0 Minutes`; *Cases Opened in Last 30 Days* — `10`. On Agent Workspace, impersonating the demo
+> agent, *My Open Cases* lists exactly `CASE0000981`, `CASE0000982` and `CASE0000986`.
 >
-> **What you can do instead.** Open the reports directly — *Reports → View / Run*, filter on the
-> `x_casemgmt_case` or `x_casemgmt_case_task` table — and they render live from the real data. Be aware of a
-> second, independent defect while you do: the six **chart** reports arrive with **no grouping column**, so
-> *All Cases by Status* renders grouped by *Assigned Agent* rather than by status until that is corrected. Root
-> cause, measured by the QA-remediation pass: the artifacts specify `<group_by>status</group_by>`, but
-> **`group_by` is not a column on `sys_report`** on this release (its columns are `field`, `sumfield`, `group`
-> and `additional_groupby`), so the element is silently discarded on import. The column a chart report groups on
-> is `field`. The two single-score reports are unaffected — *Average Time to Close* was fixed by that pass and
-> renders a real duration on a cold load, and *Cases Opened in Last 30 Days* is a `COUNT`, which needs no
-> aggregated column.
+> **Two refusals are correct, not failures.** The agent is not granted Manager View and the viewer is granted
+> neither, so those three pairs answer with the platform's own *"Sorry! / The … dashboard has not been shared with
+> you."* That is what the AAP specifies — it names an *agent* workspace and a *manager* view and no viewer
+> surface.
+>
+> *An earlier revision of this section said neither dashboard rendered and the scenario could not be completed.
+> That was accurate at the time: each composite block named **three child tables that do not exist on this
+> release** — `pa_tab` (the real table is `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and
+> `pa_dashboard_role` — so the tab, every widget placement and the role grants were dropped on commit, and
+> supplying a tab was proven insufficient because the platform auto-created one on first view and both stayed
+> blank. Both artifacts were re-authored onto the real chain (`sys_portal_page` → `sys_grid_canvas` → `pa_tabs`
+> → `pa_m2m_dashboard_tabs`, one `sys_portal` + `sys_portal_preferences` + `sys_grid_canvas_pane` trio per
+> widget, plus `pa_dashboards_permissions` and `restrict_to_roles`), and the four **chart** reports had a second,
+> independent defect fixed at the same time: they specified `<group_by>status</group_by>`, but `group_by` **is not
+> a column on `sys_report`** on this release (its columns are `field`, `sumfield`, `group` and
+> `additional_groupby`), so the element was silently discarded on import and* All Cases by Status *rendered
+> grouped by* Assigned Agent. *The column a chart groups on is `field`. A third gate had to be closed before any
+> persona could open a report at all: the read ACL evaluates `roles` only when `sys_report.user` is the literal
+> `GLOBAL`. See register §0.5 and §0.6.1.*
+>
+> **You can still open the reports directly** — *Reports → View / Run*, filter on the `x_casemgmt_case` or
+> `x_casemgmt_case_task` table — and they render live from the real data, which is a useful cross-check against
+> the dashboard widgets.
 
 The dashboards are *intended* to be reached via **Self-Service → Dashboards** (or `$pa_dashboard.do`). One
 mechanical note if you go by URL: **`$pa_dashboard.do?sysparm_dashboard=` takes the dashboard's `sys_id`, not

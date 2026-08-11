@@ -346,13 +346,29 @@ Add these to any future round trip — each one caught a real defect that Phases
       rendered "Submission failed". **Result now: ✅ both pages render and work anonymously.** Keep this step —
       testing only the REST endpoints hides both classes of defect completely.
 - [ ] **Dashboards actually render.** Do not stop at "does the `pa_dashboards` record exist" — open both
-      dashboards and count the tabs and widgets on screen. **Result: ❌ both render 0 tabs and 0 widgets**, with
-      the platform's empty state, "Add widgets using the widget picker.", and 0 console errors. Each composite
-      payload names **three child tables that do not exist on this release**: `pa_tab` (real name `pa_tabs`),
-      `pa_dashboard_widgets` (`pa_widgets`) and `pa_dashboard_role`. So the tab, all 8 widget placements and the
-      role grants are dropped on commit. **Supplying a tab is not the fix** — the platform auto-created one empty
-      `pa_tabs` row per dashboard on first view and both stayed blank. Also check the reports themselves: all 8
-      `sys_report` rows commit with an **empty `group_by`** although the artifacts specify one.
+      dashboards and count the tabs and widgets on screen. **Result now: ✅ Agent Workspace renders 3 of 3 widgets
+      and Manager View 5 of 5**, with live data over the seeded rows, correct chart types and 0 console errors;
+      verified as `admin` and then by impersonation for every persona/dashboard pair the AAP defines. Keep this
+      step exactly as written — it is what caught the original defect, and counting records instead of widgets
+      would have missed it. *Previously: ❌ both rendered 0 tabs and 0 widgets with the platform's empty state,
+      "Add widgets using the widget picker.", because each composite payload named **three child tables that do
+      not exist on this release** — `pa_tab` (real name `pa_tabs`), `pa_dashboard_widgets` (`pa_widgets`) and
+      `pa_dashboard_role` — so the tab, every widget placement and the role grants were dropped on commit; and
+      supplying a tab was not the fix, since the platform auto-created one on first view and both stayed blank.*
+      Also check the reports themselves, where two independent defects were fixed: the four chart reports carried
+      their grouping in `<group_by>`, which is **not a column** on `sys_report` (the column is `field`), and no
+      report was readable by any persona because the read ACL evaluates `roles` only when `sys_report.user` is the
+      literal `GLOBAL`. All eight now ship `roles` and `user=GLOBAL`, and all four charts plot the intended
+      dimension.
+- [ ] **The case form's related lists actually render.** Open a case that has children and measure
+      `#related_lists_wrapper` — do not settle for the *Configure ▸ Related Lists* slushbucket showing them as
+      Selected, because that is exactly the misleading signal. **Result now: ✅ 227.3125 px, class
+      `tabs_enabled`, sections `Case Tasks (2)` then `Case Parties (2)` with the real child rows, identical for
+      admin, agent and viewer.** ⚠️ **If it measures 0 px on your instance**, the rows are almost certainly
+      present and the *server-side related-list cache* is stale — which happens whenever the form was rendered
+      before the definition arrived. A REST `PUT` of the same values is a no-op and will not clear it. Open
+      *Configure ▸ Related Lists* and press **Save** with nothing moved; note that this replaces all three
+      `sys_id`s. See `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §4 item 17 and `../docs/deployment.md` step 12.
 - [ ] **Reference display values resolve.** Check that the `Case` column is populated on the task and party
       lists. **Result: ✅ FIXED and now carried by the package.** Originally all three tables shipped with
       `display=true` on nearly every column where ServiceNow permits exactly one, so every reference to a case
@@ -361,8 +377,13 @@ Add these to any future round trip — each one caught a real defect that Phases
       flag after its field loop, and it fails the run if more than one display field survives. Keep this
       assertion — it is cheap and it is how the defect was caught.
 - [ ] **Demo cases carry numbers.** Confirm `x_casemgmt_case.number` is non-empty on every seeded row.
-      **Result: ❌ empty on all 10** — the packaged `Case Record` payloads omit the `number` element, and
-      auto-numbering does not fire on an Update-Set data insert, so every by-number child reference dangles.
+      **Result now: ✅ all 10.** Every seed payload carries a **pinned** number in the 9,000,000 band
+      (`CASE9000001`-`CASE9000010`, `TASK9000001`-`TASK9000010`, `PARTY9000001`-`PARTY9000008`), chosen so it
+      cannot collide with a counter-issued number and leaves the counters untouched, and `seed_demo_data.js`
+      adopts each packaged row by that number rather than inserting a duplicate. *Previously: ❌ empty on all 10 —
+      the packaged `Case Record` payloads omitted the `number` element and auto-numbering does not fire on an
+      Update-Set data insert, so every by-number child reference dangled.* Keep this assertion; it is one line and
+      it is how that defect was found.
 - [ ] **Record-level ACL narrowing, both branches.** Verify by impersonation that the agent sees assigned cases
       *and* group-assigned cases and not others. **Result: ✅ 9 of 14 after the demo group membership was
       repaired.** The child-table half of this is also **fixed**: the agent's `case_task` / `case_party`
@@ -409,7 +430,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
       0 Skipped, with 180 of 180 step results Success, in about 4 minutes, leaving no test residue.** An earlier
       run scored 16 Success / 4 Failure across three identical runs; those four failures were the child-table ACL
       condition (ATF 07) and the three form-level assertions (ATF 15-17), both root causes since fixed, and that
-      result is history rather than status. The suite serializes to **761** of the package's 925 blocks —
+      result is history rather than status. The suite serializes to **761** of the package's 926 blocks —
       20 tests, 180 steps, **540** step inputs, 1 suite and 20 suite-member links.
 - [ ] Confirm the re-imported ATF records still **run**, not merely exist — the Defect-F failure mode applies
       to any relationally-compiled construct. Check that no test has zero steps and no step has zero
@@ -436,18 +457,22 @@ The REST sequence described in Phases 1–3 does not work here. What does:
    test-suite failure is reported rather than relaxed.
 
 > **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
-> 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is two revisions behind the one that ships today.
-> **Today's bytes are 925 blocks, 3,698,577 bytes, SHA-256 `e49a7654…`.** They differ from the intermediate
+> 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is three revisions behind the one that ships today.
+> **Today's bytes are 926 blocks, 3,781,097 bytes, SHA-256 `7292a6fe…`, and no preview has been run on them at
+> all** — see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c for the 13-payload + 1-block delta from
+> `e49a7654…` and for what was measured on it instead. The paragraph below describes the **925-block
+> `e49a7654…`** revision, which is what the 31-problem preview belongs to. Those bytes differ from the intermediate
 > 913-block `89638c17…` revision in the 28 re-shaped seed records (parent key in the `display_value`
 > attribute with an empty element body, plus deterministic pinned numbers `CASE9000001-10` /
 > `TASK9000001-10` / `PARTY9000001-08`) and 12 added blocks (8 portal-layout rows, 1 List Layout, 1 UI Policy
 > with 2 actions). That change is **not** preview-neutral, and deliberately so: the 21 package-intrinsic
-> `Could not find a record` problems the previous revision carried are **eliminated**. Measured on today's
-> bytes against an already-populated instance: upload as a fresh retrieved update set with the child count
-> asserted at **925**, then preview → **31 problems, every one
+> `Could not find a record` problems the previous revision carried are **eliminated**. Measured on the
+> `e49a7654…` bytes against an already-populated instance: upload as a fresh retrieved update set with the child
+> count asserted at **925**, then preview → **31 problems, every one
 > `Found a local update that is newer than this one`, ZERO `Could not find a record`** (63 → 0), with all 31
 > targets confirmed to hold a local `sys_update_version` in state `current`. **Phases 1-3 have NOT been
-> re-executed on today's bytes** — no teardown, and no commit, because the verification instance is shared.
+> re-executed on either `e49a7654…` or the shipping `7292a6fe…`** — no teardown, and no commit, because the
+> verification instance is shared.
 > Phases 1-3 were executed on the `7272edfc…` bytes after a proven teardown —
 > `state=loaded` with the child count asserted at exactly 913; preview problems **41 → 298 → 0 of any type**,
 > the 298 being the teardown's own deletions captured as newer local updates and the 0 confirmed by the

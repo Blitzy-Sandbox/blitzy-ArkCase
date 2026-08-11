@@ -215,6 +215,39 @@
     matches the sibling report convention (avg_time_to_close, my_open_cases,
     my_overdue_tasks all use is_real_time=false).
 
+      - Sharing discipline (AAP Section 0.4.4 "agents and managers see
+        operationally relevant aggregate views on day one", and AAP
+        Section 0.7.3 Gate 6 "accessible to users with correct
+        roles"): <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,
+        x_casemgmt_case_viewer</roles>. `sys_report.roles` is a
+        user_roles column holding role NAMES (no sys_ids, per AAP
+        Section 0.7.2), and it is what makes a report reachable by a
+        user who is neither its owner nor an admin. With it empty, a
+        report is private: an impersonated x_casemgmt_demo_agent
+        opening this report received a blank page reading "Report
+        visible only to a specific user or group" even though the
+        report's filter was correct. All three scoped roles are
+        listed because all three personas are legitimate readers of
+        aggregate case data - the row-level perimeter is enforced by
+        the table ACLs (AAP Section 0.5.6), not by report sharing, so
+        an agent still only sees the rows their ACLs permit.
+        <user>GLOBAL</user> is the other half of the fix, and the
+        load-bearing half: the platform's own read ACL on sys_report is
+        a script, and it consults `roles` ONLY on its `isGlobal` branch -
+        `isGlobal` is `current.user.toString() == "GLOBAL"`. With `user`
+        empty the report is private to whoever created it, the branch
+        that reads `roles` never runs, and an impersonated
+        x_casemgmt_demo_agent got a blank page reading "Report visible
+        only to a specific user or group" even with all three roles
+        listed. `sys_report.user` is a 40-character STRING (not a
+        reference) whose magic values are 'GLOBAL' (visible to everyone,
+        narrowed by `roles`) and 'group' (shared through
+        sys_report_users_groups); 265 of 300 sampled out-of-box reports
+        carry 'GLOBAL' with `roles` as the restriction, which is exactly
+        the shape this report now ships. 'GLOBAL' is a literal platform
+        keyword, not a sys_id, so the AAP Section 0.7.2 no-hardcoded-
+        sys_id constraint still holds.
+
     DASHBOARD CONSUMPTION
     =====================
     The Manager View dashboard widget (in
@@ -311,12 +344,10 @@
         <description>Manager View dashboard single-score widget computing COUNT(*) over x_casemgmt_case records whose opened_date falls within the trailing 30-day window. The 30-day cutoff is resolved at query-execution time via javascript:gs.daysAgoStart(30), which returns midnight of the day exactly 30 days before "now" in the system timezone - a rolling window stable across calendar time and portable across PDIs. Single scalar result, on-demand evaluation. No external BI engine; uses native GlideAggregate. Replaces ArkCase's Pentaho/Solr time-bucketed CaseSummaryByStatusAndTimePeriodDto aggregate pattern with a native single_score sys_report.</description>
         <field_list/>
         <filter>opened_date&gt;=javascript:gs.daysAgoStart(30)</filter>
-        <format/>
-        <group_by/>
         <is_real_time>false</is_real_time>
         <is_scheduled>false</is_scheduled>
         <name>x_casemgmt_cases_opened_30d</name>
-        <roles/>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
         <sys_class_name>sys_report</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -332,6 +363,6 @@
         <table>x_casemgmt_case</table>
         <title>Cases Opened in Last 30 Days</title>
         <type>single_score</type>
-        <user/>
+        <user>GLOBAL</user>
     </sys_report>
 </record_update>

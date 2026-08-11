@@ -190,6 +190,17 @@
       at the UI layer; the Script Include re-validates on the server
       side as a defense-in-depth fallback.
 
+      Note that the OPTIONAL fifth field still participates in that
+      binding. requester_email carries type="email", so a malformed
+      address makes the form invalid and disables Submit even though the
+      field is not required and carries no asterisk. That is correct - an
+      unusable address should not be stored - but it means the reason
+      Submit is disabled is not always "a starred field is empty", and
+      the form has to be able to say so. See the ACCESSIBILITY AND
+      VALIDATION FEEDBACK notes in the template and c.requiredIncomplete()
+      in the client script for how the three possible reasons are
+      distinguished and surfaced per field.
+
     HTTP-ERROR HARDENING (information-leakage prevention):
       All HTTP errors (4xx, 5xx, network 0) are treated identically by
       the client: c.errorMessage is set to the generic, hardcoded
@@ -245,6 +256,13 @@
         - btn, btn-primary: standard primary-action button styling.
         - alert, alert-danger: standard "danger" alert styling for
           the error message (red-bordered with alert icon).
+        - has-error: standard Bootstrap 3 form-validation state, applied
+          to a form-group to turn its label, control border and message
+          red together. Shipped with the OOB Service Portal theme; it is
+          the reason the per-field invalid treatment needs no CSS of its
+          own.
+        - help-block: standard Bootstrap 3 form help text, used for both
+          the per-field validation messages and the maxlength notices.
         - <h2>, <label>: standard typography.
         - The "required" CSS class on the asterisks is a standard
           Bootstrap-flavored class for indicating mandatory fields;
@@ -530,6 +548,44 @@
     c.errorMessage = '';
 
     /**
+     * True while any of the FOUR MANDATORY fields is still empty.
+     *
+     * This exists so the status region under the Submit button can name the
+     * ACTUAL reason the button is disabled instead of asserting one.
+     *
+     * The button is disabled whenever the form has any invalid control, and
+     * the form has five controls of which only four are mandatory. The fifth,
+     * requester_email, is OPTIONAL but still format-checked by type="email",
+     * so a half-typed address such as "abc@" makes the form invalid and
+     * disables Submit while every mandatory field is complete. The region
+     * previously read "Every field marked * is required. Complete all four to
+     * enable Submit." in that state, which is false twice over: all four ARE
+     * complete, and the field actually blocking the button is not marked with
+     * an asterisk at all. A requester following that instruction re-reads the
+     * four starred fields, finds nothing wrong, and has no way forward.
+     *
+     * Splitting the reason in two needs a test for "a mandatory field is
+     * empty" that is independent of the email's format validity, which is
+     * what this function is. It reads c.formData rather than the form
+     * controller because emptiness is the whole of what `required` means
+     * here, and because AngularJS trims text input into the model by default
+     * (ng-trim), so a whitespace-only entry arrives here as '' exactly as it
+     * arrives at the required validator. The two therefore agree in every
+     * state, and the three status messages are mutually exclusive and
+     * exhaustive: a mandatory field is empty, or the optional email is
+     * malformed, or the form is ready to submit.
+     *
+     * @returns {boolean} true when subject, type, description or
+     *          requester_name is empty; false when all four are populated.
+     */
+    c.requiredIncomplete = function() {
+        return !c.formData.subject ||
+               !c.formData.type ||
+               !c.formData.description ||
+               !c.formData.requester_name;
+    };
+
+    /**
      * Submit the form data to the scripted REST endpoint at
      * POST /api/x_casemgmt/case_submit.
      *
@@ -654,7 +710,6 @@
         <link/>
         <name>Case Submission Widget</name>
         <option_schema>[]</option_schema>
-        <pop_up>false</pop_up>
         <public>true</public>
         <roles/>
         <script><![CDATA[(function() {
@@ -722,27 +777,70 @@
         Four are mandatory (subject, type, description, requester_name);
         requester_email is optional.
 
-        ACCESSIBILITY of this form, and why each attribute is here:
+        ACCESSIBILITY AND VALIDATION FEEDBACK, and why each attribute is here:
           - Every control has a bound <label for>, so the accessible name is
             the visible label.
           - The `*` in each label is decoration only, so it carries
             aria-hidden="true"; the required-ness itself is conveyed
             programmatically by `required` AND by aria-required="true" on the
             control, which is what assistive technology reports.
+          - Every control carries a `name`, which is what registers it with
+            the AngularJS form controller as caseSubmitForm.<name>. Without a
+            name a control still participates in the form's aggregate
+            $invalid, but its INDIVIDUAL validity is unreachable from the
+            template - so nothing could be said about which field is wrong,
+            and nothing could be marked. Every per-field behaviour below
+            depends on these names existing.
+          - Every control binds aria-invalid, so the invalid state is exposed
+            programmatically and not by colour alone. It is bound rather than
+            hardcoded, and it resolves to the string "false" while the control
+            is valid rather than being absent, so assistive technology reads a
+            definite state in either case. The condition is
+            $invalid && $touched: a field the requester has not visited yet is
+            not reported as wrong, which is what stops a pristine form from
+            announcing four errors before a single keystroke.
+          - Each control's `.form-group` takes Bootstrap's `has-error` class
+            under the same condition, which is what turns the label, the
+            border and the message red together.
+          - Each control has its own message element, referenced through
+            aria-describedby, carrying role="alert" so it is announced when it
+            appears. The message says what is wrong with THAT field. The email
+            field's message names the email problem explicitly, because that
+            field is the one whose invalidity is least discoverable: it is
+            labelled optional, it has no asterisk, and it still blocks Submit.
+            The message elements are ng-if'd rather than kept permanently in
+            the DOM, so a valid form has exactly the vertical rhythm it had
+            before; the resulting aria-describedby reference is unresolved
+            while the field is valid, which is explicitly permitted and simply
+            ignored by assistive technology.
           - The form carries `novalidate`, which suppresses the browser's own
-            per-field messages. Without something else, a disabled Submit
-            button would be the ONLY feedback for an incomplete form and it
-            would give no reason. The status paragraph below the button
-            (id="x-casemgmt-submit-hint") supplies that reason as visible
-            text, is referenced by the button through aria-describedby, and is
-            a role="status" aria-live="polite" region so a change is announced
-            without stealing focus.
+            per-field messages, so all of the above is the only feedback
+            channel there is.
+          - The status paragraph below the button (id="x-casemgmt-submit-hint")
+            gives the aggregate reason the button is disabled, is referenced by
+            the button through aria-describedby, and is a role="status"
+            aria-live="polite" region so a change is announced without
+            stealing focus. It now distinguishes THREE states rather than
+            asserting one: a mandatory field is still empty, or the optional
+            email address is malformed, or the form is ready. See
+            c.requiredIncomplete() in the client script for why that split is
+            necessary. Note that this region reports the email problem as soon
+            as the address is malformed, without waiting for a blur, while the
+            field's own red treatment waits for $touched - so a requester who
+            types a bad address and reaches straight for a disabled Submit
+            button is still told why.
           - The same region announces the in-flight state, and the form sets
             aria-busy while a request is outstanding, so "Submitting..." is no
             longer conveyed by the button's inner text alone.
-          - No CSS ships with this widget: `help-block` is part of the Service
-            Portal's bundled Bootstrap 3, so the treatment stays inside the
-            AAP Section 0.4.4 default theme.
+          - Each length-capped field carries a role="status" notice that
+            appears only once its maxlength is reached. maxlength stops the
+            browser accepting further characters silently, so a requester
+            pasting a long description would otherwise see it truncated with
+            no indication that anything was dropped.
+          - No CSS ships with this widget: `help-block` and `has-error` are
+            both part of the Service Portal's bundled Bootstrap 3, so the
+            treatment stays inside the AAP Section 0.4.4 default theme. The
+            <css/> element of this record is, and must remain, empty.
 
         HTML5 `required` attributes plus the
         AngularJS form's $invalid binding to the submit button's ng-disabled
@@ -754,59 +852,90 @@
               novalidate
               ng-attr-aria-busy="{{c.submitting ? 'true' : 'false'}}"
               ng-submit="c.submit()">
-            <div class="form-group">
+            <div class="form-group" ng-class="{'has-error': caseSubmitForm.subject.$invalid && caseSubmitForm.subject.$touched}">
                 <label for="x-casemgmt-subject">Subject <span class="required" aria-hidden="true">*</span></label>
                 <input type="text"
                        id="x-casemgmt-subject"
+                       name="subject"
                        class="form-control"
                        maxlength="255"
                        ng-model="c.formData.subject"
                        placeholder="Enter your case subject"
                        aria-required="true"
+                       aria-describedby="x-casemgmt-subject-error"
+                       ng-attr-aria-invalid="{{(caseSubmitForm.subject.$invalid && caseSubmitForm.subject.$touched) ? 'true' : 'false'}}"
                        required />
+                <p class="help-block" id="x-casemgmt-subject-error" role="alert"
+                   ng-if="caseSubmitForm.subject.$invalid && caseSubmitForm.subject.$touched">Subject is required.</p>
+                <p class="help-block" role="status"
+                   ng-if="c.formData.subject.length >= 255">Subject has reached its limit of 255 characters. Anything typed beyond this point is discarded.</p>
             </div>
-            <div class="form-group">
+            <div class="form-group" ng-class="{'has-error': caseSubmitForm.caseType.$invalid && caseSubmitForm.caseType.$touched}">
                 <label for="x-casemgmt-type">Type <span class="required" aria-hidden="true">*</span></label>
                 <select id="x-casemgmt-type"
+                        name="caseType"
                         class="form-control"
                         ng-model="c.formData.type"
                         aria-required="true"
+                        aria-describedby="x-casemgmt-type-error"
+                        ng-attr-aria-invalid="{{(caseSubmitForm.caseType.$invalid && caseSubmitForm.caseType.$touched) ? 'true' : 'false'}}"
                         required>
                     <option value="">-- Select a type --</option>
                     <option value="General Inquiry">General Inquiry</option>
                     <option value="Complaint">Complaint</option>
                 </select>
+                <p class="help-block" id="x-casemgmt-type-error" role="alert"
+                   ng-if="caseSubmitForm.caseType.$invalid && caseSubmitForm.caseType.$touched">Select a case type.</p>
             </div>
-            <div class="form-group">
+            <div class="form-group" ng-class="{'has-error': caseSubmitForm.description.$invalid && caseSubmitForm.description.$touched}">
                 <label for="x-casemgmt-description">Description <span class="required" aria-hidden="true">*</span></label>
                 <textarea id="x-casemgmt-description"
+                          name="description"
                           class="form-control"
                           rows="4"
                           maxlength="4000"
                           ng-model="c.formData.description"
                           placeholder="Describe your case in detail"
                           aria-required="true"
+                          aria-describedby="x-casemgmt-description-error"
+                          ng-attr-aria-invalid="{{(caseSubmitForm.description.$invalid && caseSubmitForm.description.$touched) ? 'true' : 'false'}}"
                           required></textarea>
+                <p class="help-block" id="x-casemgmt-description-error" role="alert"
+                   ng-if="caseSubmitForm.description.$invalid && caseSubmitForm.description.$touched">Description is required.</p>
+                <p class="help-block" role="status"
+                   ng-if="c.formData.description.length >= 4000">Description has reached its limit of 4000 characters. Anything typed beyond this point is discarded.</p>
             </div>
-            <div class="form-group">
+            <div class="form-group" ng-class="{'has-error': caseSubmitForm.requesterName.$invalid && caseSubmitForm.requesterName.$touched}">
                 <label for="x-casemgmt-requester-name">Your Name <span class="required" aria-hidden="true">*</span></label>
                 <input type="text"
                        id="x-casemgmt-requester-name"
+                       name="requesterName"
                        class="form-control"
                        maxlength="100"
                        ng-model="c.formData.requester_name"
                        placeholder="Enter your name"
                        aria-required="true"
+                       aria-describedby="x-casemgmt-requester-name-error"
+                       ng-attr-aria-invalid="{{(caseSubmitForm.requesterName.$invalid && caseSubmitForm.requesterName.$touched) ? 'true' : 'false'}}"
                        required />
+                <p class="help-block" id="x-casemgmt-requester-name-error" role="alert"
+                   ng-if="caseSubmitForm.requesterName.$invalid && caseSubmitForm.requesterName.$touched">Your name is required.</p>
+                <p class="help-block" role="status"
+                   ng-if="c.formData.requester_name.length >= 100">Your name has reached its limit of 100 characters. Anything typed beyond this point is discarded.</p>
             </div>
-            <div class="form-group">
+            <div class="form-group" ng-class="{'has-error': caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched}">
                 <label for="x-casemgmt-requester-email">Email</label>
                 <input type="email"
                        id="x-casemgmt-requester-email"
+                       name="requesterEmail"
                        class="form-control"
                        maxlength="100"
                        ng-model="c.formData.requester_email"
-                       placeholder="Enter your email (optional)" />
+                       placeholder="Enter your email (optional)"
+                       aria-describedby="x-casemgmt-requester-email-error"
+                       ng-attr-aria-invalid="{{(caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched) ? 'true' : 'false'}}" />
+                <p class="help-block" id="x-casemgmt-requester-email-error" role="alert"
+                   ng-if="caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched">Enter a valid email address, or leave the field empty. Email is optional, but an address that is not valid blocks Submit.</p>
             </div>
 
             <!--
@@ -850,8 +979,9 @@
                 <p id="x-casemgmt-submit-hint" class="help-block" role="status" aria-live="polite">
                     <span ng-if="c.submitting">Submitting your case, please wait...</span>
                     <span ng-if="!c.submitting">
-                        <span ng-if="caseSubmitForm.$invalid">Every field marked * is required. Complete all four to enable Submit.</span>
-                        <span ng-if="!caseSubmitForm.$invalid">All required fields are complete.</span>
+                        <span ng-if="c.requiredIncomplete()">Every field marked * is required. Complete all four to enable Submit.</span>
+                        <span ng-if="!c.requiredIncomplete() && caseSubmitForm.requesterEmail.$invalid">Email is optional, but the address entered is not valid. Correct it or clear the field to enable Submit.</span>
+                        <span ng-if="!c.requiredIncomplete() && !caseSubmitForm.requesterEmail.$invalid">All required fields are complete.</span>
                     </span>
                 </p>
             </div>

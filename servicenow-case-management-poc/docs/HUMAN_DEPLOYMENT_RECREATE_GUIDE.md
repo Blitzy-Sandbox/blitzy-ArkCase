@@ -40,17 +40,37 @@
 > - **A second commit is required.** Forcing the table rebuild means deleting three `sys_db_object` rows, which
 >   cascades away all 26 ACLs, the seed rows, the demo users and the role grants; a second commit restores them.
 >   The remediation then has to be run **again** to create the 27 ACL role links.
-> - **The demo data needs preparation.** The packaged seed rows must be deleted before
->   `scripts/seed_demo_data.js` can populate anything.
+> - **The demo data needs one script run, but no longer needs preparation.** An earlier revision of this bullet
+>   said the packaged seed rows had to be **deleted** first; that is no longer true. Every seed row now carries a
+>   pinned number in the 9,000,000 band, and `scripts/seed_demo_data.js` **adopts** the packaged row by that
+>   number and fills only the columns that arrived empty. Run it in scope `x_casemgmt`; a second run reports
+>   `repaired=0`.
 >
-> Two things this guide cannot remediate, both measured and both packaging defects rather than instance
-> problems: the two dashboards **install but render 0 tabs and 0 widgets** (each names three child tables this
-> release does not have — `pa_tab`, `pa_dashboard_widgets` and `pa_dashboard_role`), and the
-> case form has **no related lists** (no `sys_ui_related_list` row exists for the scope). The portal **pages**
-> were a third item here and are now fixed — their Service Portal layout records are authored and packaged, and
-> a response-envelope bug in both widgets was corrected, so both pages render and work anonymously. Separately, the six
-> **chart** reports arrive with no grouping column — the QA-remediation pass root-caused this: `group_by` is **not a column** on `sys_report` on this release, so the element is discarded on import, and the column a chart groups on is `field` (register §0.6). Fixing any of these
-> means changing the artifacts and re-exporting, not adjusting the install.
+> **The three items this guide used to warn it could not remediate are all fixed in the package.** They are
+> recorded here because earlier revisions of this note named them as live defects, and because each one was a
+> packaging defect rather than an instance problem — so if you are installing from an older export you will still
+> meet them:
+>
+> - **The two dashboards** installed but rendered 0 tabs and 0 widgets, because each artifact named three child
+>   tables this release does not have (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`). Both are now
+>   authored onto the real chain — `sys_portal_page`, `sys_grid_canvas`, `pa_tabs`, `pa_m2m_dashboard_tabs`,
+>   `pa_dashboards` with `restrict_to_roles`, `pa_dashboards_permissions` share rows, and one `sys_portal` +
+>   `sys_portal_preferences` + `sys_grid_canvas_pane` trio per widget. Agent Workspace renders **3 of 3** widgets
+>   and Manager View **5 of 5**, verified for the manager and agent personas.
+> - **The case form had no related lists.** The package now ships
+>   `related_lists/sys_ui_related_list_x_casemgmt_case_default.xml` and the form renders *Case Tasks* above
+>   *Case Parties* with their child rows. ⚠️ **One install step applies to this and to nothing else:** on an
+>   instance that rendered the case form *before* the definition arrived, the server's cached related-list set
+>   keeps the form empty. Open a case → context menu → **Configure ▸ Related Lists** → press **Save** with
+>   nothing moved. See `deployment.md` step 12 and register §4 item 17.
+> - **The chart reports arrived with no grouping column.** `group_by` is **not a column** on `sys_report` on this
+>   release, so the element was discarded on import; the column a chart groups on is `field`. All four chart
+>   reports now ship `field`, and all eight ship `roles` plus `user=GLOBAL` — the second being a separate gate
+>   without which no persona can read a report at all (register §0.6.1).
+>
+> The portal **pages** were a fourth item and were fixed earlier — their Service Portal layout records are
+> authored and packaged, and a response-envelope bug in both widgets was corrected, so both pages render and work
+> anonymously.
 >
 > The same procedure with its measured evidence, per defect, is
 > **[`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md#95-residual-manual-footprint-per-defect-with-the-precise-step)**.
@@ -71,7 +91,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 - **26 ACLs + 27 role-link records** enforcing the role × CRUD matrix (manager full / agent assigned-only / viewer read-only).
 - **7 business rules** — in execution order: `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)** — the one that runs the transition subflow and raises the blocking form error — `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), and `set_closed_date` (500), the only writer of `closed_date`.
 - **7 Flow Designer flows** — 2 parent flows (`general_inquiry_state_machine`, `complaint_state_machine`) and 5 subflows (`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`) — plus **1 Custom Action** (`x_casemgmt_transition_guard_action`) and **1 shared flow logic block**.
-- **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards**, **1 Experience/Service Portal** with 2 pages and 3 widgets, **1 UI policy**, **6 UI Actions**, and **number counters**.
+- **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards** (Agent Workspace with 3 widgets, Manager View with 5 — both rendering), **1 Experience/Service Portal** with 2 pages and 3 widgets, **2 UI policies** with their 2 policy actions, **6 UI Actions**, **1 List Layout** and **1 Related Lists definition** on the case table's Default view, and **number counters**.
 - **1 Fix Script** (`x_casemgmt Post-Import Remediation`) carrying the post-import remediation body. It does not run by itself.
 - **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **The packaged rows now carry pinned, deterministic numbers** — `CASE9000001`-`CASE9000010`, `TASK9000001`-`TASK9000010`, `PARTY9000001`-`PARTY9000008` — chosen in the 9,000,000 band so they cannot collide with counter-issued numbers, and `scripts/seed_demo_data.js` adopts those rows rather than inserting duplicates, so a committed install is number-identical to any other. **Numbers differ from the pinned set only if you seed WITHOUT committing the package** (the script then inserts fresh rows and the instance counter allocates the numbers) or if you delete the packaged rows before seeding — which you should not do. The numbers `CASE0000013`-`CASE0000022` quoted in older revisions of this guide were simply what one counter-allocated run produced.
 
@@ -95,7 +115,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,698,577 bytes (≈3.53 MiB)**, **925 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`. Verify the digest before uploading. (The immediately previous revision was 3,618,378 bytes / `7272edfc…`; the QA-remediation pass re-synced 9 payloads and left the block count and every other byte unchanged.) (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 913 blocks.) |
+| Deliverable | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` — UTF-8, no BOM, **3,781,097 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. **Verify the digest before uploading** — this row has named three different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The immediately previous revision was 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition). Note that **no update-set preview has been run on these bytes** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -784,7 +804,8 @@ suite by hand if an instance refuses the serialized records.
 | Portal URL | `https://dev379024.service-now.com/x_casemgmt_case_portal` |
 | REST submit | `POST /api/x_casemgmt/case_submit` |
 | REST lookup | `GET /api/x_casemgmt/case_status_lookup?number=<CASE…>` |
-| Dashboards | `x_casemgmt_agent_workspace`, `x_casemgmt_manager_view` (`pa_dashboards`) |
+| Dashboards | `x_casemgmt_agent_workspace` (3 widgets; shared with the agent and manager roles), `x_casemgmt_manager_view` (5 widgets; manager only) — both `pa_dashboards`, each gated by a `pa_dashboards_permissions` share row **and** `restrict_to_roles` |
+| Case-form related lists | `sys_ui_related_x_casemgmt_case_null` — *Case Tasks* (`x_casemgmt_case_task.case`) above *Case Parties* (`x_casemgmt_case_party.case`), Default view |
 | Verbatim messages | "All tasks must be closed before resolving this case." / "Cases cannot be returned to Draft." / "Closed cases are terminal and cannot be modified." / "No case found with that number." / "Your case has been submitted" |
 
 ---
@@ -802,6 +823,10 @@ suite by hand if an instance refuses the serialized records.
 | Anonymous REST call returns 401 rather than 201/200/404 | The endpoint's anonymous access flag did not land, or you are hitting the **Table** API instead of the scripted REST path | Only `/api/x_casemgmt/case_submit` and `/api/x_casemgmt/case_status_lookup` are anonymous. The Table API is *not* anonymous and rejecting it is correct behaviour, not a defect |
 | Manager/agent/viewer denied everything | ACL role-links missing (Defect 9) | Run **5f** — step 6 of the primary procedure — then confirm **exactly 27** links, distributed manager 14 / agent 10 / viewer 3 |
 | Resolve allowed with open tasks, or any precondition not blocking | **Check the enforcement chain, in this order.** (1) Are the 7 flows `active=true` and `status=published`? They were measured so; a Draft flow enforces nothing. (2) Is the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** present and active? It is the component that calls the subflow and then issues `gs.addErrorMessage()` + `setAbortAction(true)` — **without it the flows still run but nothing blocks**. (3) Is `CaseTransitionValidator` present? The rule and the flows both call it | The earlier "flow guards are dead shells" (Defect F) diagnosis applied to a previous revision and no longer describes this package — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` for that history |
-| Dashboards open but show no widgets | Packaging: three child table names that do not exist on this release (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) | Not remediable by installing differently. Fix the artifacts and re-export |
-| A chart is grouped by the wrong field | Packaging: the six chart reports carry their grouping in `<group_by>`, which is **not a column** on `sys_report` on this release, so it is discarded on import; the column a chart groups on is `field` (register §0.6) | Same — rename the element to `field` in `reports/*.xml` and its six payloads, then re-export |
-| Portal pages are blank | Packaging: the Service Portal layout records (container / row / column / instance) were never authored | Same. The REST endpoints work and can be used to demonstrate the contract |
+| Dashboards open but show no widgets | **Fixed in the current package** — if you see this, you are installing an older export whose dashboard artifacts named three child tables this release does not have (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) | Not remediable by installing differently. Use the current export, whose dashboards carry `sys_portal_page` / `sys_grid_canvas` / `pa_tabs` / `pa_m2m_dashboard_tabs` / `sys_portal` + `sys_portal_preferences` + `sys_grid_canvas_pane` / `pa_dashboards_permissions` (register §0.5) |
+| A dashboard opens with *"has not been shared with you"* | Expected for two persona/dashboard pairs **by design** — the agent is not granted Manager View, and the viewer is granted neither. Unexpected for anyone else, in which case the share records did not land | Confirm `pa_dashboards_permissions` rows exist (type `1` = Role) **and** that `pa_dashboards.restrict_to_roles` names the role. Both are required; the sibling column `pa_dashboards.roles` is labelled *"Requires Roles"* and only narrows (register §4 item 18) |
+| A chart is grouped by the wrong field | **Fixed in the current package.** The chart reports used to carry their grouping in `<group_by>`, which is **not a column** on `sys_report` on this release, so it was discarded on import; the column a chart groups on is `field` (register §0.6.1) | Use the current export. If you must patch an old one: rename the element to `field` in the four chart `reports/*.xml` and their four payloads, then re-export |
+| A report opens as *"private"* or is refused to every persona | `sys_report.user` is empty. The read ACL only evaluates `roles` on the `isGlobal` path, so a report with roles but no `user` is private to its owner | Set `sys_report.user` to the literal `GLOBAL` **and** populate `roles`. All 8 packaged reports carry both (register §0.6.1) |
+| The case form shows no related lists | **Fixed in the current package** — but this can also be a *cache* symptom on an instance that rendered the form before the definition arrived, in which case *Configure ▸ Related Lists* will misleadingly show both lists as Selected while the form stays empty | Open a case → context menu → **Configure ▸ Related Lists** → press **Save** with nothing moved. A REST `PUT` of the same values is a no-op and will not clear it (register §4 item 17, `deployment.md` step 12) |
+| Portal pages are blank | **Fixed in the current package** — the Service Portal layout records (container / row / column / instance) had never been authored | Use the current export. The REST endpoints work regardless and can be used to demonstrate the contract |
+| `Organization` is empty on every Case Party for a non-admin user | Not a defect in this application. `core_company` is a global out-of-box table and the demo personas cannot read it, so the platform strips the column from their payload; `admin` sees the real value | Disclosed as **ADV-1** in register §0.9. The only remedy is a grant on `core_company`, which AAP §0.3.2 forbids |

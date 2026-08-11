@@ -27,7 +27,11 @@ and why, so that a later edit does not remove it by accident:
 | Required-ness | `required` **and** `aria-required="true"` on the four mandatory controls. The `*` in the label is decoration, so it carries `aria-hidden="true"` and is never the only carrier of the information | submission widget |
 | Reason a disabled button is disabled | The form sets `novalidate`, so the browser contributes no per-field message. A `help-block` paragraph under the button states the reason in visible text and is referenced by the button through `aria-describedby`. It is always present in the DOM, so the reference never dangles | both widgets |
 | In-flight state | The same paragraph is a `role="status" aria-live="polite"` region that announces "Submitting your case, please wait..." / "Looking up your case, please wait...", and the form sets `aria-busy` while the request is outstanding. The button's changing inner text is no longer the only signal | both widgets |
-| Result and error announcements | `role="alert"` on the submission error panel, the lookup result's not-found panel, and the confirmation panel; the lookup result itself is a `<dl>`/`<dt>`/`<dd>` definition list | both widgets |
+| Result and error announcements | `role="alert"` on the submission error panel, the lookup result's not-found panel, the lookup's service-failure panel, and the confirmation panel; the lookup result itself is a `<dl>`/`<dt>`/`<dd>` definition list | both widgets |
+| Programmatic invalid state | Every control has a `name` and binds **`aria-invalid`** to `$invalid && $touched`, so assistive technology is told *which* control is wrong rather than only that the form is. The `$touched` half is deliberate: a field the user has never visited is not announced as an error on first paint | both widgets |
+| Visible invalid state | The control's `.form-group` takes Bootstrap 3's **`has-error`** class under the same condition, which is what makes the failing field visually distinguishable without any custom CSS | both widgets |
+| Per-field error message | Each control has its own `help-block` paragraph carrying **`role="alert"`**, referenced by the control through `aria-describedby`, rendered only while that control is invalid and touched. The exact strings are in the table below | both widgets |
+| Maximum-length notice | Each length-capped field carries a **`role="status"`** notice that appears only once `maxlength` has been reached, because `maxlength` silently discards further keystrokes and a silent discard is the defect. Wording: *"&lt;Field&gt; has reached its limit of &lt;n&gt; characters. Anything typed beyond this point is discarded."* for Subject (255), Description (4000) and Your name (100) | submission widget |
 | Colour contrast | **Inherited in full from the platform default theme and not measurable project-side.** All three widgets ship an empty `css` element and an empty `link` element, define no colour, and reference no branding asset; `sp_portal.theme` / `theme_dv` are empty. AAP Section 0.4.4 mandates that default treatment ("ServiceNow Experience Portal default theme. No custom CSS, no custom branding"), so there is nothing project-side to change — authoring CSS to alter contrast would violate that requirement. If the platform theme's contrast is ever judged insufficient, that is a theme decision to raise against the AAP, not a defect in these widgets | portal surface |
 
 ## Page 1: Case Submission
@@ -77,6 +81,44 @@ Allows an unauthenticated external requester to submit a new case. On successful
 |  [Portal Default Footer]                                 |
 +----------------------------------------------------------+
 ```
+
+### Per-field validation messages, and what the Submit hint says
+
+Earlier revisions of these widgets validated at form level only: a single hint under the button said that required
+fields were missing, no individual control was marked, and the two consequences were both wrong answers. A user who
+had completed all four required fields and typed a malformed address in the **optional** email field was told that
+required fields were incomplete — the one field actually blocking Submit was the one the message denied mattered.
+And a user who hit a `maxlength` cap had characters discarded with no notice at all.
+
+Both are fixed. Every control now carries its own message, and the aggregate hint states the real reason:
+
+| Control | Message shown when it is invalid and has been touched |
+| --- | --- |
+| Subject | `Subject is required.` |
+| Case Type | `Select a case type.` |
+| Description | `Description is required.` |
+| Your Name | `Your name is required.` |
+| Your Email | `Enter a valid email address, or leave the field empty. Email is optional, but an address that is not valid blocks Submit.` |
+| Case Number *(lookup page)* | `Enter a case number to look up.` |
+
+The hint beneath the Submit button is a `role="status" aria-live="polite"` region and has **three** states, so it
+can never contradict the field-level messages:
+
+| Condition | Hint text |
+| --- | --- |
+| any of the four required fields still incomplete | `Every field marked * is required. Complete all four to enable Submit.` |
+| all four complete, but the optional email is malformed | `Email is optional, but the address entered is not valid. Correct it or clear the field to enable Submit.` |
+| nothing blocking | `All required fields are complete.` |
+
+The distinction is computed by `c.requiredIncomplete()` in the widget's client script, which inspects only the four
+mandatory controls — that is what lets the second state exist at all. The hint paragraph is always present in the
+DOM, so the button's `aria-describedby` reference never dangles, and it doubles as the in-flight announcement.
+
+No CSS was added for any of this: `has-error`, `help-block`, `alert-warning` and `alert-danger` are Bootstrap 3
+classes the platform's default Service Portal theme already provides, which is what keeps the widgets inside AAP
+§0.4.4's *"No custom CSS, no custom branding"*. The `css` field on all three widgets is empty. The contrast and
+control-size consequences of that constraint are recorded as a disclosed limitation in
+[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) (INFO-3), not fixed here.
 
 ### Input Fields
 
@@ -156,6 +198,26 @@ All other fields on the case table are NOT accepted by the submission endpoint a
 
 - Server-side error → 500 Internal Server Error with generic "Submission failed; please try again." (do NOT expose internal stack traces).
 
+#### `type` is optional in the API and required on the page — a deliberate contract, stated because it looks like a bug
+
+A QA pass raised this as an informational finding: `POST /api/x_casemgmt/case_submit` with no `type` returns **201**
+and stores the case with `type` empty, while the submission **page** marks Type required and will not enable Submit
+without it. Both halves are intentional, and the reason is precedence rather than oversight.
+
+AAP §0.5.7 defines the `x_casemgmt_case` table field by field, and `type` is the one choice field it does **not**
+mark mandatory (`subject`, `description` and `requester_name` are). Rejecting a payload without `type` would make
+the endpoint stricter than the schema it implements, and the endpoint is a thin, whitelisted door onto that schema —
+`CasePortalService._validateSubmission` therefore treats `type` as **optional but choice-constrained**: absent is
+accepted, present-and-unrecognised is a 400 checked against the live `sys_choice` list. The *page* is free to be
+stricter than the API, and is: its Type control is `required`, so a case submitted through the portal always carries
+one. No default is invented server-side, because inventing `General Inquiry` would silently misclassify a complaint.
+
+The consequence to be aware of: a case created by a direct API call with no `type` will show an empty Type on the
+internal form and will not appear in either bucket of the *All Cases by Type* dashboard chart. None of the ten
+seeded demo cases is in that state, and the ATF suite's submit test posts an explicit `"type": "General Inquiry"`,
+so no test depends on either reading. Recorded as **INFO-1** in
+[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+
 ## Page 2: Case Status Lookup
 
 ### Purpose
@@ -206,7 +268,7 @@ Allows an unauthenticated external requester to look up the current status of a 
 2. On valid format, the widget calls scripted REST endpoint GET `/api/x_casemgmt/case_status_lookup?number=<value>`.
 3. The endpoint queries `x_casemgmt_case` by `number = <value>` using a `GlideRecord` lookup.
 4. **If found:** returns 200 OK with body `{ "status": "...", "subject": "...", "opened_date": "..." }` — only those three fields, NOTHING else.
-5. **If not found:** returns 404 Not Found with body `{ "error": "No case found with that number." }` (verbatim).
+5. **If not found:** returns 404 Not Found carrying the verbatim literal `No case found with that number.` Measured body on this release: **`{"result":{"error":"No case found with that number."}}`** — the Scripted REST framework nests a handler's body under `result`, so the `error` key sits one level down. The message string is byte-identical either way and the widget reads it defensively, but the envelope is recorded here because earlier revisions of this document wrote it as `{"error":"…"}` and a consumer coding against that shape would miss it.
 6. The widget renders the result panel with the three returned fields, OR the verbatim "not found" message.
 
 ### Whitelisted Output Fields
@@ -260,6 +322,47 @@ Per AAP Section 0.7.4, this text is the canonical not-found message. It MUST app
 - Case number not found → 404 Not Found, displays "No case found with that number."
 - Server-side error → 500 Internal Server Error, generic "Lookup failed; please try again."
 
+#### Not-found and service-failure are two different answers, and the widget no longer conflates them
+
+Earlier revisions of the lookup widget routed **every** failure — 404, 500, a network drop, a gateway timeout —
+through a single branch that set `c.notFound = true`, which rendered the AAP's verbatim literal
+`No case found with that number.` That is the one message that must never be shown on a transport failure: it is a
+statement of fact about the case table, and an infrastructure error is not evidence about the case table. A
+requester whose case exists could be told, definitively, that it does not.
+
+The error handler is now split, and the two paths render different panels:
+
+| Outcome | State set | Panel rendered |
+| --- | --- | --- |
+| HTTP 404, or HTTP 400 (bad request) | `c.notFound = true`, `c.errorMessage = ''` | `alert alert-warning`, `role="alert"`, containing the verbatim `No case found with that number.` — unchanged, still character-for-character, still the only place that string appears |
+| HTTP 5xx, a network failure, or the client-side deadline expiring | `c.errorMessage` set, `c.notFound = false` | `alert alert-danger`, `role="alert"`, containing `The case service could not be reached. Please try again in a moment.` |
+
+The 400 case is deliberately grouped with 404 rather than with the failures: the endpoint answers 400 when the
+supplied number is not a well-formed case number, which *is* an answer about the input, and the widget's own regex
+means a 400 is close to unreachable from the page.
+
+`c.result`, `c.notFound` and `c.errorMessage` are all reset at the start of every lookup, so at most one of the
+three panels can ever be on screen.
+
+#### The lookup has a 20-second deadline; the submission deliberately has none
+
+`var LOOKUP_TIMEOUT_MS = 20000;` is passed to `$http.get(url, { timeout: LOOKUP_TIMEOUT_MS })`. Without it a stalled
+request left the button reading "Looking up your case, please wait..." indefinitely with no way to recover but a page
+reload. On expiry the promise rejects with no HTTP status, which lands in the service-failure branch above — so a
+timeout produces the "could not be reached" panel and never the not-found literal. Recovery needs nothing but
+pressing the button again.
+
+**The submission POST is deliberately left without a timeout, and that asymmetry is intentional.** A lookup is a
+read: abandoning it costs nothing and the user simply retries. A submission is a write. If the client gave up at
+20 seconds on a request the server went on to commit, the page would report failure for a case that exists, and the
+obvious user response — submit again — would create a duplicate. Better to keep waiting than to invite that. The
+anonymous flood guard on the endpoint (10 submissions per 60 s) is a second reason not to encourage retries.
+
+Verified at runtime: the failure path was driven with the browser's network emulation set offline, producing
+`net::ERR_INTERNET_DISCONNECTED` with no HTTP status. The red panel appeared, the literal
+`No case found with that number.` was absent from **every** live text node on the page, and the lookup recovered on a
+plain retry once the network was restored.
+
 ## Source-Side Semantic Mapping
 
 This section documents how the two ServiceNow portal pages semantically correspond to ArkCase concepts. None of the ArkCase code is reused — it is read-only context that informed the data shapes and request/response patterns.
@@ -290,8 +393,30 @@ The numbered procedure below cross-references [`validation-gates.md`](./validati
 5. Confirm `status = Draft`, `subject` and `requester_name` match submitted values, and `opened_date` is set.
 6. Confirm `assigned_group`, `assigned_agent`, `closed_date` are empty.
 7. Log out; open the lookup page; enter the new case number; click Look Up.
-8. Confirm the result panel shows `number`, `status`, `subject`, `opened_date` — and NO other case fields.
+8. Confirm the result panel shows `status`, `subject`, `opened_date` — and NO other case fields. (The panel also
+   re-prints the number the user typed, from its own input scope; the number is deliberately **not** in the
+   response body — see *Whitelisted Output Fields* above.)
 9. Enter case number `CASE9999999`; confirm the literal text "No case found with that number." appears.
+10. Re-check the validation behaviour of both forms, because it is the part most easily broken by a later edit:
+    - On the submission page, fill all four required fields and type `not-an-email` in Your Email. Confirm that the
+      **email** group alone takes `has-error`, that its control alone reports `aria-invalid="true"`, that the message
+      *"Enter a valid email address, or leave the field empty…"* is rendered, and that the hint under the button reads
+      *"Email is optional, but the address entered is not valid…"* — **not** the required-fields wording.
+    - Paste 300 characters into Subject. Confirm the value is capped at exactly 255 **and** that the notice
+      *"Subject has reached its limit of 255 characters…"* appears; repeat for Description at 4000.
+    - On the lookup page, block network access and press Look Up. Confirm the red *"The case service could not be
+      reached…"* panel appears and that `No case found with that number.` does **not** appear anywhere on the page.
+      Restore the network and press Look Up again; confirm it recovers without a reload.
+
+**Measured outcome of the procedure above, on `dev379024`.** Steps 1-9 pass anonymously: `POST` returns **201** with
+`{"number":"CASE…","message":"Your case has been submitted"}`, every response carries `x-is-logged-in: false`, the
+found panel holds exactly three `dt`/`dd` pairs and `Object.keys(response)` is exactly
+`["status","subject","opened_date"]`, an audit of the rendered `<main>` for the eight internal field names returns
+zero matches, and the not-found literal measures exactly **31** characters, codepoint-verified as pure ASCII with a
+terminating `U+002E`. Step 10 passes in all five invalid states tested on the submission form and both states on the
+lookup form. Both pages were also re-checked at 375 / 768 / 1280 / 1920 px after the markup changes:
+`scrollWidth === innerWidth` at every width, no element crossing the right edge, no overlapping form groups and no
+clipped text — including the 375 px state with every error message on screen at once.
 
 ## Cross-References
 

@@ -235,6 +235,39 @@
         and the dashboard widget binding must resolve consistently
         across re-imports.
 
+      - Sharing discipline (AAP Section 0.4.4 "agents and managers see
+        operationally relevant aggregate views on day one", and AAP
+        Section 0.7.3 Gate 6 "accessible to users with correct
+        roles"): <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,
+        x_casemgmt_case_viewer</roles>. `sys_report.roles` is a
+        user_roles column holding role NAMES (no sys_ids, per AAP
+        Section 0.7.2), and it is what makes a report reachable by a
+        user who is neither its owner nor an admin. With it empty, a
+        report is private: an impersonated x_casemgmt_demo_agent
+        opening this report received a blank page reading "Report
+        visible only to a specific user or group" even though the
+        report's filter was correct. All three scoped roles are
+        listed because all three personas are legitimate readers of
+        aggregate case data - the row-level perimeter is enforced by
+        the table ACLs (AAP Section 0.5.6), not by report sharing, so
+        an agent still only sees the rows their ACLs permit.
+        <user>GLOBAL</user> is the other half of the fix, and the
+        load-bearing half: the platform's own read ACL on sys_report is
+        a script, and it consults `roles` ONLY on its `isGlobal` branch -
+        `isGlobal` is `current.user.toString() == "GLOBAL"`. With `user`
+        empty the report is private to whoever created it, the branch
+        that reads `roles` never runs, and an impersonated
+        x_casemgmt_demo_agent got a blank page reading "Report visible
+        only to a specific user or group" even with all three roles
+        listed. `sys_report.user` is a 40-character STRING (not a
+        reference) whose magic values are 'GLOBAL' (visible to everyone,
+        narrowed by `roles`) and 'group' (shared through
+        sys_report_users_groups); 265 of 300 sampled out-of-box reports
+        carry 'GLOBAL' with `roles` as the restriction, which is exactly
+        the shape this report now ships. 'GLOBAL' is a literal platform
+        keyword, not a sys_id, so the AAP Section 0.7.2 no-hardcoded-
+        sys_id constraint still holds.
+
     CROSS-DEPENDENCY GRAPH
     ======================
     DEPENDS ON (must load earlier in the Update Set):
@@ -373,12 +406,10 @@
         <description>Agent Workspace dashboard list-widget data source. Returns rows from x_casemgmt_case where assigned_agent equals the current viewer (resolved per-viewer at evaluation time via javascript:gs.getUserID()) and status is NOT IN (Resolved, Closed). Columns: number, subject, priority, status, opened_date. Per-viewer semantics deliver each user's personal "open work" queue without per-user report duplication. Replaces ArkCase's Solr-backed ActiveCaseFileByQueueService facet pattern with a native GlideRecord-backed list query. No external BI engine.</description>
         <field_list>number,subject,priority,status,opened_date</field_list>
         <filter>assigned_agent=javascript:gs.getUserID()^statusNOT INResolved,Closed</filter>
-        <format/>
-        <group_by/>
         <is_real_time>false</is_real_time>
         <is_scheduled>false</is_scheduled>
         <name>x_casemgmt_my_open_cases</name>
-        <roles/>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
         <sys_class_name>sys_report</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -394,6 +425,6 @@
         <table>x_casemgmt_case</table>
         <title>My Open Cases</title>
         <type>list</type>
-        <user/>
+        <user>GLOBAL</user>
     </sys_report>
 </record_update>

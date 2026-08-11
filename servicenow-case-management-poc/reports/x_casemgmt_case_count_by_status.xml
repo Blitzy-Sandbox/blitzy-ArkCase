@@ -63,7 +63,7 @@
         this to a Choice field with exactly six values per AAP Section
         0.5.7 (Draft, Open, In Progress, Pending, Resolved, Closed)
         defined in ../choices/sys_choice_case_status.xml. The
-        <group_by>status</group_by> below references this Choice field
+        <field>status</field> below references this Choice field
         by element name; the donut renders one slice per Choice label.
 
       - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
@@ -77,7 +77,7 @@
         The DTO that ArkCase produced when aggregating cases by status -
         a (status, count) tuple consumed by Pentaho-backed reports. The
         ServiceNow target replaces this DTO + Pentaho pipeline with a
-        native sys_report whose `<group_by>status</group_by>` plus
+        native sys_report whose `<field>status</field>` plus
         `<aggregate>COUNT</aggregate>` produce the same tuple shape
         directly via the platform's GlideAggregate engine - no DTO,
         no external BI tool, no Solr facet. The dashboard widget renders
@@ -116,17 +116,40 @@
     =======================================
       - Aggregation discipline (AAP Section 0.5.1, this report's row):
         type = pie. Per agent-prompt Mandatory Field Specification,
-        chart-type reports populate <type>, <group_by>, and <aggregate>;
+        chart-type reports populate <type>, <field>, and <aggregate>;
         they leave <field_list/> and <aggregation_source/> empty. The
         rendered output is one donut/pie chart with one slice per
         distinct value of `status`.
 
       - Group-by discipline (agent-prompt Rule 4 verbatim):
-        <group_by>status</group_by>. The Choice field defined in
+        <field>status</field>. The Choice field defined in
         ../dictionary/x_casemgmt_case_status.xml. The six slices
         correspond to the six Choice values defined in
         ../choices/sys_choice_case_status.xml: Draft, Open, In Progress,
         Pending, Resolved, Closed (Title Case match required).
+
+      - COLUMN NAME OF THE GROUP-BY (measured, not assumed): the
+        group-by dimension is carried in the `field` column, whose
+        label is "Field Name". `sys_report` has NO `group_by` column
+        on this release - sys_dictionary for sys_report offers
+        `field`, `additional_groupby`, `group` (a reference to
+        sys_user_group), `sc_groupby_item_id` and
+        `sc_groupby_variable_id`, and nothing named `group_by`. An
+        earlier revision of this file emitted <group_by>status</group_by>;
+        the loader silently discarded the unknown element, `field`
+        stayed empty, and the Report renderer then fell back to the
+        alphabetically-first field on the table (Assigned Agent), so
+        the chart drew a plausible-looking but semantically WRONG
+        dimension with no error and no empty state. The element is
+        now <field>status</field>, matching the sibling
+        ../reports/x_casemgmt_avg_time_to_close.xml, which always
+        rendered correctly precisely because it named its column in
+        `field`. The `group_by` element has been removed outright
+        rather than left empty: it is not a column, so emitting it -
+        even empty - only invites the next reader to believe it is one.
+        The same applies to the `format` element the earlier revision
+        emitted; sys_report has no `format` column either, and both are
+        now gone from all eight report artifacts.
 
       - Filter discipline (agent-prompt Rule 5 verbatim):
         <filter/> empty. This report counts ALL cases regardless of
@@ -162,23 +185,36 @@
              (assigned-only ACL per AAP Section 0.5.6). For a
              `case_manager`, all six slices appear (full ACL).
 
-      - Why not "type=donut": ServiceNow's sys_report.type vocabulary
-        does NOT include a literal "donut" enum value; the canonical
-        round-aggregate chart type is "pie". The platform renders a
-        donut-style chart (pie with center hole) automatically when
-        a sys_report of type=pie is embedded in a modern Dashboard
-        widget - the donut/pie distinction is a presentation-layer
-        decision made at the widget level, not the report level.
-        Cross-version safety per AAP Section 0.4.2 ("Yokohama-and-later
-        feature floor"): `pie` exists in every ServiceNow release this
-        POC targets; `donut` does not exist as a sys_report.type value
-        in any release.
+      - Why "type=donut", corrected from "pie": AAP Section 0.4.4 and
+        Section 0.5.1 both specify a DONUT chart here, and `donut` IS a
+        valid sys_report.type value on this release. Earlier revisions of
+        this artifact shipped `pie` and justified it with two claims that
+        have since been MEASURED FALSE, so they are recorded here rather
+        than silently deleted:
+          (1) "sys_report.type has no literal donut enum" - it does. The
+              active sys_choice list for sys_report.type contains `donut`
+              (label "Donut") and `semi_donut` ("Semi donut") under the
+              platform's own "Pies and Donuts" group header, alongside
+              `pie`, and four out-of-box reports on this instance already
+              use it.
+          (2) "the platform renders a pie with a centre hole once the
+              report is embedded in a Dashboard widget" - it does not.
+              Rendered as `pie`, the Highcharts point path terminated
+              `A 0 0 0 0 1 ...` (inner radius 0) and the widget painted a
+              SOLID pie with no hole. The report's own type is what
+              decides it; there is no widget-level promotion.
+        The distinction is therefore a report-level setting, and matching
+        the AAP takes precedence over the aesthetic argument the old
+        comment made. Cross-version note per AAP Section 0.4.2
+        ("Yokohama-and-later feature floor"): `donut` is not new - it is
+        long-standing sys_report vocabulary, so this does not narrow the
+        release floor.
 
       - Why both this donut AND a parallel bar chart of the same
         aggregation: per AAP Section 0.4.4 the Manager View dashboard
         carries a separate "All Cases by Status" bar chart
         (../reports/x_casemgmt_all_cases_by_status.xml). Both reports
-        share identical <table>, <group_by>, <aggregate>, and (empty)
+        share identical <table>, <field>, <aggregate>, and (empty)
         <filter>; they differ only in <type> (pie vs. bar) and in
         which dashboard consumes them (Agent Workspace vs. Manager
         View). The duplication is INTENTIONAL per AAP Section 0.4.4
@@ -241,6 +277,39 @@
         and the dashboard widget binding must resolve consistently
         across re-imports.
 
+      - Sharing discipline (AAP Section 0.4.4 "agents and managers see
+        operationally relevant aggregate views on day one", and AAP
+        Section 0.7.3 Gate 6 "accessible to users with correct
+        roles"): <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,
+        x_casemgmt_case_viewer</roles>. `sys_report.roles` is a
+        user_roles column holding role NAMES (no sys_ids, per AAP
+        Section 0.7.2), and it is what makes a report reachable by a
+        user who is neither its owner nor an admin. With it empty, a
+        report is private: an impersonated x_casemgmt_demo_agent
+        opening this report received a blank page reading "Report
+        visible only to a specific user or group" even though the
+        report's filter was correct. All three scoped roles are
+        listed because all three personas are legitimate readers of
+        aggregate case data - the row-level perimeter is enforced by
+        the table ACLs (AAP Section 0.5.6), not by report sharing, so
+        an agent still only sees the rows their ACLs permit.
+        <user>GLOBAL</user> is the other half of the fix, and the
+        load-bearing half: the platform's own read ACL on sys_report is
+        a script, and it consults `roles` ONLY on its `isGlobal` branch -
+        `isGlobal` is `current.user.toString() == "GLOBAL"`. With `user`
+        empty the report is private to whoever created it, the branch
+        that reads `roles` never runs, and an impersonated
+        x_casemgmt_demo_agent got a blank page reading "Report visible
+        only to a specific user or group" even with all three roles
+        listed. `sys_report.user` is a 40-character STRING (not a
+        reference) whose magic values are 'GLOBAL' (visible to everyone,
+        narrowed by `roles`) and 'group' (shared through
+        sys_report_users_groups); 265 of 300 sampled out-of-box reports
+        carry 'GLOBAL' with `roles` as the restriction, which is exactly
+        the shape this report now ships. 'GLOBAL' is a literal platform
+        keyword, not a sys_id, so the AAP Section 0.7.2 no-hardcoded-
+        sys_id constraint still holds.
+
     CROSS-DEPENDENCY GRAPH
     ======================
     DEPENDS ON (must load earlier in the Update Set):
@@ -249,7 +318,7 @@
         <sys_package> both resolve against it)
       - ../tables/x_casemgmt_case.xml                  (parent table)
       - ../dictionary/x_casemgmt_case_status.xml
-            (defines the Choice field used in <group_by>)
+            (defines the Choice field used in <field>)
       - ../choices/sys_choice_case_status.xml
             (defines the six status Choice values rendered as slices:
              Draft, Open, In Progress, Pending, Resolved, Closed)
@@ -349,9 +418,10 @@
     [x] <name> = x_casemgmt_case_count_by_status
     [x] <title> = Case Count by Status
     [x] <table> = x_casemgmt_case
-    [x] <type> = pie
+    [x] <type> = donut
     [x] <filter/> empty
-    [x] <group_by> = status
+    [x] <field> = status
+    [x] <group_by/> empty (not a sys_report column on this release)
     [x] <aggregate> = COUNT
     [x] <aggregation_source/> empty
     [x] <field_list/> empty
@@ -374,14 +444,13 @@
         <aggregation_source/>
         <chart_size>medium</chart_size>
         <description>Agent Workspace dashboard donut/pie widget data source. Aggregates ALL records in x_casemgmt_case grouped by the status Choice field with COUNT(*) per bucket. Six slices expected (Draft, Open, In Progress, Pending, Resolved, Closed) when seed data spans all statuses. UNFILTERED by design - shows the entire team backlog distribution, not the agent's personal queue (which is provided by the separate x_casemgmt_my_open_cases list report). Replaces ArkCase's CaseByStatusDto + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report. Same aggregation as x_casemgmt_all_cases_by_status (Manager View bar chart); different chart type and dashboard audience per AAP Section 0.4.4.</description>
+        <field>status</field>
         <field_list/>
         <filter/>
-        <format/>
-        <group_by>status</group_by>
         <is_real_time>false</is_real_time>
         <is_scheduled>false</is_scheduled>
         <name>x_casemgmt_case_count_by_status</name>
-        <roles/>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
         <sys_class_name>sys_report</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
@@ -396,7 +465,7 @@
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <table>x_casemgmt_case</table>
         <title>Case Count by Status</title>
-        <type>pie</type>
-        <user/>
+        <type>donut</type>
+        <user>GLOBAL</user>
     </sys_report>
 </record_update>
