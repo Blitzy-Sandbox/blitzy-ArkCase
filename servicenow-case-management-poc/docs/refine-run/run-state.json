@@ -403,6 +403,354 @@
     },
     "unit": "U2"
   },
+  "phase2": {
+    "unit": "U3",
+    "entry_gate": {
+      "phase1_exit_condition": "met",
+      "checked_at_utc": "2026-09-02T19:47:16Z"
+    },
+    "clean_confirmed": {
+      "confirmed_at_utc": "2026-09-02T19:53:13Z",
+      "reconfirmed_before_fix_reattempt_utc": "2026-09-02T20:03:58Z",
+      "x_casemgmt_case": "HTTP 400 Invalid table x_casemgmt_case",
+      "x_casemgmt_case_task": "HTTP 400 Invalid table x_casemgmt_case_task",
+      "x_casemgmt_case_party": "HTTP 400 Invalid table x_casemgmt_case_party",
+      "sys_dictionary_rows": {
+        "x_casemgmt_case": 0,
+        "x_casemgmt_case_task": 0,
+        "x_casemgmt_case_party": 0
+      },
+      "sys_db_object_rows": 0,
+      "sys_security_acl_role_by_role_name": 0,
+      "sys_security_acl_role_by_acl_name": 0,
+      "sys_user_has_role_scoped_roles": 0,
+      "preserved": {
+        "sys_user_role": 3,
+        "sys_scope": 1,
+        "sys_app": 1,
+        "scoped_flows": 7,
+        "apps_current_app_preference": true
+      },
+      "deletions_performed_by_this_unit": 0
+    },
+    "package_export_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
+    "package_export_mechanism": "platform's own export path: UpdateSetExport().exportUpdateSet() (the API the sys_update_set 'Export to XML' UI action runs) then GET /export_update_set.do?sysparm_sys_id=<snapshot>&sysparm_delete_when_done=true&sysparm_is_remote=false&sysparm_ck=<session token>; master set verified at 988 children and state=complete before and after every export",
+    "package_sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+    "package_bytes": 4062436,
+    "export_history": [
+      {
+        "attempt": 1,
+        "snapshot_sys_id": "7af37c12930f435009aa70d19dba105a",
+        "bytes": 4062298,
+        "payloads": 988,
+        "sha256": "df110c9526bdc81d62b06b0f6a58b5573a83b9d3153fcd7c623ef9704668a000",
+        "outcome": "previewed with 63 type=error; superseded by fix 1"
+      },
+      {
+        "attempt": 2,
+        "snapshot_sys_id": "23467496930f435009aa70d19dba1013",
+        "bytes": 4062436,
+        "payloads": 988,
+        "sha256": "7c382fab41954ebea107c610a0c496343e29e3393bd5788c441080e58c2163db",
+        "outcome": "previewed with 60 type=error; superseded by fix 2"
+      },
+      {
+        "attempt": 3,
+        "snapshot_sys_id": "0b3b7452934f435009aa70d19dba100d",
+        "bytes": 4062436,
+        "payloads": 988,
+        "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+        "outcome": "previewed with 0 problems and committed; this is the deliverable"
+      }
+    ],
+    "package_sanity": {
+      "xmllint": "pass (no output)",
+      "payload_count": 988,
+      "payload_actions_all_insert_or_update": true,
+      "delete_action_rows": 0,
+      "sys_db_object_payload_tables": [
+        "x_casemgmt_case",
+        "x_casemgmt_case_task",
+        "x_casemgmt_case_party"
+      ],
+      "removed_hand_authored_table_ids_present": 0,
+      "sys_dictionary": 30,
+      "sys_dictionary_all_platform_named": true,
+      "sys_documentation": 30,
+      "sys_security_acl_role": 27,
+      "sys_security_acl_role_split": {
+        "x_casemgmt_case_manager": 14,
+        "x_casemgmt_case_agent": 10,
+        "x_casemgmt_case_viewer": 3
+      },
+      "sys_security_acl": 26,
+      "sys_choice": 7,
+      "sys_user_has_role": 3,
+      "sys_user_role": 3,
+      "sys_number": 3,
+      "sys_variable_value": 540,
+      "sys_atf_step": 180,
+      "seed_rows": {
+        "total": 28,
+        "x_casemgmt_case": 10,
+        "x_casemgmt_case_task": 10,
+        "x_casemgmt_case_party": 8
+      },
+      "s1_probe_artifacts_present": 0,
+      "credentials_or_tokens_present": 0,
+      "rows_not_attributed_to_x_casemgmt_scope": 0
+    },
+    "preview": {
+      "retrieved_update_set_sys_id": "0b3b7452934f435009aa70d19dba100d",
+      "is_new_record": true,
+      "distinct_from": [
+        "9929f50df18ccec91ea13b2a3bccfc90",
+        "b4861cf7bbe24b36926fcaff4583b5bf",
+        "7af37c12930f435009aa70d19dba105a",
+        "23467496930f435009aa70d19dba1013"
+      ],
+      "child_count": 988,
+      "appended": false,
+      "upload_mechanism": "priming REST GET, then GET /upload.do?sysparm_target=sys_remote_update_set to scrape sysparm_ck, then POST /sys_upload.do multipart (HTTP 200)",
+      "upload_started_utc": "2026-09-02T20:26:05Z",
+      "upload_returned_utc": "2026-09-02T20:26:09Z",
+      "load_state": "loaded",
+      "load_poll_seconds": 0,
+      "load_error_detail": "",
+      "preview_trigger": "POST /xmlhttp.do sysparm_processor=UpdateSetPreviewAjax&sysparm_ajax_processor_function=preview&sysparm_ajax_processor_sys_id=0b3b7452934f435009aa70d19dba100d&sysparm_ck=<scraped>",
+      "preview_tracker_id": "af5b3892934f435009aa70d19dba104d",
+      "preview_triggered_utc": "2026-09-02T20:26:22Z",
+      "preview_done_utc": "2026-09-02T20:26:48Z",
+      "preview_states_observed": [
+        "previewing",
+        "previewing",
+        "previewing",
+        "previewing",
+        "previewing",
+        "previewed"
+      ],
+      "preview_duration_seconds": 26,
+      "state": "previewed_then_committed"
+    },
+    "problems": {
+      "error": 0,
+      "warning": 0,
+      "total_rows": 0,
+      "warning_descriptions": [],
+      "none_resolved_skipped_or_ignored": true,
+      "pre_refine_baseline_error_count": 54,
+      "superseded_attempts": [
+        {
+          "set": "7af37c12930f435009aa70d19dba105a",
+          "error": 63,
+          "warning": 0
+        },
+        {
+          "set": "23467496930f435009aa70d19dba1013",
+          "error": 60,
+          "warning": 0
+        }
+      ]
+    },
+    "commit": {
+      "mechanism": "ui_action",
+      "resume_check": {
+        "state_before": "previewed",
+        "commit_progress_workers_for_set": 0,
+        "other_committed_sets": [
+          "9929f50df18ccec91ea13b2a3bccfc90"
+        ],
+        "tables_still_http_400": true,
+        "already_committed": false
+      },
+      "clicked_once": true,
+      "committed_twice": false,
+      "confirmation_dialog_shown": false,
+      "result_text": "Update Set Commit / Succeeded 100% / Update set committed - Succeeded in 50 Seconds",
+      "state": "committed",
+      "committed_at_utc": "2026-09-02T20:36:27Z",
+      "counters": {
+        "inserted": 613,
+        "updated": 375,
+        "deleted": 0,
+        "collisions": 0,
+        "total": 988
+      },
+      "progress_worker": {
+        "state": "Complete",
+        "completion_code": "Success",
+        "message": "Update set committed"
+      },
+      "sys_update_log_rows": 0,
+      "children_with_disposition": 0,
+      "console_errors_on_record_page": 0,
+      "network_requests_non_2xx": 0,
+      "remediation_script_run": false,
+      "second_commit": false,
+      "rollback_or_backout_invoked": false
+    },
+    "partial_commit": null,
+    "post_commit": {
+      "table_http_codes": {
+        "x_casemgmt_case": 200,
+        "x_casemgmt_case_task": 200,
+        "x_casemgmt_case_party": 200
+      },
+      "dictionary_counts": {
+        "x_casemgmt_case": 21,
+        "x_casemgmt_case_task": 14,
+        "x_casemgmt_case_party": 13
+      },
+      "sys_db_object_rows": 3,
+      "acl_role_links_total": 27,
+      "acl_role_links_split": {
+        "x_casemgmt_case_manager": 14,
+        "x_casemgmt_case_agent": 10,
+        "x_casemgmt_case_viewer": 3
+      },
+      "sys_user_role": 3,
+      "sys_user_has_role": 3,
+      "sys_security_acl": 26,
+      "rest_of_package": {
+        "scoped_flows": 7,
+        "scoped_flows_active": 7,
+        "sys_report": 8,
+        "pa_dashboards": 2,
+        "business_rules": 7,
+        "script_includes": 2,
+        "sys_ui_policy": 2,
+        "sys_ui_policy_action": 2,
+        "sys_ui_action": 6,
+        "sys_ui_list_case_tables": 3,
+        "sys_ui_related_list": "present for x_casemgmt_case",
+        "sp_portal": 1,
+        "sp_page": 2,
+        "sp_widget": 3,
+        "sys_ws_definition": 2,
+        "sys_ws_operation": 2,
+        "demo_users": 3,
+        "demo_group": 1,
+        "group_membership": 1,
+        "core_company": 2,
+        "atf_suite": 1,
+        "atf_tests": 20,
+        "atf_steps": 180,
+        "sys_number": 3,
+        "seed_rows": {
+          "x_casemgmt_case": 10,
+          "x_casemgmt_case_task": 10,
+          "x_casemgmt_case_party": 8
+        }
+      },
+      "gaps_recorded_not_acted_on": [
+        {
+          "gap": "sys_choice rows for the three tables = 0 (the package carries 7 sys_choice payloads holding 24 rows; the 4 choice-typed case fields still carry choice=3)",
+          "classification": "pre-existing package/platform first-time-import behaviour, outside the table/role-link subset; payloads byte-identical to the pre-refine package; the pre-refine path converged only via post_import_remediation.js plus a second commit, which INTERP-10 forbids",
+          "caused_by_this_run": false,
+          "fixed": false
+        },
+        {
+          "gap": "seed child rows carry no parent-case linkage: case empty on 10/10 tasks and 8/8 parties, organization empty on the 3 Organization-type parties",
+          "classification": "pre-existing - the seed task/party payloads contain no case element at all and no organization element, identically in FALLBACK.xml; the pre-refine linkage came from scripts/seed_demo_data.js run after the commit",
+          "caused_by_this_run": false,
+          "fixed": false
+        },
+        {
+          "gap": "opened_date empty on 8 of 10 cases",
+          "classification": "known pre-existing defect, expected per OVERRIDE-3 / D5; the commit engine suppresses the before-insert rule x_casemgmt_set_opened_date",
+          "caused_by_this_run": false,
+          "fixed": false
+        }
+      ]
+    },
+    "verified_checksum": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+    "verified_checksum_at_utc": "2026-09-02T20:53:14Z",
+    "verified_checksum_rule": "If the package changes after this point the checksum is stale and Phase 2 (S1-S6) must re-run before the package is ship-ready again.",
+    "fallback_package_untouched": {
+      "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+      "modified": false
+    },
+    "exit_condition": "met",
+    "exit_timestamp_utc": "2026-09-02T20:53:14Z",
+    "shippable": true,
+    "fallback_invoked": false,
+    "screenshots": [
+      {
+        "checkpoint": "L206 commit result (D34)",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-result.png",
+        "caption": "Phase 2 - commit result screen showing the outcome (zero problems / success)"
+      },
+      {
+        "checkpoint": "commit precondition",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-previewed-record.png",
+        "caption": "Phase 2 - Retrieved Update Set at state=previewed with the Commit Update Set action present, before the click"
+      },
+      {
+        "checkpoint": "commit precondition (full page)",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-previewed-record-fullpage.png",
+        "caption": "Phase 2 - full record form before the commit click"
+      },
+      {
+        "checkpoint": "authenticated session",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-login-confirmed.png",
+        "caption": "Phase 2 - authenticated session, user menu showing System Administrator"
+      },
+      {
+        "checkpoint": "commit in progress",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-progress-0pct.png",
+        "caption": "Phase 2 - Update Set Commit progress modal at 0%"
+      },
+      {
+        "checkpoint": "committed record",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-result-record-form.png",
+        "caption": "Phase 2 - Retrieved Update Set showing State = Committed after the commit"
+      },
+      {
+        "checkpoint": "post-commit storage",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-tables-created.png",
+        "caption": "Phase 2 - the three scoped tables present in sys_db_object after the commit"
+      },
+      {
+        "checkpoint": "post-commit commit log",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-progress-worker-success.png",
+        "caption": "Phase 2 - commit progress worker: Complete / Success / Update set committed"
+      },
+      {
+        "checkpoint": "post-commit seed data",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-case-seed-rows.png",
+        "caption": "Phase 2 - 10 seeded cases present after the commit"
+      },
+      {
+        "checkpoint": "post-commit seed data",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-party-seed-rows.png",
+        "caption": "Phase 2 - 8 seeded case parties present after the commit"
+      }
+    ],
+    "report": "servicenow-case-management-poc/docs/refine-run/PHASE2.md",
+    "live_state_for_following_units": {
+      "committed_retrieved_set": "0b3b7452934f435009aa70d19dba100d",
+      "superseded_retrieved_sets": [
+        "7af37c12930f435009aa70d19dba105a",
+        "23467496930f435009aa70d19dba1013"
+      ],
+      "master_shipping_set": {
+        "sys_id": "1109981a930b435009aa70d19dba1098",
+        "state": "complete",
+        "child_count": 988
+      },
+      "instance_fully_applied": true,
+      "partial_apply": false
+    },
+    "heartbeat": {
+      "running_during_unit": true,
+      "mechanism": "api",
+      "interval_minutes": 10,
+      "pid": "14676",
+      "recovery_cycles": 0,
+      "recovery_cycle_durations": [],
+      "hibernation_events": 0
+    }
+  },
   "fix_attempts": [
     {
       "unit": "U2",
@@ -411,6 +759,22 @@
       "cap": 2,
       "resolved": true,
       "resolution": "re-created with setNewGuidValue() (the platform API that forces record identity), then re-serialized the three table records into the shipping set with the platform own writer so their captured payloads carry the final number_ref; verified in the captured payloads"
+    },
+    {
+      "unit": "U3",
+      "issue": "3 type=error preview problems: \"Update scope id 'global' is different than update set scope id '82b99028936f74320d74d6f88357a5af'\" on the three natively created sys_user_has_role grants",
+      "attempts": 1,
+      "cap": 2,
+      "resolved": true,
+      "resolution": "root cause: those 3 rows were the only ones of the 988 attributed to the global scope, because the capture writer ran in global scope; sys_user_has_role has no sys_scope column, so the attribution lives only on the captured sys_update_xml row's application field, and the pre-refine package attributed the same grants to the x_casemgmt scope. Fixed in the source set by setting application to the scope (resolved by query) on those 3 rows; payload_hash verified unchanged; re-exported and re-previewed - the errors did not return"
+    },
+    {
+      "unit": "U3",
+      "issue": "60 type=error preview problems: \"Found a local update that is newer than this one\" on the swapped table/dictionary/role-link records",
+      "attempts": 2,
+      "cap": 2,
+      "resolved": true,
+      "resolution": "attempt 1 removed the 231 stale sys_update_version rows for the 60 names and was insufficient (the previewer does not read that table). attempt 2 removed the 256 local DELETE-capture sys_update_xml rows that made the authoring instance declare the package stale - 215 in the throwaway ABSORBER set 25d86c1a938b435009aa70d19dba101b and 41 in the x_casemgmt scope Default set 934aabce9343435009aa70d19dba10fe, all created today by admin between 14:32 and 19:21, each naming a record the package ships. Guards refused any master-set row and any non-DELETE row; master set verified at 988 children afterwards; the clean-instance precondition was re-confirmed before the re-verify, which returned 0 problems of any type"
     }
   ],
   "heartbeat_u2": {
