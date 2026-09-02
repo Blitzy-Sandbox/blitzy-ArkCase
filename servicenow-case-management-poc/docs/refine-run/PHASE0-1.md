@@ -1,0 +1,439 @@
+# Refine Run — Phase 0 and Phase 1 S0/S1/S2 Report
+
+Unit U1 of the Refine PR sequence. Scope of this report: Phase 0 (establish a live instance) and
+Phase 1 steps **S0** (import + fallback), **S1** (scratch native-creation validation) and **S2**
+(delete the test artifacts, re-set the master set current).
+
+Phase 1 steps **S3–S6** (the real rebuild) belong to the next unit, Phase 2 (preview/commit) to the
+unit after that, and Phase 3 (ATF) to the one after that. Nothing in those steps was performed here.
+
+- Target instance: `https://dev306625.service-now.com` — Zurich Patch 10
+- Scope: `x_casemgmt`, scope `sys_id` `82b99028936f74320d74d6f88357a5af` (always resolved by query
+  `sys_scope?sysparm_query=scope=x_casemgmt`, never from a literal)
+- Machine-readable state for the following units: [`run-state.json`](./run-state.json)
+- No credential, session token or cookie value appears in this file, in `run-state.json`, or in any
+  committed artifact.
+
+---
+
+## 1. Credential and target pre-checks (before any wake/heartbeat activity)
+
+A presence-and-plausible-format check only — neither credential set can be functionally validated
+before a session exists.
+
+| Variable | Presence | Format check | Result |
+| --- | --- | --- | --- |
+| `SERVICENOW_DEV_LOGIN_USERNAME` | present, len 17 | non-empty, no whitespace, email-shaped | PASS |
+| `SERVICENOW_DEV_LOGIN_PASSWORD` | present, len 19 | non-empty, length ≥ 8 | PASS |
+| `SERVICENOW_INSTANCE_ADMIN_URL` | present, len 33 | matches `^https://dev[0-9]+\.service-now\.com/?$` | PASS |
+| `SERVICENOW_INSTANCE_ADMIN_USERNAME` | present, len 5 | non-empty, no whitespace | PASS |
+| `SERVICENOW_INSTANCE_ADMIN_PASSWORD` | present, len 12 | non-empty, length ≥ 8 | PASS |
+
+Only lengths and masked prefixes were ever emitted. No interactive prompt for a credential was
+issued at any point.
+
+**Target verification.** Resolved host `dev306625.service-now.com` — the newly provisioned
+validation PDI. It is **not** the retired `dev379024`, and it is a developer PDI host
+(`devNNNNNN.service-now.com`), not a customer production or customer-owned instance. No instance was
+provisioned, released or re-requested.
+
+**Credential handling used throughout.** A curl config was written to the run's private scratch
+directory (outside every repository checkout) with mode `0600` and consumed as `curl -sS -K <cfg>`,
+so the password never entered a process list, a log, or a repository file:
+
+```
+printf 'user = "%s:%s"\n' "$SERVICENOW_INSTANCE_ADMIN_USERNAME" "$SERVICENOW_INSTANCE_ADMIN_PASSWORD" > <scratch>/sn.cfg
+chmod 600 <scratch>/sn.cfg
+curl -sS -K <scratch>/sn.cfg "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/..."
+```
+
+Browser work was briefed to read the credentials from the environment variables (or that same
+config file) — no credential literal was ever passed in a task brief.
+
+---
+
+## 2. Phase 0 — live, authenticated, non-hibernating session
+
+### 2.1 Connectivity verification (detection by CONTENT, not by HTTP status)
+
+| Step | Call | Observed | Verdict |
+| --- | --- | --- | --- |
+| 1 | `GET /api/now/table/sys_remote_update_set?sysparm_limit=1` | HTTP 200 with a **valid JSON body** (1 result) | reachable, credentials valid, **not** hibernating |
+| 2 | `GET /api/now/table/sys_upgrade_history?sysparm_limit=1&sysparm_query=upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` | HTTP 200, **0 records** | not mid-upgrade — proceed |
+
+Hibernation on this platform answers HTTP 200 with an HTML splash, so the decisive signal is the
+body: a JSON body means live, an HTML body would have meant hibernating. Neither 401 (credentials)
+nor 403 (access) nor a connection timeout/DNS failure (wrong URL / deprovisioned) occurred.
+
+### 2.2 Browser (UI) confirmation
+
+A real browser session logged in through the UI form at `/login.do` (fields `user_name`,
+`user_password`) and reached the landing page `https://dev306625.service-now.com/now/nav/ui/home`
+(primary route; the `/home.do` fallback was not needed).
+
+- Authenticated: the user menu shows **System Administrator** (the avatar control's accessible name
+  reads `System Administrator: Available`).
+- Live by content: a shadow-DOM-aware deep text extraction of the rendered page (10,601 characters)
+  scored **zero** occurrences for every hibernation marker (`hibernating`, `hibernate`,
+  `hibernation`, `wake up instance`, `waking up`, `sign in to wake`, `reclaimed`,
+  `developer.servicenow.com`) and zero for `invalid login`. The positive determination rests on
+  rendered application chrome plus server-backed data a static splash cannot produce — verbatim from
+  the page: "Welcome to Admin Home, System!", "Current version — Zurich", "Entitled ServiceNow apps:
+  Needs update 174 / Installed 239 / Total 3129". All 117 landing-page requests returned 2xx.
+- Console: **zero errors** on the landing page. Pre-existing base-platform noise elsewhere (two
+  `/login.do` script errors and one cosmetic SVG `NaN` path error on the welcome page) is not caused
+  by this run.
+
+**SCREENSHOT — instance landing page once confirmed live**
+`/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase0-landing-page.png`
+Caption: *Phase 0 — instance landing page confirmed live and authenticated*
+
+### 2.3 Wake sequence and recovery accounting
+
+The instance was **live at first contact**, so the wake sequence was never entered.
+
+| Item | Value |
+| --- | --- |
+| Hibernating at start | no |
+| Wake performed | no |
+| Recovery cycles used | **0** of the 3 permitted per run |
+| Recovery cycle durations | none (no cycle occurred) |
+| Fix-and-re-verify attempts used | **0** — counted independently of the recovery cap |
+
+Had a wake been required, the route is the Developer Site (`developer.servicenow.com/dev.do` →
+sub-nav **"Manage my instance"** → **"Wake Instance"** when not Online, otherwise **"⟳ Refresh"**),
+polling roughly every 30 s and judging by content, with a 15-minute / 30-poll timeout. No instance
+was ever released or re-requested.
+
+### 2.4 Heartbeat
+
+Running, on its own clock, for the remainder of this unit.
+
+| Item | Value |
+| --- | --- |
+| Mechanism | API context — `GET /api/now/table/sys_user?sysparm_limit=1` (read-only; never a write) |
+| Interval | 10 minutes |
+| Driven by | detached background loop (`nohup … &`), one lightweight action per interval |
+| PID | 8099 |
+| First recorded beat | `2026-09-02T17:34:43Z 200` |
+
+```
+nohup bash -c 'while :; do printf "%s " "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> <scratch>/heartbeat.log; \
+  curl -sS -K <scratch>/sn.cfg "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user?sysparm_limit=1" \
+  -o <scratch>/hb_body.txt -w "%{http_code}\n" >> <scratch>/heartbeat.log; sleep 600; done' >/dev/null 2>&1 &
+```
+
+Note for the commit step of the following phase: while sitting on the Retrieved Update Set record or
+the commit-result page, keep using this API-context heartbeat rather than browser navigation to
+`home.do`, so the page state needed for the commit resume check is not lost.
+
+### 2.5 Phase 0 exit condition
+
+> Live, authenticated, non-hibernating session confirmed by content, with heartbeat running.
+
+**MET at 2026-09-02T17:52:29Z (UTC).**
+
+---
+
+## 3. Single-test result — Phase 1 S0, S1, S2
+
+This section is the single-test result, reported ahead of any full-package result.
+
+### 3.1 S0 — retain the FALLBACK PACKAGE and import the master package
+
+**Fallback retained first, before any write to the instance.**
+
+| Item | Value |
+| --- | --- |
+| Fallback path | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` |
+| SHA-256 (fallback) | `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` |
+| SHA-256 (source deliverable at import time) | `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` |
+| Byte comparison | `cmp` reports the two files identical |
+| Well-formedness | `xmllint --noout` passes on the copy |
+| Payload blocks | **926** `<sys_update_xml action="INSERT_OR_UPDATE">` — the reconciliation anchor for the rebuild's count delta |
+| Original deliverable | **unmodified** (`git diff --stat` on it is empty) |
+
+**Live pre-import baseline (read-only).** One retrieved update set existed:
+`9929f50df18ccec91ea13b2a3bccfc90`, "x_casemgmt_case_management v1.0.0", `state=committed`, 926
+children, `sys_created_on 2026-04-30 12:00:00`. Three local update sets existed:
+`066c23c69383435009aa70d19dba10d3` (complete), `59a5a3069343435009aa70d19dba10e8` (complete) — the
+two stale sets sharing the package's name — and `934aabce9343435009aa70d19dba10fe` ("Default",
+in progress, current at that moment).
+
+**A structural hazard in the package, and how the import was made safe.** The package's single
+`<sys_remote_update_set>` envelope carries `<sys_id>9929f50df18ccec91ea13b2a3bccfc90</sys_id>` — the
+sys_id of the *already-committed* retrieved set above — and all 926 children point their
+`remote_update_set` field at it, while 913 of the 926 carry no child-level `sys_id` of their own. The
+live record's `sys_id` **and** its `sys_created_on` are verbatim the values inside the file, which
+proves the XML loader honours the file's record identity. Uploading the file unmodified would
+therefore have updated that committed record (resetting its state and appending children into it) —
+an out-of-scope mutation and a polluted baseline.
+
+The import therefore uploaded a **scratch-only re-enveloped copy** of the package through the same
+proven mechanism. The transformation touched record identity only:
+
+- envelope `sys_id` → a freshly generated value, `b4861cf7bbe24b36926fcaff4583b5bf`
+- envelope `name` → `x_casemgmt_case_management v1.0.0 (native rebuild import)` (unconfusable with
+  the committed set and the two stale local sets)
+- envelope `sys_created_on` / `sys_updated_on` elements dropped so the platform stamps the real load
+  time — this keeps the documented `ORDERBYDESCsys_created_on` locate query correct
+- all 926 `remote_update_set` pointers re-pointed to the new envelope
+- the 13 child-level `sys_id` values regenerated, so no child of the committed set is moved or updated
+
+Proof the imported content *is* the master package: the concatenated SHA-256 over all 926
+`<payload>` bodies is identical in the original and the uploaded copy
+(`98ffea7b68c8fcd31a448bea6924b8a302c76b0e62bd2098a0f36fa3c2ff9a18`), and the child update-name list
+is identical and in the same order. The copy lives only in the run's scratch directory; the
+repository deliverable was never modified.
+
+**Upload mechanism, exactly as used** (the Table API POST to `/api/now/table/sys_remote_update_set`
+was never used — it returns HTTP 400 on this instance):
+
+```
+# 1. priming REST GET on a cold session (required, or the token scrape returns a session-timeout page)
+curl -sS -K <scratch>/sn.cfg -c <cj> -b <cj> "$URL/api/now/table/sys_user?sysparm_limit=1"        # 200 JSON
+
+# 2. fetch the upload page and scrape the CSRF token from the hidden input name="sysparm_ck" (72 chars)
+curl -sS -K <scratch>/sn.cfg -c <cj> -b <cj> "$URL/upload.do?sysparm_target=sys_remote_update_set" # 200, 28,564 bytes
+
+# 3. multipart upload
+curl -sS -K <scratch>/sn.cfg -c <cj> -b <cj> \
+     -F "sysparm_ck=<token>" -F "sysparm_target=sys_remote_update_set" \
+     -F "attachFile=@<package file>;type=text/xml" "$URL/sys_upload.do"                            # 200, empty body
+
+# 4. locate the created record (the response carries no sys_id)
+curl -sS -K <scratch>/sn.cfg "$URL/api/now/table/sys_remote_update_set?sysparm_query=nameSTARTSWITHx_casemgmt_case_management^ORDERBYDESCsys_created_on&sysparm_limit=2"
+
+# 5. poll state every 5s, timeout 300s
+curl -sS -K <scratch>/sn.cfg "$URL/api/now/table/sys_remote_update_set/<sys_id>?sysparm_fields=state,error_detail"
+```
+
+Upload completed `2026-09-02T17:55:18Z`; the record read `state=loaded` on the first poll with an
+empty `error_detail`.
+
+**S0 result**
+
+| Assertion | Observed | Verdict |
+| --- | --- | --- |
+| New retrieved update set created | `b4861cf7bbe24b36926fcaff4583b5bf`, "x_casemgmt_case_management v1.0.0 (native rebuild import)", created 2026-09-02 17:55:15 | PASS |
+| Left pre-commit | `state=loaded`; never previewed, never committed; `sys_update_preview_problem` count 0; `summary` and `collisions` empty | PASS |
+| Child count exactly 926 | `sys_update_xml?remote_update_set=b4861cf7…` → **926** | PASS |
+| Not the already-committed set | `b4861cf7…` ≠ `9929f50d…` | PASS |
+| Committed set untouched (no append) | still `state=committed`, still 926 children, `sys_updated_on 2026-09-02 14:42:11` (before this run began) | PASS |
+| Retrieved sets on the instance | exactly 2 | PASS |
+
+**S0 baseline record count (`phase1.baseline_record_count`) = 926.** This is the "before (step 0)"
+number the rebuild's count-delta check must compare against, captured at the moment of import rather
+than remembered from documentation. It agrees with the package file's own 926 payload blocks and with
+the committed set's 926 children.
+
+**The master shipping Local Update Set.** A `sys_remote_update_set` cannot be current and cannot
+capture new changes on this platform, so "leave it current" is realised as: the retrieved set sits at
+`loaded`, and a **Local** Update Set was created to be the capture target for the rebuild.
+
+| Item | Value |
+| --- | --- |
+| `sys_id` | `1109981a930b435009aa70d19dba1098` |
+| Name | `x_casemgmt_case_management v1.0.0 (native rebuild)` |
+| Application | the query-resolved `x_casemgmt` scope |
+| State | `in progress`, `is_default=false` |
+| Captured records | **0** — deliberately empty; filling it is the next unit's work |
+| Current | yes (see §3.3) |
+
+Two records therefore stand for "the master set", and both are intended: the Retrieved Update Set
+`b4861cf7…` holding the imported package at `loaded`, and the shipping Local Update Set
+`1109981a…` that is current.
+
+Mechanism for making a set current, and a caveat worth knowing:
+
+```
+curl -sS -K <scratch>/sn.cfg -b <cj> -H "X-UserToken: <sysparm_ck>" -H 'Content-Type: application/json' \
+     -X PUT "$URL/api/now/ui/concoursepicker/updateset" -d '{"sysId":"<update set sys_id>"}'   # {"success":true}
+```
+
+The picker **GET** is session-cached: a session opened before the change keeps reporting the previous
+set. Re-read it in a fresh session. The backing user preference is `sys_update_set` for the user, and
+the platform may replace that preference *row* (its `sys_id` changed during this run), so read it by
+`name=sys_update_set^user=<user sys_id>` rather than by a remembered `sys_id`.
+
+### 3.2 S1 — native creation validated in a separate SCRATCH Update Set
+
+**Resume check, run first.** `sys_db_object?name=x_casemgmt_refine_probe` → empty;
+`sys_user_role?name=x_casemgmt_refine_probe_role` → empty; `GET /api/now/table/x_casemgmt_refine_probe`
+→ HTTP 400 "Invalid table". Neither artifact existed, so S1 was executed in full.
+
+**SCRATCH Update Set** (separate from the shipping set, and it must never ship):
+`4999985a930b435009aa70d19dba102e`, name `REFINE SCRATCH native-creation probe (DO NOT SHIP)`, in the
+`x_casemgmt` scope, made current for the duration of the probe.
+
+**One probe table, created by the real Table API — a platform action, not authored XML:**
+
+```
+curl -sS -K <scratch>/sn.cfg -H 'Content-Type: application/json' -X POST "$URL/api/now/table/sys_db_object" \
+  -d '{"name":"x_casemgmt_refine_probe","label":"Refine Probe","sys_scope":"<scope sys_id resolved by query>","is_extendable":"false"}'
+# HTTP 201 -> sys_id 19999c5a930b435009aa70d19dba107d
+```
+
+Physical storage confirmed by the table's own endpoint flipping from HTTP 400 "Invalid table" to
+**HTTP 200** (`{"result":[]}`); the platform auto-provisioned the six audit columns and the
+collection dictionary row.
+
+**One probe role, and one role LINK produced by the platform's own role-assignment path:**
+
+```
+curl -sS -K <scratch>/sn.cfg -H 'Content-Type: application/json' -X POST "$URL/api/now/table/sys_user_role" \
+  -d '{"name":"x_casemgmt_refine_probe_role","description":"…","sys_scope":"<scope sys_id>"}'
+# HTTP 201 -> sys_id caa9509a930b435009aa70d19dba1033
+```
+
+A REST `POST /api/now/table/sys_security_acl` was **refused**: HTTP 403
+`ACL Exception Insert Failed due to security constraints`. Plain `admin` cannot write ACL records on
+this instance, and `security_admin` elevation is session-bound to the interactive UI — a Basic-auth
+REST session cannot carry it. The ACL work was therefore done in the UI: user menu → **Elevate
+role** → `security_admin` → Update (the red elevated-privileges border confirms it), then a new ACL
+was created on `/sys_security_acl.do?sys_id=-1` and the role was assigned through the ACL form's own
+**"Requires role"** related list, so that the platform itself wrote the link record.
+
+| Record | Identity | Notes |
+| --- | --- | --- |
+| Probe ACL | `sys_security_acl` `63cc5812934b435009aa70d19dba109f` | `type=record`, `operation=read`, `name=x_casemgmt_refine_probe`, active, admin overrides, condition/script empty, `x_casemgmt` scope |
+| Probe role link | `sys_security_acl_role` `96dcd812934b435009aa70d19dba1064` | written by the platform as the side effect of the UI role assignment |
+
+Two platform gates encountered on the way, recorded so they need not be rediscovered: this instance
+**refuses to insert a role-less Allow-If ACL** ("Empty ACL - Select Role or Security Attribute"; the
+save aborts and no record is created), so the role must be attached via the same "Requires role"
+related list *before* the insert; and the save then raises a
+"Verify Security Rules for '<table>'" dialog which must be confirmed with **Continue**. None of the
+26 pre-existing ACLs was opened for edit or modified — they all still show `Updated 2024-12-31 16:00:00`.
+
+**Capture evidence — the whole premise of the rebuild.** The platform captured six records into the
+SCRATCH set, including the `sys_security_acl_role` class that appears **zero** times in the shipping
+package:
+
+| Type | Target | Update name |
+| --- | --- | --- |
+| Table | Refine Probe | `sys_db_object_19999c5a930b435009aa70d19dba107d` |
+| Dictionary | Refine Probe | `sys_dictionary_x_casemgmt_refine_probe_null` |
+| Field Label | Refine Probe | `sys_documentation_x_casemgmt_refine_probe__en` |
+| Access Control | x_casemgmt_refine_probe | `sys_security_acl_63cc5812934b435009aa70d19dba109f` |
+| **Access Roles** | .x_casemgmt_refine_probe_role | `sys_security_acl_role_96dcd812934b435009aa70d19dba1064` |
+| Role | x_casemgmt_refine_probe_role | `sys_user_role_caa9509a930b435009aa70d19dba1033` |
+
+Two naming facts for the rebuild that follows: the platform names a captured table record
+`sys_db_object_<sys_id>` — **not** `sys_db_object_<table name>` — and a newly created table captures a
+single collection dictionary row `sys_dictionary_<table>_null` plus a field-label row.
+
+**Persistence confirmed by marking the SCRATCH set Complete and then querying the Table API** (the
+Retrieved-Update-Set Preview/Commit flow does not apply to a Local Update Set and was not invoked):
+
+```
+curl -sS -K <scratch>/sn.cfg -H 'Content-Type: application/json' \
+  -X PATCH "$URL/api/now/table/sys_update_set/4999985a930b435009aa70d19dba102e" -d '{"state":"complete"}'
+```
+
+| Post-Complete assertion | Observed | Verdict |
+| --- | --- | --- |
+| `GET /api/now/table/x_casemgmt_refine_probe?sysparm_limit=1` | HTTP **200** | PASS |
+| `GET /api/now/table/sys_user_role?sysparm_query=name=x_casemgmt_refine_probe_role` | exactly **1** record | PASS |
+| The link record itself, by `sys_id` | present, both references intact; count for the probe role = 1 | PASS |
+| SCRATCH set state | `complete` | PASS |
+| Nothing shipped from the probe | shipping set still 0 captured records; retrieved-set count still 2; SCRATCH never exported, uploaded, previewed or committed | PASS |
+
+**S1 verdict: PASS**, verified `2026-09-02T18:37:43Z`. Native creation produces captured records,
+including the role-link class — which is exactly what the rebuild depends on.
+
+**SCREENSHOT — test table's definition in Studio showing native creation**
+`/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-table-studio.png`
+Caption: *Phase 1 S1 — probe table definition created natively via Table API*
+(ServiceNow Studio, Data Model → Table → Refine Probe: Name `x_casemgmt_refine_probe`, Application
+`x_casemgmt Case Management`, Columns tab. Studio neither asked to change nor changed the current
+application scope or update set — it issued only read GETs against the picker API.)
+
+**SCREENSHOT — role assignment screen showing the test role link**
+`/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png`
+Caption: *Phase 1 S1 — role assignment screen showing the natively created probe role link*
+(The saved ACL with its "Requires role" related list: column Role, one row
+`x_casemgmt_refine_probe_role`, pager "1 to 1 of 1".)
+
+### 3.3 S2 — delete the test artifacts, re-set the master set current
+
+Deletions, in the order performed:
+
+```
+DELETE /api/now/table/sys_security_acl_role/96dcd812934b435009aa70d19dba1064   -> HTTP 403 (ACL Exception Delete Failed due to security constraints)
+DELETE /api/now/table/sys_security_acl/63cc5812934b435009aa70d19dba109f        -> HTTP 403 (same constraint)
+DELETE /api/now/table/sys_user_role/caa9509a930b435009aa70d19dba1033           -> HTTP 204
+DELETE /api/now/table/sys_db_object/19999c5a930b435009aa70d19dba107d           -> HTTP 204
+```
+
+The two records REST refused (for the same lack of `security_admin` elevation that blocked the
+insert) were removed by the platform itself: **deleting the table cascaded its ACL and that ACL's
+role link.** No second elevation round was needed, and no fix-and-re-verify attempt was consumed.
+
+Deletion proven by observation:
+
+| Assertion | Observed | Verdict |
+| --- | --- | --- |
+| Probe table gone | `GET /api/now/table/x_casemgmt_refine_probe?sysparm_limit=1` → **HTTP 400 `Invalid table x_casemgmt_refine_probe`** (this instance's confirmation of removal — not 404/403) | PASS |
+| Probe role gone | `sys_user_role?name=x_casemgmt_refine_probe_role` → **0** records | PASS |
+| Probe link gone | `sys_security_acl_role` rows for the probe ACL → **0** | PASS |
+| No residue | all four probe records return HTTP 404 by `sys_id`; `nameLIKErefine_probe` → 0 rows across `sys_db_object`, `sys_dictionary`, `sys_security_acl`, `sys_user_role`, `sys_documentation` | PASS |
+| `apps.current_app` preserved | preference `8749eb4e9343435009aa70d19dba1085` still = `82b99028936f74320d74d6f88357a5af` — never deleted, never repointed | PASS |
+
+Master set re-set as current, and read back in a fresh session:
+
+| Assertion | Observed | Verdict |
+| --- | --- | --- |
+| Current update set | `x_casemgmt_case_management v1.0.0 (native rebuild) [x_casemgmt Case Management]`, `sysId 1109981a930b435009aa70d19dba1098` | PASS |
+| SCRATCH no longer current | correct; it sits at `state=complete` | PASS |
+
+Surroundings re-asserted (their deletion belongs to the rebuild unit's S6, not here):
+
+| Object | Expected | Observed |
+| --- | --- | --- |
+| `x_casemgmt_case` / `x_casemgmt_case_task` / `x_casemgmt_case_party` | HTTP 200 | HTTP 200 / 200 / 200 |
+| Scoped roles | 3 | 3 (`case_manager`, `case_agent`, `case_viewer`) |
+| `sys_security_acl` in scope | 26 | **26** |
+| `sys_security_acl_role` for the 3 roles | 27 (manager 14 / agent 10 / viewer 3) | **27** (14 / 10 / 3) |
+| `x_casemgmt_case` rows | unchanged | 12 |
+| Retrieved set `b4861cf7…` | `loaded`, 926 children | `loaded`, 926 |
+| Committed set `9929f50d…` | `committed`, 926 children | `committed`, 926 |
+| Shipping set `1109981a…` | `in progress`, 0 captured | `in progress`, 0 |
+
+**S0–S2 exit timestamp: 2026-09-02T18:40:16Z (UTC).**
+
+---
+
+## 4. State handed to the following units
+
+| Item | Value |
+| --- | --- |
+| Retrieved Update Set (imported package, pre-commit) | `b4861cf7bbe24b36926fcaff4583b5bf` — `state=loaded`, 926 children, never previewed/committed |
+| Master shipping Local Update Set (capture target, **current**) | `1109981a930b435009aa70d19dba1098` — `x_casemgmt_case_management v1.0.0 (native rebuild)`, 0 captured records |
+| Baseline record count for the count-delta check | **926** |
+| Pre-existing committed retrieved set (leave alone) | `9929f50df18ccec91ea13b2a3bccfc90` — `committed`, 926 children |
+| Stale local sets sharing the package name (do not confuse) | `066c23c69383435009aa70d19dba10d3`, `59a5a3069343435009aa70d19dba10e8` |
+| SCRATCH set (complete, must never ship) | `4999985a930b435009aa70d19dba102e` |
+| Fallback package | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`, SHA-256 `7292a6fe…1add66b7` |
+| Heartbeat | API-context loop, PID 8099, 10-minute interval, still running |
+| Scope | resolve by query every time: `sys_scope?sysparm_query=scope=x_casemgmt` → `82b99028936f74320d74d6f88357a5af` |
+
+Practical notes that cost time to establish, so they need not be rediscovered:
+
+1. A priming REST GET is mandatory before scraping `sysparm_ck` on a cold session.
+2. `/sys_upload.do` returns HTTP 200 with an **empty body** and no `sys_id`; locate the record by query.
+3. The XML loader honours the identity inside the file — an envelope `sys_id` that already exists on
+   the instance is updated rather than duplicated, and children with no `sys_id` are appended to it.
+4. ACL inserts and ACL deletes both require `security_admin` elevation, which only an interactive UI
+   session can hold; deleting a table cascades its ACLs and their role links.
+5. The update-set picker GET is session-cached; the `sys_update_set` user-preference row may be
+   replaced, so query it by `name` + `user`.
+6. `PATCH {"state":"complete"}` on a `sys_update_set` works through the Table API and is reflected on
+   read-back.
+
+## 5. Open items and blockers
+
+None. Every step assigned to this unit completed and was verified by observation. No fix-and-
+re-verify attempt was consumed (0 of 2 per issue), no recovery cycle was used (0 of 3 per run), no
+rollback was invoked, and no partial write was left behind: every artifact this unit created on the
+instance is either intentionally retained and named in §4, or deleted and proven gone in §3.3.

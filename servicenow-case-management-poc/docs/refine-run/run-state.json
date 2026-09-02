@@ -1,0 +1,86 @@
+{
+  "instance": {
+    "url": "https://dev306625.service-now.com",
+    "scope_sys_id": "82b99028936f74320d74d6f88357a5af",
+    "release": "Zurich Patch 10"
+  },
+  "fallback_package": {
+    "path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml",
+    "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+    "source_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7"
+  },
+  "phase0": {
+    "exit_condition": "met",
+    "exit_timestamp_utc": "2026-09-02T17:52:29Z",
+    "hibernating_at_start": false,
+    "wake_performed": false,
+    "recovery_cycles": 0,
+    "recovery_cycle_durations": [],
+    "heartbeat": {
+      "running": true,
+      "mechanism": "api",
+      "interval_minutes": 10,
+      "pid": "8099"
+    },
+    "screenshots": [
+      {
+        "checkpoint": "L86 landing page",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase0-landing-page.png",
+        "caption": "Phase 0 - instance landing page confirmed live and authenticated"
+      }
+    ]
+  },
+  "phase1": {
+    "master_retrieved_set": {
+      "sys_id": "b4861cf7bbe24b36926fcaff4583b5bf",
+      "state": "loaded",
+      "child_count": 926
+    },
+    "master_shipping_set": {
+      "sys_id": "1109981a930b435009aa70d19dba1098",
+      "name": "x_casemgmt_case_management v1.0.0 (native rebuild)",
+      "type": "local"
+    },
+    "baseline_record_count": 926,
+    "scratch_set": {
+      "sys_id": "4999985a930b435009aa70d19dba102e",
+      "name": "REFINE SCRATCH native-creation probe (DO NOT SHIP)",
+      "state": "complete",
+      "captured_records": [
+        "sys_db_object_19999c5a930b435009aa70d19dba107d",
+        "sys_dictionary_x_casemgmt_refine_probe_null",
+        "sys_documentation_x_casemgmt_refine_probe__en",
+        "sys_security_acl_63cc5812934b435009aa70d19dba109f",
+        "sys_security_acl_role_96dcd812934b435009aa70d19dba1064",
+        "sys_user_role_caa9509a930b435009aa70d19dba1033"
+      ],
+      "shipped": false
+    },
+    "s1_result": {
+      "probe_table": "x_casemgmt_refine_probe",
+      "probe_table_get_before": 200,
+      "probe_role": "x_casemgmt_refine_probe_role",
+      "role_link_class": "sys_security_acl_role",
+      "verdict": "pass"
+    },
+    "s2_result": {
+      "probe_table_get_after": 400,
+      "probe_role_count_after": 0,
+      "master_set_current": true
+    },
+    "s0_s2_exit_timestamp_utc": "2026-09-02T18:40:16Z",
+    "screenshots": [
+      {
+        "checkpoint": "L115-116 Studio table + role link",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-table-studio.png",
+        "caption": "Phase 1 S1 - probe table definition created natively via Table API"
+      },
+      {
+        "checkpoint": "L115-116 Studio table + role link",
+        "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png",
+        "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link"
+      }
+    ]
+  },
+  "fix_attempts": []
+}
