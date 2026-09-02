@@ -1,5 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `case` field on the `x_casemgmt_case_party` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_dictionary_x_casemgmt_case_party_case
+      Update record type       : Dictionary
+      Update record target     : Case Party.Case
+      Captured (instance time) : 2026-09-02 19:14:17
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (23daa09e938b435009aa70d19dba10bd), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
     ServiceNow Update Set record-definition for the `sys_dictionary` row that
     declares the `case` Reference field on the `x_casemgmt_case_party` custom
     table inside the scoped application `x_casemgmt`.
@@ -440,14 +471,19 @@
             to resolve the parent-case sys_id at seed time, never via
             hard-coded literals)
 -->
-<record_update table="sys_dictionary">
-    <sys_dictionary action="INSERT_OR_UPDATE">
+<record_update>
+    <sys_dictionary action="INSERT_OR_UPDATE" element="case" table="x_casemgmt_case_party">
         <active>true</active>
         <array>false</array>
-        <attributes/>
+        <attributes>edge_encryption_enabled=true,encode_utf8=false</attributes>
         <audit>false</audit>
-        <calculation/>
-        <choice>0</choice>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
         <choice_field/>
         <choice_table/>
         <column_label>Case</column_label>
@@ -466,9 +502,10 @@
         <element>case</element>
         <element_reference>false</element_reference>
         <foreign_database/>
+        <formula/>
         <function_definition/>
         <function_field>false</function_field>
-        <internal_type>reference</internal_type>
+        <internal_type display_value="Reference">reference</internal_type>
         <mandatory>true</mandatory>
         <max_length>32</max_length>
         <name>x_casemgmt_case_party</name>
@@ -476,28 +513,26 @@
         <primary>false</primary>
         <read_only>false</read_only>
         <read_roles/>
-        <reference>x_casemgmt_case</reference>
+        <reference display_value="" name="x_casemgmt_case">x_casemgmt_case</reference>
         <reference_cascade_rule>none</reference_cascade_rule>
-        <reference_floor/>
+        <reference_floats>false</reference_floats>
         <reference_key/>
         <reference_qual/>
         <reference_qual_condition/>
         <reference_type/>
-        <sizeclass/>
         <spell_check>false</spell_check>
         <staged>false</staged>
         <sys_class_name>sys_dictionary</sys_class_name>
         <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>fbd5378ac5055b3db843042ff20777b5</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name/>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_created_on>2026-09-02 19:14:17</sys_created_on>
+        <sys_id>23daa09e938b435009aa70d19dba10bd</sys_id>
+        <sys_name>Case</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_dictionary_x_casemgmt_case_party_case</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <sys_updated_on>2026-09-02 19:14:17</sys_updated_on>
         <table_reference>false</table_reference>
         <text_index>false</text_index>
         <unique>false</unique>
@@ -505,7 +540,7 @@
         <use_dynamic_default>false</use_dynamic_default>
         <use_reference_qualifier>simple</use_reference_qualifier>
         <virtual>false</virtual>
-        <virtual_type/>
+        <virtual_type>script</virtual_type>
         <widget/>
         <write_roles/>
         <xml_view>false</xml_view>

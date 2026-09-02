@@ -34,12 +34,16 @@
     "master_retrieved_set": {
       "sys_id": "b4861cf7bbe24b36926fcaff4583b5bf",
       "state": "loaded",
-      "child_count": 926
+      "child_count": 926,
+      "child_count_after_move": 0
     },
     "master_shipping_set": {
       "sys_id": "1109981a930b435009aa70d19dba1098",
       "name": "x_casemgmt_case_management v1.0.0 (native rebuild)",
-      "type": "local"
+      "type": "local",
+      "state": "complete",
+      "child_count": 988,
+      "current_after_unit": false
     },
     "baseline_record_count": 926,
     "scratch_set": {
@@ -80,7 +84,342 @@
         "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png",
         "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link"
       }
-    ]
+    ],
+    "absorber_set": {
+      "sys_id": "25d86c1a938b435009aa70d19dba101b",
+      "name": "REFINE ABSORBER deletions (DO NOT SHIP)",
+      "purpose": "absorbed the platform capture of every OVERRIDE-3-authorised deletion so no DELETE row could overwrite a payload row in the shipping set",
+      "child_count": 266,
+      "shipped": false
+    },
+    "resume_check_s3": {
+      "i_hand_authored_removed": false,
+      "ii_tables_natively_recreated": false,
+      "iii_role_links_natively_recreated": false,
+      "action": "all three sub-parts were incomplete, so all three were run; nothing completed was redone"
+    },
+    "removed": {
+      "total": 31,
+      "by_class": {
+        "sys_db_object": 3,
+        "sys_dictionary": 25,
+        "sys_user_has_role": 3
+      },
+      "sys_db_object": [
+        "sys_db_object_179699d585b1c44f4a15b28b51a0de1c",
+        "sys_db_object_bd806f5b23883f5d28ed792570f1070b",
+        "sys_db_object_f9fd58b1a8c6ecc0cf653c0b50ecc5a3"
+      ],
+      "sys_dictionary": [
+        "sys_dictionary_04c189886307f35757d6fc5f94b9074f",
+        "sys_dictionary_0bf56c205b5fbda5c5971de48d3ca279",
+        "sys_dictionary_180d00dda06c4b93e4c2c106b621d153",
+        "sys_dictionary_1fa3f30c65afbf042f32440bf955199f",
+        "sys_dictionary_25c60a42b3b9a76ae153979ec5e88edc",
+        "sys_dictionary_25cae07ed16e95fd89a4c8013152ecc2",
+        "sys_dictionary_35ea82e3ffef23bfc94aa73d2a74fa52",
+        "sys_dictionary_388df21ea3ca149d70916144f84ecf42",
+        "sys_dictionary_3e18b5498c00dfde143bbc84fced474c",
+        "sys_dictionary_548ff520bd22f86da39916a86f8cef1e",
+        "sys_dictionary_5e02afdbd2f05f407e986015e93d1238",
+        "sys_dictionary_5f0be2eaed29d45b1d63d64e876d22c4",
+        "sys_dictionary_696e73e041d826fe2d43a3f259acd1f1",
+        "sys_dictionary_6f706e8bfa01ada7d9e44707e33251be",
+        "sys_dictionary_71f23b3da166caace302a5c4ea7052d0",
+        "sys_dictionary_7584a06a06745f24e42efb27f0ae5975",
+        "sys_dictionary_8cd658b766c404ce4445d191adabd14c",
+        "sys_dictionary_96a737c3997894e2ba2aacb07aa4854e",
+        "sys_dictionary_9a49190f6a6b8f2b4100073c53631168",
+        "sys_dictionary_a20971037c6fb4c520d7a13231b15f3b",
+        "sys_dictionary_af19c46ec8457885c75512edec980172",
+        "sys_dictionary_c6fd3f91c5c2dc0ecf41923ef9bf75b5",
+        "sys_dictionary_d9b322d03c2bb79ef07a261e2f686cb4",
+        "sys_dictionary_f08a56ae8a5263f0af629913c48ae173",
+        "sys_dictionary_fbd5378ac5055b3db843042ff20777b5"
+      ],
+      "sys_user_has_role": [
+        "sys_user_has_role_0988a3e374b3a9fee4fd767265fba757",
+        "sys_user_has_role_b095d91833fde26d96f511e6a60afd58",
+        "sys_user_has_role_c6ed64934879ee3ea435a2276bb5bf79"
+      ],
+      "left_untouched": {
+        "sys_choice": 7,
+        "sys_security_acl": 26,
+        "payload_guard_sha256": "f7e5df42723bbedd3705321fa1ae99b2d4919768b4ebcc4e052d1956f0733f93",
+        "verified_byte_identical_after_every_step": true
+      }
+    },
+    "created": {
+      "total": 93,
+      "by_class": {
+        "sys_db_object": 3,
+        "sys_dictionary": 30,
+        "sys_documentation": 30,
+        "sys_security_acl_role": 27,
+        "sys_user_has_role": 3
+      },
+      "sys_db_object": [
+        "sys_db_object_13cae85e938b435009aa70d19dba10e0",
+        "sys_db_object_7bca2c5e938b435009aa70d19dba1095",
+        "sys_db_object_c4da2c5e938b435009aa70d19dba10fa"
+      ],
+      "sys_dictionary": [
+        "sys_dictionary_x_casemgmt_case_assigned_agent",
+        "sys_dictionary_x_casemgmt_case_assigned_group",
+        "sys_dictionary_x_casemgmt_case_closed_date",
+        "sys_dictionary_x_casemgmt_case_description",
+        "sys_dictionary_x_casemgmt_case_duration_to_close",
+        "sys_dictionary_x_casemgmt_case_null",
+        "sys_dictionary_x_casemgmt_case_number",
+        "sys_dictionary_x_casemgmt_case_opened_date",
+        "sys_dictionary_x_casemgmt_case_party_case",
+        "sys_dictionary_x_casemgmt_case_party_null",
+        "sys_dictionary_x_casemgmt_case_party_number",
+        "sys_dictionary_x_casemgmt_case_party_organization",
+        "sys_dictionary_x_casemgmt_case_party_party_type",
+        "sys_dictionary_x_casemgmt_case_party_person",
+        "sys_dictionary_x_casemgmt_case_party_role_label",
+        "sys_dictionary_x_casemgmt_case_pending_reason",
+        "sys_dictionary_x_casemgmt_case_priority",
+        "sys_dictionary_x_casemgmt_case_requester_email",
+        "sys_dictionary_x_casemgmt_case_requester_name",
+        "sys_dictionary_x_casemgmt_case_status",
+        "sys_dictionary_x_casemgmt_case_subject",
+        "sys_dictionary_x_casemgmt_case_task_assigned_to",
+        "sys_dictionary_x_casemgmt_case_task_case",
+        "sys_dictionary_x_casemgmt_case_task_due_date",
+        "sys_dictionary_x_casemgmt_case_task_null",
+        "sys_dictionary_x_casemgmt_case_task_number",
+        "sys_dictionary_x_casemgmt_case_task_status",
+        "sys_dictionary_x_casemgmt_case_task_subject",
+        "sys_dictionary_x_casemgmt_case_task_type",
+        "sys_dictionary_x_casemgmt_case_type"
+      ],
+      "sys_documentation": [
+        "sys_documentation_x_casemgmt_case__en",
+        "sys_documentation_x_casemgmt_case_assigned_agent_en",
+        "sys_documentation_x_casemgmt_case_assigned_group_en",
+        "sys_documentation_x_casemgmt_case_closed_date_en",
+        "sys_documentation_x_casemgmt_case_description_en",
+        "sys_documentation_x_casemgmt_case_duration_to_close_en",
+        "sys_documentation_x_casemgmt_case_number_en",
+        "sys_documentation_x_casemgmt_case_opened_date_en",
+        "sys_documentation_x_casemgmt_case_party__en",
+        "sys_documentation_x_casemgmt_case_party_case_en",
+        "sys_documentation_x_casemgmt_case_party_number_en",
+        "sys_documentation_x_casemgmt_case_party_organization_en",
+        "sys_documentation_x_casemgmt_case_party_party_type_en",
+        "sys_documentation_x_casemgmt_case_party_person_en",
+        "sys_documentation_x_casemgmt_case_party_role_label_en",
+        "sys_documentation_x_casemgmt_case_pending_reason_en",
+        "sys_documentation_x_casemgmt_case_priority_en",
+        "sys_documentation_x_casemgmt_case_requester_email_en",
+        "sys_documentation_x_casemgmt_case_requester_name_en",
+        "sys_documentation_x_casemgmt_case_status_en",
+        "sys_documentation_x_casemgmt_case_subject_en",
+        "sys_documentation_x_casemgmt_case_task__en",
+        "sys_documentation_x_casemgmt_case_task_assigned_to_en",
+        "sys_documentation_x_casemgmt_case_task_case_en",
+        "sys_documentation_x_casemgmt_case_task_due_date_en",
+        "sys_documentation_x_casemgmt_case_task_number_en",
+        "sys_documentation_x_casemgmt_case_task_status_en",
+        "sys_documentation_x_casemgmt_case_task_subject_en",
+        "sys_documentation_x_casemgmt_case_task_type_en",
+        "sys_documentation_x_casemgmt_case_type_en"
+      ],
+      "sys_security_acl_role": [
+        "sys_security_acl_role_04e920da938b435009aa70d19dba1053",
+        "sys_security_acl_role_08e920da938b435009aa70d19dba103c",
+        "sys_security_acl_role_0ce920da938b435009aa70d19dba1070",
+        "sys_security_acl_role_33d920da938b435009aa70d19dba101f",
+        "sys_security_acl_role_33d9ec9a938b435009aa70d19dba10a9",
+        "sys_security_acl_role_33d9ec9a938b435009aa70d19dba10e4",
+        "sys_security_acl_role_3bd920da938b435009aa70d19dba1001",
+        "sys_security_acl_role_48e920da938b435009aa70d19dba104d",
+        "sys_security_acl_role_4ce920da938b435009aa70d19dba1036",
+        "sys_security_acl_role_73d9ec9a938b435009aa70d19dba10ba",
+        "sys_security_acl_role_77d920da938b435009aa70d19dba1019",
+        "sys_security_acl_role_77d9ec9a938b435009aa70d19dba10a3",
+        "sys_security_acl_role_7fd9ec9a938b435009aa70d19dba10fb",
+        "sys_security_acl_role_80e920da938b435009aa70d19dba107c",
+        "sys_security_acl_role_88e920da938b435009aa70d19dba105e",
+        "sys_security_acl_role_8ce920da938b435009aa70d19dba1047",
+        "sys_security_acl_role_b3d920da938b435009aa70d19dba1031",
+        "sys_security_acl_role_b7d9ec9a938b435009aa70d19dba10b4",
+        "sys_security_acl_role_bbd9ec9a938b435009aa70d19dba109d",
+        "sys_security_acl_role_bfd9ec9a938b435009aa70d19dba10d1",
+        "sys_security_acl_role_c0e920da938b435009aa70d19dba1042",
+        "sys_security_acl_role_c4e920da938b435009aa70d19dba1076",
+        "sys_security_acl_role_cce920da938b435009aa70d19dba1058",
+        "sys_security_acl_role_f3d920da938b435009aa70d19dba1007",
+        "sys_security_acl_role_f3d9ec9a938b435009aa70d19dba10cc",
+        "sys_security_acl_role_fbd9ec9a938b435009aa70d19dba10ae",
+        "sys_security_acl_role_fbd9ec9a938b435009aa70d19dba10e9"
+      ],
+      "sys_user_has_role": [
+        "sys_user_has_role_40e920da938b435009aa70d19dba1089",
+        "sys_user_has_role_c0e920da938b435009aa70d19dba1090",
+        "sys_user_has_role_cce920da938b435009aa70d19dba1081"
+      ],
+      "acl_role_links_total": 27,
+      "acl_role_links_split": {
+        "x_casemgmt_case_manager": 14,
+        "x_casemgmt_case_agent": 10,
+        "x_casemgmt_case_viewer": 3
+      },
+      "acl_role_pairs_identical_to_pre_rebuild": true,
+      "live_table_sys_ids": {
+        "x_casemgmt_case": "13cae85e938b435009aa70d19dba10e0",
+        "x_casemgmt_case_task": "7bca2c5e938b435009aa70d19dba1095",
+        "x_casemgmt_case_party": "c4da2c5e938b435009aa70d19dba10fa"
+      },
+      "platform_naming_observed": {
+        "sys_db_object": "sys_db_object_<sys_id>",
+        "sys_dictionary": "sys_dictionary_<table>_<element>",
+        "sys_documentation": "sys_documentation_<table>[_<element>]_en",
+        "sys_security_acl_role": "sys_security_acl_role_<sys_id>",
+        "sys_user_has_role": "sys_user_has_role_<sys_id>"
+      },
+      "physical_storage_proof": {
+        "x_casemgmt_case": 200,
+        "x_casemgmt_case_task": 200,
+        "x_casemgmt_case_party": 200,
+        "dictionary_rows": {
+          "x_casemgmt_case": 21,
+          "x_casemgmt_case_task": 14,
+          "x_casemgmt_case_party": 13
+        },
+        "auto_number_first_value": "CASE0000001",
+        "status_default": "Draft"
+      }
+    },
+    "post_swap_record_count": 988,
+    "delta_explanation": {
+      "baseline": 926,
+      "post_swap": 988,
+      "formula": "926 - 31 + 93 = 988",
+      "classes_count_changed": {
+        "sys_dictionary": [
+          25,
+          30
+        ],
+        "sys_documentation": [
+          0,
+          30
+        ],
+        "sys_security_acl_role": [
+          0,
+          27
+        ]
+      },
+      "classes_identity_changed_count_same": {
+        "sys_db_object": 3,
+        "sys_user_has_role": 3
+      },
+      "all_other_classes_numerically_unchanged": true,
+      "other_class_count": 40,
+      "stop_and_report_triggered": false,
+      "measured_baseline_deviations_from_brief": {
+        "sys_script": "measured 8, brief says 7",
+        "sys_hub_flow": "measured 7 with sys_hub_flow_block counted separately as 1"
+      },
+      "reconciliation_file": "docs/refine-run/PHASE1-REBUILD.md section 2.7"
+    },
+    "s4_throwaway_check": {
+      "probe_matches_in_shipping_set": 0,
+      "scratch_set_as_update_set_of_a_shipping_child": 0,
+      "scratch_set_state": "complete",
+      "scratch_set_child_count": 6,
+      "searched": [
+        "refine_probe",
+        "19999c5a930b435009aa70d19dba107d",
+        "caa9509a930b435009aa70d19dba1033",
+        "63cc5812934b435009aa70d19dba109f",
+        "96dcd812934b435009aa70d19dba1064"
+      ]
+    },
+    "complete_at": "2026-09-02T19:20:46Z",
+    "instance_clean_at": "2026-09-02T19:22:09Z",
+    "instance_clean_state": {
+      "x_casemgmt_case": "HTTP 400 Invalid table x_casemgmt_case",
+      "x_casemgmt_case_task": "HTTP 400 Invalid table x_casemgmt_case_task",
+      "x_casemgmt_case_party": "HTTP 400 Invalid table x_casemgmt_case_party",
+      "sys_dictionary_rows": 0,
+      "sys_security_acl_role": 0,
+      "sys_user_has_role": 0,
+      "sys_number": 0,
+      "preserved": {
+        "sys_user_role": 3,
+        "sys_scope": 1,
+        "sys_app": 1,
+        "sys_hub_flow": 7,
+        "apps_current_app_preference": true
+      },
+      "cascade_removed_and_restored_by_the_package_on_commit": {
+        "sys_security_acl": 26,
+        "sys_choice": 24,
+        "business_rules": 7,
+        "sys_report": 8,
+        "sys_ui_list": 3,
+        "sys_ui_related_list": 1,
+        "sys_ui_policy": 2,
+        "data_rows": 30
+      },
+      "set_unchanged_after_deletions": {
+        "state": "complete",
+        "child_count": 988
+      }
+    },
+    "exit_condition": "met",
+    "exit_condition_timestamp_utc": "2026-09-02T19:22:09Z",
+    "mechanism_notes": [
+      "INTERP-3: the master set was realized as the Local Update Set 1109981a930b435009aa70d19dba1098. A background script re-pointed all 926 sys_update_xml children from remote_update_set=b4861cf7... onto update_set=1109981a... and cleared remote_update_set (moved=926 failed=0); record identity preserved, setWorkflow(false)+autoSysFields(false); the sys_remote_update_set record itself was never modified and stays state=loaded.",
+      "Every destructive step ran with the ABSORBER set current and every creative step with the shipping set current, switched by the platform GlideUpdateSet().set() inside the same script. Reason: an update-set capture is keyed by update name, so a captured DELETE would overwrite the same-named INSERT_OR_UPDATE payload row inside the shipping set.",
+      "Role links were created BEFORE the tables were deleted, because the platform table-delete cascade removes the 26 ACLs; links created against re-created ACLs would reference ACL sys_ids absent from the package and would commit orphaned.",
+      "sys_security_acl_role is auto-captured (collection attribute update_synch=true) and its insert leaves the parent ACL untouched (verified: sys_updated_on and sys_mod_count unchanged, zero sys_security_acl captures).",
+      "sys_user_has_role is NOT auto-captured (no update_synch). The grants were created natively and then serialized into the set by the platform own update-set writer GlideUpdateManager2.saveRecord(), the mechanism behind the platform Add to Update Set action - no hand-authored XML.",
+      "Tables and fields were created with the real Table API: POST /api/now/table/sys_db_object x3 and POST /api/now/table/sys_dictionary x27, all HTTP 201, every value replayed from the pre-deletion live schema dump; scope resolved by sys_scope?scope=x_casemgmt.",
+      "The platform assigns a fresh GUID to a new sys_security_acl_role row; the pre-existing composite sys_ids were manufactured by scripts/post_import_remediation.js, not by the platform. Pairing (operation, ACL name, role) was reproduced exactly instead.",
+      "sys_number counters were re-created with the ABSORBER current so the package own 3 sys_number payloads stay as shipped; setNewGuidValue() forced the package identities, and the three table records were then re-serialized into the shipping set so their captured payloads carry the final number_ref.",
+      "The auto-number probe ran IN the x_casemgmt scope (cross-scope writes from rhino.global are refused) with the current set switched by a preceding global script (GlideUpdateSet is barred in scoped code) and the result read from syslog under prefix U2NUMTEST.",
+      "No security_admin elevation was needed: REST refuses sys_security_acl* writes for a non-elevated admin, but a server-side platform script is not ACL-gated."
+    ],
+    "repository_impact": {
+      "tables_rewritten": 3,
+      "dictionary_rewritten": 25,
+      "files_added": 0,
+      "files_removed": 0,
+      "added": [],
+      "schema_fidelity": "all 27 fields attribute-identical to the pre-refine live dictionary; only normalisation is choice 0 -> empty (both mean no choice list); choice=3 fields preserved",
+      "impact_checks": {
+        "field_references_in_other_artifacts": "all resolve, nothing rewritten",
+        "numbers_artifacts": "match the re-created counters exactly (sys_ids 4fc55a26.../ee298f5e.../2358f946..., prefixes CASE/TASK/PARTY, maximum_digits 7, counter 0) - nothing rewritten",
+        "deliverable_and_fallback_xml": "byte-unchanged"
+      },
+      "side_effects_reported": [
+        "x_casemgmt_case_task.number_ref and x_casemgmt_case_party.number_ref were dangling pre-refine and now resolve",
+        "known cosmetic defect #2 (no sys_documentation label row for x_casemgmt_case.duration_to_close) is incidentally repaired because the platform writes a label row for every column it creates"
+      ]
+    },
+    "unit": "U2"
   },
-  "fix_attempts": []
+  "fix_attempts": [
+    {
+      "unit": "U2",
+      "issue": "sys_number records had to carry the identities the package carries; setValue('sys_id') is ignored by the platform on insert, so the first re-creation produced new GUIDs and the platform \"Synch Table Number Reference\" rule re-pointed each table number_ref at them",
+      "attempts": 2,
+      "cap": 2,
+      "resolved": true,
+      "resolution": "re-created with setNewGuidValue() (the platform API that forces record identity), then re-serialized the three table records into the shipping set with the platform own writer so their captured payloads carry the final number_ref; verified in the captured payloads"
+    }
+  ],
+  "heartbeat_u2": {
+    "running_during_unit": true,
+    "mechanism": "api",
+    "interval_minutes": 10,
+    "pid": "11248",
+    "recovery_cycles": 0,
+    "recovery_cycle_durations": [],
+    "hibernation_events": 0
+  }
 }
