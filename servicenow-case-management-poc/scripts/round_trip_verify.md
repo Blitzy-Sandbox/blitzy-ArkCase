@@ -39,7 +39,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 1. **Upload** the Update Set XML to the verification PDI.
 2. **Preview** the Update Set and verify zero errors.
 3. **Commit** the Update Set after a clean preview.
-4. **Remediate** — run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed. This phase is **mandatory**: a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md).
+4. **Remediate** — **updated 2026-09-02: on the package that ships today this phase is no longer mandatory for the schema or the role links.** The native-rebuild run committed the shipping bytes once on a clean instance and got physical storage for all three tables and all 27 `sys_security_acl_role` links out of the commit itself, with the remediation script never run and no second commit ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Still needed post-commit: the **choice rows** (`sys_choice` is empty for the three tables), the seed-row linkage and `opened_date` — the last two by running `scripts/seed_demo_data.js` in scope. The text that follows describes the retained original package (`../update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`), for which this phase was mandatory: run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed — a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md).
 5. **Re-verify** all six functional gates (Gates 1–6) on the verification PDI.
 6. **Assert self-sufficiency** — record, explicitly, everything the package did *not* do for itself.
 
@@ -68,8 +68,10 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 - Application name matches the scoped application (`x_casemgmt Case Management`).
 - No upload error message displayed.
 - **The child `sys_update_xml` count is exactly 926.** Assert this, do not eyeball it — see the warning below
-  for why it is the one number that catches the most common mistake in this procedure. 926 is the block count of
-  the file that ships today (3,781,097 bytes, SHA-256 `7292a6fe…`); if you are verifying an archived revision,
+  for why it is the one number that catches the most common mistake in this procedure. **Updated 2026-09-02:
+  the file that ships today is the native-rebuild package — 988 blocks, 4,062,436 bytes, SHA-256 `eee9fabd…` —
+  so assert 988 for it.** 926 (3,781,097 bytes, SHA-256 `7292a6fe…`) is the block count of the retained
+  original, `../update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`; if you are verifying an archived revision,
   assert *its* count instead — 925 for `e49a7654…`, 913 for `89638c17…` and for `7272edfc…`. Re-derive it from
   the file rather than trusting this line: `grep -c '<sys_update_xml ' <the XML>`.
 
@@ -174,10 +176,17 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 - Use the **Back out** action on the Retrieved Update Set record to reverse the commit.
 - Return to the source PDI to investigate; this typically indicates a deeper integrity issue not caught by preview.
 
-## Phase 4 — Post-Import Remediation (mandatory)
+## Phase 4 — Post-Import Remediation (mandatory for the retained original package only)
 
-A successful commit does **not** produce a working application, and nothing in the package runs by itself. This
-phase is required on every install. It is the same seven-step primary procedure documented in
+> **Updated 2026-09-02.** On the package that ships today this whole phase is optional for the schema and the
+> role links: a single commit of the shipping bytes on a clean instance produced three tables with physical
+> storage (21 / 14 / 13 columns) and all 27 ACL role links by itself
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Run the steps below only against
+> the retained original (`…FALLBACK.xml`), or when you need the choice rows, the seed linkage or `opened_date`
+> — for which `scripts/seed_demo_data.js` in scope is the relevant step.
+
+On the retained original package, a successful commit does **not** produce a working application, and nothing in
+that package runs by itself. This phase was required on every install of it. It is the same seven-step primary procedure documented in
 [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), reduced here to
 the checklist a round-trip verifier needs.
 
@@ -465,8 +474,11 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 
 > **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
 > 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is three revisions behind the one that ships today.
-> **Today's bytes are 926 blocks, 3,781,097 bytes, SHA-256 `7292a6fe…`, and no preview has been run on them at
-> all** — see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c for the 13-payload + 1-block delta from
+> **Updated 2026-09-02: today's bytes are the native-rebuild package — 988 blocks, 4,062,436 bytes, SHA-256
+> `eee9fabd…` — and criteria 1, 2 and 3 hold on them directly: 0 `type=error` and 0 `type=warning` preview
+> problems from a genuinely clean slate, then a UI-action commit that succeeded 100%
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). The 926-block, 3,781,097-byte,
+> `7292a6fe…` bytes discussed below are the retained original, and no preview was ever run on them** — see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c for the 13-payload + 1-block delta from
 > `e49a7654…` and for what was measured on it instead. The paragraph below describes the **925-block
 > `e49a7654…`** revision, which is what the 31-problem preview belongs to. Those bytes differ from the intermediate
 > 913-block `89638c17…` revision in the 28 re-shaped seed records (parent key in the `display_value`
@@ -487,7 +499,9 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > criteria also held earlier on the 916-block `32a064d6…` revision, which is retained as history in
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of
 > that document is the current record. Criterion 4
-> holds: `verified=true` with 27 of 27 links, after two remediation runs separated by a second commit.
+> holds two ways: on the shipping bytes, **27 of 27 links straight out of a single commit, with no remediation
+> run at all** (2026-09-02); on the retained original, `verified=true` with 27 of 27 links only after two
+> remediation runs separated by a second commit.
 > Criterion 5 holds for Workflow, for Data model and ACLs **on all three tables** after remediation, **and now for
 > Dashboards and for both portal pages as well** — the packaging defects that made those three fail have each been
 > fixed and re-verified in a browser: both dashboards render every widget with the seed data (Agent Workspace 3 of
@@ -501,10 +515,12 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > (`TES0001016`, `TES0001017` — record your own rollup, because suite-result rows are not durable here and the
 > `TES0001015` row this line used to cite no longer resolves).
 >
-> ⚠️ **Before you start, check the instance is awake.** The verification PDI has been hibernating since
-> 2026-08-11 — every route answers HTTP 200 with ServiceNow's 5,904-byte "Instance Hibernating page" — so this
-> procedure cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that
-> owns it. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+> ⚠️ **Before you start, check the instance is awake.** Detect hibernation by CONTENT, not HTTP status: a
+> hibernating instance answers HTTP 200 with ServiceNow's "Instance Hibernating" page, and this procedure
+> cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that owns it.
+> The PDI these notes were written against has been hibernating since 2026-08-11; **the procedure was executed
+> end-to-end on a newly provisioned validation PDI on 2026-09-02**
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)), which was awake throughout. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
 ### Fail Criteria (Any One Triggers Fail)
 

@@ -1160,5 +1160,410 @@
     "next_steps": "carried forward as a known issue, not a Phase 3 failure"
    }
   ]
+ },
+ "final": {
+  "unit": "U5",
+  "directives_owned": [
+   "D1",
+   "D3",
+   "D5",
+   "D6",
+   "D7",
+   "D9",
+   "D45",
+   "D46",
+   "D48"
+  ],
+  "report": "servicenow-case-management-poc/docs/refine-run/FINAL-REPORT.md",
+  "shipping_package": "rebuilt",
+  "shipping_package_label": "the Phase-1-rebuilt, Phase-2-verified package - it DOES include this round’s fix",
+  "deliverable_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
+  "deliverable_sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+  "matched_against": "phase2.verified_checksum (recorded 2026-09-02T20:53:14Z, the bytes previewed with zero problems and committed)",
+  "matches_recorded": true,
+  "re_export_performed": false,
+  "re_export_note": "INTERP-11: the deliverable is the exact bytes Phase 2 previewed and committed, already at the deliverable path; sha256 was recomputed over that file rather than re-exporting from the instance",
+  "checksum_stale": false,
+  "checksum_stale_note": "INTERP-9: no fix changed the package after Phase 2 (phase3.checksum_impact.package_xml_changed=false; git shows the file unmodified since U3 committed it), so the recorded checksum is current",
+  "deliverable_bytes": 4062436,
+  "deliverable_payload_count": 988,
+  "deliverable_xmllint": "pass (no output)",
+  "fallback_package": {
+   "path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml",
+   "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+   "bytes": 3781097,
+   "payload_count": 926,
+   "invoked": false,
+   "modified": false,
+   "retained_in_place": true
+  },
+  "phase_exit_conditions": {
+   "phase0": {
+    "verdict": "met",
+    "timestamp_utc": "2026-09-02T17:52:29Z",
+    "condition": "live, authenticated, non-hibernating session confirmed by content, with heartbeat running",
+    "entered_after_prior_confirmation": "n/a - first phase"
+   },
+   "phase1": {
+    "verdict": "met",
+    "timestamp_utc": "2026-09-02T19:22:09Z",
+    "condition": "import (S0), scratch validation (S1-S2), native rebuild (S3-S4), count check (S4a) confirmed; master set Complete with the full package and the swap applied; instance clean",
+    "entered_after_prior_confirmation": true,
+    "evidence": "first Phase-1 write (S0 upload) at 2026-09-02T17:55:18Z, after phase0 met at 17:52:29Z"
+   },
+   "phase2": {
+    "verdict": "met",
+    "timestamp_utc": "2026-09-02T20:53:14Z",
+    "condition": "preview and commit both clean on this checksum against a genuinely clean instance, with storage and role links confirmed after",
+    "entered_after_prior_confirmation": true,
+    "evidence": "phase1.exit_condition read as met at 2026-09-02T19:47:16Z; first action (clean re-confirm) 19:53:13Z"
+   },
+   "phase3": {
+    "verdict": "met",
+    "timestamp_utc": "2026-09-02T22:10:59Z",
+    "condition": "full suite executed with every result captured and classified; 100% pass rate not required",
+    "entered_after_prior_confirmation": true,
+    "evidence": "phase2.exit_condition read as met (20:53:14Z); single test ran 21:20:29Z",
+    "non_blocking": true
+   }
+  },
+  "sequence_gating_verdict": "satisfied - no phase entered out of order; each successor read the predecessor exit_condition before acting",
+  "rollback_performed": false,
+  "rollback_evidence": "no deleteApplication call, no scope deletion, no back-out anywhere in the run. Re-verified read-only 2026-09-02: sys_scope and sys_app 82b99028936f74320d74d6f88357a5af v1.0.0 both resolve by query; 3 scoped roles resolve; 3 tables HTTP 200; 27 sys_security_acl_role links (14/10/3); zero retrieved update sets on the instance in state commit_failed or error",
+  "partial_apply_state": null,
+  "instance_state": "fully applied - the commit succeeded 100% (inserted 613, updated 375, deleted 0, collisions 0, total 988; progress worker Complete/Success; 0 sys_update_log rows; 0 children with a disposition). Deliberately NOT untouched: per OVERRIDE-3 the three scoped tables and their role links were deleted and the package re-committed, so the instance holds exactly what the package carries (10 cases, 10 tasks, 8 parties). The word \"untouched\" is used in this run only for the retained FALLBACK package file.",
+  "screenshots": [
+   {
+    "checkpoint": "directive L86 - Phase 0 landing page",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase0-landing-page.png",
+    "caption": "Phase 0 - instance landing page confirmed live and authenticated",
+    "resolves_on_disk": true
+   },
+   {
+    "checkpoint": "directive L115 - Phase 1 S1 Studio probe table",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-table-studio.png",
+    "caption": "Phase 1 S1 - probe table definition created natively via Table API (Studio, Data Model, table \"Refine Probe\")",
+    "resolves_on_disk": true
+   },
+   {
+    "checkpoint": "directive L116 - Phase 1 S1 role-assignment screen",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png",
+    "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link (ACL \"Requires role\" related list, 1 of 1)",
+    "resolves_on_disk": true
+   },
+   {
+    "checkpoint": "directive L206 - Phase 2 commit result",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-result.png",
+    "caption": "Phase 2 - commit result screen showing the outcome: zero problems, \"Succeeded 100%\", \"Update set committed\"",
+    "resolves_on_disk": true
+   },
+   {
+    "checkpoint": "directive L243 - Phase 3 ATF suite summary",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-atf-suite-results.png",
+    "caption": "Phase 3 - ATF suite results screen showing the final pass/fail summary (TES0001002, 14 success / 6 failure of 20, 180 steps)",
+    "resolves_on_disk": true
+   }
+  ],
+  "screenshots_missing": [],
+  "screenshot_policy": "INTERP-6: attached by absolute path plus caption next to each checkpoint result in FINAL-REPORT.md; PNG binaries are NOT committed",
+  "classified_issues": [
+   {
+    "id": "I1",
+    "classification": "c",
+    "issue": "sys_choice rows absent for the three scoped tables (0 rows; the package’s own choice sys_id 3e7609e334c65bf732756bc25d9f21c2 returns HTTP 404) while the dictionary keeps case.type, case.status, case.priority and case.pending_reason choice-typed",
+    "caused_by_this_pr": false,
+    "evidence_pre_existing": "the 7 sys_choice payloads are byte-identical between the rebuilt package and FALLBACK.xml; the package docs already record the package-alone state as \"sys_choice 0\"; the pre-refine instance had 24 choice rows only because post_import_remediation.js created them, which INTERP-10 excludes from a clean commit",
+    "failures_caused": [
+     "ATF 01",
+     "ATF 10",
+     "ATF 15",
+     "ATF 16",
+     "ATF 17",
+     "ATF 18"
+    ],
+    "fix_attempts": 0,
+    "cap": 2,
+    "resolved": false,
+    "shipped_anyway": true,
+    "flagged_for_human_decision": true,
+    "reverified_by_u5": "read-only query 2026-09-02: sys_choice rows for the three tables = 0"
+   },
+   {
+    "id": "I2",
+    "classification": "c",
+    "issue": "seed child rows carry no parent-case linkage: case empty on 10/10 tasks and 8/8 parties, organization empty on the 3 Organization-type parties",
+    "caused_by_this_pr": false,
+    "evidence_pre_existing": "the seed task/party payloads contain no case element and no organization element, identically in FALLBACK.xml; the pre-refine linkage came from scripts/seed_demo_data.js run after the commit",
+    "fix_attempts": 0,
+    "cap": 2,
+    "resolved": false,
+    "shipped_anyway": true,
+    "flagged_for_human_decision": true
+   },
+   {
+    "id": "I3",
+    "classification": "c",
+    "issue": "opened_date empty on 8 of 10 seeded cases (blank Opened Date in the anonymous lookup; \"Cases Opened in Last 30 Days\" = 1)",
+    "caused_by_this_pr": false,
+    "note": "the defect is unambiguous, but its only fix vehicle is the seed XML / seed_demo_data.js inside the checksum-frozen package, so amend-and-re-verify vs ship-and-remediate is a human judgment call - class (c), not decided unilaterally",
+    "exercised_by_atf": false,
+    "fix_attempts": 0,
+    "cap": 2,
+    "resolved": false,
+    "shipped_anyway": true,
+    "flagged_for_human_decision": true
+   },
+   {
+    "id": "I4",
+    "classification": "b",
+    "issue": "pre-existing documentation defects: the retired host dev379024 cited 16 times and README’s stale file count",
+    "caused_by_this_pr": false,
+    "fixed": false,
+    "reason_not_fixed": "this unit’s documentation mandate is limited to statements THIS RUN falsified; sweeping these up would exceed it. Reported as a human decision item instead",
+    "flagged_for_human_decision": true
+   },
+   {
+    "id": "I5",
+    "classification": "c",
+    "issue": "cosmetic: the \"Case Count by Status\" donut renders no legend or data labels",
+    "caused_by_this_pr": false,
+    "asserted_by_any_test": false,
+    "fixed": false,
+    "flagged_for_human_decision": true
+   },
+   {
+    "id": "I6",
+    "classification": "repaired as a side effect of in-scope work",
+    "issue": "cosmetic: the case form rendered the raw column name duration_to_close as its label",
+    "outcome": "incidentally repaired by the native rebuild - the platform writes a sys_documentation label row for every column it creates (48 rows live)",
+    "fix_attempts": 0
+   }
+  ],
+  "class_a_regressions": {
+   "count": 0,
+   "evidence": "13/13 harness assertions PASS, identical to the pre-refine baseline TOTAL=13 PASSED=13 FAILED=0; the whole RBAC/ACL matrix passes (ATF 02-07); every script-path transition test passes (ATF 08, 09, 11, 12, 13, 14); both lookup tests pass (ATF 19, 20); two documented package-alone defects (Defect 9 role links, Defect C storage half) are now FIXED by the rebuild"
+  },
+  "human_decision_items": [
+   {
+    "ref": "I1",
+    "item": "sys_choice rows absent for the three scoped tables - root cause of ATF 01, 10, 15, 16, 17, 18",
+    "options": [
+     "1) amend the package choice payloads then re-run Phase 2 (clean instance, checksum, preview, zero errors, UI commit, storage/link confirmation) for a NEW verified checksum",
+     "2) accept the verified package and keep the documented post-commit remediation step for choices",
+     "3) hand-create the 24 choice rows on the instance - available but NOT recommended: it masks the package-alone defect (D4)"
+    ],
+    "then": "re-run the six named tests"
+   },
+   {
+    "ref": "I3",
+    "item": "opened_date empty on 8 of 10 seeded cases",
+    "options": [
+     "1) amend the seed payloads and re-run Phase 2 for a new verified checksum",
+     "2) ship as verified and keep the documented post-commit seed_demo_data.js step, which fills the field"
+    ]
+   },
+   {
+    "ref": "I2",
+    "item": "seed child rows carry no parent-case linkage",
+    "options": [
+     "1) amend the seed payloads and re-run Phase 2 for a new verified checksum",
+     "2) ship as verified and keep the post-commit seed_demo_data.js step, which creates the linkage"
+    ]
+   },
+   {
+    "ref": "I4",
+    "item": "pre-existing documentation defects left in place (retired host dev379024, stale file count)",
+    "options": [
+     "schedule a separate documentation pass: replace dev379024 with dev306625, resolve the scope sys_id by query instead of a literal, and re-count the files"
+    ]
+   },
+   {
+    "ref": "I5",
+    "item": "\"Case Count by Status\" donut renders no legend or data labels",
+    "options": [
+     "leave as is",
+     "add data labels/legend in a later cosmetic pass"
+    ]
+   }
+  ],
+  "fix_attempts_summary": {
+   "cap_per_issue": 2,
+   "any_issue_over_cap": false,
+   "any_issue_at_cap_unresolved": false,
+   "ledger": [
+    {
+     "unit": "U2",
+     "issue": "sys_number records had to carry the identities the package carries",
+     "attempts": 2,
+     "resolved": true
+    },
+    {
+     "unit": "U3",
+     "issue": "3 type=error preview problems: global-scope attribution on the three natively created sys_user_has_role grants",
+     "attempts": 1,
+     "resolved": true
+    },
+    {
+     "unit": "U3",
+     "issue": "60 type=error preview problems: \"Found a local update that is newer than this one\" on the swapped records",
+     "attempts": 2,
+     "resolved": true
+    },
+    {
+     "unit": "U4",
+     "issue": "sys_choice rows absent for the three scoped tables (6 named ATF failures)",
+     "attempts": 0,
+     "resolved": false,
+     "classification": "c",
+     "flagged_for_human_decision": true
+    }
+   ],
+   "recovery_cycles": {
+    "counted_independently_of_the_fix_cap": true,
+    "cap": 3,
+    "used_phase0": 0,
+    "used_phase1": 0,
+    "used_phase2": 0,
+    "used_phase3": 0,
+    "hibernation_events": 0,
+    "time_lost": "none"
+   }
+  },
+  "scope_audit_d46": {
+   "in_scope_all_performed": true,
+   "in_scope": [
+    "native table/role-link creation and rebuild",
+    "scratch-then-master Update Set sequencing (SCRATCH 4999985a930b435009aa70d19dba102e never shipped; 0 refine_probe matches in the deliverable; probe table now HTTP 400)",
+    "checksum-gated preview/commit verification",
+    "ATF suite execution",
+    "falling back to the original package if Phase 1/2 could not complete - not needed"
+   ],
+   "out_of_scope_respected": {
+    "new_atf_tests_authored": 0,
+    "instance_released_or_re_requested": false,
+    "delivery_blocked_by_phase3": false,
+    "apps_current_app_preference_preserved": true
+   },
+   "platform_records_touched_outside_the_table_role_link_subset": [
+    {
+     "records": "sys_documentation 30 label rows",
+     "licence": "unavoidable platform side effect of native column creation",
+     "classification": "authorized side effect of the in-scope action"
+    },
+    {
+     "records": "sys_number 3 counters re-created carrying the package identities",
+     "licence": "the OVERRIDE-3 table-delete cascade removed them",
+     "classification": "authorized side effect"
+    },
+    {
+     "records": "cascade removed and commit restored: 26 sys_security_acl, 24 sys_choice rows, 7 business rules, 8 reports, 3 sys_ui_list, 1 sys_ui_related_list, 2 sys_ui_policy, 30 data rows",
+     "licence": "consequence of the OVERRIDE-3 authorized targeted table deletion",
+     "classification": "authorized, restored by the commit"
+    },
+    {
+     "records": "2 throwaway local update sets: SCRATCH 4999985a930b435009aa70d19dba102e (6 children), ABSORBER 25d86c1a938b435009aa70d19dba101b (266 children)",
+     "licence": "containers that kept delete-captures out of the shipping set",
+     "classification": "never shipped"
+    },
+    {
+     "records": "231 stale sys_update_version rows (fix 1) and 256 local DELETE-capture sys_update_xml rows (fix 2) removed on the authoring instance",
+     "licence": "residue of this run’s own authorized deletions, removed to reach zero type=error preview problems",
+     "classification": "in-scope fix work, not pre-existing platform state"
+    },
+    {
+     "records": "ATF run side effects",
+     "licence": "suite execution",
+     "classification": "rollback clean: recovered delete 2, modified 3, inserted 37, exceptions 0"
+    }
+   ],
+   "leftover_records_on_the_instance": [
+    "2 superseded retrieved update sets 7af37c12930f435009aa70d19dba105a and 23467496930f435009aa70d19dba1013, both state=previewed, never committed",
+    "the pre-refine committed retrieved set 9929f50df18ccec91ea13b2a3bccfc90, still committed with its original 926 children",
+    "the loaded import envelope b4861cf7bbe24b36926fcaff4583b5bf, 0 children after the child move"
+   ]
+  },
+  "doc_updates": {
+   "performed": true,
+   "reason": "the rebuilt package ships, so the conditional documentation-accuracy pass applies; edits are confined to statements this run falsified and cross-reference docs/refine-run/FINAL-REPORT.md for the evidence",
+   "files": [
+    {
+     "file": "servicenow-case-management-poc/README.md",
+     "corrected": [
+      "the \"two manual post-import steps are mandatory\" headline",
+      "the \"bytes that ship have never been previewed / conditional gate\" item and its 926-block identity sentence",
+      "the package Identity bullet (now 988 blocks / 4,062,436 bytes / eee9fabd...)",
+      "the AAP deployment-contract callout \"a commit alone leaves the tables without storage and the ACLs without role links\"",
+      "the round-trip-status bullet",
+      "the \"nothing has been re-measured\" closing sentence"
+     ]
+    },
+    {
+     "file": "servicenow-case-management-poc/docs/deployment.md",
+     "corrected": [
+      "the \"bytes that ship ... NO preview has been run\" callout",
+      "Step 3’s \"a commit alone does not reach it / the two shortfalls need the manual remediation\" note"
+     ]
+    },
+    {
+     "file": "servicenow-case-management-poc/docs/validation-gates.md",
+     "corrected": [
+      "the shipping-bytes \"no preview has been run\" bullet",
+      "the Data model, ACLs and Update Set gate verdicts",
+      "the 4-pass/3-qualified net count (now 6/1/0, with the pre-rebuild accounting retained)",
+      "the round-trip status bullet \"not even steps 1-4 have been run\"",
+      "the hibernation \"nothing re-measured\" note"
+     ]
+    },
+    {
+     "file": "servicenow-case-management-poc/docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md",
+     "corrected": [
+      "the header summary: \"upload -> preview -> commit does not give you a working application\", Defects C and 9 \"require manual steps every time\", \"a second commit is required\"",
+      "the deliverable size and block-count row",
+      "§5’s \"REQUIRED, not optional\" preamble",
+      "the \"steps 4 and 6 are the same command run twice\" note"
+     ]
+    },
+    {
+     "file": "servicenow-case-management-poc/docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md",
+     "corrected": [
+      "§0.1 package identity, including the \"clean-slate upload -> preview -> commit on these bytes: NOT on these bytes\" row",
+      "the runtime-status rows for the physical schema and the ACL role x CRUD matrix",
+      "the Defect 9 section heading and verdict (FIXED by the native rebuild)",
+      "§9.5 residual-manual-footprint preamble (rows 1, 2, 3 no longer apply)",
+      "the package-alone census row (sys_dictionary 25, acl_links 0)",
+      "§10.0 item 1a (clean-slate trip on the shipping bytes) marked done",
+      "the §0 hibernation \"nothing re-measured\" note"
+     ]
+    },
+    {
+     "file": "servicenow-case-management-poc/scripts/round_trip_verify.md",
+     "corrected": [
+      "phase-list item 4 \"Remediate ... mandatory\"",
+      "the \"assert the child sys_update_xml count is exactly 926\" instruction (988 for the shipping file; 926 attributed to FALLBACK.xml)",
+      "the standing-result paragraph",
+      "criterion 4 \"27 of 27 links after two remediation runs separated by a second commit\"",
+      "the \"Phase 4 - Post-Import Remediation (mandatory)\" heading and preamble",
+      "the hibernation \"cannot be executed at all\" warning"
+     ]
+    }
+   ],
+   "deliberately_left_alone": [
+    "the retired host dev379024 (16 occurrences) and README’s stale file count - pre-existing class (b) documentation defects, outside this pass’s mandate",
+    "every statement that remains true: sys_choice 0 for the three tables, the post-commit seed_demo_data.js step for the seed linkage, opened_date empty on 8 of 10 cases"
+   ],
+   "not_present_in_the_repository": "the brief’s example \"a from-scratch first commit legitimately fails with 22 errors\" appears only in the environment handover, not in any repository document (grep: 0 occurrences), so it had nothing to correct; the related \"second commit required\" claim is in the documentation and was corrected"
+  },
+  "validation": {
+   "deliverable_sha256_matches_recorded": true,
+   "xmllint_all_xml": "no output over every servicenow-case-management-poc/**/*.xml",
+   "node_check_all_js": "no output over the *.js scripts",
+   "run_state_parses": true,
+   "every_screenshot_path_in_the_report_resolves": true,
+   "fallback_present_and_hash_intact": true,
+   "no_png_or_video_binaries_staged": true,
+   "no_credential_token_cookie_or_sysparm_ck_in_new_or_edited_files": true
+  },
+  "blockers": [],
+  "final_step_completed_at_utc": "2026-09-02T22:44:11Z"
  }
 }

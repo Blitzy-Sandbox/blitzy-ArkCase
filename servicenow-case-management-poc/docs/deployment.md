@@ -24,8 +24,16 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > history and cannot occur on a fresh PDI. **Commit was withheld on those bytes** — the verification instance
 > is shared — so "0 of any type" remains proven only on `7272edfc…`.
 >
-> **The bytes that ship today are 926 blocks, 3,781,097 bytes, SHA-256
-> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, and NO preview has been run on them.**
+> **Superseded on 2026-09-02.** The bytes that ship today are the native-rebuild package — **988 blocks,
+> 4,062,436 bytes, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — and the full
+> trip **has** been measured on them: 0 `type=error` and 0 `type=warning` preview problems on a genuinely clean
+> instance, then a single UI-action commit that succeeded 100% (613 inserted / 375 updated / 0 collisions), with
+> physical storage and all 27 ACL role links confirmed afterwards. The record is
+> [`../docs/refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The remainder of this note describes the
+> **previous** revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`:
+>
+> **Those retained bytes are 926 blocks, 3,781,097 bytes, SHA-256
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, and NO preview was ever run on them.**
 > Be precise about which measurement belongs to which artifact, because five digests appear in this deliverable's
 > history (`32a064d6…`, `7272edfc…`, `89638c17…`, `e49a7654…` and today's `7292a6fe…`) and only two of them carry a
 > preview result. What changed from `e49a7654…` is small and fully enumerated: **13 payloads** re-synced
@@ -136,7 +144,16 @@ For the comprehensive manual round-trip verification procedure, see [`../scripts
 
 Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; Both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); Both dashboards accessible to users with correct roles; Synthetic demo data visible in case list."
 
-> **This walkthrough is the deliverable's idealized path and a commit alone does not reach it.** A clean-instance
+> **On the package that ships today, a commit alone does reach this walkthrough's state for the schema and the
+> role links.** The 2026-09-02 native-rebuild run committed the shipping bytes once on a clean instance and the
+> commit itself produced physical storage for all three tables (HTTP 200; dictionary 21 / 14 / 13) and all **27**
+> ACL role links (manager 14 / agent 10 / viewer 3), with the remediation script never run and no second commit
+> — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The paragraph below records the behaviour of
+> the **retained original** package (`update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`), and the
+> one shortfall that still applies to today's bytes is the **choice lists**: `sys_choice` rows are absent for the
+> three tables, so choices — with the seed-row linkage and `opened_date` — still need a post-commit step.
+>
+> **On the retained original package, a commit alone did not reach it.** A clean-instance
 > round trip established that after commit the three tables exist as metadata with **no physical storage** and the
 > 26 ACLs have **0 of 27** role links. That same trip also found the dashboards' child records failing to commit
 > and the portal pages rendering blank; **both of those were packaging defects and both are fixed** (see the
