@@ -82,8 +82,9 @@
  *   Step 3  Record, on abort: the enumeration verbatim (class, query, count,
  *           the queried scope, the UTC timestamp of the measurement); the
  *           phase whose step required the deletion, recorded as UNMET with the
- *           destructive boundary named as the reason; and the fact that no
- *           instance write took place.
+ *           destructive boundary named as the reason; and the fact that no data
+ *           or metadata write took place (the syslog rows its own output
+ *           creates are reported separately as log_records_emitted).
  *   Step 4  Name the fallback: leave the instance exactly as it stands - no
  *           rollback, no back-out, no deleteApplication, no scope deletion -
  *           ship the fallback package labelled for what it is, and hand the
@@ -319,13 +320,27 @@ function countRows(tableName, applyQuery) {
                 error: 'aggregate returned a blank value, so the count is unmeasured'
             };
         }
-        var total = parseInt(raw, 10);
+        // The WHOLE value must be a non-negative integer. parseInt() is
+        // deliberately not the validator: it accepts a numeric prefix and
+        // discards the rest, so parseInt('0oops', 10) is 0 and a malformed
+        // value would clear the class as an honest zero. A count that cannot be
+        // read in full is unmeasured, and unmeasured aborts.
+        var normalized = String(raw).trim();
+        if (!/^[0-9]+$/.test(normalized)) {
+            return {
+                readable: false,
+                count: 0,
+                error: 'aggregate returned the malformed value "' + raw +
+                    '", which is not a whole non-negative integer, so the count is unmeasured'
+            };
+        }
+        var total = parseInt(normalized, 10);
         if (isNaN(total) || total < 0) {
             return {
                 readable: false,
                 count: 0,
-                error: 'aggregate returned the non-numeric value "' + raw +
-                    '", so the count is unmeasured'
+                error: 'aggregate value "' + raw + '" did not convert to a non-negative ' +
+                    'integer, so the count is unmeasured'
             };
         }
         return { readable: true, count: total, error: '' };
@@ -630,8 +645,9 @@ function preDeleteCollateralGuard(targetTables, phaseLabel) {
  * Step 3 and Step 4 - the abort record.
  *
  * Emits the enumeration verbatim, records the phase as UNMET with the
- * destructive boundary as the reason, states that no instance write took place,
- * and names the fallback path. Writes nothing.
+ * destructive boundary as the reason, states that no data or metadata write took
+ * place, and names the fallback path. Issues no write API call; the syslog rows
+ * its own output creates are counted in the summary as log_records_emitted.
  *
  * @return {string} the summary line, beginning "VERDICT=ABORT"
  */

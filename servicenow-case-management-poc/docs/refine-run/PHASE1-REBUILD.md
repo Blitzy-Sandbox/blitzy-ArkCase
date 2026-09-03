@@ -468,13 +468,18 @@ the fail-closed reading is the correct one — treat it as collateral and abort.
 **Step 2 — the abort rule, single and unconditional.** Any non-zero count in a class marked
 **NO** aborts the operation **before the first delete, having deleted nothing**. There is no
 partial variant: not "delete the tables and let the commit restore the rest", not "delete
-what the authorisation covers and accept the cascade". The guard writes nothing on the
-instance; it is read-only from Step 0 to Step 3.
+what the authorisation covers and accept the cascade". The guard issues **no data or metadata
+write** — no insert, update or delete against any business or metadata table — from Step 0 to
+Step 3. It is not absolutely write-free, and the specification says so rather than leaving it to
+be found: its own output goes through `gs.info()`/`gs.warn()`, which the platform persists as
+`syslog` rows, and the implementation counts and reports them as `log_records_emitted` beside
+`data_and_metadata_writes=0`.
 
 **Step 3 — what is recorded on abort.** (a) the enumeration verbatim — class, query, count,
 the queried scope and the UTC timestamp of the measurement; (b) the phase whose step required
 the deletion, recorded as **unmet**, with the destructive boundary named as the reason; (c)
-the fact that no instance write took place.
+the fact that no data or metadata write took place, with the count of `syslog` rows the run's own
+output created reported alongside it.
 
 **Step 4 — the fallback.** OVERRIDE-2's leave-for-human path: leave the instance exactly as
 it stands — no rollback, no back-out, no `deleteApplication`, no scope deletion — ship the
