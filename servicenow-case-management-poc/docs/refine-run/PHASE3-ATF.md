@@ -24,8 +24,24 @@ shipping package and the gate's verdict on its bytes, is [`FINAL-REPORT.md`](./F
 **Availability.** Instance liveness was confirmed **by content** (a JSON body, not the hibernation
 HTML splash) and a read-only API heartbeat (`GET /api/now/table/sys_user?sysparm_limit=1`, 10-minute
 independent clock) ran for the whole phase: 21:04:43, 21:14:43, 21:24:43, 21:34:43, 21:44:43,
-21:54:44, 22:04:44 — all HTTP 200. **Hibernation events: 0; recovery cycles used: 0 of 3
+21:54:44, 22:04:44 — all HTTP 200 (all UTC). **Hibernation events: 0; recovery cycles used: 0 of 3
 (0 duration lost).**
+
+**Heartbeat mechanism — required, used, and the deviation, stated for this phase.**
+(a) **Required** by directive lines 76–84: the **browser/UI heartbeat** — a rendered navigation to
+`home.do` on an independent ~10-minute clock, judged live by content. The **API-context** variant is
+the narrow exception, permitted **only** while a Retrieved Update Set record page or a commit-result
+page must be preserved — a condition that **never arose in this phase**, which previewed and
+committed nothing. (b) **Used:** the API variant, for the whole phase — the seven beats above, on the
+run-long loop (`PHASE0-1.md` §2.4). (c) That is a **DEVIATION from directive lines 76–84 in mechanism
+selection**, not compliance: with no record or commit-result page to preserve here, the exception did
+not apply and the mandated browser/UI heartbeat should have run. (d) **Observed impact: none** — 0
+hibernation events, 0 recovery cycles, and both variants are read-only.
+(e) **Corrective action:** the mandated browser-context heartbeat was executed in the CR2 remediation
+pass against `home.do` in a rendered authenticated session — BEAT 1 `2026-09-03T04:23:34.684Z`,
+BEAT 2 `2026-09-03T04:34:04.494Z`, delta 630 s, both judged live by page content, session
+"System Administrator"; that pass performed no commit and no PDI write, so the browser→API→browser
+transition pair is **not applicable** to it. Full statement: `PHASE0-1.md` §2.4.
 
 ---
 
@@ -44,9 +60,13 @@ Performed **before** any test was launched:
 | `sys_atf_test_suite_result` total rows | **1** |
 
 The only pre-existing suite result was `1768f7429307435009aa70d19dba10a4` / **TES0001001**, start
-`2026-09-02 08:33:54`, end `08:36:27`, `status=Success`, `success_count=20`, `failure_count=0`,
-`error_count=0`, `skip_count=0`. That run **predates Phase 2's commit by roughly twelve hours**, so it
-measured the *pre-refine converged* instance, not the package-only state now live.
+**`2026-09-02 15:33:54Z`**, end **`15:36:27Z`** (both **UTC**, as stored on the suite-result record;
+the same two instants render as `08:33:54` and `08:36:27` in the browser's local display, which runs
+at **UTC−7**), `status=Success`, `success_count=20`, `failure_count=0`, `error_count=0`,
+`skip_count=0`. Normalized to UTC and compared with Phase 2's commit at **`2026-09-02T20:36:27Z`**,
+that run **predates the commit by 5 h 02 min 33 s** — not the "roughly twelve hours" an earlier
+revision of this record stated, which came from comparing the local-display value against a UTC one.
+Either way it measured the *pre-refine converged* instance, not the package-only state now live.
 
 **Resume decision, recorded per test before execution: no test was resumable.** All 20 tests counted
 as **not completed** for this run and every one was re-run from scratch. No test was found in a
@@ -345,7 +365,8 @@ decision.**
 
 **The alternative reading, stated rather than buried.** Measured against the pre-refine *live
 instance* — which had choice rows via remediation, and where this same suite passed 20/20 at
-08:33:54 — a reviewer could reasonably call this a regression of the live environment. Both readings
+`2026-09-02 15:33:54Z` (`08:33:54` in the browser's UTC−7 local display) — a reviewer could reasonably
+call this a regression of the live environment. Both readings
 are recorded here and the decision is left to the human. What is not in dispute: **the shipped
 artifact is not worse**, because its choice payloads are byte-identical to the package that shipped
 before.
@@ -393,7 +414,7 @@ form-login** session (`GET /login.do` → 72-char `sysparm_ck` → `POST /login.
 `user_password`, `sysparm_ck`, `sys_action=sysverb_login` → `/login_redirect.do`), and on Zurich P10
 `/sys.scripts.do` emits no `g_ck`, so the hidden input named `sysparm_ck` was scraped. The platform
 answered *"Script completed in scope x_casemgmt"*. Started 2026-09-02T22:05:07Z; the line was written
-at 22:05:09.
+at **22:05:09Z** (`syslog.sys_created_on`, UTC as the Table API returns it).
 
 **Read back with INTERP-8's exact query**
 (`GET /api/now/table/syslog?sysparm_query=messageSTARTSWITHU1ASSERT^ORDERBYDESCsys_created_on&sysparm_limit=1`).
@@ -429,10 +450,14 @@ none — 0 of 13 failed.**
 
 ### Baseline comparison
 
-| | Aggregate | Cleanup | When |
+| | Aggregate | Cleanup | When (**UTC**) |
 | --- | --- | --- | --- |
-| Pre-refine baseline | `TOTAL=13 PASSED=13 FAILED=0` | `tasks=4 cases=7 remainingCases=11` | 2026-09-02 15:24:30 |
-| **This run** | **`TOTAL=13 PASSED=13 FAILED=0`** | `tasks=4 cases=7 remainingCases=10` | 2026-09-02 22:05:09 |
+| Pre-refine baseline | `TOTAL=13 PASSED=13 FAILED=0` | `tasks=4 cases=7 remainingCases=11` | 2026-09-02 15:24:30Z |
+| **This run** | **`TOTAL=13 PASSED=13 FAILED=0`** | `tasks=4 cases=7 remainingCases=10` | 2026-09-02 22:05:09Z |
+
+Both "When" values are the `syslog.sys_created_on` of the harness's own `U1ASSERT|` line as the Table
+API returns it — **UTC**, not a browser-local display value — so the two rows are directly comparable
+without normalization. Neither is compared against any other timestamp in this record.
 
 **Identical aggregate — no regression in the transition-logic contract.** The only delta is
 `remainingCases` 11 → 10, which is **expected per OVERRIDE-3**: the two extra portal-created cases

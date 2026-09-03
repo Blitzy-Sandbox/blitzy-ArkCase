@@ -116,13 +116,17 @@ to the elected deliverable:
 | Fix Script body is the repository source, byte for byte | **VERIFIED.** The packaged `<script>` equals `../scripts/post_import_remediation.js` exactly (172,520 characters), as does the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper. |
 | **Clean-slate upload → preview → commit on these bytes** | **NOT on these bytes — do not read the §0.3 or §0.3b results as covering them.** The full teardown → upload → preview → commit trip (child count asserted at 913, preview to **0 problems of any type**, then `state=committed`) was measured on the earlier **913-block `7272edfc…`** revision (§0.3). The **925-block `e49a7654…`** revision was uploaded and previewed against this already-populated instance: **31 problems, all `Found a local update that is newer than this one`, ZERO `Could not find a record` problems** (63 → 0), every one of the 31 confirmed to have a local `sys_update_version` in state `current`; commit withheld because the verification instance is shared (§0.3b). **No preview has been run on today's 926-block `7292a6fe…` bytes.** What has been measured on them instead is recorded in §0.3c: every one of the 13 changed payloads and the 1 added block was applied to the live instance and read back field-for-field identical to its artifact, and every table and column each of them names was checked to exist in `sys_db_object` / `sys_dictionary`. |
 
-### 0.3 CLOSED — this deliverable has been clean-slate round-tripped
+### 0.3 CLOSED for the historical 913-block `7272edfc…` revision — that revision was clean-slate round-tripped; Gate 7 remains OPEN for the bytes on disk
 
-This was previously OPEN LIMITATION 1: the zero-preview-error proof belonged to a **much earlier revision** of
-the file. **That gap is closed by measurement** on the 913-block, 3,618,378-byte, SHA-256 `7272edfc…` revision
-— the file as it stood immediately before the QA-remediation pass re-synced 9 payloads into it. §0.3a, §0.3b and
-§0.3c together state precisely how this result carries — and does not carry — to today's `7292a6fe…` bytes; three
-revisions separate them.
+**Whose result this is.** Everything in this subsection was measured on the **913-block, 3,618,378-byte,
+SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`** revision — the file as it stood
+immediately before the QA-remediation pass re-synced 9 payloads into it. It closed what was previously OPEN
+LIMITATION 1 **for those bytes**, and for no others. **Gate 7 is OPEN for both artifacts on disk**: the elected
+926-block `7292a6fe…` deliverable has never been previewed on any instance, and the retained 988-block
+`90ee0249…` rebuild was never uploaded, previewed or committed (§0.2's table above, §0.3c, §10.0 item 1a). The
+separate 2026-09-02 zero-problem preview and commit belong to **export 3's** `eee9fabd…` sequence, which is no
+file in this repository (§0.1). §0.3a, §0.3b and §0.3c state precisely how this revision's result carries — and
+does not carry — to today's `7292a6fe…` bytes; three revisions separate them.
 
 The trip was run on `https://dev379024.service-now.com` (Australia Patch 3). It is the same procedure the
 earlier revision went through, executed again from a genuine teardown, and every figure below is an observation:
@@ -278,7 +282,12 @@ census stayed at 10 cases / 10 tasks / 8 parties with no duplicates, and the sna
 
 1. **You cannot ingest this file through the Table API.** `POST /api/now/table/sys_remote_update_set` with the
    XML as the body does not load an `<unload>` document. Use a multipart form POST to **`/sys_upload.do`**
-   (not `/upload.do`), with a login session and that form's own `sysparm_ck`.
+   (the POST target is `/sys_upload.do`, never `/upload.do`), with a login session and the `sysparm_ck` scraped
+   from the upload **form** at `GET /upload.do?sysparm_target=sys_remote_update_set` — that form's own token,
+   not a `g_ck` taken from a list page. On a cold session prime it with one REST GET before scraping: the form
+   otherwise returns a session-timeout variant carrying no token, and re-requesting the same page does not
+   recover. The runnable sequence is
+   [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §4.2.
 2. **`PATCH`-ing `sys_remote_update_set.state` does not drive the workflow.** The field is effectively
    read-only from the REST API — the write is silently reverted. Preview can be driven from a background script
    (`state=previewing`, then `GlideScriptedHierarchicalWorker` against
@@ -794,8 +803,8 @@ read against the packaged seed rows alone.
 
 | Capability | Runtime status on the PDI |
 |---|---|
-| 3 custom tables + fields + choices + auto-number | ⚠️ **Updated 2026-09-02: the elected deliverable is the retained original package, so the assessment below holds as written.** One commit of the **rebuilt** package — retained, not shipped (§0.1) — produced three tables at HTTP 200 with 21 / 14 / 13 columns and the three number counters, with the remediation never run ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)); **the choice lists still did not** (`sys_choice` remained empty for the three tables post-commit). That "from the package alone" result belongs to the retained rebuilt file and **not** to the elected deliverable, which ships the hand-authored schema records. On the elected package: ⚠️ **Working, but not from the package alone.** The physical schema is built by `../scripts/post_import_remediation.js`. The package ships that script as a Fix Script so the body is auditable, but it ships **no trigger and nothing that runs by itself**: an auto-execute Business Rule was built, was measured firing on commit, was measured failing with 121 `SecurityException`s (the commit engine forces the record's `sys_scope` to the application, and `GlideTableDescriptor`/`GlideSecurityManager` are then refused in scoped execution), and was subsequently **removed from the package** for that reason and for the security reason in §0.7. On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage** until an operator performs the manual sequence in §9.5, **steps 1-3**. Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
-| 3 roles + ACL role × CRUD matrix (manager/agent/viewer, incl. assigned-only + field ACLs) | ⚠️ **Updated 2026-09-02: the elected deliverable is the retained original package, so the assessment below holds as written.** The **rebuilt** package — retained, not shipped (§0.1) — carries the 27 `sys_security_acl_role` link records, and one commit of it produced 27 of 27 (manager 14 / agent 10 / viewer 3) with no remediation run ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). The elected deliverable carries **0** of those link records, so that result belongs to the retained rebuilt file alone. On the elected package: ⚠️ **Working, but not from the package alone.** A clean commit produces the 26 ACLs with **0 of 27** `sys_security_acl_role` links; the 27 links and the security-cache flush appear only after the remediation is run manually (§9.4–§9.5). Once run, the live 12-cell matrix is correct: manager full CRUD on all three tables; agent create with **no blanket** read/write and `delete=false`; viewer read-only. **Record-level narrowing empirically confirmed for both halves of the AAP §0.5.6 "Assigned only" definition** — impersonated agent sees 9 of 14 cases; `CASE0000453` and `CASE0000458` are visible with an *empty* `assigned_agent`, so group membership is the only possible grant path, and the five cases with neither group nor agent are absent. Direct-URL access to an unassigned row returns "Security constraints prevent access to requested page". Field-level ACLs confirmed too: the agent sees `assigned_group` read-only while `assigned_agent` stays editable. **Child-table narrowing: historically broken, now passing.** An earlier revision's `case_task`/`case_party` agent conditions could not compile (`case` is a JavaScript reserved word, so a `current.case` dot-walk fails); with the `current.getElement('case')` accessor the impersonated agent sees its assigned task and party rows (10 and 8) with write but not delete, and `ATF 07` passes — green in the current suite run `TES0001015` (§8.3). The failure is retained in §9.6 E-ATF as diagnosis only; it is **not** an open defect. |
+| 3 custom tables + fields + choices + auto-number | ⚠️ **Updated 2026-09-02: the elected deliverable is the retained original package, so the assessment below holds as written.** One commit of the 988 records the **rebuilt** package carries — retained, not shipped (§0.1) — produced three tables at HTTP 200 with 21 / 14 / 13 columns and the three number counters, with the remediation never run; that commit was performed on **export 3's `eee9fabd…` sequence**, the same records in pre-re-sequencing block order, and the retained file's own `90ee0249…` bytes were never uploaded, previewed or committed ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)); **the choice lists still did not** (`sys_choice` remained empty for the three tables post-commit). That "from the package alone" result belongs to `eee9fabd…` and to the records the retained rebuilt file carries — **not** to the elected deliverable, which ships the hand-authored schema records. On the elected package: ⚠️ **Working, but not from the package alone.** The physical schema is built by `../scripts/post_import_remediation.js`. The package ships that script as a Fix Script so the body is auditable, but it ships **no trigger and nothing that runs by itself**: an auto-execute Business Rule was built, was measured firing on commit, was measured failing with 121 `SecurityException`s (the commit engine forces the record's `sys_scope` to the application, and `GlideTableDescriptor`/`GlideSecurityManager` are then refused in scoped execution), and was subsequently **removed from the package** for that reason and for the security reason in §0.7. On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage** until an operator performs the manual sequence in §9.5, **steps 1-3**. Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
+| 3 roles + ACL role × CRUD matrix (manager/agent/viewer, incl. assigned-only + field ACLs) | ⚠️ **Updated 2026-09-02: the elected deliverable is the retained original package, so the assessment below holds as written.** The **rebuilt** package — retained, not shipped (§0.1) — carries the 27 `sys_security_acl_role` link records, and one commit of those 988 records produced 27 of 27 (manager 14 / agent 10 / viewer 3) with no remediation run; that commit was performed on **export 3's `eee9fabd…` sequence**, the same records in pre-re-sequencing block order, and the retained file's own `90ee0249…` bytes were never uploaded, previewed or committed ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). The elected deliverable carries **0** of those link records, so that result belongs to `eee9fabd…` and to the records the retained rebuilt file carries — never to the deliverable. On the elected package: ⚠️ **Working, but not from the package alone.** A clean commit produces the 26 ACLs with **0 of 27** `sys_security_acl_role` links; the 27 links and the security-cache flush appear only after the remediation is run manually (§9.4–§9.5). Once run, the live 12-cell matrix is correct: manager full CRUD on all three tables; agent create with **no blanket** read/write and `delete=false`; viewer read-only. **Record-level narrowing empirically confirmed for both halves of the AAP §0.5.6 "Assigned only" definition** — impersonated agent sees 9 of 14 cases; `CASE0000453` and `CASE0000458` are visible with an *empty* `assigned_agent`, so group membership is the only possible grant path, and the five cases with neither group nor agent are absent. Direct-URL access to an unassigned row returns "Security constraints prevent access to requested page". Field-level ACLs confirmed too: the agent sees `assigned_group` read-only while `assigned_agent` stays editable. **Child-table narrowing: historically broken, now passing.** An earlier revision's `case_task`/`case_party` agent conditions could not compile (`case` is a JavaScript reserved word, so a `current.case` dot-walk fails); with the `current.getElement('case')` accessor the impersonated agent sees its assigned task and party rows (10 and 8) with write but not delete, and `ATF 07` passes — green in the current suite run `TES0001015` (§8.3). The failure is retained in §9.6 E-ATF as diagnosis only; it is **not** an open defect. |
 | Prohibited-transition guards (Any→Draft, Closed→*) | ✅ Working (Business Rules). Since the QA-remediation pass this also covers a Closed row's **fields**, not just its status: a field-only edit to a Closed case raises the same verbatim message, while a save that changes nothing is still accepted (§9.6 **E13**) |
 | Transition-graph enforcement (only the edges AAP §0.5.5 lists are legal) | ✅ Working (Business Rule order 250, STEP 0). Was previously **absent** — only each target status's precondition was checked, so all 8 illegal skip/backward edges were accepted and `Draft→Closed` could reach the terminal state unassigned with an empty `closed_date`. Now refused with a message naming the attempted edge and the legal next status; 16/16 attempts blocked across both case types (§9.6 **E12**) |
 | The six transition **UI Actions** (`Open`, `Start Progress`, `Set Pending`, `Resume`, `Resolve`, `Close`) | ✅ Working. Visibility is correct for all 18 identity × status combinations, including zero buttons for the read-only viewer, after the four over-length conditions moved into `CaseTransitionValidator.canShowAction()` (§9.6 **E3**); and `Set Pending`, which could never reach the server because of a reserved `sysverb_` prefix in its `gsftSubmit` call, now performs its transition (§9.6 **E11**) |
@@ -1032,10 +1041,15 @@ Acceptance path **(b)**, not (a).
 
 > **Not fixed on the elected bytes — the remediation run is mandatory.** The root cause recorded below is that
 > role links cannot be shipped as
-> hand-authored records. The 2026-09-02 rebuild had the **platform** create the role assignments, so the
-> platform captured 27 `sys_security_acl_role` rows into the Update Set, and committing it on a clean instance
+> hand-authored records — **not** that captured link rows cannot travel at all. The 2026-09-02 rebuild had the
+> **platform** create the role assignments, so the
+> platform captured 27 `sys_security_acl_role` rows into the Update Set, and committing those 988 records on a
+> clean instance
 > produced **27 of 27** links (manager 14 / agent 10 / viewer 3) with `post_import_remediation.js` never run
-> and no second commit — see [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **That package is
+> and no second commit — measured on **export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`
+> sequence**, the same records in pre-re-sequencing block order, the retained file's own `90ee0249…` bytes
+> never having been uploaded, previewed or committed; see
+> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **That package is
 > retained, not shipped**, at
 > `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (§0.1), so the fix travels
 > with it and not with the deliverable. The **elected** deliverable is the untouched original,
@@ -1043,8 +1057,11 @@ Acceptance path **(b)**, not (a).
 > `7292a6fe…`), which carries **0** `sys_security_acl_role` rows — so everything below applies to the package
 > that ships and `scripts/post_import_remediation.js` must be run to create the 27 links.
 
-**Verdict (the elected deliverable): NOT automated end-to-end. A human step is required.** The 27 links cannot be shipped as records at
-all (two independent measured reasons below), so a script is the only mechanism available — and the script's
+**Verdict (the elected deliverable): NOT automated end-to-end. A human step is required.** The elected package
+carries **0** `sys_security_acl_role` rows, and a hand-authored link payload pushed through the engine's direct
+`loadXML` path produces nothing (reasons below, each scoped to what it was measured on), so **for this
+package** a script is the only
+mechanism available — and the script's
 auto-execute path fires but fails, for the same commit-time scope rewrite as Defect C, because
 `GlideSecurityManager` is refused in scoped execution (§9.4). The links and the security-cache flush appear only
 after an operator runs `scripts/post_import_remediation.js` in scope **Global**
@@ -1056,21 +1073,44 @@ after an operator runs `scripts/post_import_remediation.js` in scope **Global**
   assigned-only condition scripts, and descriptions that name the intended role per ACL) but **zero**
   `sys_security_acl_role` link records. On this high-security PDI, an ACL with no role + no condition + no
   script evaluates to **deny** ("Deny access for empty term"), so every non-admin was denied.
-- **Why the links cannot be packaged as records — two independent, measured reasons.**
+- **Why the links do not arrive from *this* package — measured, and scoped precisely to the cases each
+  measurement actually covers.** *(An earlier revision of this bullet claimed the links "cannot be packaged as records" in general.
+  That absolute form is **too strong and is withdrawn** — see the proven portable route below.)*
   1. `sys_security_acl` has **no `roles` column** on this release. Enumerating `sys_dictionary` for the table
      and its `sys_metadata` super-class yields `active, admin_overrides, advanced, applies_to, condition,
      controlled_by_refs, decision_type, description, local_or_existing, name, operation, script,
      security_attribute, sys_id, type` — nothing role-bearing. So the links exist only as rows in the
-     `sys_security_acl_role` m2m table; they cannot ride along inside the ACL record.
-  2. `sys_security_acl_role` **payloads are silently skipped by the update engine.** Five different payload
+     `sys_security_acl_role` m2m table; they cannot ride along inside the ACL record. **This is unconditional
+     and still true.**
+  2. **The elected/original package carries 0 `sys_security_acl_role` rows.** Nothing in it can create the
+     links, whatever the engine would do with such a row — which is the operative reason the manual run is
+     mandatory on the artifact that ships.
+  3. **Direct `GlideUpdateManager2.loadXML` injection of a hand-authored link payload produces nothing.** Five
+     different payload
      shapes were pushed through `GlideUpdateManager2.loadXML` — standalone; with an XML prolog; nested inside
      the parent ACL's `record_update`; wrapped in an `<unload>` document; and the platform's *own* captured
      serialization obtained via `GlideUpdateManager2.saveRecord` — and **all five produced 0 rows**, with no
-     error raised. A plain `GlideRecord` insert of the same data from a global script produced 1 row.
+     error raised. A plain `GlideRecord` insert of the same data from a global script produced 1 row. **The
+     scope of this result is the direct `loadXML` back door**, which is how it was exercised; it does not
+     establish anything about a normal Retrieved Update Set preview → commit.
 
-  Shipping 27 `sys_security_acl_role` `<sys_update_xml>` blocks would therefore have looked correct in the
-  package and delivered nothing on import. They are deliberately **not** in the deliverable, and no
-  link-artifact files were added under `acl/` — that directory still holds exactly the original 26 ACL records.
+  **The proven portable route: platform-captured rows committed through a normal retrieved-set
+  preview → commit.** Rows the **platform itself** captured into an Update Set (because the role assignment was
+  performed through the platform rather than authored by hand) do survive a normal preview → commit: a single
+  commit produced **27 of 27** links, **manager 14 / agent 10 / viewer 3**, with
+  `post_import_remediation.js` never run and no second commit. Measured 2026-09-02 on **export 3's byte
+  sequence, 988 blocks / 4,062,436 bytes / SHA-256
+  `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**
+  ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). The retained rebuilt package
+  (`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, `90ee0249…`, §0.1)
+  carries those captured rows in dependency order; its own bytes were never uploaded, previewed or committed.
+
+  For the elected deliverable the practical position is unchanged: hand-authoring 27
+  `sys_security_acl_role` `<sys_update_xml>` blocks into it would have looked correct in the package and
+  delivered nothing through the direct-load path, so they are deliberately **not** in it, and no
+  link-artifact files were added under `acl/` — that directory still holds exactly the original 26 ACL
+  records. The links therefore come from `scripts/post_import_remediation.js` on this package, and the
+  captured-row route arrives only with the promotion in §10.0 Path A.
 - **Remediation — shipped in the package, but run by hand.** `scripts/post_import_remediation.js` creates the
   27 links and flushes the security cache. The package ships **no trigger** for it: one was built, fired, could
   not succeed (§9.4) and was removed (§0.7); **an operator must run the script in scope Global**
@@ -1814,7 +1854,7 @@ so future operators don't mistake them for bugs.
 | 6 `gs.nowDateTime` | partial | ✅ | ✅ | — |
 | 7 REST `service_id` | ✅ both `Scripted REST Service` payload blocks updated | ✅ | ✅ `portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml`, `…_case_status_lookup.xml` | re-asserted by the script (convergence for a partially-repaired instance) |
 | 8 stale REST op-scripts | already correct in XML | ✅ | n/a | — |
-| 9 ACL role-links | ✅ the remediation that creates them is in the Update Set (as the Fix Script; no trigger ships). The 27 `sys_security_acl_role` **records themselves cannot be packaged** — `sys_security_acl` has no `roles` column and link payloads are silently skipped by the engine (5 shapes tested) | ✅ | ✅ created by `scripts/post_import_remediation.js` from each ACL's own `<roles>` declaration, resolved **by name** | ⚠️ **nothing auto-executes; one manual run required.** A clean commit leaves `acl_links_total=0` of an expected 27; the links and the `GlideSecurityManager.get().reset()` flush appear only after the manual run. The trigger that once dispatched this fired but could not succeed, and has been removed (§0.7). See §9.4–§9.5. |
+| 9 ACL role-links | ✅ the remediation that creates them is in the Update Set (as the Fix Script; no trigger ships). The 27 `sys_security_acl_role` **records are not in the elected package** — `sys_security_acl` has no `roles` column, so links exist only as m2m rows, and a **hand-authored** link payload pushed through direct `GlideUpdateManager2.loadXML` produced 0 rows in all 5 shapes tested. **Not an absolute limit:** platform-**captured** link rows committed through a normal retrieved-set preview → commit produced **27 of 27** (manager 14 / agent 10 / viewer 3) with no remediation run — measured on export 3's `eee9fabd…` sequence, and carried by the retained rebuilt package (§2 Defect 9, §0.1) | ✅ | ✅ created by `scripts/post_import_remediation.js` from each ACL's own `<roles>` declaration, resolved **by name** | ⚠️ **nothing auto-executes; one manual run required.** A clean commit leaves `acl_links_total=0` of an expected 27; the links and the `GlideSecurityManager.get().reset()` flush appear only after the manual run. The trigger that once dispatched this fired but could not succeed, and has been removed (§0.7). See §9.4–§9.5. |
 | F flow serialization | ✅ (7 flows replaced with the platform's own graph serialization; +Action Type, +Flow Block, +order-250 Business Rule; 148 → 151 records) | ✅ (7 flows re-authored natively in Flow Designer and published/active; Custom Action published; Business Rule installed) | ✅ | — (no post-import step required) |
 
 > **Repo-source propagation policy (current).** Every remediation now propagates into the repository and into
@@ -1826,9 +1866,14 @@ so future operators don't mistake them for bugs.
 >   files carry the values and the corresponding `Dictionary`, `Number Maintenance` and `Scripted REST Service`
 >   `<payload>` blocks in `update-set/x_casemgmt_case_management_update_set.xml` carry them identically, so the
 >   repo artifact and the deliverable cannot disagree. No operational step remains for either.
-> - **C** (physical schema) and **9** (ACL role links) **cannot** be delivered as records — not as a matter of
->   policy but of measured platform behaviour: the DDL comes from a business rule the commit engine suppresses,
->   and `sys_security_acl_role` payloads are silently discarded (§2, §4.1, §4.14). For these the *remediation
+> - **C** (physical schema) and **9** (ACL role links) are **not** delivered as records **by the elected
+>   package** — not as a matter of policy but of measured platform behaviour: the DDL comes from a business rule
+>   the commit engine suppresses, and a **hand-authored** `sys_security_acl_role` payload pushed through direct
+>   `GlideUpdateManager2.loadXML` is discarded silently (§2, §4.1, §4.14). **Neither is an absolute limit on
+>   packaging:** platform-**captured** table, dictionary and `sys_security_acl_role` records committed through a
+>   normal retrieved-set preview → commit produced physical storage on all three tables and **27 of 27** role
+>   links with no remediation run — measured on export 3's `eee9fabd…` sequence and carried by the retained
+>   rebuilt package (§0.1, §2 Defect 9). For the package that ships, the *remediation
 >   body* is what ships, and nothing more: `../scripts/post_import_remediation.js` and its Fix Script wrapper,
 >   folded into the same single Update Set as block 117 of 926. The global after-update Business Rule on
 >   `sys_remote_update_set` that once dispatched it **is no longer in the package** — it fired, could not
@@ -2361,11 +2406,25 @@ Two root causes were found on the way, and both are worth knowing for the next g
 
 Mechanics worth recording, because the documented sequence does not work here: the Table-API POST of an
 `<unload>` document is rejected (HTTP 400 `Misshaped element`), so upload must be a multipart
-`POST /sys_upload.do`; and `sys_remote_update_set.state` is **read-only over REST** — a `PATCH` is silently
-reverted — so preview and commit must be driven through `UpdateSetPreviewAjax` and
-`com.glide.update.UpdateSetCommitAjaxProcessor` via `/xmlhttp.do` (or from the UI). No browser is required.
+`POST /sys_upload.do` carrying the `sysparm_ck` scraped from the `/upload.do?sysparm_target=sys_remote_update_set`
+form; and `sys_remote_update_set.state` is **read-only over REST** — a `PATCH` is silently
+reverted — so preview must be driven through `UpdateSetPreviewAjax` via `/xmlhttp.do`.
 Before committing, the platform's own predicate was checked: `state=previewed`, `unresolvedProblems=false`,
 `shouldDisplay=true` — i.e. nothing manual sat between preview and commit.
+
+> **SUPERSEDED — the commit half of that note.** This paragraph originally continued *"…so preview and commit
+> must be driven through `UpdateSetPreviewAjax` and `com.glide.update.UpdateSetCommitAjaxProcessor` via
+> `/xmlhttp.do` (or from the UI). No browser is required."* The `UpdateSetPreviewAjax` half stands; the commit
+> half does **not**, and it is retained here only as the historical mechanics note it was. **Commit is a
+> UI-only action:** it must be performed by clicking the native **Commit Update Set** UI action on the
+> retrieved-set record in a rendered browser session, exactly once, after confirming `state=previewed`, that
+> the set is not already committed, and that no commit progress worker is already running for it — with any
+> unexpected confirmation dialog treated as a hard stop for human review rather than clicked through. The
+> direct commit processor is **not** an authorized path: the 2026-09-02 commit did not use it, and the earlier
+> pass in §9.10 that did drive a commit through that contract is history rather than procedure. §0.3b item 2
+> is the current authoritative statement (*"commit must be launched from the browser UI action"*), and the
+> operator procedures are [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md) Phase 3 and
+> [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §4.1 step 4.
 
 ### 9.3 The three edits made to the deliverable in the clean-instance round-trip pass
 
@@ -2573,9 +2632,12 @@ and correct on the clean install (`counters_already=3`, `number_default_already=
 
 > **Updated 2026-09-02 — the footprint below is the elected deliverable's, in full.** The **rebuilt** package
 > shrinks it: on that package rows **1** (Defect C's
-> physical storage) and **3** (Defect 9's 27 ACL role links) do not apply — one commit on a clean instance
+> physical storage) and **3** (Defect 9's 27 ACL role links) are not expected to apply — one commit of those
+> 988 records on a clean instance
 > produced three tables at HTTP 200 with 21 / 14 / 13 columns and 27 of 27 role links, with no remediation run
-> and no second commit, so row **2** (the second commit) does not apply either, leaving only
+> and no second commit (**measured on export 3's `eee9fabd…` sequence**, the same records in
+> pre-re-sequencing block order; the retained file's own `90ee0249…` bytes were never uploaded, previewed or
+> committed), so row **2** (the second commit) is not expected to apply either, leaving only
 > the **0 `sys_choice` rows** named in row 1, the seed-row linkage and `opened_date` (both addressed by
 > `../scripts/seed_demo_data.js` in scope), and the instance prerequisites in row 6. Measurements:
 > [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **That package is retained, not shipped**
@@ -2590,7 +2652,7 @@ Everything that could be automated is in the package. What remains, in the order
 |---|---|---|---|---|
 | 1 | **C** — physical schema | `sys_db_object` metadata exists but has **no physical storage**; REST returns 403; 0 `sys_choice` rows for all 7 choice lists; inserts fail with `invalid table name` | **Run `scripts/post_import_remediation.js` in scope Global — that is the whole step.** It performs the `sys_db_object` deletion and the rebuild itself. Re-measured on a clean install of the final package: from Global alone it reported `clean slate\|dictionary_rows_removed=14\|db_object_rows_removed=1\|residue=0\|reusing_sys_id=yes` for each table, the platform emitted its DDL (`Creating table:`, `DBTable.create() for:`, `ALTER TABLE x_casemgmt_case ADD number VARCHAR(40)`), and all three finished `built\|signals=...isValid=yes,...isValid=yes,...tableExists=yes` with `tables_built=3, fields_created=25, choices_created=24`. **No application picker was set at any point.** An earlier revision of this row required setting `apps.current_app` first and REST-DELETEing the three rows by hand, on the basis that `DictionaryUtils.isDeletable()` refuses from Global; that is retained below as a fallback only | The DDL comes from the platform's `Synch Dictionary and Table` business rule, which the commit engine suppresses; and the remediation cannot run from the auto-execute path because commit rewrites its scope (§9.4). `sys_db_object` deletion is gated by `DictionaryUtils.isDeletable()` → `_isItemInUserScope()`, which refuses from Global, while the cross-scope policy on `sys_db_object` refuses from the app scope — the application-picker route is the only one that works |
 | 2 | **C**, second pass | Deleting the three `sys_db_object` rows **cascades away all 26 ACLs** | **Upload → preview → commit the same Update Set a second time.** This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — accept those (`status=ignored`). **On collisions, read this carefully:** the rule "never ignore a collision" still holds for every table EXCEPT `sys_dictionary`. Re-measured on the final package, this preview reported 46 problems = 25 collisions + the 21 references, and **all 25 collisions were `sys_dictionary` rows the remediation had written moments earlier**. The original caution existed because ignoring them used to discard the hand-repaired display fields; the package now carries the corrected `display` and `defaultsort` values itself, so accepting the remote is the correct action there, and the step-3 remediation re-verifies afterwards. Note that on this platform `status='ignored'` means *ignore the problem and apply the incoming record*; the only other choices are `skipped` and `skip_collision`. The second commit restores the 26 ACLs, the seed rows, the users and the role grants | A consequence of step 1, not avoidable while the DDL must be produced by a table rebuild |
-| 3 | **9** — 27 ACL role links | 26 ACLs with **0** role links. On this high-security instance an ACL with no role, no condition and no script evaluates to **deny**, which makes the application unusable | Run `scripts/post_import_remediation.js` in scope **Global** again. Expected on the `SUMMARY` line: `verified=true`, `acl_links_created=27`, `acl_links_total=27`, `acl_links_expected=27`, `security_cache_flushed=true`, `errors=0`. The script also emits a `TRIGGER` line; on the current package it reports that no bootstrap rule was found, which is correct — the rule was removed and the code path is only a defensive leftover. Do not wait for a deactivation message | `sys_security_acl` has no `roles` column and `sys_security_acl_role` link payloads are silently discarded by the commit engine (5 payload shapes tested, §2 Defect 9). The creating script cannot auto-run for the reason in §9.4 |
+| 3 | **9** — 27 ACL role links | 26 ACLs with **0** role links. On this high-security instance an ACL with no role, no condition and no script evaluates to **deny**, which makes the application unusable | Run `scripts/post_import_remediation.js` in scope **Global** again. Expected on the `SUMMARY` line: `verified=true`, `acl_links_created=27`, `acl_links_total=27`, `acl_links_expected=27`, `security_cache_flushed=true`, `errors=0`. The script also emits a `TRIGGER` line; on the current package it reports that no bootstrap rule was found, which is correct — the rule was removed and the code path is only a defensive leftover. Do not wait for a deactivation message | `sys_security_acl` has no `roles` column, so links exist only as m2m rows; the elected package carries **0** of them; and a **hand-authored** link payload pushed through direct `GlideUpdateManager2.loadXML` is discarded silently (5 payload shapes tested, §2 Defect 9). Platform-**captured** link rows do commit normally — 27 of 27, measured on export 3's `eee9fabd…` sequence — but that route arrives only with the promotion in §10.0 Path A. The creating script cannot auto-run for the reason in §9.4 |
 | 4 | ~~**E7** — one display field per table~~ **NO LONGER MANUAL — now carried by the package** | Nothing. This step is retained with its original number so that existing references to "§9.5 step 4" still resolve | **No operator action.** Previously the operator had to reduce each table to one display field by hand, because all three arrived with `display=true` on nearly every column (13 of 14 on `x_casemgmt_case`) while ServiceNow permits exactly one — so every reference **to** a case rendered blank. Both carriers of the defect are now fixed: the 24 `dictionary/*.xml` artifacts and their Update Set payloads ship `display=false` on all but one column per table (`x_casemgmt_case` → `number`, `x_casemgmt_case_task` → `subject`, `x_casemgmt_case_party` → `role_label`), and `post_import_remediation.js` no longer sets `display: true` on every field it creates. The script additionally **reconciles** the flag after its field loop and **verifies exactly one display field per table**, failing the run if that does not hold | Now fully automated. Two platform behaviours had to be understood first: (a) a normal write that sets `display=true` on one column **silently clears it on every sibling**, so multiple display fields can only ever be *created* by an Update Set commit, where business rules are suppressed — which is why the package was the sole carrier; and (b) the reconciliation therefore has to run once per table after all fields are settled, not per field. Verified by injection: forcing `display=true` onto a non-display column was detected by attribute and value and repaired in a single pass |
 | 5 | **E1/E2 — FIXED in the shipping bytes** | *Was:* the packaged seed rows committed with **`number` empty on all 10 demo cases** and dangling parent references, and they **blocked the app's own seed script from repairing them**. *Now:* all 28 seed rows carry pinned deterministic numbers (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+) and the `case` / `organization` references travel as a `display_value` attribute with an empty body, so nothing dangles | Run `scripts/seed_demo_data.js` in scope `x_casemgmt`. **Do not delete the packaged rows first** — the script now ADOPTS them by pinned number and fills only the columns that are still empty. Measured on a live PDI: first run `adopted=10/10/8`, second run `repaired=0`, no duplicates |
 | 6 | Instance prerequisites (not package artifacts, deliberately not captured) | — | `sn_atf.runner.enabled = true` to run the ATF suite (it survived this teardown). `sn_atf.headless.enabled = false` and cannot be enabled here, so `/atf_test_runner.do?sysparm_nostack=true` must be open in a browser before launching the suite. The three demo personas have **no password** by design and can only be exercised through admin **UI Impersonation** | These are instance test-harness settings, not application configuration; capturing them into the Update Set would be a global write |
@@ -2902,8 +2964,8 @@ and where the two disagree §0 is correct.
 | BEFORE (populated instance) | **54 error-type problems** = 33 `Found a local update that is newer than this one` + 18 `Could not find a record in x_casemgmt_case for column case` + 3 `…core_company for column organization`. The 21 reference problems are **identical** to those recorded in §9.2/§9.3 |
 | Teardown | Staged application-level teardown, every query anchored on the app's `sys_scope` or the `x_casemgmt_` prefix. Verified complete: every census counter **0**, and the three tables moved from HTTP **403** to HTTP **400** — a useful distinction, since 400 means *table absent* whereas 403 means *table exists but cross-scope refused* (E9) |
 | Clean-slate preview | First pass **296 problems, 100 % collisions**, zero missing references and zero missing tables — caused by the teardown's own deletions being captured locally (a local DELETE is "newer" than the package's INSERT). Purging only the local rows whose `<name>` the retrieved set itself carries (299 `sys_update_xml` + 1891 `sys_update_version`) and re-previewing gave **ZERO PROBLEMS OF ANY TYPE** — zero errors *and* zero warnings. Progression **54 → 296 → 0** |
-| Commit | `SNC.PreviewerManager().doPreview()` leaves `state=loaded`, so the platform's own predicate refused (`shouldDisplay=false`). After setting `state=previewed`: `unresolvedProblems=false`, `shouldDisplay=true` — the predicate was checked, not assumed. The AJAX contract was read out of the platform's own **Commit Update Set** UI action: `validateCommitRemoteUpdateSet` → `commitRemoteUpdateSet` with `sysparm_remote_updateset_sys_id` and `sysparm_skip_app_installs=false`. **previewed → committing → committed** |
-| Package-alone state (this row describes the **elected** deliverable, the untouched original; **on the retained rebuilt package — not shipped, §0.1 — the same census reads `sys_dictionary` 30 with real physical storage 21/14/13 and `sys_security_acl_role` 27 of 27, while `sys_choice` stays 0** — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)) | scope 1, `sys_db_object` 3, `sys_dictionary` 25, **`sys_choice` 0** (Defect C), `sys_number` 3, roles 3, ACLs 26, **acl_role links 0** (Defect 9), flows 7, reports 8, dashboards 2, REST 2+2, portal 1+2+3, ATF 20, demo users 3 |
+| Commit | `SNC.PreviewerManager().doPreview()` leaves `state=loaded`, so the platform's own predicate refused (`shouldDisplay=false`). After setting `state=previewed`: `unresolvedProblems=false`, `shouldDisplay=true` — the predicate was checked, not assumed. The AJAX contract was read out of the platform's own **Commit Update Set** UI action: `validateCommitRemoteUpdateSet` → `commitRemoteUpdateSet` with `sysparm_remote_updateset_sys_id` and `sysparm_skip_app_installs=false`. **previewed → committing → committed**. **Historical mechanics only — do not follow this as a procedure:** commit is now a UI-only action performed by clicking that button in a rendered browser session, exactly once (§9.2 SUPERSEDED note, §0.3b item 2, and [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §4.1 step 4) |
+| Package-alone state (this row describes the **elected** deliverable, the untouched original; **on the 988 platform-captured records the retained rebuilt package carries — not shipped, §0.1 — the same census reads `sys_dictionary` 30 with real physical storage 21/14/13 and `sys_security_acl_role` 27 of 27, while `sys_choice` stays 0**, measured on **export 3's `eee9fabd…` sequence** rather than on the retained file's own `90ee0249…` bytes, which were never uploaded, previewed or committed — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)) | scope 1, `sys_db_object` 3, `sys_dictionary` 25, **`sys_choice` 0** (Defect C), `sys_number` 3, roles 3, ACLs 26, **acl_role links 0** (Defect 9), flows 7, reports 8, dashboards 2, REST 2+2, portal 1+2+3, ATF 20, demo users 3 |
 | Auto-execute trigger | **Zero `X_CASEMGMT_REMEDIATION` marker rows at or after the commit start — and that is the expected result because no auto-execute record exists to fire.** The package ships **1 Fix Script and no bootstrap Business Rule, `sysauto_script` or `sys_trigger` of any kind** (§0.1 "Installer records", §9.4); the bootstrap rule an earlier revision carried was removed from the package. An earlier version of this row asserted that the rule "ships `active=false`" and quoted a committed record's field values — **that was stale and factually wrong.** Nothing of the kind is in the package or on the instance: 0 `x_casemgmt`-scoped Business Rules on any update-set table, 0 `sysauto_script` rows, 0 `sys_trigger` rows. Post-import remediation is therefore a **documented manual step**, not an automatic one — run the packaged Fix Script, or `../scripts/post_import_remediation.js`, from Global scope after commit (§9.5). |
 
 **Path (b) was then executed exactly as §9.5 prescribes**, which produced the two corrections now folded into
@@ -3043,8 +3105,10 @@ available to this run is (§0.11).
 >   the 27 ACL-role links and the 30 field/table label rows are **not in it**, the native table/dictionary swap
 >   that directives D2 and D21 ordered is **not in it**, and the 27 links must therefore be created by
 >   `../scripts/post_import_remediation.js` after commit — exactly as the pre-refine deployment did, and exactly
->   as [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) already documents at step
->   5 and step 7. And because **its own bytes were never previewed at all** (§0.3c), electing it does **not**
+>   as [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) already documents at
+>   **steps 4-6** of its primary procedure — step 4 the physical-schema rebuild (§5a), step 5 the second commit
+>   of the same Update Set, step 6 the pass that creates the 27 role links (§5f). Step 7 (§5g) is the separate
+>   seeding run. And because **its own bytes were never previewed at all** (§0.3c), electing it does **not**
 >   satisfy AAP §0.7.1: item 1a stands open against it, in the form the table above carries.
 > - **Path A — still available, now as a promotion of the retained rebuilt package.** That package is retained
 >   on disk, not shipped, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`

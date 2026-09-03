@@ -265,31 +265,82 @@ chmod +x /tmp/bg.sh
 1. **System Update Sets → Retrieved Update Sets → Import Update Set from XML** → upload
    `x_casemgmt_case_management_update_set.xml`.
 2. Open the loaded retrieved set → **Preview Update Set**. Wait for preview to finish.
-3. **Resolve preview problems**: the corrected deliverable previews with **zero errors**. If you see
-   name-resolution / `sys_scope` errors, you are importing an *uncorrected* XML — see
+3. **Resolve preview problems. Zero `type=error` problems is the REQUIRED PASS CONDITION for this step — not
+   a property already measured on the file you are uploading.** The elected deliverable
+   (`update-set/x_casemgmt_case_management_update_set.xml`, 926 blocks, `7292a6fe…`) has never been previewed
+   on any instance, and the retained rebuild (`…REBUILT-DEPENDENCY-ORDERED.xml`, 988 blocks, `90ee0249…`) was
+   never uploaded or previewed either, so neither carries a preview result: you are measuring it here. The one
+   sequence that has previewed to **0 `type=error` and 0 `type=warning`** and then committed is **export 3's —
+   988 blocks, 4,062,436 bytes, SHA-256
+   `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, on 2026-09-02** — which is no file on
+   disk and survives only in git history ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). If you
+   see name-resolution / `sys_scope` errors, you are importing an *uncorrected* XML — see
    `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` Defects A & B (duplicate scope record / `application` reference
-   encoding) and re-export a corrected XML first.
-4. **Commit Update Set.**
+   encoding) and re-export a corrected XML first. Do not proceed to step 4 while any `type=error` row remains,
+   and do not silence one to get past this step.
+4. **Commit Update Set** — the platform's native UI action on the retrieved-set record, clicked **once** in
+   this rendered browser session. Before you click: confirm `state = previewed`, confirm the set is not
+   already `committed` and carries no successful commit in its history, and confirm no update-set commit
+   progress worker (`sys_progress_worker`) is already running for it. **If a confirmation dialog appears, do
+   not click through it** — screenshot it, stop, and escalate for human review. (The successful 2026-09-02
+   commit of export 3's `eee9fabd…` sequence produced no dialog, so a dialog is not the expected path.)
+   Afterwards, verify `state=committed` and record the commit progress worker's `state` / `state_code`:
+   exactly **one** successful worker should exist for the set.
 
-### 4.2 API method (scriptable)
+### 4.2 API method (scriptable — upload and preview only; commit stays in the UI)
 
 ```bash
 SN="$SERVICENOW_INSTANCE_URL"
 XML="servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml"
 
-# Upload (multipart via the UI upload processor; the Table-API POST returns HTTP 400 for this payload)
-# Establish the UI session per Section 3 first, then:
-G_CK=$(curl -s -K /tmp/sn_curl.cfg -b /tmp/sn_cookies.txt "$SN/sys_remote_update_set_list.do" \
-  | grep -oE "g_ck['\"]?[ ]*=[ ]*['\"][^'\"]{32,}" | grep -oE "[A-Za-z0-9_+/=,-]{32,}" | tail -1)
-curl -s -K /tmp/sn_curl.cfg -b /tmp/sn_cookies.txt \
-  -F "sysparm_ck=${G_CK}" -F "sysparm_target=sys_remote_update_set" \
+# Upload (multipart via the UI upload processor; the Table-API POST returns HTTP 400 for this payload).
+# Establish the UI session per Section 3 first, then run these four steps IN ORDER.
+CJ=/tmp/sn_cookies.txt
+
+# (1) PRIME the session with one REST GET. Do not skip this on a cold session: scraping the upload
+#     form first returns a session-timeout page variant that carries NO token, and re-requesting the
+#     same page does not recover — you have to prime, then scrape.
+curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -o /dev/null -w "prime: HTTP %{http_code}\n" \
+  "$SN/api/now/table/sys_remote_update_set?sysparm_limit=1"
+
+# (2) GET the upload FORM for this target (this is the page that carries the token to use)
+curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -o /tmp/upload_form.html \
+  "$SN/upload.do?sysparm_target=sys_remote_update_set"
+
+# (3) Scrape that form's OWN sysparm_ck (not g_ck from a list page - a list-page token is a
+#     different form's token and the upload processor rejects it)
+UP_CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' /tmp/upload_form.html \
+  | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//' | head -1)
+[ -z "$UP_CK" ] && { echo "NO_CK on the upload form - session is cold or expired; re-run section 3, then step (1)"; exit 2; }
+
+# (4) POST the file as multipart to /sys_upload.do
+curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" \
+  -F "sysparm_ck=${UP_CK}" -F "sysparm_target=sys_remote_update_set" \
   -F "attachFile=@${XML};type=text/xml" \
-  "$SN/sys_upload.do" -o /tmp/upload_result.html
+  "$SN/sys_upload.do" -o /tmp/upload_result.html -w "upload: HTTP %{http_code}\n"
 ```
 
-Then **Preview** and **Commit** are driven through `UpdateSetPreviewAjax` / `UpdateSetCommitAjax`
-(via a background script) or simply through the UI (Section 4.1). After the load, verify zero
-**error**-type preview problems:
+Those four steps are the mandated sequence — prime → `GET /upload.do?sysparm_target=…` → scrape that form's
+`sysparm_ck` → multipart `POST /sys_upload.do` — and they are what the 2026-09-02 upload used. Confirm the load
+afterwards by reading the retrieved set's `state` and its child `sys_update_xml` count (§4.1 step 1 gives the
+count to assert).
+
+**Preview may be scripted; Commit may not.** Preview is driven through `UpdateSetPreviewAjax` — the only
+AJAX processor this procedure authorizes — with a `POST /xmlhttp.do` carrying
+`sysparm_processor=UpdateSetPreviewAjax`, `sysparm_ajax_processor_function=preview`,
+`sysparm_ajax_processor_sys_id=<the retrieved set>` and a scraped `sysparm_ck`, then polled
+`previewing → previewed`. A `PATCH {"state":"previewing"}` returns HTTP 200 and silently does nothing —
+`sys_remote_update_set.state` is read-only over REST — so do not use it.
+
+**Commit must be performed through the native "Commit Update Set" UI action in a rendered browser session
+(Section 4.1 step 4), exactly once, after the pre-click checks recorded there.** Do **not** call
+`UpdateSetCommitAjax` / `com.glide.update.UpdateSetCommitAjaxProcessor`, do not `PATCH` `state`, and do not
+launch a commit from a background script. An earlier revision of this section offered the background-AJAX
+commit as an equal alternative; that path was rejected and never used, and it is **superseded** by the UI-only
+action. The successful 2026-09-02 commit was performed by the UI action and encountered no confirmation
+dialog; if one appears for you, stop and escalate rather than clicking through it.
+
+After the load, verify zero **error**-type preview problems:
 
 ```bash
 RUSET="<remote_update_set_sys_id>"
@@ -406,7 +457,7 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > |---|---|---|---|
 > | 1 | **Upload** | *System Update Sets → Retrieved Update Sets → Import Update Set from XML*, select the deliverable XML. Check the SHA-256 first (§1), then assert the loaded child `sys_update_xml` count — **926** for the elected deliverable (`7292a6fe…`), 988 if you are instead verifying the retained `…REBUILT-DEPENDENCY-ORDERED.xml`. Re-derive it from the file rather than trusting this row: `grep -c '<sys_update_xml ' <the XML>` | §4 |
 > | 2 | **Preview** | Run Preview to completion. On a genuinely clean instance the expected result is **0 errors and 0 warnings**. Resolve any error; do **not** ignore a collision | §4 |
-> | 3 | **Commit** | Commit to `state=committed` | §4 |
+> | 3 | **Commit** | Click the native **Commit Update Set** UI action in a rendered browser session, **exactly once**, after the pre-click checks in §4.1 step 4 (`state=previewed`, not already committed, no commit progress worker running). Any confirmation dialog is a **hard stop** — screenshot it and escalate, do not click through. Do not script this step. Result: `state=committed` | §4.1 step 4 |
 > | 4 | **Run the remediation in scope `Global`** — *first pass* | *System Definition → **Scripts - Background***, set **"In scope" = Global**, paste `scripts/post_import_remediation.js`, run. This pass builds the three tables' physical storage, their fields and their choice lists. It does the `sys_db_object` work itself; **you do not delete anything and you do not touch the application picker** | §5a |
 > | 5 | **Commit the same Update Set a second time** | The rebuild in step 4 **cascades away all 26 ACLs**, the seed rows, the demo users and the role grants; a second commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports ~25 `sys_dictionary` collisions from the rows step 4 wrote moments earlier; accepting the remote is correct **for `sys_dictionary` only**, because the package now carries the corrected `display` and `defaultsort` values itself. **Never ignore a collision on any other table** | §4 again |
 > | 6 | **Run the remediation in scope `Global`** — *second pass* | Same invocation as step 4. This is the pass that creates the **27** `sys_security_acl_role` links and flushes the security cache. Without it you have 26 ACLs with **0** role links, and on a high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
@@ -676,14 +727,35 @@ Expect on the `SUMMARY` line: `verified=true`, `acl_links_total=27`, `acl_links_
 viewer 3; the script rejects a surplus as well as a shortfall and deletes unexpected links, so any other number
 means it has not converged.
 
-Why the 27 links cannot simply be shipped as records — both reasons were measured on this release, not assumed:
+Why the 27 links do not arrive from **this** package — and, precisely, what does and does not travel. Every
+fact below was measured on this release, not assumed:
 
 1. `sys_security_acl` has **no `roles` column** (checked against `sys_dictionary` for the table *and* its
    `sys_metadata` super-class), so the links exist only as rows in the `sys_security_acl_role` m2m table.
-2. `sys_security_acl_role` **payloads are silently skipped by the update engine.** Five payload shapes were
-   pushed through `GlideUpdateManager2.loadXML` — standalone, with a prolog, nested in the parent ACL's
+   This is unconditional and still true.
+2. **The elected deliverable carries 0 `sys_security_acl_role` rows**, so on the package that actually ships
+   there is nothing for the commit to apply and the remediation run above is mandatory. That is the operative
+   reason here.
+3. **Direct `GlideUpdateManager2.loadXML` injection of a hand-authored link payload does not work.** Five
+   payload shapes were pushed through it — standalone, with a prolog, nested in the parent ACL's
    `record_update`, wrapped in `<unload>`, and the platform's own captured serialization — and every one
-   produced **0 rows with no error**. A `GlideRecord` insert from a global script produces the row.
+   produced **0 rows with no error**. A `GlideRecord` insert from a global script produces the row. This result
+   is about the direct `loadXML` back door, and it does **not** generalise to a normal Update Set commit.
+
+**What IS a proven portable route — measured, and it changes the general claim.** `sys_security_acl_role`
+rows that the **platform itself captured** into an Update Set do ride a normal Retrieved Update Set
+preview → commit and do land: a single commit produced **27 of 27** links, distributed **manager 14 / agent 10
+/ viewer 3**, with `post_import_remediation.js` never run and no second commit. That was measured on
+**export 3's byte sequence, 988 blocks / 4,062,436 bytes / SHA-256
+`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**, on 2026-09-02
+([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). The retained rebuilt package
+(`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, `90ee0249…`) carries those
+same captured rows in dependency order; its own bytes have never been uploaded, previewed or committed. So the
+earlier absolute claim — that the 27 links *cannot be shipped as records at all* — is **too strong and is
+withdrawn**: what cannot be shipped is a **hand-authored** link payload pushed through direct `loadXML`, and
+what the elected package cannot do is deliver links it does not contain. **None of this changes the step you
+are performing:** the package that ships carries no link rows, so run the remediation exactly as written
+above.
 
 Without the links, a high-security PDI evaluates an ACL with no role, no condition and no script as **deny**
 ("Deny access for empty term"), so no role can use the app.

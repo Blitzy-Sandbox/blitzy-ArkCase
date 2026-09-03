@@ -18,6 +18,22 @@ Phase 2 was entered. Instance liveness was confirmed **by content** (a JSON body
 hibernation HTML splash) and a read-only API heartbeat (`GET /api/now/table/sys_user?sysparm_limit=1`,
 10-minute interval) ran for the whole phase. **Hibernation events: 0; recovery cycles used: 0 of 3.**
 
+**Heartbeat mechanism — required, used, and the deviation, stated for this phase.**
+(a) **Required** by directive lines 76–84: the **browser/UI heartbeat** — a rendered navigation to
+`home.do` on an independent ~10-minute clock, judged live by content — with the **API-context**
+variant (`GET sys_user`) permitted **only** while the Retrieved Update Set record page or the
+commit-result page must be preserved. (b) **Used:** the API variant for the **whole phase**, on the
+run-long 10-minute loop (`PHASE0-1.md` §2.4), not only across the commit window. (c) That is a
+**DEVIATION from directive lines 76–84 in mechanism selection**, not compliance — for the §5 commit
+window it is the licensed exception (§5, "Heartbeat exception"), and for every other interval of this
+phase the mandated browser/UI heartbeat was not executed. (d) **Observed impact: none** — 0
+hibernation events, 0 recovery cycles, and both variants are read-only. (e) **Corrective action:**
+the mandated browser-context heartbeat was executed in the CR2 remediation pass against `home.do` in
+a rendered authenticated session — BEAT 1 `2026-09-03T04:23:34.684Z`, BEAT 2 `2026-09-03T04:34:04.494Z`,
+delta 630 s, both judged live by page content, session "System Administrator"; that pass performed no
+commit and no PDI write, so no commit-page exception window arose and the browser→API→browser
+transition pair is **not applicable** to it. Full statement: `PHASE0-1.md` §2.4.
+
 ---
 
 ## 1. S1 — the instance was genuinely clean before anything was previewed (D28)
@@ -188,7 +204,7 @@ or otherwise silenced. Both issues were fixed at their cause and re-verified; th
 | Class | Count | Description (verbatim) | Rows affected |
 | --- | --- | --- | --- |
 | Collision | 60 | "Found a local update that is newer than this one" | the 60 metadata names this run swapped: 3 `sys_db_object`, 26 `sys_dictionary`, 27 `sys_security_acl_role`, 1 `sys_documentation` (`duration_to_close` label), `sys_ui_list_x_casemgmt_case_null`, `sys_ui_related_x_casemgmt_case_null`, `sys_ui_policy_507da6cb…` |
-| Scope | 3 | "Cannot commit Update Set 'x_casemgmt_case_management v1.0.0 (native rebuild)' because: Update scope id 'global' is different than update set scope id '82b99028936f74320d74d6f88357a5af'. Resolve the problem before committing." | the 3 natively created `sys_user_has_role` grants (Demo Manager / Agent / Viewer) |
+| Scope | 3 | "Cannot commit Update Set 'x_casemgmt_case_management v1.0.0 (native rebuild)' because: Update scope id 'global' is different than update set scope id '82b99028936f74320d74d6f88357a5af'. Resolve the problem before committing." | the 3 re-created `sys_user_has_role` grants (Demo Manager / Agent / Viewer) |
 
 ### Issue 1 — global-scope attribution on the three grant rows (fixed in 1 attempt)
 
@@ -258,6 +274,27 @@ its `validateCommitRemoteUpdateSet` call raised no unresolved-problem confirmati
 kicked off by the page's own client script (`commitRemoteUpdateSet`, `sysparm_skip_app_installs`
 empty → app installs not skipped).
 
+**Driver identity — what is recoverable and what is not.** The rendered session was driven by a
+`run_chrome_task` browser task. **Its orchestrator-side task/session identifier was not captured at
+execution time and is not recoverable**, for three reasons established while attempting to recover
+it: `syslog_transaction.session_id` is empty on this release (Zurich Patch 10), `blitzy/screenshots/`
+is a flat directory carrying no per-run identifier, and subagent reports are not persisted to disk.
+No identifier is asserted here in its place. What **is** recoverable is the platform-side identity
+chain the driver left behind — non-secret, read from `syslog_transaction` and `sys_progress_worker`:
+
+| # | Platform record | sys_id | UTC | What it shows |
+| --- | --- | --- | --- | --- |
+| 1 | `syslog_transaction` — interactive UI login form post (`/login.do?…sys_action=sysverb_login`, user `admin`) | `a8cc785a930f435009aa70d19dba1004` | `2026-09-02 20:32:27` | the driver logged in through the rendered login form, not through an API session |
+| 2 | `syslog_transaction` — rendered record-page form load for `/sys_remote_update_set.do?sys_id=0b3b7452934f435009aa70d19dba100d` | `f20df49e930f435009aa70d19dba100a` | `20:33:44` | the Retrieved Update Set record was opened as a rendered form — the page the "Commit Update Set" action lives on |
+| 3 | `sys_progress_worker` — "Committing update set…" | `1bad34d6934f435009aa70d19dba10cb` | `20:36:27` → `20:37:18` | `state_code=success`, `sys_created_by=admin`; the single commit worker for this set |
+| 4 | `syslog_transaction` — post-commit record-page reload | `852e7c96934f435009aa70d19dba1027` | `20:38:32` | the driver re-read the record after the commit, in the same rendered session |
+
+Screenshots produced by that driver, tying the chain to the visual evidence below:
+`phase2-commit-progress-0pct.png` (the progress modal opened by the click at chain step 3),
+`phase2-commit-result.png` and `phase2-commit-result-record-form.png` (the result screen and the
+record at `State = Committed`, chain step 4), and
+`phase2-postcommit-progress-worker-success.png` (the `sys_progress_worker` row of chain step 3).
+
 **Result text, verbatim from the result screen:**
 
 ```
@@ -282,9 +319,12 @@ entry, no skipped or failed update. The instance is in a **fully applied** state
 state. Consistent with OVERRIDE-2, no Rollback, no Back Out and no `deleteApplication` was invoked at
 any point in this phase — and none would have been permitted.
 
-**Heartbeat exception (D12, line 84) honoured:** while sitting on the Retrieved Update Set record and
-the commit-result page the browser was **never** navigated to `home.do`; liveness was carried by the
-independent API heartbeat (`GET sys_user`), which logged HTTP 200 with a JSON body throughout.
+**Heartbeat exception (D12, line 84) honoured — this interval, and only this interval, is compliant:**
+while sitting on the Retrieved Update Set record and the commit-result page the browser was **never**
+navigated to `home.do`; liveness was carried by the independent API heartbeat (`GET sys_user`), which
+logged HTTP 200 with a JSON body throughout. This is the narrow condition lines 76–84 license. It does
+not cover the rest of the phase, where the same API variant ran in place of the required browser/UI
+heartbeat — recorded as a deviation in the entry-gate section above and in `PHASE0-1.md` §2.4.
 
 ### D34 — commit screenshot
 
@@ -556,7 +596,7 @@ exactly what it is.**
 
 | # | Issue | Attempts | Cap | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | 3 `type=error` "Update scope id 'global' is different than update set scope id …" on the natively created `sys_user_has_role` grants | 1 | 2 | **Resolved** — `application` set to the `x_casemgmt` scope on those 3 captured rows in the source set (payload_hash unchanged); errors never returned |
+| 1 | 3 `type=error` "Update scope id 'global' is different than update set scope id …" on the re-created `sys_user_has_role` grants | 1 | 2 | **Resolved** — `application` set to the `x_casemgmt` scope on those 3 captured rows in the source set (payload_hash unchanged); errors never returned |
 | 2 | 60 `type=error` "Found a local update that is newer than this one" on the swapped table / dictionary / role-link records | 2 | 2 | **Resolved** — attempt 1 (231 stale `sys_update_version` rows removed) was insufficient; attempt 2 removed the 256 local `DELETE`-capture `sys_update_xml` rows (ABSORBER 215 + scope Default 41) that made the authoring instance declare the package stale. Clean-instance precondition re-established before the re-verify |
 
 Hibernation recovery cycles: **0 of 3**, counted independently of the fix cap. No fix attempt

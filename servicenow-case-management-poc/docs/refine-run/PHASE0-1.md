@@ -109,13 +109,25 @@ was ever released or re-requested.
 
 Running, on its own clock, for the remainder of this unit.
 
+**(a) Required mechanism, and the one condition that licenses the API variant.** Directive
+lines 76–84 require the **browser/UI heartbeat** for the general sequence: a rendered
+navigation to `home.do` in the authenticated browser session, on an independent ~10-minute
+clock, judged live **by content**. The **API-context heartbeat**
+(`GET /api/now/table/sys_user?sysparm_limit=1`) is the **narrow exception**, permitted
+**only while the Retrieved Update Set record page or the commit-result page must be
+preserved** — navigating away would destroy the page state the commit resume check depends
+on.
+
+**(b) Mechanism actually used — the API variant, for the whole run, Phase 0 to end.**
+
 | Item | Value |
 | --- | --- |
-| Mechanism | API context — `GET /api/now/table/sys_user?sysparm_limit=1` (read-only; never a write) |
+| Mechanism used | API context — `GET /api/now/table/sys_user?sysparm_limit=1` (read-only; never a write) — for **every** interval of the run, not only the commit window |
 | Interval | 10 minutes |
 | Driven by | detached background loop (`nohup … &`), one lightweight action per interval |
 | PID | 8099 |
 | First recorded beat | `2026-09-02T17:34:43Z 200` |
+| Phase 3's beats, as an example of the same loop | 21:04:43, 21:14:43, 21:24:43, 21:34:43, 21:44:43, 21:54:44, 22:04:44 — all HTTP 200 |
 
 ```
 nohup bash -c 'while :; do printf "%s " "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> <scratch>/heartbeat.log; \
@@ -123,9 +135,45 @@ nohup bash -c 'while :; do printf "%s " "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> <scr
   -o <scratch>/hb_body.txt -w "%{http_code}\n" >> <scratch>/heartbeat.log; sleep 600; done' >/dev/null 2>&1 &
 ```
 
-Note for the commit step of the following phase: while sitting on the Retrieved Update Set record or
-the commit-result page, keep using this API-context heartbeat rather than browser navigation to
-`home.do`, so the page state needed for the commit resume check is not lost.
+**The one interval where this mechanism was the correct one — retained, now correctly
+scoped.** For the commit step of the following phase, while sitting on the Retrieved Update
+Set record or the commit-result page, this API-context heartbeat is what the directive's
+exception licenses, and browser navigation to `home.do` is what it forbids there,
+so the page state needed for the commit resume check is not lost. Phase 2 honoured that
+exception (`PHASE2.md` §5). The deviation is not that interval; it is every **other**
+interval of the run, where the browser/UI heartbeat was required and the API variant was
+used instead.
+
+**(c) This is a DEVIATION from directive lines 76–84 in mechanism selection, not
+compliance.** The general sequence ran on the exception's mechanism. The API variant was
+selected globally at Phase 0 and never switched back to a rendered `home.do` navigation
+outside the commit window, so the mandated browser/UI heartbeat was **not** executed during
+the run.
+
+**(d) Observed impact: none.** **0 hibernation events** and **0 recovery cycles** for the
+whole run, so no availability decision turned on the variant chosen, and **both variants
+are read-only** — neither the deviation nor the mandated mechanism writes anything to the
+instance.
+
+**(e) Corrective action taken in the CR2 remediation pass.** The mandated
+**browser-context heartbeat** was executed against `home.do` in a rendered, authenticated
+session:
+
+| Beat | Timestamp (UTC) | Judged live by | Session |
+| --- | --- | --- | --- |
+| BEAT 1 | `2026-09-03T04:23:34.684Z` | page **content** — `/hibernat/i` false against the full 186 KB rendered DOM, Polaris shell components present, server-computed dashboard aggregates returned | user menu confirmed **"System Administrator"** |
+| BEAT 2 | `2026-09-03T04:34:04.494Z` | same content checks, same result | same |
+
+Delta between beats: **630 s**, i.e. the required ~10-minute independent clock. Screenshots
+`blitzy/screenshots/heartbeat-beat1-home-rendered.png` and
+`blitzy/screenshots/heartbeat-beat2-home-rendered.png` (cited by path per INTERP-6; the PNG
+binaries are not committed). That pass performed **no commit and no PDI write of any kind**,
+so **no commit-page exception window arose** and the API variant was **not used at all in
+it**. The **browser→API and API→browser transition pair is therefore NOT APPLICABLE to that
+pass**; the exact condition that would trigger it in a future run is the one in (a) — the
+moment a Retrieved Update Set record page or a commit-result page must stay open, switch to
+`GET sys_user` for the duration and switch back to the rendered `home.do` navigation as
+soon as the page is no longer needed, recording both transitions.
 
 ### 2.5 Phase 0 exit condition
 
@@ -415,7 +463,7 @@ Surroundings re-asserted (their deletion belongs to the rebuild unit's S6, not h
 | Stale local sets sharing the package name (do not confuse) | `066c23c69383435009aa70d19dba10d3`, `59a5a3069343435009aa70d19dba10e8` |
 | SCRATCH set (complete, must never ship) | `4999985a930b435009aa70d19dba102e` |
 | Fallback package | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`, SHA-256 `7292a6fe…1add66b7` |
-| Heartbeat | API-context loop, PID 8099, 10-minute interval, still running |
+| Heartbeat | API-context loop, PID 8099, 10-minute interval, still running — the **API variant where §2.4(a) requires the browser/UI variant** outside the record/commit-page exception: a **deviation** from directive lines 76–84, recorded in §2.4 |
 | Scope | resolve by query every time: `sys_scope?sysparm_query=scope=x_casemgmt` → `82b99028936f74320d74d6f88357a5af` |
 
 Practical notes that cost time to establish, so they need not be rediscovered:

@@ -39,7 +39,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 1. **Upload** the Update Set XML to the verification PDI.
 2. **Preview** the Update Set and verify zero errors.
 3. **Commit** the Update Set after a clean preview.
-4. **Remediate** — **updated 2026-09-02: mandatory, because the elected deliverable is the retained original package.** Run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed — a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links, since the elected package carries **0** `sys_security_acl_role` rows. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md). **On the retained rebuilt package this phase shrinks**, and that is the one difference the promotion buys: committing `../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` once on a clean instance produced physical storage for all three tables and all 27 `sys_security_acl_role` links out of the commit itself, with the remediation script never run and no second commit ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)); still needed post-commit even there are the **choice rows** (`sys_choice` is empty for the three tables), the seed-row linkage and `opened_date` — the last two by running `scripts/seed_demo_data.js` in scope.
+4. **Remediate** — **updated 2026-09-02: mandatory, because the elected deliverable is the retained original package.** Run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed — a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links, since the elected package carries **0** `sys_security_acl_role` rows. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md). **On the retained rebuilt package this phase is expected to shrink**, and that is the one difference the promotion buys: a single commit of those 988 records on a clean instance produced physical storage for all three tables and all 27 `sys_security_acl_role` links out of the commit itself, with the remediation script never run and no second commit — **measured on export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` sequence**, which carries the same 988 records in the block order that preceded the §0.5.2 re-sequencing. `../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (`90ee0249…`) carries those records in dependency order and **its own bytes were never uploaded, previewed or committed**, so on it this is the expected outcome rather than a measured one ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)); still needed post-commit even there are the **choice rows** (`sys_choice` is empty for the three tables), the seed-row linkage and `opened_date` — the last two by running `scripts/seed_demo_data.js` in scope.
 5. **Re-verify** all six functional gates (Gates 1–6) on the verification PDI.
 6. **Assert self-sufficiency** — record, explicitly, everything the package did *not* do for itself.
 
@@ -177,16 +177,46 @@ Per AAP Section 0.7.2 (User Example — Deployment steps, Step 2): "If preview e
 
 Only proceed if Phase 2 completed with zero preview errors. Committing applies all changes to the verification PDI permanently (subject to the standard back-out procedure documented in [`../docs/deployment.md`](../docs/deployment.md) Rollback Procedure).
 
-- [ ] On the Retrieved Update Set record, click **Commit Update Set** (top-right).
-- [ ] Confirm the prompt and click **OK**.
-- [ ] Wait for commit to complete (1–3 minutes typically).
+> **Commit is a UI-only, exactly-once action.** It must be performed by clicking the platform's native
+> **Commit Update Set** UI action on the Retrieved Update Set record **in a rendered, logged-in browser
+> session**. Do **not** drive it from a script: no `PATCH` of `state`, no `/xmlhttp.do` call, and no direct
+> invocation of the commit AJAX processor. §6.5 records why (`state` is read-only over REST and a `PATCH` is
+> silently reverted), and the browser UI action is the path the successful 2026-09-02 commit used. Because a
+> commit cannot be repeated safely, run the three pre-click checks below
+> **before** you click, and click **once**.
+
+- [ ] **Pre-click check 1 — the set is previewed and clean.** On the Retrieved Update Set record confirm
+      `state = previewed` and that Phase 2's `type=error` count is still zero. Anything else (`loaded`,
+      `previewing`) means Phase 2 is not finished — go back, do not click.
+- [ ] **Pre-click check 2 — this set has not already been committed.** Confirm `state` is not already
+      `committed` and that the record carries no successful commit in its history. If it does, the commit has
+      already happened: **stop**, and read the result rather than repeating it.
+- [ ] **Pre-click check 3 — no commit is already running.** Confirm no update-set commit progress worker
+      (`sys_progress_worker`) exists for this set. A worker already in flight means someone or something is
+      committing it now; wait for that worker to finish and read its outcome instead of clicking.
+- [ ] On the Retrieved Update Set record, click **Commit Update Set** (top-right) — **exactly once**, in the
+      rendered browser session. Do not click it again while the commit is in progress, and do not reload the
+      page to "retry" it.
+- [ ] **If any confirmation dialog appears, do NOT click through it.** Treat it as a **hard stop**: capture a
+      screenshot of the dialog, dismiss nothing, and escalate for human review before proceeding. A dialog on
+      this action means the platform has something to say about the state of the target that this procedure has
+      not accounted for. *(Supporting fact: the successful 2026-09-02 commit of export 3's `eee9fabd…` sequence
+      encountered no dialog at all — the UI action committed directly, so a dialog is not the expected path
+      here.)*
+- [ ] Wait for commit to complete (1–3 minutes typically). Read the progress bar and the resulting
+      commit-progress worker, not an HTTP status.
 - [ ] When commit completes, verify the **State** field shows **Committed**.
 - [ ] Confirm no commit-time errors appear (the platform shows a banner if any error occurred during the commit phase).
+- [ ] Capture a screenshot of the commit result page, and record the commit progress worker's own
+      `state` / `state_code`. That worker row is the durable evidence that the commit ran once and succeeded.
 
 ### Pass Criteria for Phase 3
 
 - State = Committed.
 - No commit-time error banner displayed.
+- **Exactly one** successful update-set commit progress worker exists for this set — not two.
+- The commit was performed through the native UI action in a rendered browser session, and no confirmation
+  dialog was clicked through.
 
 ### If Phase 3 Fails
 
@@ -201,10 +231,14 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 > is mandatory** — it carries 0 `sys_security_acl_role` rows and the hand-authored schema records, so a commit
 > alone leaves the tables without physical storage and the 26 ACLs without their 27 role links. On the retained
 > native-rebuild package
-> (`../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`) this phase is optional
+> (`../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, `90ee0249…`) this phase
+> is expected to be optional
 > for the schema and the
-> role links: a single commit of those bytes on a clean instance produced three tables with physical
-> storage (21 / 14 / 13 columns) and all 27 ACL role links by itself
+> role links: a single commit of those 988 records on a clean instance produced three tables with physical
+> storage (21 / 14 / 13 columns) and all 27 ACL role links by itself — **measured on export 3's
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` sequence**, the same records in
+> pre-re-sequencing block order, since the retained file's own bytes were never uploaded, previewed or
+> committed
 > ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Either way you still run the
 > steps below when you need the choice rows, the seed linkage or `opened_date`
 > — for which `scripts/seed_demo_data.js` in scope is the relevant step.
@@ -430,13 +464,26 @@ Add these to any future round trip — each one caught a real defect that Phases
 
 The REST sequence described in Phases 1–3 does not work here. What does:
 
-- **Upload** must be a multipart `POST /sys_upload.do` with the upload form's own `sysparm_ck`. A Table-API
+- **Upload** must be a multipart `POST /sys_upload.do` carrying the `sysparm_ck` scraped from the upload
+  form itself — `GET /upload.do?sysparm_target=sys_remote_update_set` — plus `sysparm_target=sys_remote_update_set`
+  and the file as `attachFile`. On a genuinely cold session, issue one priming REST GET first: scraping the
+  form before the session is warm returns a session-timeout page variant with no token, and retrying the same
+  page does not recover. A Table-API
   `POST /api/now/table/sys_remote_update_set` with `Content-Type: application/xml` is rejected with HTTP 400
   `Exception while reading request … Misshaped element`.
-- **Preview and commit** cannot be driven by `PATCH`ing `state` — the field is read-only over REST and the
-  change is silently reverted. Use `UpdateSetPreviewAjax` and
-  `com.glide.update.UpdateSetCommitAjaxProcessor` via `POST /xmlhttp.do`, or the UI actions. No browser is
-  required for either.
+- **Preview** cannot be driven by `PATCH`ing `state` — the field is read-only over REST and the change is
+  silently reverted. Preview, and **only** preview, may be driven from a script: `POST /xmlhttp.do` with
+  `sysparm_processor=UpdateSetPreviewAjax`, `sysparm_ajax_processor_function=preview`,
+  `sysparm_ajax_processor_sys_id=<the retrieved set>` and a scraped `sysparm_ck`, then poll
+  `previewing → previewed`.
+- **Commit must be performed through the native "Commit Update Set" UI action in a rendered browser session**,
+  exactly once, after Phase 3's pre-click checks. The same `PATCH`-is-reverted fact applies to commit, but the
+  remedy is **not** a script: do not call `com.glide.update.UpdateSetCommitAjaxProcessor` (or any other commit
+  processor) over `/xmlhttp.do`. An earlier revision of this list said the AJAX processor worked and that "no
+  browser is required for either" — that path was rejected and never used, and it is **superseded** by the
+  UI-only procedure in Phase 3. The successful 2026-09-02 commit was performed by the browser UI action; an
+  earlier pass did drive a commit through the AJAX contract, and that is history rather than an authorized
+  route (`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.2 and §9.10).
 - **Teardown** for a genuine clean slate cannot rely on `DELETE /api/now/table/sys_scope/{id}`: it returns
   HTTP 500 `Transaction cancelled: maximum execution time exceeded`, removes the `sys_scope` row and leaves
   every other artifact in place. Stage it explicitly instead (ATF results and `sys_variable_value` rows, then
@@ -575,9 +622,10 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of
 > that document is the current record. Criterion 4
 > holds two ways: on the elected deliverable, `verified=true` with 27 of 27 links only after two
-> remediation runs separated by a second commit — the package carries none of the links itself; on the retained
-> rebuilt package, **27 of 27 links straight out of a single commit, with no remediation
-> run at all** (2026-09-02).
+> remediation runs separated by a second commit — the package carries none of the links itself; and on the 988
+> platform-captured records the retained rebuilt package carries, **27 of 27 links straight out of a single
+> commit, with no remediation run at all** — measured 2026-09-02 on **export 3's `eee9fabd…` sequence**, not on
+> the retained file's own `90ee0249…` bytes, which were never uploaded, previewed or committed.
 > Criterion 5 holds for Workflow, for Data model and ACLs **on all three tables** after remediation, **and now for
 > Dashboards and for both portal pages as well** — the packaging defects that made those three fail have each been
 > fixed and re-verified in a browser: both dashboards render every widget with the seed data (Agent Workspace 3 of
@@ -594,9 +642,15 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > ⚠️ **Before you start, check the instance is awake.** Detect hibernation by CONTENT, not HTTP status: a
 > hibernating instance answers HTTP 200 with ServiceNow's "Instance Hibernating" page, and this procedure
 > cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that owns it.
-> The PDI these notes were written against has been hibernating since 2026-08-11; **the procedure was executed
-> end-to-end on a newly provisioned validation PDI on 2026-09-02**
-> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)), which was awake throughout. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+> The PDI these notes were written against has been hibernating since 2026-08-11; a newly provisioned
+> validation PDI, awake throughout, was used on 2026-09-02 — and **the sequence this procedure was executed
+> end-to-end on there was export 3's: 988 blocks, 4,062,436 bytes, SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**, which is no file on disk and survives
+> only in git history
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). **Neither artifact on disk was
+> part of that run** — not the elected 926-block `7292a6fe…` deliverable (never previewed on any instance) and
+> not the retained 988-block `90ee0249…` rebuild (never uploaded, previewed or committed) — consistent with the
+> *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
 ### Fail Criteria (Any One Triggers Fail)
 
