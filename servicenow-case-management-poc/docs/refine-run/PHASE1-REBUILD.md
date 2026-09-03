@@ -381,18 +381,22 @@ re-deriving it.
 > **How it was validated, and what that validation cost — both stated, because one of the
 > two methods exceeded this review's own interaction boundary.**
 >
-> **(1) Off-instance, 40 of 40 assertions.** A stubbed-Glide harness exercises every decision
+> **(1) Off-instance, 58 of 58 assertions.** A stubbed-Glide harness exercises every decision
 > path: PROCEED with no collateral; ABORT naming each of the eight collateral classes; ABORT
 > on a role link pointing outside the three scoped roles; and the six fail-closed paths —
 > unresolvable scope, missing scoped role, a class whose query throws, a class whose
 > aggregate returns **no row**, one that returns a **blank** value, and one that returns a
-> **non-numeric** value. It also asserts that a target outside the authorised three aborts
+> **non-numeric** value. Full-string numeric validation is covered explicitly: malformed
+> values including `0oops`, `12abc`, `7x`, `1e3`, `-1`, `4.0`, `0x10` and `null` all
+> produce **ABORT**, while whitespace-wrapped nonnegative integers remain valid counts. It
+> also asserts that a target outside the authorised three aborts
 > **before** any enumeration, that an authorised subset is still accepted, that the guard
 > issues no write through any stub, and that the count of log records it claims equals the
 > number it actually emitted. The three "unmeasured" cases matter most: an earlier revision
 > of this script coerced a missing or non-numeric aggregate to `0`, which would have let the
 > abort rule clear a class it never successfully measured — the precise failure the guard
-> exists to prevent. It now fails closed on all three.
+> exists to prevent. It now fails closed on all three, including the malformed numeric-prefix
+> case `0oops` that the earlier `parseInt` implementation accepted.
 >
 > **(2) Against this converged instance, by read-only REST enumeration.** Every collateral
 > count the guard reports reproduces through `GET /api/now/stats/...` with the scope resolved
