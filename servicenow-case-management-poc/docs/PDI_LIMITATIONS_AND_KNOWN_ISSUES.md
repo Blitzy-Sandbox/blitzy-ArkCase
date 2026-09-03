@@ -57,15 +57,26 @@ rebuilt deliverable's preview, commit, post-commit census and ATF suite were re-
 > table, dictionary and role-link records are the platform's own captured records
 > (`sys_db_object` 3 · `sys_dictionary` 30 platform-named · `sys_documentation` 30 · **`sys_security_acl_role`
 > 27** · `sys_user_has_role` 3), and the file now at the path below is **988 blocks, 4,062,436 bytes, SHA-256
-> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`**. Those 988 records were previewed to
-> **0 `type=error` and 0 `type=warning`** problems on an instance holding none of the three tables and then
-> committed by the native UI action ("Succeeded 100%", 613 inserted / 375 updated / 0 collisions), which also
-> closes the "Clean-slate upload → preview → commit on these bytes" row further down this table. The file was
-> then re-sequenced into AAP §0.5.2 dependency order and carries those same 988 records byte-for-byte at the
+> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — the digest to verify the artifact on
+> disk against. **This splits in two, and both halves matter.** *(1) What was verified live:* those 988 records
+> were uploaded onto an instance holding none of the three tables, previewed to **0 `type=error` and 0
+> `type=warning`** problems and then committed by the native UI action ("Succeeded 100%", 613 inserted /
+> 375 updated / 0 collisions) — measured `2026-09-02T20:53:14Z` on the **pre-reorder,
+> previewed-and-committed byte sequence, 988 blocks / 4,062,436 bytes / SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**. *(2) What ships:* the file was then
+> re-sequenced into AAP §0.5.2 dependency order and carries those same 988 records byte-for-byte at the
 > same 4,062,436 bytes, differing from the previewed bytes **only in `<sys_update_xml>` block order** — hence
-> the digest above. The reorder was verified statically (`xmllint --noout` clean, 988 blocks, block multiset
-> identical to the previewed bytes, unchanged byte count and 44-class census, every §0.5.2 dependency assertion
-> passing); the reordered bytes were **not** themselves re-uploaded, re-previewed or re-committed.
+> the digest above. **The exact-byte round trip on `90ee0249…` is owed and has not been run**, so under this
+> run's frozen rule (a package that changes after Phase 2 has a stale recorded checksum and re-runs the whole
+> gate before it is ship-ready) the recorded checksum **is** stale, AAP §0.7.1 is satisfied for the previewed
+> sequence and outstanding for the sequence that ships, and the "Clean-slate upload → preview → commit on these
+> bytes" row further down this table is therefore closed **for the previewed sequence only** — §10.0 item 1a
+> is re-opened for the shipping one. The reorder was verified statically (`xmllint --noout` clean, 988 blocks,
+> block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class census,
+> every §0.5.2 dependency assertion passing) and read-only REST confirmed the instance's captured set still
+> holds 988 children whose update names are set-identical to the file's, which bounds the difference to block
+> sequence alone; that is corroboration, not the gate. The reordered bytes were **not** themselves re-uploaded,
+> re-previewed or re-committed.
 > **The identity recorded in the rest of §0.1 — 926 blocks, 3,781,097 bytes, `7292a6fe…` — is the previous
 > revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`**, and every
 > measurement in §0.2, §0.3, §0.3b and §0.3c belongs to that lineage. Full record:
@@ -2938,26 +2949,36 @@ deliberately conservative.
 
 ### 10.0 Do this first
 
-> **Updated 2026-09-02: item 1a is DONE.** The clean-slate trip was executed on the 988 records that ship — the
-> rebuilt package, 988 blocks / 4,062,436 bytes, the file now hashing to `90ee0249…` after the §0.5.2
-> re-sequencing that changed block order only — against an instance holding none of the
-> three tables: preview **0 `type=error`, 0 `type=warning`**, then a native UI-action commit, "Succeeded 100%",
-> with physical storage and 27 of 27 ACL role links confirmed afterwards. Item 0 is also moot: the verification
-> PDI in use is `dev306625`, which was awake for the whole run. See
-> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The remaining open item from this section is the
+> **Updated 2026-09-02: item 1a was closed and is now RE-OPENED for the bytes that ship.** The clean-slate trip
+> was executed on the rebuilt package's 988 records — against an instance holding none of the three tables:
+> preview **0 `type=error`, 0 `type=warning`**, then a native UI-action commit, "Succeeded 100%", with physical
+> storage and 27 of 27 ACL role links confirmed afterwards. **It was executed on the pre-reorder,
+> previewed-and-committed byte sequence — 988 blocks / 4,062,436 bytes / SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, measured `2026-09-02T20:53:14Z`.** The
+> post-review CR1 pass then re-sequenced those same 988 blocks into AAP §0.5.2 dependency order, so the file
+> that ships is a different byte sequence — 988 blocks / 4,062,436 bytes / `90ee0249…` — and **the trip has not
+> been run on it.** Under this run's frozen rule the recorded checksum is stale the moment the package changes
+> after verification, so item 1a stands open against the `90ee0249…` bytes and is restated in the table below.
+> Item 0 in its original form is moot: the verification PDI used on 2026-09-02 was `dev306625`, awake for the
+> whole run — but it is no longer a clean target, which is part of why 1a could not be closed here. See
+> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) and
+> [`refine-run/PHASE2.md` §7.1](./refine-run/PHASE2.md). The other open item from this section is the
 > ATF re-run (item 2), which was executed on 2026-09-02 with 14 of 20 tests passing and the six failures
 > itemized by name in that report.
 
 Item 1 — the clean-slate round trip — was done, and is recorded in §0.3 and in §10.5 under its original number.
 **It was done on the `7272edfc…` revision, and the deliverable changed twice after that**, so a round trip *on
-the bytes that ship* was outstanding again and was re-listed below as item 1a — since completed, as the note
-above records. Three items remain here, and **item 0 is
-a precondition for the other two** — neither can start while the verification instance is asleep (§0.11).
+the bytes that ship* was outstanding again and was re-listed below as item 1a. It was then satisfied on the
+rebuilt package's pre-reorder, previewed-and-committed `eee9fabd…` sequence and **re-opened by the §0.5.2
+re-sequencing**, which is the form the
+table below carries. Three items remain here; **item 0's precondition — an instance that answers at all — is
+met on `dev306625`, but item 1a additionally needs a target that is genuinely clean**, which no instance
+available to this run is (§0.11).
 
 | # | Work | Why | Estimate |
 |---|---|---|---|
 | 0 | **Wake the verification PDI `dev379024` from the ServiceNow Developer Program account that owns it, then re-measure the final gate.** In order: read the case and task the 502 save touched to establish whether that write committed; delete the ten `QA-FINAL` fixture rows; re-run the §3.4 form observations, the §9.7 assertion harness and the ATF suite; then proceed to 1a and 2 | Since 2026-08-11 every route on the instance returns ServiceNow's hibernation placeholder (§0.11), so items 1a and 2 cannot begin and **nothing in this register can be re-measured**. Waking requires developer-portal credentials that a build environment does not hold — instance `admin` credentials cannot authenticate to the Developer Program portal | 15 min to wake · ~2 h to re-measure |
-| 1a | **Clean-slate upload → preview → commit the shipping `7292a6fe…` bytes** on a dedicated instance, and record the problem count by type | The absolute zero-problems gate belongs to `7272edfc…` (§0.3); `e49a7654…` was previewed against a populated instance with the reference class at zero and commit withheld (§0.3b); and **no preview has been run on today's 926-block bytes at all** (§0.3c). The delta since `e49a7654…` is 13 payloads of records that already existed under the same `sys_id` plus 1 new `sys_metadata` block, so the expected outcome is the same local-history collision class and nothing else — but that is a reasoned expectation, not a measurement, and this register does not treat the two as equivalent. It cannot be run here: this PDI is shared, and a teardown would destroy an application other automated work is using | 1–2 h on a dedicated PDI |
+| 1a | **RE-OPENED — run the full S1–S6 gate on the exact shipping byte sequence `90ee0249…`** (988 blocks / 4,062,436 bytes) on a genuinely clean, dedicated instance, and record the problem count by type. Exactly what remains, in the Phase 2 step names: **S1** confirm the instance is clean, **S2** compute the checksum of the file under test, **S3a** upload it as a retrieved update set and assert **988** children, **S3b** preview to zero `type=error` (and record `type=warning`), **S4** commit through the native "Commit Update Set" UI action, **S5** confirm physical storage on all three tables and all **27** `sys_security_acl_role` links, **S6** record `90ee0249…` as the verified checksum with that run's timestamp. Procedure to follow verbatim: [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) | **The gate was met on a byte sequence that is no longer the one that ships.** Preview to 0 `type=error` / 0 `type=warning` and the "Succeeded 100%" commit were measured on the pre-reorder, previewed-and-committed sequence `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` at `2026-09-02T20:53:14Z`; the post-review CR1 §0.5.2 re-sequencing then changed the deliverable's bytes to `90ee0249…`. Under the run's frozen rule the recorded checksum is stale and the whole gate re-runs before the package is ship-ready, so AAP §0.7.1 is satisfied for the previewed sequence and **outstanding for the sequence that ships** ([`refine-run/PHASE2.md` §7.1](./refine-run/PHASE2.md)). What bounds the risk, as corroboration and not as the gate: `xmllint --noout` clean, 988 blocks, a per-block digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST showing the instance's captured set still holding 988 set-identical children — the difference is block sequence alone. **Why it could not be closed here:** the one provisioned PDI already holds this application installed, committed, converged and seeded, and re-running the deployment, re-committing or backing it out would destroy that verified environment; the review boundary this work ran under allowed read-only REST only; AAP §0.7.1 wants a *fresh* PDI and provisioning or re-requesting an instance is prohibited, while the available instance is not clean, so a preview there returns `Found a local update that is newer than this one` collisions instead of the clean-slate zero-problem result; and this file's `<sys_remote_update_set>` descriptor makes the loader **reuse** the existing retrieved set and **append** its children (`../scripts/round_trip_verify.md`, Phase 1 warning), so an upload would mutate the committed record the live evidence rests on. The earlier lineage is unchanged history: the absolute zero-problems result on `7272edfc…` (§0.3), the populated-instance preview of `e49a7654…` with the reference class at zero and commit withheld (§0.3b), and **no preview of any kind on the retained `7292a6fe…` fallback** (§0.3c) | 1–2 h on a dedicated, genuinely clean PDI |
 | 2 | **Re-load every `atf/*.xml` artifact into the instance and re-run the suite**, recording the verdict against the re-loaded bytes | Still open, but **much narrower than earlier revisions of this row implied**, and the residual risk is now quantified rather than assumed. What has been measured (§8.3): a full re-diff of the packaged `sys_variable_value` blocks against the live rows returns **539 of 540 byte-identical, 1 differing, 0 only-in-package, 0 only-in-live**; the one difference is `ATF 18` step 9 and is **17 `//` comment lines with 0 non-comment lines changed** (comment-stripped md5 `91822682b141` on both sides), so the **executable code of all 540 inputs is identical to the package**. Provenance is measured too: all 20 tests, all 180 steps and the suite carry `sys_mod_count = 0` with the package's `2025-01-01 00:00:00` stamps, and **180 / 180 `step_config` plus 540 / 540 input `variable` references resolve** to live rows with **0** zero-input steps and **0** duplicate `(document_key, variable)` pairs — i.e. the green verdicts already recorded were taken on the as-installed package records, not on hand-edited copies. What remains unmeasured is narrow and specific: a re-load performed *on the current bytes*, followed by a suite run, which would close both the one comment-only delta and the last of the "expectation is not measurement" gap in one operation. Note also that the delta cannot be closed by patching the row — `PATCH sys_variable_value/7b1f7b99…` answers `403 ACL Exception Update Failed due to security constraints` — and should not be, since a hand-write would destroy the `sys_mod_count = 0` provenance above | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
 
 ### 10.1 Blocking — the application is not demonstrable through its intended UI without these

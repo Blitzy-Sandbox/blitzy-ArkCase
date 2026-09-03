@@ -356,9 +356,9 @@ outside this unit's scope. The consequences, stated plainly:
 | --- | --- |
 | Was any fix applied? | **No** |
 | Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload |
-| Is Phase 2's verified checksum stale? | **No.** The verified checksum is `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` — Phase 2's value, refreshed for that §0.5.2 re-sequencing, which changed block order and nothing else: the same 988 payload records with byte-identical bodies and identities, unchanged byte size and 44-class census, and a block multiset identical to the previewed bytes. Phase 2's live preview-and-commit result therefore attaches to exactly the records that ship, and no Phase 2 re-run is owed. Re-asserted at the end of this phase (§7) |
-| Was Phase 2 re-run? | **Not required and not performed** |
-| What ships? | Exactly the **Phase-2-verified package** — its 988 Phase-2-verified records, in AAP §0.5.2 dependency order. Nothing unverified is presented as the deliverable |
+| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order, so the file that ships hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run on the `90ee0249…` bytes owed** — not performed by this phase, and not by the CR1 pass that made the change |
+| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It **is** owed on the shipping bytes for the reason in the row above, and it has not been performed |
+| What ships? | The deliverable file: export 3's 988 Phase-2-verified records, re-sequenced into AAP §0.5.2 dependency order after this phase. **This phase presented nothing unverified** — while it ran, the deliverable was the Phase-2-verified byte sequence. The byte sequence that ships has its own S1–S6 verification outstanding |
 
 **D6 two-attempt cap: 0 of 2 attempts consumed.** No class (a) or actionable class (b) issue arose, so
 no fix-and-re-verify loop was entered; nothing was abandoned mid-loop and nothing hit the cap.
@@ -453,7 +453,7 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 | XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files) |
 | JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
-| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | Equal to `phase2.verified_checksum` when this phase ran, asserted explicitly because this phase changed nothing in the package. The recorded value is now **`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`**, refreshed by the later AAP §0.5.2 re-sequencing of the block order — same 988 payload records, byte size and 44-class census, no re-import |
+| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (The file was re-sequenced after this phase and now hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`; under D36 that makes the recorded checksum stale and the S1–S6 re-run on those bytes owed — §5.5) |
 | No binaries staged | `git status` | no PNG/video staged; `blitzy/screenshots/*.png` remain untracked |
 
 ---
@@ -477,12 +477,13 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 
 **PHASE 3 EXIT CONDITION: MET — 2026-09-02T22:10:59Z (UTC).**
 
-Phase 3 is **informational only**. The package now identified by
-`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` already shipped on Phase 2's
-result and **this phase does not gate that** (D4/OVERRIDE-4). Its checksum is **not** stale: no fix
-was applied here, and the later §0.5.2 re-sequencing that produced that digest reordered the
-`sys_update_xml` blocks without touching a single payload, so Phase 2's preview-and-commit result
-still covers the 988 records the file carries.
+Phase 3 is **informational only**. The package Phase 2 verified —
+`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — already shipped on Phase 2's
+result and **this phase does not gate that** (D4/OVERRIDE-4). **This phase applied no fix and changed
+no artifact**, so nothing here made that checksum stale. It was made stale afterwards: the CR1 pass
+re-sequenced the deliverable's block order, the file that ships now hashes to
+`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and under D36 the Phase 2 S1–S6
+re-run on those bytes is owed and has not been performed (§5.5).
 
 ### Known issues handed to the FINAL REPORT (U5), by name
 

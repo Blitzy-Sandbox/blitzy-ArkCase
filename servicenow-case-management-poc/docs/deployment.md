@@ -24,17 +24,25 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > history and cannot occur on a fresh PDI. **Commit was withheld on those bytes** — the verification instance
 > is shared — so "0 of any type" remains proven only on `7272edfc…`.
 >
-> **Superseded on 2026-09-02.** The package that ships today is the native rebuild — **988 blocks,
-> 4,062,436 bytes, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — and the full
-> trip **has** been measured on its 988 records: 0 `type=error` and 0 `type=warning` preview problems on a
-> genuinely clean instance, then a single UI-action commit that succeeded 100% (613 inserted / 375 updated /
-> 0 collisions), with physical storage and all 27 ACL role links confirmed afterwards. The file was then
-> re-sequenced into the AAP §0.5.2 dependency order: it carries those same 988 records byte-for-byte at the same
-> 4,062,436 bytes and differs from the previewed bytes **only in the order of the `<sys_update_xml>` blocks**,
-> which is why its digest is the one above. That reorder was checked statically — `xmllint --noout` clean, 988
-> blocks, block multiset identical to the previewed bytes, unchanged byte count and 44-class census, every
-> §0.5.2 dependency assertion passing — and the reordered bytes were **not** re-uploaded, re-previewed or
-> re-committed anywhere, so do not read the trip above as a round trip of this exact byte sequence. The record is
+> **Superseded on 2026-09-02, and it splits in two.** *(1) What was verified live:* the full trip was measured
+> on the **pre-reorder, previewed-and-committed byte sequence — 988 blocks, 4,062,436 bytes, SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, `2026-09-02T20:53:14Z`**: 0 `type=error`
+> and 0 `type=warning` preview problems on a genuinely clean instance, then a single UI-action commit that
+> succeeded 100% (613 inserted / 375 updated / 0 collisions), with physical storage and all 27 ACL role links
+> confirmed afterwards. *(2) What ships:* the file was then re-sequenced into the AAP §0.5.2 dependency order,
+> so the deliverable is **988 blocks, 4,062,436 bytes, SHA-256
+> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — the same 988 records byte-for-byte at
+> the same byte count, differing from the previewed bytes **only in the order of the `<sys_update_xml>`
+> blocks**. **The round trip on those exact bytes is outstanding: it has not been run, so nobody may read this
+> walkthrough as already executed on the file they hold.** Under this run's frozen rule the recorded checksum is
+> stale once the package changes after verification, which makes the zero-preview-error requirement stated at
+> the top of this document satisfied for the previewed sequence and **owed for the sequence that ships**; §5 of
+> [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), run against the `90ee0249…` file
+> on a genuinely clean PDI, is what discharges it. The reorder was checked statically — `xmllint --noout` clean,
+> 988 blocks, block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class
+> census, every §0.5.2 dependency assertion passing — and the reordered bytes were **not** re-uploaded,
+> re-previewed or re-committed anywhere; that is corroboration, not a round trip of this exact byte sequence.
+> The record is
 > [`../docs/refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The remainder of this note describes the
 > **previous** revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`:
 >

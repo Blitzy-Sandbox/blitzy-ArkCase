@@ -480,8 +480,8 @@
   },
   "package_export_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
   "package_export_mechanism": "platform's own export path: UpdateSetExport().exportUpdateSet() (the API the sys_update_set 'Export to XML' UI action runs) then GET /export_update_set.do?sysparm_sys_id=<snapshot>&sysparm_delete_when_done=true&sysparm_is_remote=false&sysparm_ck=<session token>; master set verified at 988 children and state=complete before and after every export",
-  "package_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
-  "package_sha256_note": "the digest of the deliverable file as it stands now, i.e. after the post-review CR1 reorder (final.post_review_cr1_remediation). The bytes Phase 2 exported, uploaded, previewed and committed carried the same 988 payload records in a different block sequence and therefore hashed differently; that pre-reorder digest was removed from this record so no superseded digest can be mistaken for the shipping one, and it is recoverable from git history with: git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml | sha256sum",
+  "package_sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+  "package_sha256_note": "the digest of the bytes export 3 streamed - the exact byte sequence that was uploaded onto the clean instance, previewed to 0 problems of any type and committed in this phase (export_history attempt 3). The deliverable file at package_export_path no longer hashes to this value: the post-review CR1 pass re-sequenced its sys_update_xml blocks into AAP 0.5.2 dependency order, so it now hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 (final.deliverable_sha256). Under verified_checksum_rule, applied without exception, the package therefore changed after Phase 2, the recorded checksum is stale, and the S1-S6 re-run on the new bytes is owed and has not been performed - see final.owed_verification.",
   "package_bytes": 4062436,
   "export_history": [
    {
@@ -505,9 +505,9 @@
     "snapshot_sys_id": "0b3b7452934f435009aa70d19dba100d",
     "bytes": 4062436,
     "payloads": 988,
-    "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
-    "sha256_note": "this attempt's 988 payload records are the deliverable's, and they were previewed with 0 problems and committed. The digest recorded here is the deliverable file's current digest, after the post-review CR1 reorder changed the block sequence only (final.post_review_cr1_remediation); the bytes exported at this attempt hashed differently, and that superseded digest is recoverable with: git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml | sha256sum",
-    "outcome": "previewed with 0 problems and committed; these payload records are the deliverable"
+    "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+    "sha256_note": "the digest of the bytes streamed at this attempt. This is export 3's historical digest and it is phase2.verified_checksum: these are the bytes that were uploaded, previewed to 0 problems of any type and committed. The deliverable file was written from this export and was afterwards re-sequenced by the post-review CR1 pass, so the file that ships hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 instead - see final.owed_verification.",
+    "outcome": "previewed with 0 problems and committed; this is the export the deliverable was written from"
    }
   ],
   "package_sanity": {
@@ -710,11 +710,11 @@
     }
    ]
   },
-  "verified_checksum": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+  "verified_checksum": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
   "verified_checksum_at_utc": "2026-09-02T20:53:14Z",
-  "verified_checksum_refreshed_on": "2026-09-02, by the post-review CR1 remediation",
-  "verified_checksum_scope": "Phase 2's zero-preview-error and committed evidence attaches to the 988 payload records this checksum's file carries, not to a byte sequence: the record set was uploaded, previewed to 0 problems of any type and committed on a clean instance at 2026-09-02T20:53:14Z. The recorded digest was refreshed when the post-review CR1 remediation re-ordered those same 988 blocks into AAP 0.5.2 dependency-safe sequence; the block multiset is byte-identical to the Phase-2-verified bytes, so the payload-level evidence carries over unchanged. The reordered bytes themselves were verified statically only and were NOT round-tripped on a PDI. See final.post_review_cr1_remediation.",
-  "verified_checksum_rule": "A change to any payload body, payload identity or the block multiset makes this checksum stale and Phase 2 (S1-S6) must re-run before the package is ship-ready again. A change that only permutes the block sequence while leaving the header, the tail and every payload block byte-identical does not invalidate Phase 2's payload-level evidence: it requires the digest to be refreshed here and the permutation to be proved statically (well-formed XML, unchanged block count, byte-identical block multiset, unchanged class census, AAP 0.5.2 order assertions). Exactly one such permutation has been applied - the post-review CR1 remediation.",
+  "verified_checksum_stale_since": "2026-09-02, when the post-review CR1 pass re-sequenced the deliverable's block order. The package changed after this checksum was taken, so under verified_checksum_rule the checksum is STALE and the Phase 2 S1-S6 re-run is owed on the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes. It has not been performed. This checksum was not refreshed and must not be: it is the digest of the bytes that were actually previewed and committed.",
+  "verified_checksum_scope": "this checksum was taken on the exact bytes export 3 streamed, and it covers that byte sequence and nothing else: that sequence was uploaded onto a clean instance, previewed to 0 problems of any type and committed at 2026-09-02T20:53:14Z, with physical storage and the 27 role links confirmed afterwards. The file that ships is a different byte sequence (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, the block order re-sequenced by the post-review CR1 pass) and has never been uploaded, previewed or committed on any instance. See final.owed_verification.",
+  "verified_checksum_rule": "If the package changes after this point the checksum is stale and Phase 2 (S1-S6) must re-run before the package is ship-ready again.",
   "fallback_package_untouched": {
    "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
    "modified": false
@@ -722,6 +722,7 @@
   "exit_condition": "met",
   "exit_timestamp_utc": "2026-09-02T20:53:14Z",
   "shippable": true,
+  "shippable_scope": "true for the byte sequence this phase verified, phase2.verified_checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae. It is not a ship-readiness claim about the file that ships: final.deliverable_sha256 is 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, final.checksum_stale is true, and the S1-S6 re-run on those bytes is owed and unperformed (final.owed_verification).",
   "fallback_invoked": false,
   "screenshots": [
    {
@@ -834,9 +835,9 @@
    "classification": "c - pre-existing and a judgment call; not decided unilaterally per D5(c)",
    "resolution": "NO FIX APPLIED. (c) pre-existing and a judgment call - the 7 sys_choice payloads are BYTE-IDENTICAL between the rebuilt package and FALLBACK.xml, and the package's own docs record the package-alone state as 'sys_choice 0 (Defect C)'; the pre-refine instance had choices only because post_import_remediation.js created them (choices_created=24), which INTERP-10 forbade in Phase 2. Not fixed unilaterally: the artifact at fault is the update-set XML, which is out of U4's scope and whose change would make phase2.verified_checksum stale (INTERP-9)",
    "package_xml_affected": false,
-   "phase2_checksum_stale": false,
+   "phase2_checksum_stale_due_to_this_issue": false,
    "phase2_rerun_performed": false,
-   "ship_readiness_note": "the package is unchanged, so phase2.verified_checksum remains valid and the Phase-2-verified package is what ships",
+   "ship_readiness_note": "no fix touched the package for this issue, so nothing here made phase2.verified_checksum (eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae) stale and the rebuilt package remains the shipping decision. Separately, the post-review CR1 re-sequencing of the deliverable's block order did change the package after Phase 2, so the recorded checksum IS stale for the bytes that ship (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7) and the S1-S6 re-run on them is owed and unperformed - final.owed_verification.",
    "flagged_for_human_decision": true,
    "options": "human decision between Option 1 (amend the package, then re-run Phase 2 for a NEW verified checksum) and Option 2 (accept the verified package, keep the documented post-commit remediation step); Option 3 (hand-create the 24 choice rows) available but NOT recommended - it masks the package-alone defect (D4); then re-run this test"
   }
@@ -1126,13 +1127,15 @@
   "checksum_impact": {
    "fixes_applied": 0,
    "package_xml_changed": false,
-   "phase2_verified_checksum": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
-   "phase2_verified_checksum_note": "Phase 3 changed no artifact, so every statement in this block is about Phase 3 and holds as recorded. The digest quoted here is the current one: it was refreshed after Phase 3, by the post-review CR1 remediation, which permuted the deliverable's block sequence only (final.post_review_cr1_remediation). Phase 2's payload-level evidence is unaffected because the block multiset is byte-identical.",
-   "phase2_checksum_stale": false,
-   "phase2_rerun_required": false,
+   "phase2_verified_checksum": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+   "phase2_verified_checksum_note": "Phase 3 changed no artifact, so every statement in this block is about Phase 3 and holds as recorded, and the digest quoted here is Phase 2's verified checksum - export 3's bytes. The deliverable file was re-sequenced after this phase by the post-review CR1 pass and now hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 (final.deliverable_sha256); that change, and nothing Phase 3 did, is what makes the recorded checksum stale.",
+   "phase2_checksum_stale": true,
+   "phase2_checksum_stale_cause": "not this phase. Phase 3 applied no fix and changed no artifact (package_xml_changed=false), and at the end of this phase the deliverable was still byte-identical to the Phase-2-verified bytes. The post-review CR1 pass afterwards re-sequenced the deliverable's block order, changing the file's bytes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7; under phase2.verified_checksum_rule that is what makes the recorded checksum stale. See final.owed_verification.",
+   "phase2_rerun_required": true,
    "phase2_rerun_performed": false,
+   "phase2_rerun_performed_by_the_cr1_pass": false,
    "checksum_reasserted_at_end_of_phase3": true,
-   "what_ships": "exactly the Phase-2-verified payload records; nothing unverified is presented as the deliverable"
+   "what_ships": "the deliverable file at final.deliverable_path: export 3's 988 payload records, re-sequenced into AAP 0.5.2 dependency order after this phase. Phase 3 itself presented nothing unverified - when it ran, the deliverable was the Phase-2-verified byte sequence. The byte sequence that ships (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7) has not been previewed or committed on any instance and its S1-S6 re-run is owed - final.owed_verification."
   },
   "d6_cap": {
    "attempts_used": 0,
@@ -1226,15 +1229,56 @@
   ],
   "report": "servicenow-case-management-poc/docs/refine-run/FINAL-REPORT.md",
   "shipping_package": "rebuilt",
-  "shipping_package_label": "the Phase-1-rebuilt, Phase-2-verified package - it DOES include this round’s fix",
+  "shipping_package_label": "the Phase-1-rebuilt package - it DOES include this round’s fix. Phase 2 verified export 3's byte sequence; the file that ships carries those 988 payload records re-sequenced into AAP 0.5.2 order, so its own S1-S6 verification is owed (final.owed_verification)",
   "deliverable_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
   "deliverable_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
-  "matched_against": "phase2.verified_checksum (refreshed by the post-review CR1 remediation and equal to this value). Phase 2's zero-preview-error and committed evidence, recorded 2026-09-02T20:53:14Z, attaches to the 988 payload records the deliverable carries; the deliverable holds those records byte-identically and differs from the previewed-and-committed bytes only in block sequence",
-  "matches_recorded": true,
+  "matched_against": "phase2.verified_checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, recorded 2026-09-02T20:53:14Z on the bytes that were previewed with zero problems and committed",
+  "matches_recorded": false,
+  "matches_recorded_note": "NOT equal, and that inequality is the staleness D36 describes rather than a measurement error: the deliverable hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 while the recorded verified checksum is eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, because the post-review CR1 pass re-sequenced the file's block order after Phase 2. The artifact that ships is presented as carrying an owed verification, not as a Phase-2-verified byte sequence - final.checksum_stale is true and final.owed_verification states the gate, its blockers and the human next step.",
   "re_export_performed": false,
-  "re_export_note": "INTERP-11: the deliverable carries the exact payload records Phase 2 previewed and committed, already at the deliverable path; sha256 was recomputed over that file rather than re-exporting from the instance. The file's block sequence was subsequently re-ordered in place by the post-review CR1 remediation - no re-export, no instance action, and no change to any payload block",
-  "checksum_stale": false,
-  "checksum_stale_note": "No fix changed any payload of the package after Phase 2 (phase3.checksum_impact.package_xml_changed=false). The deliverable file was changed once after Phase 2, by the post-review CR1 remediation, which permuted its block sequence and left the header, the tail and all 988 payload blocks byte-identical; the recorded checksum was refreshed to match the file and is current. Under phase2.verified_checksum_rule a permutation of that kind does not make Phase 2's payload-level evidence stale, and Phase 2 was not re-run - see final.post_review_cr1_remediation for the static verification that stands in for it",
+  "re_export_note": "INTERP-11: no re-export was performed. At the end of the run the deliverable was the exact bytes Phase 2 previewed and committed, already at the deliverable path, and sha256 was recomputed over that file rather than re-exporting from the instance. The file's block sequence was afterwards re-ordered in place by the post-review CR1 pass - no re-export and no instance action - which changed the file's bytes and therefore its digest.",
+  "checksum_stale": true,
+  "checksum_stale_note": "STALE. The post-review CR1 pass re-sequenced the deliverable's sys_update_xml blocks after Phase 2, so the package changed after the S6 checksum was taken. Under phase2.verified_checksum_rule (D36), applied without exception, the recorded checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae is stale and Phase 2 - S1 clean confirm, S2 checksum, S3a preview, S3b zero type=error, S4 UI-action commit, S5 storage/role-link confirmation, S6 recorded checksum - must re-run on the exact 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes before the package is ship-ready again. That re-run is OWED and has NOT been performed. See final.owed_verification.",
+  "owed_verification": {
+   "gate": "Phase 2 S1-S6, re-run in full on the exact bytes at final.deliverable_sha256",
+   "applies_to_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+   "rule": "phase2.verified_checksum_rule (D36), applied without exception",
+   "trigger": "the post-review CR1 pass re-sequenced the deliverable's 988 sys_update_xml blocks into AAP 0.5.2 dependency order after Phase 2 had recorded its checksum, which changed the file's bytes",
+   "status": "owed",
+   "performed": false,
+   "performed_by_the_cr1_pass": false,
+   "steps_owed": [
+    "S1 - confirm the target instance is genuinely clean",
+    "S2 - checksum the bytes about to be uploaded",
+    "S3a - upload the file and preview it through the AJAX preview processor",
+    "S3b - zero sys_update_preview_problem rows of type=error",
+    "S4 - commit through the native Commit Update Set UI action",
+    "S5 - confirm physical storage for the three scoped tables and all 27 sys_security_acl_role links",
+    "S6 - record the checksum of the bytes that were previewed and committed"
+   ],
+   "phase2_verified_checksum_covers": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only, i.e. export 3's byte sequence; it is not the digest of the file that ships",
+   "aap_0_7_1_status": "AAP 0.7.1 (the exported XML must re-import on a fresh PDI with zero preview errors) is satisfied for export 3's byte sequence and OWED for the byte sequence that ships",
+   "blockers": [
+    "the environment directive records the scoped app as already installed, committed, converged and seeded on the single provisioned PDI, and states that re-running the deployment, re-committing it or backing it out would destroy that verified environment",
+    "the code-review boundary the CR1 pass worked under permitted read-only REST and no PDI write of any kind",
+    "AAP 0.7.1 wants a FRESH PDI, and provisioning or re-requesting an instance is prohibited, while the one provisioned instance is not clean - it holds the committed application and 12 case rows - so a preview there produces \"Found a local update that is newer than this one\" collisions instead of the clean-slate zero-problem result the gate defines",
+    "this package's own scripts/round_trip_verify.md warning is measured fact: the file's sys_remote_update_set descriptor makes the loader REUSE the existing retrieved set and APPEND its children, so an upload would mutate the committed Phase 2 record itself"
+   ],
+   "corroborating_static_evidence": {
+    "xmllint": "pass (no output)",
+    "payload_blocks": 988,
+    "per_block_digest_multiset_identical_to_export_3": true,
+    "header_bytes_identical": 1370,
+    "tail_identical": true,
+    "bytes": 4062436,
+    "payload_class_census_identical": 44,
+    "aap_0_5_2_dependency_assertions": "all pass",
+    "read_only_rest_cross_check": "the instance's captured set 1109981a930b435009aa70d19dba1098 still holds 988 children whose update names are set-identical to the file's"
+   },
+   "corroborating_evidence_is_not_the_gate": "the static checks bound the risk to block sequence alone and are recorded as corroborating evidence. They are not the platform test D36 requires and do not discharge it: no upload, preview or commit of the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes has taken place anywhere",
+   "human_next_step": "on a genuinely clean PDI, run docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 against the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 file - upload it, assert 988 children, preview to zero type=error, commit through the native Commit Update Set UI action, confirm physical storage and all 27 role links - then record 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 as verified with that run's own timestamp",
+   "shipping_decision": "unchanged: the rebuilt package ships and the fallback (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7) remains uninvoked and unmodified. Reverting the re-sequencing is not an option - it would re-open a HIGH AAP 0.5.2 violation - and invoking the fallback is worse, since the fallback was never previewed at all and carries the hand-authored records directives D2/D21 ordered replaced"
+  },
   "deliverable_bytes": 4062436,
   "deliverable_payload_count": 988,
   "deliverable_xmllint": "pass (no output)",
@@ -1541,7 +1585,7 @@
      "corrected": [
       "the \"two manual post-import steps are mandatory\" headline",
       "the \"bytes that ship have never been previewed / conditional gate\" item and its 926-block identity sentence",
-      "the package Identity bullet (988 blocks / 4,062,436 bytes / the shipping SHA-256 as recorded at the time of this edit; that digest was later superseded by the post-review CR1 remediation, which refreshed final.deliverable_sha256)",
+      "the package Identity bullet (988 blocks / 4,062,436 bytes / the Phase-2-verified SHA-256 eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, which was the deliverable's digest when this edit was made; the file was re-sequenced afterwards and now hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 - see final.owed_verification)",
       "the AAP deployment-contract callout \"a commit alone leaves the tables without storage and the ACLs without role links\"",
       "the round-trip-status bullet",
       "the \"nothing has been re-measured\" closing sentence"
@@ -1581,7 +1625,7 @@
       "the Defect 9 section heading and verdict (FIXED by the native rebuild)",
       "§9.5 residual-manual-footprint preamble (rows 1, 2, 3 no longer apply)",
       "the package-alone census row (sys_dictionary 25, acl_links 0)",
-      "§10.0 item 1a (clean-slate trip on the shipping bytes) marked done",
+      "§10.0 item 1a (clean-slate trip) marked done - the trip was run on export 3's byte sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, which was the deliverable's byte sequence when this edit was made; see final.owed_verification for the sequence that ships",
       "the §0 hibernation \"nothing re-measured\" note"
      ]
     },
@@ -1604,7 +1648,8 @@
    "not_present_in_the_repository": "the brief’s example \"a from-scratch first commit legitimately fails with 22 errors\" appears only in the environment handover, not in any repository document (grep: 0 occurrences), so it had nothing to correct; the related \"second commit required\" claim is in the documentation and was corrected"
   },
   "validation": {
-   "deliverable_sha256_matches_recorded": true,
+   "deliverable_sha256_matches_recorded": false,
+   "deliverable_sha256_matches_recorded_note": "the deliverable hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 and phase2.verified_checksum is eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae. They differ because the post-review CR1 pass re-sequenced the file's block order after Phase 2; under D36 the recorded checksum is stale and the S1-S6 re-run on the shipping bytes is owed and unperformed - final.owed_verification.",
    "xmllint_all_xml": "no output over every servicenow-case-management-poc/**/*.xml",
    "node_check_all_js": "no output over the *.js scripts",
    "run_state_parses": true,
@@ -1616,15 +1661,15 @@
   "blockers": [],
   "final_step_completed_at_utc": "2026-09-02T22:44:11Z",
   "post_review_cr1_remediation": {
-   "what_it_is": "the code-review resolution pass for delta code review CR1 (package integrity lens), dated 2026-09-02. Not a new unit in the run's U1-U5 sequence: it changes no instance state, runs no phase and re-opens no exit condition.",
+   "what_it_is": "the code-review resolution pass for delta code review CR1 (package integrity lens), dated 2026-09-02. Not a new unit in the run's U1-U5 sequence: it changed no instance state and ran no phase. It did, however, change the package after Phase 2's checksum, which re-opens the D36 verification obligation recorded at final.owed_verification.",
    "date": "2026-09-02",
    "resolved_findings": {
     "finding_1_high": {
      "issue": "the native re-export emitted the 988 payload blocks in a randomized order, violating AAP 0.5.2 dependency ordering (sys_app at payload index 514, dictionaries before their table, choices before their dictionary row, ACL-role links before their ACL/role, dashboards before reports, seed rows before later prerequisites)",
      "change": "the deliverable update-set/x_casemgmt_case_management_update_set.xml was re-assembled into a deterministic dependency-safe block sequence. Block SEQUENCE ONLY: the 1370-byte header, the tail and every one of the 988 payload blocks are byte-identical to the Phase-2-verified bytes, and the byte size is unchanged at 4,062,436.",
-     "checksum_effect": "the digest changed because the byte order changed. New: 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7. The superseded pre-reorder digest was removed from this record so it cannot be mistaken for the shipping one; it is recoverable with: git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml | sha256sum",
-     "verification": "STATIC ONLY, and deliberately labelled as such: xmllint --noout clean; 988 <sys_update_xml action=\"INSERT_OR_UPDATE\"> blocks; the SHA-256 multiset of the block texts is identical to that of the Phase-2-verified bytes (pure permutation, sequence differs); header and tail byte-identical; the 44-class payload census unchanged; and the AAP 0.5.2 assertions all pass - sys_app at index 0, zero dictionary-before-its-table violations, zero choice-before-dictionary violations, every sys_user_role before every sys_security_acl, zero acl-role-link-before-prerequisite violations, every sys_report before both dashboards, and all 38 seed rows last (the 28 rows on the three scoped tables plus the 10 demo sys_user / sys_user_group / sys_user_grmember / sys_user_has_role / core_company rows, at payload indices 950-987).",
-     "not_claimed": "the reordered bytes were NOT uploaded, previewed, committed or otherwise round-tripped on a PDI. What was verified live in Phase 2 is the 988 payload records, which the reordered file carries byte-identically; no instance action of any kind was taken by this pass.",
+     "checksum_effect": "the digest changed because the byte sequence changed: the deliverable now hashes to 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7. Phase 2's verified checksum remains eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, export 3's historical digest, and it was not refreshed - it is the digest of the bytes that were actually previewed and committed. Under D36 the recorded checksum is therefore stale for the file that ships and the S1-S6 re-run on the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes is owed and unperformed (final.owed_verification).",
+     "verification": "STATIC ONLY, and it is corroborating evidence rather than the D36 gate: xmllint --noout clean; 988 <sys_update_xml action=\"INSERT_OR_UPDATE\"> blocks; the SHA-256 multiset of the block texts is identical to that of the Phase-2-verified bytes (the sequence differs, nothing else); header and tail byte-identical; byte size unchanged at 4,062,436; the 44-class payload census unchanged; the AAP 0.5.2 assertions all pass - sys_app at index 0, zero dictionary-before-its-table violations, zero choice-before-dictionary violations, every sys_user_role before every sys_security_acl, zero acl-role-link-before-prerequisite violations, every sys_report before both dashboards, and all 38 seed rows last (the 28 rows on the three scoped tables plus the 10 demo sys_user / sys_user_group / sys_user_grmember / sys_user_has_role / core_company rows, at payload indices 950-987); and read-only REST confirming the instance's captured set 1109981a930b435009aa70d19dba1098 still holds 988 children whose update names are set-identical to the file's. This bounds the risk to block sequence alone and does not discharge D36.",
+     "not_claimed": "the reordered bytes were NOT uploaded, previewed, committed or otherwise round-tripped on a PDI, and no instance action of any kind was taken by this pass. What was verified live in Phase 2 is export 3's byte sequence. Nothing here claims the shipping bytes are platform-verified or that the static checks stand in for Phase 2: the S1-S6 re-run on them is owed - final.owed_verification.",
      "owner_note": "the deliverable XML was changed by the group holding that file; this record documents the effect on the run's evidence."
     },
     "finding_2_medium": {
@@ -1648,9 +1693,11 @@
    },
    "instance_touched": false,
    "phase2_rerun_performed": false,
+   "phase2_rerun_owed": true,
+   "phase2_rerun_owed_detail": "see final.owed_verification for the gate, its blockers and the human next step",
    "fallback_package_touched": false,
    "fallback_package_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
-   "shipping_package": "rebuilt - unchanged as a decision; the deliverable is the same 988 payload records in dependency-safe order",
+   "shipping_package": "rebuilt - unchanged as a decision. The deliverable is export 3's 988 payload records in dependency-safe order; reverting would re-open the HIGH AAP 0.5.2 violation and the fallback, never previewed at all, is worse",
    "unchanged_figures": {
     "deliverable_bytes": 4062436,
     "deliverable_payload_count": 988,

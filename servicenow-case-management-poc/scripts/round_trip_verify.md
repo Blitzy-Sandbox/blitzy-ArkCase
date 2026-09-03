@@ -80,7 +80,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 > in this file hard-codes `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, so the loader matches on it. Two
 > successive uploads onto a row that already carried one committed batch took the child count
 > **913 → 1,826 → 2,739** (observed on the 913-block revision; the multiples track whatever the current
-> block count is — 926 today, so expect 926 → 1,852 → 2,778), and the second upload silently reset the row's state from `previewed` back to
+> block count is — 988 today, so expect 988 → 1,976 → 2,964), and the second upload silently reset the row's state from `previewed` back to
 > `loaded`, discarding the first preview. `sys_updated_on` cannot tell the loads apart, because each load stamps
 > it back to the file's literal `2026-04-30 12:00:00`.
 >
@@ -90,7 +90,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 >   each problem to its originating batch through `remote_update` → that child's `sys_created_on`.
 > - **This procedure's zero-problem criterion is only meaningful from a clean slate**, which is what Phase 0's
 >   teardown is for. On a fresh PDI that has never seen this application, the count is the file's own block count —
->   926 for the bytes that ship today — and the question does not arise.
+>   988 for the `90ee0249…` bytes that ship today — and the question does not arise.
 >
 > Related trap when diffing two loads: **preview rewrites `sys_update_xml.name`**, re-canonicalising a
 > `<table>_<sys_id>` name into a human-readable one (e.g. `sys_dictionary_0bf56c20…` →
@@ -475,15 +475,32 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
 > 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is three revisions behind the one that ships today.
 > **Updated 2026-09-02: today's package is the native-rebuild one — 988 blocks, 4,062,436 bytes, SHA-256
-> `90ee0249…` — and criteria 1, 2 and 3 hold directly on its 988 payload records: 0 `type=error` and 0
-> `type=warning` preview problems from a genuinely clean slate, then a UI-action commit that succeeded 100%
-> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Those records were previewed and
-> committed as export 3's byte sequence; the post-review CR1 re-sequencing then reordered the `sys_update_xml`
-> blocks into AAP §0.5.2 dependency order without altering a single payload body or identity — proven by a
-> block-multiset comparison against the previewed bytes, an unchanged 4,062,436-byte size and an unchanged
-> 44-class census — so the digest changed while the previewed evidence still attaches to exactly the records
-> that ship. The reordered bytes were verified statically and were **not** themselves re-uploaded or
-> re-previewed on any instance. The 926-block, 3,781,097-byte,
+> `90ee0249…` — and criteria 1, 2 and 3 do NOT yet hold on the bytes in your hands.** They hold on the
+> pre-reorder, previewed-and-committed byte sequence — the same 988 records at the same 4,062,436 bytes, SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, measured `2026-09-02T20:53:14Z`: State =
+> Loaded, 0 `type=error` and 0 `type=warning` preview problems from a genuinely clean slate, then a UI-action
+> commit that succeeded 100% — 613 inserted / 375 updated / 0 collisions
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). The post-review CR1
+> re-sequencing then reordered the `sys_update_xml` blocks into AAP §0.5.2 dependency order, which changed the
+> file's digest to the `90ee0249…` value you are asked to assert in Phase 1. **Running this procedure on
+> `90ee0249…` is the outstanding step** — under this run's frozen rule the recorded checksum is stale once the
+> package changes after verification, so AAP §0.7.1 is satisfied for the previewed sequence and outstanding for
+> the sequence that ships, and nothing below may be read as a result on it. What is established about the
+> reordered file is corroboration, not this procedure's result: `xmllint --noout` clean, 988 blocks, a per-block
+> digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and
+> 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST confirming the
+> instance's captured set still holds 988 children whose update names are set-identical to the file's — which
+> bounds the difference to block sequence alone. **The re-run needs a clean target, for three measured reasons:**
+> Phase 0's teardown cannot be performed on the single provisioned PDI, which already holds this application
+> installed, committed, converged and seeded; the warning in Phase 1 above applies literally — this file's
+> `<sys_remote_update_set>` descriptor makes the loader REUSE the existing retrieved set and APPEND its
+> children, so an upload here would mutate the very committed record the live evidence rests on; and a preview
+> against a populated instance returns `Found a local update that is newer than this one` collisions instead of
+> the clean-slate zero-problem result criterion 2 requires. Discharge it by running
+> [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) against the
+> `90ee0249…` file on a genuinely clean PDI — upload, assert 988 children, preview to zero `type=error`, commit
+> through the native "Commit Update Set" UI action, confirm physical storage and all 27 role links — and then
+> record `90ee0249…` as verified with that run's timestamp. **The 926-block, 3,781,097-byte,
 > `7292a6fe…` bytes discussed below are the retained original, and no preview was ever run on them** — see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c for the 13-payload + 1-block delta from
 > `e49a7654…` and for what was measured on it instead. The paragraph below describes the **925-block
 > `e49a7654…`** revision, which is what the 31-problem preview belongs to. Those bytes differ from the intermediate
