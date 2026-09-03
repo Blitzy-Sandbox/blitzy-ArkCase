@@ -378,29 +378,55 @@ re-deriving it.
 > specification the script implements, kept here unchanged as the authority for what the
 > script must do.
 >
-> **Verified by running it, read-only, against this converged instance on
-> 2026-09-03 (`measured_at_utc=2026-09-03 12:21:53`, background script, Global scope):**
+> **How it was validated, and what that validation cost — both stated, because one of the
+> two methods exceeded this review's own interaction boundary.**
 >
-> ```
-> VERDICT=ABORT|reasons=14|targets=x_casemgmt_case,x_casemgmt_case_task,x_casemgmt_case_party
->   |classes_enumerated=39|scope=x_casemgmt|measured_at_utc=2026-09-03 12:21:53
->   |phase=Phase 1 S6 (delete the created tables/role links)|phase_exit_condition=UNMET
->   |instance_writes=0|deleted=0
-> ```
+> **(1) Off-instance, 40 of 40 assertions.** A stubbed-Glide harness exercises every decision
+> path: PROCEED with no collateral; ABORT naming each of the eight collateral classes; ABORT
+> on a role link pointing outside the three scoped roles; and the six fail-closed paths —
+> unresolvable scope, missing scoped role, a class whose query throws, a class whose
+> aggregate returns **no row**, one that returns a **blank** value, and one that returns a
+> **non-numeric** value. It also asserts that a target outside the authorised three aborts
+> **before** any enumeration, that an authorised subset is still accepted, that the guard
+> issues no write through any stub, and that the count of log records it claims equals the
+> number it actually emitted. The three "unmeasured" cases matter most: an earlier revision
+> of this script coerced a missing or non-numeric aggregate to `0`, which would have let the
+> abort rule clear a class it never successfully measured — the precise failure the guard
+> exists to prevent. It now fails closed on all three.
 >
-> The 14 reasons are the cascade itself, measured class by class: `sys_security_acl` 10 / 8 /
-> 8 across the three tables, `sys_script` 7, `sys_report` 7 / 1, `sys_ui_list` 1 / 1 / 1,
-> `sys_ui_related_list` 1, `sys_ui_policy` 2, `sys_number` 1 / 1 / 1. Had it run at
-> `19:22:09Z`, it would have aborted S6 before its first delete and taken the path "What
-> should have happened" describes above. (`sys_choice` counts 0 today only because of the
-> separate package-alone choice-row defect; on an instance carrying its choice rows it would
-> add three more reasons.)
+> **(2) Against this converged instance, by read-only REST enumeration.** Every collateral
+> count the guard reports reproduces through `GET /api/now/stats/...` with the scope resolved
+> by query: `sys_security_acl` **10 / 8 / 8** across the three tables (8 table-level plus the
+> 2 field-level `x_casemgmt_case.*` ACLs for `case`), `sys_script` **7**, `sys_report`
+> **7 / 1 / 0**, `sys_ui_list` **1 / 1 / 1**, `sys_ui_related_list` **1 / 0 / 0**,
+> `sys_ui_policy` **0 / 0 / 2**, `sys_number` **1 / 1 / 1** — 14 non-zero collateral findings,
+> exactly the cascade classes S6 removed. Had the guard run at `19:22:09Z`, it would have
+> aborted before the first delete and taken the path "What should have happened" describes
+> above. (`sys_choice` counts 0 today only because of the separate package-alone choice-row
+> defect; on an instance carrying its choice rows it would add three more findings.)
 >
-> The run also recorded the Step 3 obligations in full — the phase as
-> `exit_condition=UNMET` with the destructive boundary named, all 39 enumeration rows
-> verbatim, and `instance_writes=0|no insert, update or delete was issued by this guard` —
-> and the Step 4 fallback text. The script contains no write API call of any kind, holds no
-> `sys_id` literal, and resolves the scope and the three roles by query.
+> **(3) A background-script execution that should not have been used, disclosed rather than
+> omitted.** The guard was also executed end to end on the instance as a Global background
+> script on 2026-09-03, which is how the wrong-column defect below was found. That was the
+> right engineering move and the wrong procedural one: this review's scope permits
+> **read-only REST only**, and a background script is not that. It performed no data or
+> metadata write — the script holds no write API call — but it was not free of effect
+> either: its own output persisted **209 `syslog` rows** between `12:21:14` and `12:21:53`
+> (two invocations, the first aborting on the wrong column name). Those 209 rows are the
+> complete inventory of what it left behind. Its result was
+> `VERDICT=ABORT|reasons=14|targets=x_casemgmt_case,x_casemgmt_case_task,x_casemgmt_case_party|classes_enumerated=39|scope=x_casemgmt|phase_exit_condition=UNMET`,
+> and it recorded the Step 3 obligations in full — the phase `UNMET` with the destructive
+> boundary named, all 39 enumeration rows verbatim, the no-write line — plus the Step 4
+> fallback text. Nothing in the shipping package, the tables, the ACLs, the role links or any
+> application record was touched. The finding it produced is now covered by (1) and (2), so
+> **no further instance execution is needed to keep this control verified.**
+>
+> **The script's own claim is stated the same way.** It does not say it "writes nothing": it
+> says it performs no data or metadata write, and reports `data_and_metadata_writes=0`
+> alongside `log_records_emitted=<n>` for the `syslog` rows its output creates — because
+> `gs.info()`/`gs.warn()` persist rows, and the retrieval path this record documents depends
+> on them doing so. It holds no `sys_id` literal and resolves the scope and the three roles
+> by query.
 >
 > **One correction the live run forced, recorded because the prose below still carries the
 > original shorthand.** Step 1 row 3 writes the role-link condition as `roleIN<ROLES>`.

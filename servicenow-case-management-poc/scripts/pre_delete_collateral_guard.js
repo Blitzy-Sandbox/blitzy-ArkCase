@@ -1,9 +1,21 @@
 /*
  * x_casemgmt_case_management - Pre-Delete Collateral Guard
  *
- * READ-ONLY. This script writes NOTHING. It performs no insert, no update and
- * no delete on any table, in any scope, under any code path. Its whole output
- * is a verdict and an enumeration.
+ * READ-ONLY WITH RESPECT TO DATA AND METADATA. This script performs no insert,
+ * no update and no delete on any business or metadata table, in any scope,
+ * under any code path: it holds no write API call at all. Its whole output is a
+ * verdict and an enumeration.
+ *
+ * IT IS NOT, HOWEVER, WRITE-FREE IN THE ABSOLUTE SENSE, and the distinction is
+ * stated here rather than left to be discovered. Every line it emits goes
+ * through `gs.info()` / `gs.warn()`, which the platform PERSISTS as `syslog`
+ * rows - that is the retrieval path this header documents below. So a run of
+ * this guard leaves N System Log records behind, where N is the line count it
+ * reports as `log_records_emitted` in its summary. Those are the only rows any
+ * run of it creates. Nothing it does touches the three scoped tables, their
+ * dictionary rows, their data, the ACLs, the role links or any other
+ * application record, and the summary reports that separately as
+ * `data_and_metadata_writes=0`.
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS IS, AND WHY IT EXISTS
@@ -120,13 +132,23 @@
  * ---------------------------------------------------------------------------
  * GUARANTEES
  * ---------------------------------------------------------------------------
- *   - Read-only: no write API is called anywhere in this file.
- *   - Repeatable: running it twice changes nothing and reports the same
- *     verdict for the same instance state.
+ *   - No data or metadata write: no write API is called anywhere in this file.
+ *     The `syslog` rows its own output creates are the single exception, and
+ *     are counted and reported rather than claimed away (see the header note).
+ *   - Repeatable: running it twice changes nothing about the instance's data or
+ *     metadata and reports the same verdict for the same instance state.
  *   - No hard-coded sys_id: the scope and the three roles are resolved by
  *     name, per AAP section 0.7.2.
- *   - Fail-closed: an unresolvable scope, an unreadable class or an
- *     unrecognised table produces ABORT, never PROCEED.
+ *   - Fail-closed, without exception. Every one of these produces ABORT and
+ *     none of them can produce PROCEED: an unresolvable scope; a missing scoped
+ *     role; a class whose query throws; a class whose aggregate returns no row;
+ *     a class whose aggregate returns a blank or non-numeric value; and a
+ *     target table outside the authorised three. A count that was not
+ *     successfully measured is never treated as a count of zero.
+ *   - Targets are allowlisted: only `x_casemgmt_case`, `x_casemgmt_case_task`
+ *     and `x_casemgmt_case_party` may be enumerated, because those are the only
+ *     tables OVERRIDE-3's authorisation covers. Any other target aborts before
+ *     enumeration begins.
  *
  * ---------------------------------------------------------------------------
  * ONE CORRECTION TO THE SPECIFICATION'S QUERY SHORTHAND
@@ -177,11 +199,18 @@ var DEFAULT_PHASE_LABEL = 'Phase 1 S6 (delete the created tables/role links)';
 // ============================================================================
 
 /**
+ * Count of log records this run has emitted. Each one is a persisted `syslog`
+ * row, so it is counted and reported rather than described as no write at all.
+ */
+var LOG_RECORDS_EMITTED = 0;
+
+/**
  * Emit one marked information line. gs.print() is deliberately not used: it is
  * forbidden in scoped contexts, whereas gs.info() lands in syslog in every
- * context.
+ * context - which is also why this is a persisted row and is counted.
  */
 function log(message) {
+    LOG_RECORDS_EMITTED += 1;
     gs.info(LOG_MARKER + '|' + message);
 }
 
@@ -190,6 +219,7 @@ function log(message) {
  * that could not be read - both of which are decisions, not incidents.
  */
 function logWarn(message) {
+    LOG_RECORDS_EMITTED += 1;
     gs.warn(LOG_MARKER + '|' + message);
 }
 
@@ -268,12 +298,35 @@ function countRows(tableName, applyQuery) {
         }
         ga.addAggregate('COUNT');
         ga.query();
-        var total = 0;
-        if (ga.next()) {
-            total = parseInt(ga.getAggregate('COUNT'), 10);
-            if (isNaN(total)) {
-                total = 0;
-            }
+
+        // Fail-closed, all three ways this can fail to produce a measurement.
+        // A class that was not successfully measured is NOT a class counted at
+        // zero: reporting 0 here would let the abort rule clear collateral that
+        // was never looked at, which is the exact failure this guard exists to
+        // prevent.
+        if (!ga.next()) {
+            return {
+                readable: false,
+                count: 0,
+                error: 'aggregate returned no row, so the count is unmeasured'
+            };
+        }
+        var raw = ga.getAggregate('COUNT');
+        if (raw === null || raw === undefined || String(raw).trim() === '') {
+            return {
+                readable: false,
+                count: 0,
+                error: 'aggregate returned a blank value, so the count is unmeasured'
+            };
+        }
+        var total = parseInt(raw, 10);
+        if (isNaN(total) || total < 0) {
+            return {
+                readable: false,
+                count: 0,
+                error: 'aggregate returned the non-numeric value "' + raw +
+                    '", so the count is unmeasured'
+            };
         }
         return { readable: true, count: total, error: '' };
     } catch (e) {
@@ -471,9 +524,31 @@ function preDeleteCollateralGuard(targetTables, phaseLabel) {
     var phase = phaseLabel || DEFAULT_PHASE_LABEL;
     var measuredAt = new GlideDateTime();
     var measuredAtUtc = measuredAt.getValue();
+    var i;
 
-    log('START|read-only guard, writes nothing|measured_at_utc=' + measuredAtUtc +
-        '|phase=' + phase + '|targets=' + tables.join(','));
+    log('START|no data or metadata write; emits syslog rows only|measured_at_utc=' +
+        measuredAtUtc + '|phase=' + phase + '|targets=' + tables.join(','));
+
+    // ---- Target allowlist, before any enumeration ---------------------------
+    // OVERRIDE-3's authorisation covers exactly three tables. A target outside
+    // that set is outside the authorisation this guard measures against, so it
+    // aborts here rather than being enumerated - a table the guard does not
+    // know cannot be cleared by it, whatever its dependent classes count.
+    var rejected = [];
+    for (i = 0; i < tables.length; i++) {
+        if (DEFAULT_TARGET_TABLES.indexOf(tables[i]) === -1) {
+            rejected.push(tables[i]);
+        }
+    }
+    if (rejected.length > 0) {
+        logWarn('STEP0|target(s) outside the authorised three: ' + rejected.join(','));
+        return abort(
+            ['these target(s) are outside the authorised destructive subset and cannot be ' +
+             'cleared by this guard: ' + rejected.join(', ') + '. The authorisation covers ' +
+             DEFAULT_TARGET_TABLES.join(', ') + ' only; deleting anything else requires an ' +
+             'explicit human expansion of the destructive scope first.'],
+            [], tables, phase, measuredAtUtc, '(not queried - target rejected)');
+    }
 
     // ---- Step 0 -------------------------------------------------------------
     var scopeSysId = lookupScopeSysId();
@@ -498,7 +573,6 @@ function preDeleteCollateralGuard(targetTables, phaseLabel) {
 
     // ---- Step 1 -------------------------------------------------------------
     var allRows = [];
-    var i;
     var row;
     for (i = 0; i < tables.length; i++) {
         if (!tableIsResolvable(tables[i])) {
@@ -543,7 +617,8 @@ function preDeleteCollateralGuard(targetTables, phaseLabel) {
     var summary = 'VERDICT=PROCEED|no collateral class holds a record|targets=' +
         tables.join(',') + '|classes_enumerated=' + allRows.length +
         '|scope=' + SCOPE_NAME + '|measured_at_utc=' + measuredAtUtc +
-        '|phase=' + phase + '|instance_writes=0';
+        '|phase=' + phase + '|data_and_metadata_writes=0|deleted=0' +
+        '|log_records_emitted=' + (LOG_RECORDS_EMITTED + 2);
     log(summary);
     log('STEP2|the deletion is permitted for the enumerated targets, and ONLY for them. ' +
         'Re-run this guard immediately before the first delete if any time has passed: ' +
@@ -584,8 +659,10 @@ function abort(reasons, allRows, tables, phase, measuredAtUtc, scopeSysId) {
         '|reason=the deletion its step required would exceed the authorised destructive ' +
         'boundary, so it was not performed');
 
-    // Step 3 (c) - no write happened.
-    log('STEP3|instance_writes=0|no insert, update or delete was issued by this guard');
+    // Step 3 (c) - no data or metadata write happened.
+    log('STEP3|data_and_metadata_writes=0|no insert, update or delete was issued by this ' +
+        'guard against any business or metadata table. The syslog rows this run emitted are ' +
+        'its own output and are counted in the summary as log_records_emitted.');
 
     // Step 4 - the fallback, named rather than implied.
     log('STEP4|fallback=leave the instance exactly as it stands: no rollback, no back-out, ' +
@@ -599,7 +676,8 @@ function abort(reasons, allRows, tables, phase, measuredAtUtc, scopeSysId) {
     var summary = 'VERDICT=ABORT|reasons=' + reasons.length + '|targets=' + tables.join(',') +
         '|classes_enumerated=' + allRows.length + '|scope=' + SCOPE_NAME +
         '|measured_at_utc=' + measuredAtUtc + '|phase=' + phase +
-        '|phase_exit_condition=UNMET|instance_writes=0|deleted=0';
+        '|phase_exit_condition=UNMET|data_and_metadata_writes=0|deleted=0' +
+        '|log_records_emitted=' + (LOG_RECORDS_EMITTED + 1);
     logWarn(summary);
     return summary;
 }
