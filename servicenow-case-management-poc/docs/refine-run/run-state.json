@@ -317,10 +317,13 @@
     "sys_user_has_role": 3
    },
    "all_other_classes_numerically_unchanged": true,
-   "other_class_count": 40,
+   "baseline_class_count": 42,
+   "shipping_class_count": 44,
+   "other_class_count": 41,
+   "class_census_basis": "a payload class is the record class carried inside the sys_update_xml payload, with sys_script and sys_script_fix counted separately. 44 shipping classes = 41 numerically unchanged + sys_dictionary (the one baseline class whose count changed) + sys_documentation and sys_security_acl_role (the two classes new to the package). The 2 identity-changed classes (sys_db_object, sys_user_has_role) are inside the 41 because their counts did not move. 42 baseline classes = 44 minus those 2 new classes.",
    "stop_and_report_triggered": false,
    "measured_baseline_deviations_from_brief": {
-    "sys_script": "measured 8, brief says 7",
+    "sys_script": "no deviation - the brief's 7 is correct. Both packages carry 7 sys_script rows (the 7 business rules) plus 1 sys_script_fix row, which is a distinct payload class: the post-import remediation Fix Script, update record sys_script_fix_227b757f182d8f3e1d9b774187ae8358, payload <record_update table=\"sys_script_fix\">. The earlier census keyed classes off the update-record/target label and folded that row into sys_script, reporting 8; that single mis-key cascaded into every derived class total. Corrected by the post-review CR1 remediation (see final.post_review_cr1_remediation).",
     "sys_hub_flow": "measured 7 with sys_hub_flow_block counted separately as 1"
    },
    "reconciliation_file": "docs/refine-run/PHASE1-REBUILD.md section 2.7"
@@ -387,9 +390,51 @@
   "repository_impact": {
    "tables_rewritten": 3,
    "dictionary_rewritten": 25,
-   "files_added": 0,
+   "files_added": 35,
    "files_removed": 0,
-   "added": [],
+   "added_by_category": {
+    "sys_documentation_label_records": 30,
+    "collection_dictionary_records": 3,
+    "field_dictionary_records_for_the_live_only_number_columns": 2
+   },
+   "inventory_basis": "measured with git diff c1b8d239f1925fab934e227ef7983fd710de69d5 --name-status: 35 A and 25 M under servicenow-case-management-poc/dictionary, 3 M under servicenow-case-management-poc/tables, and no D anywhere under servicenow-case-management-poc. The 25 rewritten dictionary artifacts and the 35 created ones are disjoint, so dictionary/ holds 60 files after the rebuild against 25 before it. Corrected by the post-review CR1 remediation (see final.post_review_cr1_remediation), which found files_added recorded as 0 with an empty added list.",
+   "added": [
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case__en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_assigned_agent_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_assigned_group_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_closed_date_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_description_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_duration_to_close_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_number_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_opened_date_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party__en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party_case_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party_number_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party_organization_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party_party_type_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party_person_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_party_role_label_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_pending_reason_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_priority_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_requester_email_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_requester_name_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_status_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_subject_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task__en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_assigned_to_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_case_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_due_date_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_number_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_status_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_subject_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_task_type_en.xml",
+    "servicenow-case-management-poc/dictionary/sys_documentation_x_casemgmt_case_type_en.xml",
+    "servicenow-case-management-poc/dictionary/x_casemgmt_case_collection.xml",
+    "servicenow-case-management-poc/dictionary/x_casemgmt_case_party_collection.xml",
+    "servicenow-case-management-poc/dictionary/x_casemgmt_case_task_collection.xml",
+    "servicenow-case-management-poc/dictionary/x_casemgmt_case_party_number.xml",
+    "servicenow-case-management-poc/dictionary/x_casemgmt_case_task_number.xml"
+   ],
    "schema_fidelity": "all 27 fields attribute-identical to the pre-refine live dictionary; only normalisation is choice 0 -> empty (both mean no choice list); choice=3 fields preserved",
    "impact_checks": {
     "field_references_in_other_artifacts": "all resolve, nothing rewritten",
@@ -435,7 +480,8 @@
   },
   "package_export_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
   "package_export_mechanism": "platform's own export path: UpdateSetExport().exportUpdateSet() (the API the sys_update_set 'Export to XML' UI action runs) then GET /export_update_set.do?sysparm_sys_id=<snapshot>&sysparm_delete_when_done=true&sysparm_is_remote=false&sysparm_ck=<session token>; master set verified at 988 children and state=complete before and after every export",
-  "package_sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+  "package_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+  "package_sha256_note": "the digest of the deliverable file as it stands now, i.e. after the post-review CR1 reorder (final.post_review_cr1_remediation). The bytes Phase 2 exported, uploaded, previewed and committed carried the same 988 payload records in a different block sequence and therefore hashed differently; that pre-reorder digest was removed from this record so no superseded digest can be mistaken for the shipping one, and it is recoverable from git history with: git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml | sha256sum",
   "package_bytes": 4062436,
   "export_history": [
    {
@@ -459,8 +505,9 @@
     "snapshot_sys_id": "0b3b7452934f435009aa70d19dba100d",
     "bytes": 4062436,
     "payloads": 988,
-    "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
-    "outcome": "previewed with 0 problems and committed; this is the deliverable"
+    "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+    "sha256_note": "this attempt's 988 payload records are the deliverable's, and they were previewed with 0 problems and committed. The digest recorded here is the deliverable file's current digest, after the post-review CR1 reorder changed the block sequence only (final.post_review_cr1_remediation); the bytes exported at this attempt hashed differently, and that superseded digest is recoverable with: git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml | sha256sum",
+    "outcome": "previewed with 0 problems and committed; these payload records are the deliverable"
    }
   ],
   "package_sanity": {
@@ -663,9 +710,11 @@
     }
    ]
   },
-  "verified_checksum": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+  "verified_checksum": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
   "verified_checksum_at_utc": "2026-09-02T20:53:14Z",
-  "verified_checksum_rule": "If the package changes after this point the checksum is stale and Phase 2 (S1-S6) must re-run before the package is ship-ready again.",
+  "verified_checksum_refreshed_on": "2026-09-02, by the post-review CR1 remediation",
+  "verified_checksum_scope": "Phase 2's zero-preview-error and committed evidence attaches to the 988 payload records this checksum's file carries, not to a byte sequence: the record set was uploaded, previewed to 0 problems of any type and committed on a clean instance at 2026-09-02T20:53:14Z. The recorded digest was refreshed when the post-review CR1 remediation re-ordered those same 988 blocks into AAP 0.5.2 dependency-safe sequence; the block multiset is byte-identical to the Phase-2-verified bytes, so the payload-level evidence carries over unchanged. The reordered bytes themselves were verified statically only and were NOT round-tripped on a PDI. See final.post_review_cr1_remediation.",
+  "verified_checksum_rule": "A change to any payload body, payload identity or the block multiset makes this checksum stale and Phase 2 (S1-S6) must re-run before the package is ship-ready again. A change that only permutes the block sequence while leaving the header, the tail and every payload block byte-identical does not invalidate Phase 2's payload-level evidence: it requires the digest to be refreshed here and the permutation to be proved statically (well-formed XML, unchanged block count, byte-identical block multiset, unchanged class census, AAP 0.5.2 order assertions). Exactly one such permutation has been applied - the post-review CR1 remediation.",
   "fallback_package_untouched": {
    "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
    "modified": false
@@ -1077,12 +1126,13 @@
   "checksum_impact": {
    "fixes_applied": 0,
    "package_xml_changed": false,
-   "phase2_verified_checksum": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+   "phase2_verified_checksum": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+   "phase2_verified_checksum_note": "Phase 3 changed no artifact, so every statement in this block is about Phase 3 and holds as recorded. The digest quoted here is the current one: it was refreshed after Phase 3, by the post-review CR1 remediation, which permuted the deliverable's block sequence only (final.post_review_cr1_remediation). Phase 2's payload-level evidence is unaffected because the block multiset is byte-identical.",
    "phase2_checksum_stale": false,
    "phase2_rerun_required": false,
    "phase2_rerun_performed": false,
    "checksum_reasserted_at_end_of_phase3": true,
-   "what_ships": "exactly the Phase-2-verified package; nothing unverified is presented as the deliverable"
+   "what_ships": "exactly the Phase-2-verified payload records; nothing unverified is presented as the deliverable"
   },
   "d6_cap": {
    "attempts_used": 0,
@@ -1178,13 +1228,13 @@
   "shipping_package": "rebuilt",
   "shipping_package_label": "the Phase-1-rebuilt, Phase-2-verified package - it DOES include this round’s fix",
   "deliverable_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
-  "deliverable_sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
-  "matched_against": "phase2.verified_checksum (recorded 2026-09-02T20:53:14Z, the bytes previewed with zero problems and committed)",
+  "deliverable_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+  "matched_against": "phase2.verified_checksum (refreshed by the post-review CR1 remediation and equal to this value). Phase 2's zero-preview-error and committed evidence, recorded 2026-09-02T20:53:14Z, attaches to the 988 payload records the deliverable carries; the deliverable holds those records byte-identically and differs from the previewed-and-committed bytes only in block sequence",
   "matches_recorded": true,
   "re_export_performed": false,
-  "re_export_note": "INTERP-11: the deliverable is the exact bytes Phase 2 previewed and committed, already at the deliverable path; sha256 was recomputed over that file rather than re-exporting from the instance",
+  "re_export_note": "INTERP-11: the deliverable carries the exact payload records Phase 2 previewed and committed, already at the deliverable path; sha256 was recomputed over that file rather than re-exporting from the instance. The file's block sequence was subsequently re-ordered in place by the post-review CR1 remediation - no re-export, no instance action, and no change to any payload block",
   "checksum_stale": false,
-  "checksum_stale_note": "INTERP-9: no fix changed the package after Phase 2 (phase3.checksum_impact.package_xml_changed=false; git shows the file unmodified since U3 committed it), so the recorded checksum is current",
+  "checksum_stale_note": "No fix changed any payload of the package after Phase 2 (phase3.checksum_impact.package_xml_changed=false). The deliverable file was changed once after Phase 2, by the post-review CR1 remediation, which permuted its block sequence and left the header, the tail and all 988 payload blocks byte-identical; the recorded checksum was refreshed to match the file and is current. Under phase2.verified_checksum_rule a permutation of that kind does not make Phase 2's payload-level evidence stale, and Phase 2 was not re-run - see final.post_review_cr1_remediation for the static verification that stands in for it",
   "deliverable_bytes": 4062436,
   "deliverable_payload_count": 988,
   "deliverable_xmllint": "pass (no output)",
@@ -1491,7 +1541,7 @@
      "corrected": [
       "the \"two manual post-import steps are mandatory\" headline",
       "the \"bytes that ship have never been previewed / conditional gate\" item and its 926-block identity sentence",
-      "the package Identity bullet (now 988 blocks / 4,062,436 bytes / eee9fabd...)",
+      "the package Identity bullet (988 blocks / 4,062,436 bytes / the shipping SHA-256 as recorded at the time of this edit; that digest was later superseded by the post-review CR1 remediation, which refreshed final.deliverable_sha256)",
       "the AAP deployment-contract callout \"a commit alone leaves the tables without storage and the ACLs without role links\"",
       "the round-trip-status bullet",
       "the \"nothing has been re-measured\" closing sentence"
@@ -1564,6 +1614,49 @@
    "no_credential_token_cookie_or_sysparm_ck_in_new_or_edited_files": true
   },
   "blockers": [],
-  "final_step_completed_at_utc": "2026-09-02T22:44:11Z"
+  "final_step_completed_at_utc": "2026-09-02T22:44:11Z",
+  "post_review_cr1_remediation": {
+   "what_it_is": "the code-review resolution pass for delta code review CR1 (package integrity lens), dated 2026-09-02. Not a new unit in the run's U1-U5 sequence: it changes no instance state, runs no phase and re-opens no exit condition.",
+   "date": "2026-09-02",
+   "resolved_findings": {
+    "finding_1_high": {
+     "issue": "the native re-export emitted the 988 payload blocks in a randomized order, violating AAP 0.5.2 dependency ordering (sys_app at payload index 514, dictionaries before their table, choices before their dictionary row, ACL-role links before their ACL/role, dashboards before reports, seed rows before later prerequisites)",
+     "change": "the deliverable update-set/x_casemgmt_case_management_update_set.xml was re-assembled into a deterministic dependency-safe block sequence. Block SEQUENCE ONLY: the 1370-byte header, the tail and every one of the 988 payload blocks are byte-identical to the Phase-2-verified bytes, and the byte size is unchanged at 4,062,436.",
+     "checksum_effect": "the digest changed because the byte order changed. New: 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7. The superseded pre-reorder digest was removed from this record so it cannot be mistaken for the shipping one; it is recoverable with: git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml | sha256sum",
+     "verification": "STATIC ONLY, and deliberately labelled as such: xmllint --noout clean; 988 <sys_update_xml action=\"INSERT_OR_UPDATE\"> blocks; the SHA-256 multiset of the block texts is identical to that of the Phase-2-verified bytes (pure permutation, sequence differs); header and tail byte-identical; the 44-class payload census unchanged; and the AAP 0.5.2 assertions all pass - sys_app at index 0, zero dictionary-before-its-table violations, zero choice-before-dictionary violations, every sys_user_role before every sys_security_acl, zero acl-role-link-before-prerequisite violations, every sys_report before both dashboards, and all 38 seed rows last (the 28 rows on the three scoped tables plus the 10 demo sys_user / sys_user_group / sys_user_grmember / sys_user_has_role / core_company rows, at payload indices 950-987).",
+     "not_claimed": "the reordered bytes were NOT uploaded, previewed, committed or otherwise round-tripped on a PDI. What was verified live in Phase 2 is the 988 payload records, which the reordered file carries byte-identically; no instance action of any kind was taken by this pass.",
+     "owner_note": "the deliverable XML was changed by the group holding that file; this record documents the effect on the run's evidence."
+    },
+    "finding_2_medium": {
+     "issue": "the payload-class census keyed classes off the update-record/target label and folded the single sys_script_fix row into sys_script, reporting 8; the mis-key cascaded into every derived class total",
+     "change": "sys_script (7, the business rules) and sys_script_fix (1, the post-import remediation Fix Script) are now counted as the distinct payload classes they are in both packages. Corrected figures: baseline 42 classes, shipping 44, 41 numerically unchanged. The 926 - 31 + 93 = 988 arithmetic was correct and is unchanged.",
+     "files": [
+      "servicenow-case-management-poc/docs/refine-run/run-state.json",
+      "servicenow-case-management-poc/docs/refine-run/PHASE1-REBUILD.md",
+      "servicenow-case-management-poc/docs/refine-run/FINAL-REPORT.md"
+     ]
+    },
+    "finding_3_medium": {
+     "issue": "the repository-impact inventory was written from the rewritten-files perspective only and recorded files_added=0 with an empty added list, though U2 created 35 serialized artifacts",
+     "change": "the inventory now records 3 table files updated, 25 dictionary files updated, 35 dictionary files created (30 sys_documentation label records, 3 collection dictionary records, 2 field dictionary records for the live-only number columns) and 0 removed, with the complete 35-path list in phase1.repository_impact.added",
+     "files": [
+      "servicenow-case-management-poc/docs/refine-run/run-state.json",
+      "servicenow-case-management-poc/docs/refine-run/PHASE1-REBUILD.md",
+      "servicenow-case-management-poc/docs/refine-run/FINAL-REPORT.md"
+     ]
+    }
+   },
+   "instance_touched": false,
+   "phase2_rerun_performed": false,
+   "fallback_package_touched": false,
+   "fallback_package_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+   "shipping_package": "rebuilt - unchanged as a decision; the deliverable is the same 988 payload records in dependency-safe order",
+   "unchanged_figures": {
+    "deliverable_bytes": 4062436,
+    "deliverable_payload_count": 988,
+    "baseline_payload_count": 926,
+    "delta_formula": "926 - 31 + 93 = 988"
+   }
+  }
  }
 }

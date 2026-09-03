@@ -69,7 +69,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 - No upload error message displayed.
 - **The child `sys_update_xml` count is exactly 926.** Assert this, do not eyeball it — see the warning below
   for why it is the one number that catches the most common mistake in this procedure. **Updated 2026-09-02:
-  the file that ships today is the native-rebuild package — 988 blocks, 4,062,436 bytes, SHA-256 `eee9fabd…` —
+  the file that ships today is the native-rebuild package — 988 blocks, 4,062,436 bytes, SHA-256 `90ee0249…` —
   so assert 988 for it.** 926 (3,781,097 bytes, SHA-256 `7292a6fe…`) is the block count of the retained
   original, `../update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`; if you are verifying an archived revision,
   assert *its* count instead — 925 for `e49a7654…`, 913 for `89638c17…` and for `7272edfc…`. Re-derive it from
@@ -474,10 +474,16 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 
 > **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
 > 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is three revisions behind the one that ships today.
-> **Updated 2026-09-02: today's bytes are the native-rebuild package — 988 blocks, 4,062,436 bytes, SHA-256
-> `eee9fabd…` — and criteria 1, 2 and 3 hold on them directly: 0 `type=error` and 0 `type=warning` preview
-> problems from a genuinely clean slate, then a UI-action commit that succeeded 100%
-> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). The 926-block, 3,781,097-byte,
+> **Updated 2026-09-02: today's package is the native-rebuild one — 988 blocks, 4,062,436 bytes, SHA-256
+> `90ee0249…` — and criteria 1, 2 and 3 hold directly on its 988 payload records: 0 `type=error` and 0
+> `type=warning` preview problems from a genuinely clean slate, then a UI-action commit that succeeded 100%
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Those records were previewed and
+> committed as export 3's byte sequence; the post-review CR1 re-sequencing then reordered the `sys_update_xml`
+> blocks into AAP §0.5.2 dependency order without altering a single payload body or identity — proven by a
+> block-multiset comparison against the previewed bytes, an unchanged 4,062,436-byte size and an unchanged
+> 44-class census — so the digest changed while the previewed evidence still attaches to exactly the records
+> that ship. The reordered bytes were verified statically and were **not** themselves re-uploaded or
+> re-previewed on any instance. The 926-block, 3,781,097-byte,
 > `7292a6fe…` bytes discussed below are the retained original, and no preview was ever run on them** — see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c for the 13-payload + 1-block delta from
 > `e49a7654…` and for what was measured on it instead. The paragraph below describes the **925-block
 > `e49a7654…`** revision, which is what the 31-problem preview belongs to. Those bytes differ from the intermediate

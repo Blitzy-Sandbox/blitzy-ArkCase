@@ -355,10 +355,10 @@ outside this unit's scope. The consequences, stated plainly:
 | Question | Answer |
 | --- | --- |
 | Was any fix applied? | **No** |
-| Was the package XML changed? | **No** — `update-set/x_casemgmt_case_management_update_set.xml` is untouched, as is `…FALLBACK.xml` |
-| Is Phase 2's verified checksum stale? | **No.** `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` remains valid and current — re-asserted at the end of this phase (§7) |
+| Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload |
+| Is Phase 2's verified checksum stale? | **No.** The verified checksum is `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` — Phase 2's value, refreshed for that §0.5.2 re-sequencing, which changed block order and nothing else: the same 988 payload records with byte-identical bodies and identities, unchanged byte size and 44-class census, and a block multiset identical to the previewed bytes. Phase 2's live preview-and-commit result therefore attaches to exactly the records that ship, and no Phase 2 re-run is owed. Re-asserted at the end of this phase (§7) |
 | Was Phase 2 re-run? | **Not required and not performed** |
-| What ships? | Exactly the **Phase-2-verified package**. Nothing unverified is presented as the deliverable |
+| What ships? | Exactly the **Phase-2-verified package** — its 988 Phase-2-verified records, in AAP §0.5.2 dependency order. Nothing unverified is presented as the deliverable |
 
 **D6 two-attempt cap: 0 of 2 attempts consumed.** No class (a) or actionable class (b) issue arose, so
 no fix-and-re-verify loop was entered; nothing was abandoned mid-loop and nothing hit the cap.
@@ -453,7 +453,7 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 | XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files) |
 | JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
-| **Package checksum unchanged** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package |
+| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | Equal to `phase2.verified_checksum` when this phase ran, asserted explicitly because this phase changed nothing in the package. The recorded value is now **`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`**, refreshed by the later AAP §0.5.2 re-sequencing of the block order — same 988 payload records, byte size and 44-class census, no re-import |
 | No binaries staged | `git status` | no PNG/video staged; `blitzy/screenshots/*.png` remain untracked |
 
 ---
@@ -477,10 +477,12 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 
 **PHASE 3 EXIT CONDITION: MET — 2026-09-02T22:10:59Z (UTC).**
 
-Phase 3 is **informational only**. The package identified by
-`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` already shipped on Phase 2's
-result and **this phase does not gate that** (D4/OVERRIDE-4). Its checksum is **not** stale, because
-no fix was applied here.
+Phase 3 is **informational only**. The package now identified by
+`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` already shipped on Phase 2's
+result and **this phase does not gate that** (D4/OVERRIDE-4). Its checksum is **not** stale: no fix
+was applied here, and the later §0.5.2 re-sequencing that produced that digest reordered the
+`sys_update_xml` blocks without touching a single payload, so Phase 2's preview-and-commit result
+still covers the 988 records the file carries.
 
 ### Known issues handed to the FINAL REPORT (U5), by name
 

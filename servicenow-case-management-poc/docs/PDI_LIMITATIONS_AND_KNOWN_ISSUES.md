@@ -57,13 +57,18 @@ rebuilt deliverable's preview, commit, post-commit census and ATF suite were re-
 > table, dictionary and role-link records are the platform's own captured records
 > (`sys_db_object` 3 · `sys_dictionary` 30 platform-named · `sys_documentation` 30 · **`sys_security_acl_role`
 > 27** · `sys_user_has_role` 3), and the file now at the path below is **988 blocks, 4,062,436 bytes, SHA-256
-> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**. It was previewed to **0 `type=error`
-> and 0 `type=warning`** problems on an instance holding none of the three tables and then committed by the
-> native UI action ("Succeeded 100%", 613 inserted / 375 updated / 0 collisions), which also closes the
-> "clean-slate upload → preview → commit on these bytes" row further down this table. **The identity recorded
-> in the rest of §0.1 — 926 blocks, 3,781,097 bytes, `7292a6fe…` — is the previous revision, retained verbatim
-> as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`**, and every measurement in §0.2, §0.3,
-> §0.3b and §0.3c belongs to that lineage. Full record:
+> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`**. Those 988 records were previewed to
+> **0 `type=error` and 0 `type=warning`** problems on an instance holding none of the three tables and then
+> committed by the native UI action ("Succeeded 100%", 613 inserted / 375 updated / 0 collisions), which also
+> closes the "Clean-slate upload → preview → commit on these bytes" row further down this table. The file was
+> then re-sequenced into AAP §0.5.2 dependency order and carries those same 988 records byte-for-byte at the
+> same 4,062,436 bytes, differing from the previewed bytes **only in `<sys_update_xml>` block order** — hence
+> the digest above. The reorder was verified statically (`xmllint --noout` clean, 988 blocks, block multiset
+> identical to the previewed bytes, unchanged byte count and 44-class census, every §0.5.2 dependency assertion
+> passing); the reordered bytes were **not** themselves re-uploaded, re-previewed or re-committed.
+> **The identity recorded in the rest of §0.1 — 926 blocks, 3,781,097 bytes, `7292a6fe…` — is the previous
+> revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`**, and every
+> measurement in §0.2, §0.3, §0.3b and §0.3c belongs to that lineage. Full record:
 > [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md).
 
 | Property | Value |
@@ -2933,8 +2938,9 @@ deliberately conservative.
 
 ### 10.0 Do this first
 
-> **Updated 2026-09-02: item 1a is DONE.** The clean-slate trip was executed on the bytes that ship — the
-> rebuilt package, 988 blocks / 4,062,436 bytes / SHA-256 `eee9fabd…` — against an instance holding none of the
+> **Updated 2026-09-02: item 1a is DONE.** The clean-slate trip was executed on the 988 records that ship — the
+> rebuilt package, 988 blocks / 4,062,436 bytes, the file now hashing to `90ee0249…` after the §0.5.2
+> re-sequencing that changed block order only — against an instance holding none of the
 > three tables: preview **0 `type=error`, 0 `type=warning`**, then a native UI-action commit, "Succeeded 100%",
 > with physical storage and 27 of 27 ACL role links confirmed afterwards. Item 0 is also moot: the verification
 > PDI in use is `dev306625`, which was awake for the whole run. See

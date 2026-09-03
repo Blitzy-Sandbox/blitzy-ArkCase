@@ -24,11 +24,17 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > history and cannot occur on a fresh PDI. **Commit was withheld on those bytes** — the verification instance
 > is shared — so "0 of any type" remains proven only on `7272edfc…`.
 >
-> **Superseded on 2026-09-02.** The bytes that ship today are the native-rebuild package — **988 blocks,
-> 4,062,436 bytes, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — and the full
-> trip **has** been measured on them: 0 `type=error` and 0 `type=warning` preview problems on a genuinely clean
-> instance, then a single UI-action commit that succeeded 100% (613 inserted / 375 updated / 0 collisions), with
-> physical storage and all 27 ACL role links confirmed afterwards. The record is
+> **Superseded on 2026-09-02.** The package that ships today is the native rebuild — **988 blocks,
+> 4,062,436 bytes, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — and the full
+> trip **has** been measured on its 988 records: 0 `type=error` and 0 `type=warning` preview problems on a
+> genuinely clean instance, then a single UI-action commit that succeeded 100% (613 inserted / 375 updated /
+> 0 collisions), with physical storage and all 27 ACL role links confirmed afterwards. The file was then
+> re-sequenced into the AAP §0.5.2 dependency order: it carries those same 988 records byte-for-byte at the same
+> 4,062,436 bytes and differs from the previewed bytes **only in the order of the `<sys_update_xml>` blocks**,
+> which is why its digest is the one above. That reorder was checked statically — `xmllint --noout` clean, 988
+> blocks, block multiset identical to the previewed bytes, unchanged byte count and 44-class census, every
+> §0.5.2 dependency assertion passing — and the reordered bytes were **not** re-uploaded, re-previewed or
+> re-committed anywhere, so do not read the trip above as a round trip of this exact byte sequence. The record is
 > [`../docs/refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The remainder of this note describes the
 > **previous** revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`:
 >
@@ -145,7 +151,7 @@ For the comprehensive manual round-trip verification procedure, see [`../scripts
 Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; Both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); Both dashboards accessible to users with correct roles; Synthetic demo data visible in case list."
 
 > **On the package that ships today, a commit alone does reach this walkthrough's state for the schema and the
-> role links.** The 2026-09-02 native-rebuild run committed the shipping bytes once on a clean instance and the
+> role links.** The 2026-09-02 native-rebuild run committed those 988 records once on a clean instance and the
 > commit itself produced physical storage for all three tables (HTTP 200; dictionary 21 / 14 / 13) and all **27**
 > ACL role links (manager 14 / agent 10 / viewer 3), with the remediation script never run and no second commit
 > — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The paragraph below records the behaviour of

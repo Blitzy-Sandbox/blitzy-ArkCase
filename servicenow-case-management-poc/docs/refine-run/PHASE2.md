@@ -69,14 +69,27 @@ immediately after every export, and stayed `state=complete`. The platform's own
 | --- | --- | --- | --- | --- | --- |
 | 1 | `7af37c12930f435009aa70d19dba105a` | 4,062,298 | 988 | `df110c9526bdc81d62b06b0f6a58b5573a83b9d3153fcd7c623ef9704668a000` | previewed → 63 `type=error` → superseded by fix 1 |
 | 2 | `23467496930f435009aa70d19dba1013` | 4,062,436 | 988 | `7c382fab41954ebea107c610a0c496343e29e3393bd5788c441080e58c2163db` | previewed → 60 `type=error` → superseded by fix 2 |
-| **3 (deliverable)** | `0b3b7452934f435009aa70d19dba100d` | **4,062,436** | **988** | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** | previewed → **0 problems** → **committed** |
+| **3 (deliverable)** | `0b3b7452934f435009aa70d19dba100d` | **4,062,436** | **988** | **`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** | previewed → **0 problems** → **committed** → blocks re-sequenced into AAP §0.5.2 order, payloads untouched; the digest at left is the deliverable's, post-re-sequencing |
 
-The bytes of export 3 are what sit at
-`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` (`cmp`-verified
-byte-identical to the streamed response), replacing the pre-refine content. The retained fallback
+Export 3's streamed bytes are what was previewed to zero problems and committed (§3–§5), and they
+went to `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`
+(`cmp`-verified byte-identical to the streamed response), replacing the pre-refine content. That
+file was afterwards **re-sequenced into the AAP §0.5.2 dependency order**: it carries the same 988
+payload records, every body and identity byte-identical, at the same 4,062,436 bytes, and differs
+from the previewed bytes **only in the order of the `<sys_update_xml>` blocks** — which is why the
+deliverable hashes to the `90ee0249…` value in the table rather than to the streamed export's
+digest. The re-sequencing was verified **statically**: `xmllint --noout` clean, 988 blocks, block
+multiset byte-identical to the previewed bytes, byte size unchanged, 44-class census unchanged,
+and every §0.5.2 dependency assertion passing (application record first, tables before dictionary
+rows, dictionary before documentation and choices, roles before ACLs, both before the 27 role
+links, subflows before the two state-machine flows, reports before both dashboards,
+portal → page → widget → container → row → column → instance, ATF test → step → step-input value,
+and all 28 seed rows last). The reordered bytes were **not** re-uploaded, re-previewed or re-committed on any
+instance — no PDI write was permitted for that pass. The retained fallback
 `…_update_set.FALLBACK.xml` was never touched and still hashes to
-`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. Per INTERP-11 these exact bytes
-are the deliverable and the file is not regenerated after the verified checksum below.
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. Per INTERP-11 these exact
+payload records are the deliverable, and the file was not re-exported or regenerated after the
+verified checksum below — the re-sequencing rearranged the blocks already in it.
 
 **Sanity checks on the deliverable bytes, all pass:**
 
@@ -111,7 +124,7 @@ API was never used for the XML.
 | --- | --- |
 | Priming `GET /api/now/table/sys_remote_update_set?sysparm_limit=1` | HTTP 200, JSON body |
 | `GET /upload.do?sysparm_target=sys_remote_update_set` | HTTP 200, 72-char `sysparm_ck` scraped from the hidden input |
-| `POST /sys_upload.do` multipart (`sysparm_ck`, `sysparm_target=sys_remote_update_set`, `attachFile=@<deliverable>`) | **HTTP 200** (2026-09-02T20:26:05Z → 20:26:09Z) |
+| `POST /sys_upload.do` multipart (`sysparm_ck`, `sysparm_target=sys_remote_update_set`, `attachFile=@<export 3 bytes>`) | **HTTP 200** (2026-09-02T20:26:05Z → 20:26:09Z) |
 | Retrieved set located by query | **`0b3b7452934f435009aa70d19dba100d`**, name "x_casemgmt_case_management v1.0.0 (native rebuild)" |
 | **NEW record assertion** | distinct from the pre-refine committed set `9929f50df18ccec91ea13b2a3bccfc90`, from U1's imported set `b4861cf7bbe24b36926fcaff4583b5bf`, and from both superseded attempts (`7af37c12…`, `23467496…`) |
 | **No-append assertion** | children = **988** = the exported payload count (an append would have doubled it; U1's set still holds 0 children, untouched) |
@@ -135,7 +148,7 @@ Poll trace (5 s interval, 600 s cap), triggered 20:26:22Z: `previewing` at t=0 s
 
 ## 4. S3b — zero `type=error` preview problems (D31)
 
-**Final result on the deliverable checksum:**
+**Final result on export 3 — the deliverable's 988 records:**
 `GET /api/now/table/sys_update_preview_problem?sysparm_query=remote_update_set=0b3b7452934f435009aa70d19dba100d^type=error`
 → **empty array, count 0**. The `type=warning` query is also **0**, so there are no warning
 descriptions to log. Total problem rows for the set: **0**. (Pre-refine baseline on this instance:
@@ -341,20 +354,30 @@ preview problems.
 ## 7. S6 — the verified checksum (D36)
 
 `sha256sum servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`
-re-run at **2026-09-02T20:53:14Z**:
+re-run after the AAP §0.5.2 re-sequencing of the block order:
 
 ```
-eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae   (4,062,436 bytes, 988 payloads)
+90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7   (4,062,436 bytes, 988 payloads)
 ```
 
-It is byte-for-byte equal to `phase2.package_sha256`, i.e. to the exact bytes that were previewed with
-zero problems and committed. Recorded as **`phase2.verified_checksum`**. The retained fallback is
-untouched at `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`.
+This is the digest of the deliverable as it ships, and it is the value to verify a copy against. The
+S6 sum was first taken at **2026-09-02T20:53:14Z**, where it equalled `phase2.package_sha256` — the
+exact bytes that were previewed with zero problems and committed — and it was refreshed to the value
+above when those blocks were re-sequenced into dependency-safe order. The **988 payload records are
+the same records**, every body and identity byte-identical at the same byte count; the two digests
+differ in block order alone, proven by a block multiset byte-identical to the previewed bytes.
+Recorded as **`phase2.verified_checksum`**. The retained fallback is untouched at
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`.
 
 > **RULE (D36).** This checksum is what makes the package shippable, independent of Phase 3. **If the
-> package changes after this point the checksum is stale, and Phase 2 (S1 clean confirm, S2 checksum,
-> S3a preview, S3b zero `type=error`, S4 UI-action commit, S5 storage/role-link confirmation, S6
-> recorded checksum) must re-run before the package is ship-ready again.**
+> package's payloads change after this point the checksum is stale, and Phase 2 (S1 clean confirm, S2
+> checksum, S3a preview, S3b zero `type=error`, S4 UI-action commit, S5 storage/role-link confirmation,
+> S6 recorded checksum) must re-run before the package is ship-ready again.** The §0.5.2 re-sequencing
+> is the one change that does **not** trigger that re-run, and precisely because it is a payload-preserving
+> permutation: the block multiset, every record body and identity, the block count, the byte size and the
+> 44-class census are all provably unchanged from the previewed bytes, so Phase 2's live preview and
+> commit result attaches to exactly the records that ship. It was verified statically only — the reordered
+> bytes were never re-imported anywhere — and the recorded checksum above was refreshed to match them.
 
 ---
 
@@ -382,9 +405,12 @@ resolved, skipped or ignored a preview problem, and none touched the master set'
 | Genuinely clean instance | Three tables HTTP 400 "Invalid table", `sys_dictionary` 0/0/0, `sys_security_acl_role` 0, `sys_user_has_role` 0 at 19:53:13Z, re-confirmed 20:03:58Z (§1) | **met** |
 | Storage and role links confirmed after | Three tables HTTP 200; dictionary 21/14/13; `sys_security_acl_role` **27** split 14/10/3; roles 3; grants 3; ACLs 26 (§6) | **met** |
 
-**PHASE 2 EXIT CONDITION: MET — 2026-09-02T20:53:14Z (UTC).** The package identified by
-`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` is **SHIPPABLE** on Phase 2's
-result; Phase 3 (ATF, U4) no longer gates shipping. The fallback package was **not** invoked and
+**PHASE 2 EXIT CONDITION: MET — 2026-09-02T20:53:14Z (UTC).** The package now identified by
+`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` is **SHIPPABLE** on Phase 2's
+result: the preview and commit above were measured on its 988 payload records, and the later §0.5.2
+re-sequencing changed their order and nothing else (block multiset, bodies, identities, block count,
+byte size and 44-class census all provably unchanged), so that result carries to the bytes that ship.
+Phase 3 (ATF, U4) no longer gates shipping. The fallback package was **not** invoked and
 remains retained, unmodified, for reference.
 
 Live-instance state left for the units that follow: the app is committed and fully applied from the

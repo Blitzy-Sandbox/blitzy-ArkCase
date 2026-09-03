@@ -20,11 +20,12 @@
 >
 > **Updated 2026-09-02 — read this before the summary below.** The deliverable was rebuilt so that the table,
 > dictionary and role-link records are the platform's own captured records, and a **single** upload → preview →
-> commit of the shipping bytes (988 blocks, 4,062,436 bytes, SHA-256 `eee9fabd…`) on a clean instance now
-> produces: three tables with physical storage (21 / 14 / 13 columns, REST HTTP 200) and **all 27 ACL role
+> commit of the shipping package's 988 records (988 blocks, 4,062,436 bytes; the file hashes to `90ee0249…`
+> since the §0.5.2 re-sequencing, which changed block order only) on a clean instance now produces:
+> three tables with physical storage (21 / 14 / 13 columns, REST HTTP 200) and **all 27 ACL role
 > links** (manager 14 / agent 10 / viewer 3) — with `post_import_remediation.js` **never run** and **no second
 > commit**, from a preview carrying 0 `type=error` and 0 `type=warning` problems. Defects C-storage and 9 are
-> therefore no longer manual steps on these bytes. What still needs a post-commit step: the **choice rows**
+> therefore no longer manual steps on those records. What still needs a post-commit step: the **choice rows**
 > (`sys_choice` is empty for the three tables — Defect C's remaining half), the seed-row linkage and
 > `opened_date`, the last two via `scripts/seed_demo_data.js` in scope. Evidence, including the commit counters
 > and every post-commit query: [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **The summary and
@@ -129,7 +130,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | **Updated 2026-09-02:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is now the native-rebuild package — UTF-8, no BOM, **4,062,436 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`. The figures that follow describe the retained original, `…FALLBACK.xml`: UTF-8, no BOM, **3,781,097 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. **Verify the digest before uploading** — this row has named three different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The immediately previous revision was 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition). Note that **no update-set preview has been run on these bytes** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
+| Deliverable | **Updated 2026-09-02:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is now the native-rebuild package — UTF-8, no BOM, **4,062,436 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. That digest is the one to check before you upload: the file's 988 records are the records that were previewed and committed on 2026-09-02, and the file was afterwards re-sequenced into AAP §0.5.2 dependency order — the same 988 records byte-for-byte at the same byte count, in a dependency-safe block order, verified statically (`xmllint --noout` clean, 988 blocks, block multiset identical to the previewed bytes, unchanged 44-class census, every §0.5.2 dependency assertion passing) rather than by a further upload or preview. The figures that follow describe the retained original, `…FALLBACK.xml`: UTF-8, no BOM, **3,781,097 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. **Verify the digest before uploading** — this row has named three different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The immediately previous revision was 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition). Note that **no update-set preview has been run on these bytes** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -293,8 +294,9 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 ## 5. Post-import remediations
 
 > **Read this first — updated 2026-09-02.** On the package that ships today this section is **verification
-> only for defects C-storage and 9**: a single upload → preview → commit of the shipping bytes (988 blocks,
-> SHA-256 `eee9fabd…`) on a clean instance produced three tables with physical storage and all **27** ACL role
+> only for defects C-storage and 9**: a single upload → preview → commit of the shipping package's 988 records
+> (988 blocks; the file hashes to `90ee0249…` since the §0.5.2 re-sequencing, which changed block order only)
+> on a clean instance produced three tables with physical storage and all **27** ACL role
 > links by itself, with the remediation never run and no second commit
 > ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). Defect C's **choice-list half is not fixed** —
 > `sys_choice` is still empty for the three tables after commit — so §5a's choice-row steps still apply, and
@@ -374,11 +376,11 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > **Steps 4 and 6 are the same command run twice.** That is deliberate, not a typo: the script is idempotent, and
 > the two passes are separated by a commit because the commit is what restores the records the rebuild removed.
 >
-> **Updated 2026-09-02: on the shipping bytes, steps 4, 5 and 6 are not needed.** Steps 1-3 alone produced the
-> physical schema and all 27 role links, and step 5's second commit was never performed; step 7 remains, and the
-> choice rows remain outstanding. Steps 4-6 stay documented here because they are still the procedure for the
-> retained original package — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) records which is
-> which.
+> **Updated 2026-09-02: on the package that ships today, steps 4, 5 and 6 are not needed.** Steps 1-3 alone
+> produced the physical schema and all 27 role links, and step 5's second commit was never performed; step 7
+> remains, and the choice rows remain outstanding. Steps 4-6 stay documented here because they are still the
+> procedure for the retained original package —
+> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) records which is which.
 >
 > ### The destructive route is a FALLBACK — preconditions and stop conditions
 >

@@ -73,7 +73,7 @@ payload, type, target_name, action) was preserved; `setWorkflow(false)` and
 `autoSysFields(false)` avoided audit churn. Result: `moved=926 failed=0`,
 shipping children **926**, remote children left **0**, remote set still `state=loaded`.
 Verified immediately afterwards: the shipping set's per-class inventory was **identical to
-the S0 baseline across all 41 payload classes**, and a SHA-256 guard over the 7 choice +
+the S0 baseline across all 42 payload classes**, and a SHA-256 guard over the 7 choice +
 26 ACL payloads matched (`f7e5df42723bbedd3705321fa1ae99b2d4919768b4ebcc4e052d1956f0733f93`).
 
 **Step 2 — the ABSORBER, and why it exists.** An update-set capture is keyed by update
@@ -411,10 +411,10 @@ sys_atf_test_suite_test          20       20       +0   unchanged
 x_casemgmt_case                  10       10       +0   unchanged
 x_casemgmt_case_task             10       10       +0   unchanged
 sys_report                        8        8       +0   unchanged
-sys_script                        8        8       +0   unchanged
 x_casemgmt_case_party             8        8       +0   unchanged
 sys_choice                        7        7       +0   unchanged
 sys_hub_flow                      7        7       +0   unchanged
+sys_script                        7        7       +0   unchanged (the 7 business rules)
 sys_ui_action                     6        6       +0   unchanged
 sp_widget                         3        3       +0   unchanged
 sys_db_object                     3        3       +0   3 hand-authored removed, 3 platform-captured added (new sys_ids) - the swap
@@ -439,6 +439,7 @@ sys_app                           1        1       +0   unchanged
 sys_atf_test_suite                1        1       +0   unchanged
 sys_hub_action_type_definition        1        1       +0   unchanged
 sys_hub_flow_block                1        1       +0   unchanged
+sys_script_fix                    1        1       +0   unchanged (the post-import remediation Fix Script)
 sys_ui_list                       1        1       +0   unchanged
 sys_ui_related                    1        1       +0   unchanged
 sys_user_grmember                 1        1       +0   unchanged
@@ -450,6 +451,7 @@ TOTAL                           926      988      +62
 
 classes whose COUNT changed: ['sys_dictionary', 'sys_documentation', 'sys_security_acl_role']
 classes whose count is unchanged but identities changed: ['sys_db_object', 'sys_user_has_role']
+payload classes: S0 baseline 42, post-swap 44 (the 2 added are sys_documentation and sys_security_acl_role); 41 of the 44 are numerically unchanged
 
 LINE ITEMS
   926  S0 baseline (U1 import; equals the package file's 926 payload blocks)
@@ -473,18 +475,31 @@ VERDICT: the delta is explained line-for-line by the table/role-link swap alone.
 
 D24's stop-and-report condition was **not** triggered. Exactly three classes changed count
 (`sys_dictionary` 25→30, `sys_documentation` 0→30, `sys_security_acl_role` 0→27), two kept
-their count with new identities (`sys_db_object`, `sys_user_has_role`), and the remaining
-39 classes are numerically identical — including every figure this unit's brief enumerates
-(540 `sys_variable_value`, 180 `sys_atf_step`, 26 `sys_security_acl`, 20 `sys_atf_test`, 20
-`sys_atf_test_suite_test`, 8 `sys_report`, 7 `sys_choice`, 6 `sys_ui_action`, 3
-`sys_number`, 3 `sys_user`, 3 `sys_user_role`, 2 dashboards, the portal records and the 28
-seed rows on the three scoped tables). The set difference was asserted, not eyeballed: 93
-row names added and 31 removed, every one of them inside the five swap classes.
+their count with new identities (`sys_db_object`, `sys_user_has_role`), and **41 of the 44
+payload classes are numerically identical** — every class except those three, the two
+identity-changed ones included, since their counts did not move. The 41 cover every figure
+this unit's brief enumerates (540 `sys_variable_value`, 180 `sys_atf_step`, 26
+`sys_security_acl`, 20 `sys_atf_test`, 20 `sys_atf_test_suite_test`, 8 `sys_report`, 7
+`sys_choice`, 6 `sys_ui_action`, 3 `sys_number`, 3 `sys_user`, 3 `sys_user_role`, 2
+dashboards, the portal records and the 28 seed rows on the three scoped tables). The set
+difference was asserted, not eyeballed: 93 row names added and 31 removed, every one of
+them inside the five swap classes.
 
-Two figures in the brief differ from the measured baseline and are unchanged by the swap,
-so they cannot mask anything: `sys_script` measures **8** (the brief says 7 — 7 business
-rules plus one further `sys_script` row) and `sys_hub_flow` measures **7** with
-`sys_hub_flow_block` counted separately as 1.
+One figure in the brief differs from the measured baseline and is unchanged by the swap, so
+it cannot mask anything: `sys_hub_flow` measures **7** with `sys_hub_flow_block` counted
+separately as 1.
+
+The brief's `sys_script` figure of **7 is correct**, and the census above now says so. Both
+packages carry 7 `sys_script` rows — the seven business rules — plus one row of a *distinct*
+payload class, `sys_script_fix`: the post-import remediation Fix Script, update record
+`sys_script_fix_227b757f182d8f3e1d9b774187ae8358`, whose payload is
+`<record_update table="sys_script_fix">`. The first pass at this census keyed each payload
+off the update-record/target label rather than off the record class inside the payload, and
+so folded that one row into `sys_script` and reported 8; the mis-key then propagated into
+every derived class total in this section. Both rows are `+0` either way, so no count, no
+line item and no verdict above changes — only the class taxonomy and the class totals do
+(baseline 42 rather than 41, post-swap 44, 41 numerically unchanged rather than 39).
+Corrected by the post-review CR1 remediation, §7.
 
 ### 2.8 S5 — the master set is Complete (D25)
 
@@ -539,13 +554,63 @@ this legitimate divergence from the pre-refine content, not a defect):
 
 | Path | Change |
 | --- | --- |
-| `tables/x_casemgmt_case.xml`, `tables/x_casemgmt_case_task.xml`, `tables/x_casemgmt_case_party.xml` | rewritten from the captured `sys_db_object` payloads (3 files) |
-| `dictionary/x_casemgmt_*.xml` (25 existing) | rewritten from the captured `sys_dictionary` payloads |
-| 0 new files under `dictionary/` | added for captured records that had no serialized artifact |
+| `tables/x_casemgmt_case.xml`, `tables/x_casemgmt_case_task.xml`, `tables/x_casemgmt_case_party.xml` | **3 files updated** — rewritten from the captured `sys_db_object` payloads |
+| `dictionary/x_casemgmt_*.xml` (25 existing) | **25 files updated** — rewritten from the captured `sys_dictionary` payloads |
+| **35 new files** under `dictionary/` | **35 files created** — added for captured records that had no serialized artifact: 30 `sys_documentation` label records, 3 collection dictionary records, 2 field dictionary records for the live-only `number` columns |
 
-The new files are:
+Counted from `git diff c1b8d239f1925fab934e227ef7983fd710de69d5 --name-status`: 35 `A` and
+25 `M` under `dictionary/`, 3 `M` under `tables/`, and no `D` anywhere under
+`servicenow-case-management-poc/`. The 25 updated and the 35 created files are disjoint
+sets, so `dictionary/` holds **60** files after this unit against 25 before it, and
+`tables/` still holds 3.
 
+The new files are, all 35 of them, grouped by the kind of captured record they carry:
 
+```
+30 sys_documentation label records - one per created column, plus one per table
+  dictionary/sys_documentation_x_casemgmt_case__en.xml
+  dictionary/sys_documentation_x_casemgmt_case_assigned_agent_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_assigned_group_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_closed_date_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_description_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_duration_to_close_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_number_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_opened_date_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party__en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party_case_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party_number_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party_organization_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party_party_type_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party_person_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_party_role_label_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_pending_reason_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_priority_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_requester_email_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_requester_name_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_status_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_subject_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task__en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_assigned_to_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_case_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_due_date_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_number_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_status_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_subject_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_task_type_en.xml
+  dictionary/sys_documentation_x_casemgmt_case_type_en.xml
+
+3 collection (table-level) dictionary records
+  dictionary/x_casemgmt_case_collection.xml
+  dictionary/x_casemgmt_case_party_collection.xml
+  dictionary/x_casemgmt_case_task_collection.xml
+
+2 field dictionary records for the live-only auto-number columns
+  dictionary/x_casemgmt_case_party_number.xml
+  dictionary/x_casemgmt_case_task_number.xml
+```
+
+The two `number` rows are the `number` columns on `case_task` and `case_party` that the
+pre-refine package never carried as serialized artifacts (§2.5).
 
 `dictionary/*_collection.xml` carry the table-level (collection) dictionary rows the
 platform writes when it creates a table — captured as
@@ -555,8 +620,11 @@ rows the platform writes for every column and table; the pre-refine package cont
 `dictionary/` because they are dictionary-adjacent label records for the same three tables,
 and they are named after their update record so the mapping is unambiguous.
 
-**No file was removed**: every one of the 25 pre-existing dictionary artifacts and all 3
-table artifacts still correspond to a captured record.
+**No file was removed** — zero `D` entries in the diff. Every one of the 25 updated
+dictionary artifacts and all 3 updated table artifacts still corresponds to a captured
+record, and each of the 35 created files corresponds to a captured record that previously
+had no serialized artifact at all. The totals for this unit are therefore **3 table files
+updated, 25 dictionary files updated, 35 dictionary files created, 0 removed.**
 
 Each rewritten file keeps its original explanatory header and gains a `PROVENANCE` block in
 the same comment style, which names the update record, its type/target and its capture
@@ -572,7 +640,7 @@ the serializer asserts element-by-element that no text or CDATA content changed.
 | Field name/type dependencies in `business_rules/*`, `flows/**`, `acl/*`, `reports/*`, `ui_policy/*`, `related_lists/*`, `list_layouts/*`, `atf/*`, `script_includes/*`, `portal/**`, `scripts/*`, `seed-data/**` | every field they depend on still exists with the same name and the same type — the 27 rebuilt fields are attribute-identical to the pre-refine live dictionary (only the `choice` 0→empty normalisation differs, which is semantically the same "no choice list"). **Nothing rewritten.** |
 | `numbers/sys_number_x_casemgmt_case.xml`, `…_case_task.xml`, `…_case_party.xml` | still match the re-created counters exactly: sys_id `4fc55a26…`/`ee298f5e…`/`2358f946…`, categories `x_casemgmt_case`/`_case_task`/`_case_party`, prefixes CASE/TASK/PARTY, `maximum_digits` 7, counter 0. **Nothing rewritten.** |
 | `choices/*.xml` and `acl/*.xml` | out of scope by D21 and untouched; their payloads in the shipping set were verified byte-identical after every step |
-| `update-set/x_casemgmt_case_management_update_set.xml` and `…FALLBACK.xml` | not this unit's to touch; both byte-unchanged (`git diff --stat` empty) |
+| `update-set/x_casemgmt_case_management_update_set.xml` and `…FALLBACK.xml` | not this unit's to touch; both byte-unchanged by this unit (`git diff --stat` empty when U2 finished). U3 later wrote the exported package to the deliverable path, and the post-review CR1 remediation re-ordered its payload blocks — §7 |
 
 ---
 
@@ -584,7 +652,7 @@ the serializer asserts element-by-element that no text or CDATA content changed.
 | Scratch validation (S1–S2) confirmed | met (U1) | §1 above; probe artifacts proven gone, master set re-set current |
 | Native rebuild (S3–S4) confirmed | **met** | §2.3–§2.6: 31 hand-authored rows removed, 93 platform-captured rows present, no probe artifact, choices and ACLs byte-identical |
 | Count check (S4a) confirmed | **met** | §2.7: 988 = 926 − 31 + 93, itemized; no other class shifted |
-| Master set is Complete and contains the full package with the swap applied | **met** | `state=complete`, 988 children, all 39 unrelated classes at baseline |
+| Master set is Complete and contains the full package with the swap applied | **met** | `state=complete`, 988 children, all 39 baseline classes outside the five swap classes at their baseline counts (41 of the 44 classes numerically unchanged, §2.7) |
 | Instance is clean | **met** | §2.9: HTTP 400 "Invalid table" ×3, zero dictionary rows, zero links, zero grants |
 | Single-test result reported before the full-package result | **met** | §1 precedes §2 |
 
@@ -627,3 +695,34 @@ zero).
 | Current Update Set left as | the global **Default** set — nothing can be captured into the completed master set |
 | Clean-instance precondition for Phase 2 S1 | the three tables return HTTP 400 "Invalid table"; zero scoped dictionary rows, zero `sys_security_acl_role`, zero `sys_user_has_role`; scope, `sys_app`, 3 roles and 7 flows still present; 26 ACLs and 24 choices absent (cascade — the package restores them on commit) |
 | `apps.current_app` preference | intact (`8749eb4e9343435009aa70d19dba1085` → the x_casemgmt scope). Do not delete or repoint it. |
+
+---
+
+## 7. Post-review corrections — code review CR1 (2026-09-02)
+
+Delta code review CR1 (package integrity lens) raised three blocking findings against this
+run, two of them against this report. All three were resolved on **2026-09-02**, after the
+run's five units had finished. This is the code-review resolution pass, not a sixth unit: it
+took **no action on the instance** — no upload, no preview, no commit, no write of any kind.
+
+| Finding | What was wrong here | What changed in this file |
+| --- | --- | --- |
+| **2 (MEDIUM)** — payload-class census | The S4a census keyed each payload off the update-record/target label, so the one `sys_script_fix` row (the post-import remediation Fix Script, `sys_script_fix_227b757f182d8f3e1d9b774187ae8358`) was folded into `sys_script` and reported as 8. The mis-key propagated into the derived class totals: §2.2 put the baseline at 41 classes where there are 42, and §2.7 put the numerically identical count at 39 where it is 41 | §2.7's table now carries a distinct `sys_script_fix` row (`sys_script` 7, `sys_script_fix` 1, both `+0` in both packages) and an explicit class census; §2.2 reads **42** baseline classes; §2.7 reads **41 of the 44** numerically unchanged; §4's row names the 39 baseline classes outside the five swap classes. No count, line item, total or verdict moved — `926 − 31 + 93 = 988` stands unchanged |
+| **3 (MEDIUM)** — repository-impact inventory | §3's table put the number of files added under `dictionary/` at zero and left the "The new files are:" list blank, though this unit created 35 serialized artifacts | §3 now records **3 table files updated, 25 dictionary files updated, 35 dictionary files created, 0 removed**, with the complete 35-path inventory grouped as 30 `sys_documentation` label records, 3 collection dictionary records and 2 field dictionary records for the live-only `number` columns |
+| **1 (HIGH)** — AAP §0.5.2 dependency ordering | Not this report's defect, and not this unit's artifact: the deliverable update-set XML carried the 988 payload blocks in the order the native re-export produced them | The deliverable's blocks were re-assembled into dependency-safe order by the group holding that file. **Block sequence only**: header, tail and every payload block byte-identical, size unchanged at 4,062,436 bytes, 988 blocks, and the 44-class census unchanged. The shipping SHA-256 therefore changed to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, which every record in this directory now quotes |
+
+**What the Phase 2 evidence covers, stated precisely.** Phase 2 verified the **988 payload
+records**: that record set was uploaded onto a clean instance, previewed to zero problems of
+any type and committed. The reordered deliverable carries those same records
+byte-identically and differs only in block sequence, so the evidence carries over to the
+record set. The reordered bytes themselves were **not** round-tripped on a PDI; they were
+verified statically — `xmllint --noout` clean, 988 blocks, a per-block SHA-256 multiset
+identical to the Phase-2-verified bytes, an unchanged 44-class census, and the AAP §0.5.2
+assertions passing (`sys_app` at payload index 0, no dictionary before its table, no choice
+before its dictionary row, every role before every ACL, no ACL-role link before its
+prerequisites, every report before both dashboards, and all 38 seed rows last — the 28 rows
+on the three scoped tables plus the 10 demo user/group/membership/grant/company rows, at
+payload indices 950–987). The full account is in
+[`FINAL-REPORT.md`](./FINAL-REPORT.md) under "Post-review remediation — code review CR1",
+and the machine-readable one under `final.post_review_cr1_remediation` in
+[`run-state.json`](./run-state.json).
