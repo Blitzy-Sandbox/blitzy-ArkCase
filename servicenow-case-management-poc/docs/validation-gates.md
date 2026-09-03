@@ -469,11 +469,28 @@ In addition, every Gate's Pass Condition (column 3 of the Seven Gates table abov
 > **Read every measured status in this document as of the date its evidence was taken.** The verification instance
 > has been hibernating since 2026-08-11 and serves no application surface, so nothing here was re-measured on
 > it; [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) records what that
-> leaves unproven. **The gates were re-exercised on 2026-09-02 on the existing `dev306625` PDI, after the
-> authorized targeted clean-state operation** — that instance was **not** newly provisioned; it already held
-> this application installed, committed and seeded, and the clean target was obtained by deleting only the 3
-> `sys_db_object`, 25 `sys_dictionary` and 3 `sys_user_has_role` rows (31 records), with the scope, the
-> application record, the three roles and the seven flows left in place. Clean state confirmed at
+> leaves unproven. **The gates were re-exercised on 2026-09-02 on the existing `dev306625` PDI, after a targeted
+> clean-state operation whose cascade exceeded the destructive boundary it was authorized under** — that
+> instance was **not** newly provisioned; it already held this application installed, committed and seeded.
+> **The intended target was authorized under OVERRIDE-3** — the three scoped tables' `sys_db_object` records,
+> their `sys_dictionary` rows, their data rows and the scoped `sys_security_acl_role` links — **but the
+> platform's table-delete cascade reached beyond that subset, which is a scope violation of the destructive
+> boundary rather than an authorized side effect**: it also removed **26 `sys_security_acl`, 24 `sys_choice`
+> rows, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3
+> `sys_number` counters**, measured before and after in
+> [`refine-run/PHASE1-REBUILD.md` §2.5](./refine-run/PHASE1-REBUILD.md). On a live instance the application
+> therefore carried zero ACLs, zero ACL-role links, zero business rules and zero UI policies from
+> `2026-09-02T19:22:09Z` until the Phase 2 commit at `2026-09-02T20:53:14Z` — roughly **91 minutes** — which
+> is the **second, independent ground on which Phase 1's hard gate is NOT MET**, alongside the role-link/grant
+> mechanism deviation. Neither the deletion command having named only the three `sys_db_object` records, nor the
+> Phase 2 commit's later restoration of the removed records, authorizes that reach. **Any equivalent future
+> operation MUST run the pre-delete collateral guard first**: a read-only enumeration of the platform's delete
+> dependencies before the first delete, aborting with **nothing deleted** on any non-zero count in a class
+> outside the authorized subset, recording the phase as unmet on that ground, taking OVERRIDE-2's fallback /
+> leave-for-human path, and proceeding only on an explicit human expansion of the destructive scope — specified
+> in [`refine-run/PHASE1-REBUILD.md` §2.5](./refine-run/PHASE1-REBUILD.md) and in `refine-run/run-state.json`
+> `final.scope_audit_d46.override_3_destructive_boundary`. The scope, the application record, the three roles
+> and the seven flows were left in place. Clean state confirmed at
 > `2026-09-02T19:22:09Z`: three tables at `HTTP 400 Invalid table`, `sys_dictionary` 0, `sys_security_acl_role`
 > 0, `sys_user_has_role` 0, `sys_number` 0 — see
 > [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) for the preview/commit result and the ATF suite

@@ -22,7 +22,8 @@
         template, virtual_type, formula, reference_floats, ...) are its own
         serialization, not a formatting choice made here;
       - the <sys_scope>/<sys_package> elements are the platform's own serialization of
-        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
         verbatim; the only sys_id this file introduces of its own accord is none - the
         rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
         platform write the reference.
@@ -35,8 +36,21 @@
     record - the platform's own table/number machinery created it on the instance,
     which is precisely the class of side effect the hand-authored XML bypassed. It is
     added here so the repository's serialized artifacts match the shipping package.
-    Scope exclusivity and the no-hard-coded-sys_id rule are honoured: every reference
-    below resolves by name, and the only sys_id present is this record's own.
+    Scope exclusivity holds (`<name>` is `x_casemgmt_case_party`; NO global-scope
+    writes), but the scope references below are the platform's own LITERAL
+    serialization rather than by-name tokens: `<sys_package>` carries
+    display_value="x_casemgmt Case Management" and source="x_casemgmt" over the text
+    node 82b99028936f74320d74d6f88357a5af, and `<sys_scope>` carries display_value
+    only over that same scope-record id, with no source attribute. The rebuild
+    resolved the scope by query (sys_scope?scope=x_casemgmt) and let ServiceNow write
+    the reference, which the refine PR's native-capture directive AUTHORIZES
+    (docs/refine-run/PHASE1-REBUILD.md). The `<sys_id>` text node
+    ccda2c5e938b435009aa70d19dba10fb is this record's own platform-assigned identity,
+    not a value derived from the field identifier `<name>.<element>`, so the
+    no-hard-coded-sys_id rule is satisfied BY PROVENANCE (nothing here was composed by
+    hand) rather than by the absence of literal ids. Re-import matches the existing
+    sys_dictionary row on that id, which is why the captured values must be preserved
+    verbatim; regenerating the record would produce a different id.
 -->
 <record_update>
     <sys_dictionary action="INSERT_OR_UPDATE" element="" table="x_casemgmt_case_party">

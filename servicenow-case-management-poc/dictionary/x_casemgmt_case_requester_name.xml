@@ -22,7 +22,8 @@
         template, virtual_type, formula, reference_floats, ...) are its own
         serialization, not a formatting choice made here;
       - the <sys_scope>/<sys_package> elements are the platform's own serialization of
-        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
         verbatim; the only sys_id this file introduces of its own accord is none - the
         rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
         platform write the reference.
@@ -112,21 +113,36 @@
     Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
       - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
         within the scoped application, and `<sys_scope>` / `<sys_package>`
-        bind THIS dictionary record to the same scope by `source` attribute
-        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
+        bind THIS dictionary record to the same scope through the scope
+        record id the platform serialized into both elements. NO
+        global-scope writes - the OOB tables `task`, `incident`,
         `sys_user`, `core_company`, etc. are never modified.
-      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
-        `<sys_package>` text-node values resolve by scope source name
-        (`x_casemgmt`), not by literal sys_id. The `<sys_id>`
-        text-node value is THIS record's own deterministic primary key
-        (MD5 of the canonical field identifier `x_casemgmt_case.requester_name`)
-        and is NOT a reference to any other record. The MD5 derivation
-        guarantees that re-generation of this Update Set on any agent run
-        produces a byte-identical `<sys_id>` (no random UUIDs), which is
-        required for clean Update-Set re-import on a fresh PDI without
-        creating duplicate sys_dictionary rows. Verified:
-            python3 -c "import hashlib; print(hashlib.md5(b'x_casemgmt_case.requester_name').hexdigest())"
-        prints 696e73e041d826fe2d43a3f259acd1f1 (matches sys_id below).
+      - No cross-reference sys_id was hand-authored here, and the ids that
+        ARE present are the platform's own. The Phase 1 rebuild resolved
+        the scope by query (`sys_scope?scope=x_casemgmt`) and let
+        ServiceNow serialize every reference, so what it wrote is literal,
+        not a by-name token: `<sys_package>` carries
+        display_value="x_casemgmt Case Management" and source="x_casemgmt"
+        over the text node 82b99028936f74320d74d6f88357a5af, and
+        `<sys_scope>` carries display_value only over that same
+        scope-record id, with no source attribute at all. Both text nodes
+        are that id. This is ServiceNow's native serialization of a
+        reference field and is AUTHORIZED by the refine PR's
+        native-capture directive, which supersedes the hand-authored
+        origin for this path (docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value 7ddaec5e938b435009aa70d19dba1095
+        is the identity the platform assigned this record when it created
+        it: this record's own primary key, not a reference to any other
+        record, and NOT derived from the field identifier
+        `x_casemgmt_case.requester_name`. Re-running the rebuild would
+        yield a different id, so this file is NOT reproducible
+        byte-for-byte by regeneration; the no-hard-coded-sys_id rule is
+        satisfied by PROVENANCE (nothing here was composed by hand)
+        rather than by the absence of literal ids. Re-import matches the
+        existing row on this id, so the captured value must be preserved
+        verbatim: re-importing this XML on the same or a future PDI then
+        idempotently updates that one dictionary row instead of creating
+        a duplicate.
       - The concrete scope identifier `casemgmt` is used per AAP convention;
         ServiceNow Update Set imports use a standard XML parser, so the
         scope id must be concrete in the XML before export. The identifier appears in `<name>`, `<sys_scope>`,

@@ -22,7 +22,8 @@
         template, virtual_type, formula, reference_floats, ...) are its own
         serialization, not a formatting choice made here;
       - the <sys_scope>/<sys_package> elements are the platform's own serialization of
-        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
         verbatim; the only sys_id this file introduces of its own accord is none - the
         rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
         platform write the reference.
@@ -205,19 +206,38 @@
     Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
       - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
         within the scoped application, and `<sys_scope>` / `<sys_package>`
-        bind THIS dictionary record to the same scope by `source` attribute
-        lookup. NO global-scope writes. The function field operates only
-        on `x_casemgmt_case` columns, never on out-of-the-box tables.
-      - Zero hardcoded cross-reference sys_ids: `<sys_scope>` and
-        `<sys_package>` resolve by scope source name (`x_casemgmt`).
-        The `<sys_id>` text-node value is THIS record's own
-        deterministic primary key (MD5 of the canonical field
-        identifier `x_casemgmt_case.duration_to_close` =
-        f08a56ae8a5263f0af629913c48ae173) and is NOT a reference to
-        any other record. The deterministic derivation matches the
-        sibling convention (closed_date sys_id =
-        25c60a42b3b9a76ae153979ec5e88edc, opened_date sys_id =
-        3e18b5498c00dfde143bbc84fced474c).
+        bind THIS dictionary record to the same scope through the
+        scope-record id the platform serialized into both elements (the
+        rebuild resolved the scope by query, so this is NOT a `source`
+        attribute lookup). NO global-scope writes. The function field
+        operates only on `x_casemgmt_case` columns, never on
+        out-of-the-box tables.
+      - No cross-reference sys_id was hand-authored here, and the ids
+        that ARE present are the platform's own. The rebuild resolved
+        the scope by query (sys_scope?scope=x_casemgmt) and let
+        ServiceNow serialize every reference, so what it wrote is
+        literal, not a by-name token: `<sys_package>` carries
+        display_value="x_casemgmt Case Management" and
+        source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af, and `<sys_scope>` carries
+        display_value only over that same scope-record id, with no
+        `source` attribute at all. Both text nodes are that id. This
+        is ServiceNow's native serialization of a reference field and
+        is AUTHORIZED by the refine PR's native-capture directive,
+        which supersedes the hand-authored origin for this path (see
+        docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value
+        deda209e938b435009aa70d19dba103b is the identity the platform
+        assigned this record when it created it: this record's own
+        primary key, NOT a reference to any other record, and NOT
+        derived from the field identifier
+        `x_casemgmt_case.duration_to_close`. Re-running the rebuild
+        would yield a different id, so this file is NOT reproducible
+        byte-for-byte by regeneration; the no-hard-coded-sys_id rule
+        is satisfied BY PROVENANCE (nothing here was composed by
+        hand) rather than by the absence of literal ids. Re-import
+        matches the existing row on this id, which is why the
+        captured value must be preserved verbatim.
       - The concrete scope identifier `casemgmt` is used per AAP convention (Section 0.7.2 "Scoped-namespace-only constraint"); ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export.
       - mandatory=false at the dictionary level. A function field
         cannot be "mandatory" in the user-input sense because users

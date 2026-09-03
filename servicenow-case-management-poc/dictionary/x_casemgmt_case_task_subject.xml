@@ -22,7 +22,8 @@
         template, virtual_type, formula, reference_floats, ...) are its own
         serialization, not a formatting choice made here;
       - the <sys_scope>/<sys_package> elements are the platform's own serialization of
-        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
         verbatim; the only sys_id this file introduces of its own accord is none - the
         rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
         platform write the reference.
@@ -118,21 +119,38 @@
       - Scope-namespace exclusivity: `<name>` resolves to
         `x_casemgmt_case_task` within the scoped application, and
         `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
-        the same scope by `source` attribute lookup. NO global-scope
-        writes - the OOB tables `task`, `incident`, `sys_user`, etc.
-        are never modified by this dictionary entry or any other artifact
-        in the Update Set.
-      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
-        `<sys_package>` text-node values resolve by scope source name
-        (`x_casemgmt`), not by literal sys_id. The
-        `<sys_id>` text-node value is THIS record's own deterministic
-        primary key (MD5 of the canonical field identifier
-        `x_casemgmt_case_task.subject`) and is NOT a reference to any
-        other record. The MD5 derivation guarantees that re-generation
-        of this Update Set on any agent run produces a byte-identical
-        `<sys_id>` (no random UUIDs), which is required for clean
-        Update-Set re-import on a fresh PDI without creating duplicate
-        sys_dictionary rows.
+        the same scope through the platform's own serialization of that
+        scope reference (the next two bullets state exactly what the
+        capture wrote). NO global-scope writes - the OOB tables
+        `task`, `incident`, `sys_user`, etc. are never modified by this
+        dictionary entry or any other artifact in the Update Set.
+      - No cross-reference sys_id was hand-authored here, and the ids
+        that ARE present are the platform's own. The rebuild resolved
+        the scope by query (`sys_scope?scope=x_casemgmt`) and let
+        ServiceNow serialize every reference, so what it wrote is
+        LITERAL, not a by-name token: `<sys_package>` carries
+        display_value="x_casemgmt Case Management" and
+        source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af, and `<sys_scope>` carries
+        display_value only over that same scope-record id, with no
+        `source` attribute. Both text nodes are that id. This is
+        ServiceNow's native serialization of a reference field and is
+        AUTHORIZED by the refine PR's native-capture directive, which
+        supersedes the hand-authored origin for this path
+        (docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value
+        3ada609e938b435009aa70d19dba1073 is the identity the platform
+        assigned this record when it created it: this record's own
+        primary key, NOT a reference to any other record, and NOT
+        derived from the field identifier `<name>.<element>`. Re-running
+        the rebuild would yield a different id, so this file is NOT
+        reproducible byte-for-byte by regeneration; the
+        no-hard-coded-sys_id rule is satisfied by PROVENANCE (nothing
+        here was composed by hand) rather than by the absence of literal
+        ids. Re-import matches the existing sys_dictionary row on this
+        id, which is why the captured value must be preserved verbatim:
+        altering it would make a commit insert a duplicate row instead
+        of updating the existing one.
       - The concrete scope identifier `casemgmt` is used per AAP convention;
         ServiceNow Update Set imports use a standard XML parser, so the
         scope id must be concrete in the XML before export. The identifier appears in `<name>`, `<sys_scope>`,
@@ -225,8 +243,10 @@
           * ../app/sys_app/x_casemgmt_case_management.xml (the scoped
             application record, and the sole scope authority in this
             package - the standalone sys_scope artifact was removed as
-            Defect A; <sys_scope> and <sys_package> resolve against it by
-            source name)
+            Defect A; the captured <sys_scope> / <sys_package> text
+            nodes carry that record's own id,
+            82b99028936f74320d74d6f88357a5af, so it must exist before
+            this dictionary entry loads)
       - This record MUST load BEFORE:
           * ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml (synthetic
             demo tasks per AAP Section 0.7.4 must populate this mandatory
@@ -248,17 +268,14 @@
             but reading `current.subject` for diagnostic display requires
             this column to exist)
 
-    Source for the deterministic sys_id derivation:
-        echo -n "x_casemgmt_case_task.subject" | md5sum
-        => 8cd658b766c404ce4445d191adabd14c
-
-    The MD5 input is the canonical field identifier <name>.<element>,
-    matching the same derivation pattern used across all other
-    sys_dictionary records in this Update Set (verifiable by re-running
-    md5sum on x_casemgmt_case.subject => 96a737c3997894e2ba2aacb07aa4854e
-    which matches ./x_casemgmt_case_subject.xml's <sys_id>, and on
-    x_casemgmt_case_task.case => 25cae07ed16e95fd89a4c8013152ecc2 which
-    matches ./x_casemgmt_case_task_case.xml's <sys_id>).
+    Record identity (platform-assigned; no derivation recipe applies):
+    The <sys_id> below, 3ada609e938b435009aa70d19dba1073, is the identity
+    the platform assigned this sys_dictionary row when the native rebuild
+    created the `subject` field - the same way every other record in the
+    rebuild got its id. It is not computed from the field identifier
+    <name>.<element> or from any other input, so nothing reproduces it
+    and a repeat rebuild would produce a different value. Preserve it
+    verbatim: re-import matches the existing row on this id.
 
     SINGLE DISPLAY FIELD FOR `x_casemgmt_case_task` (`display=true`):
 

@@ -673,11 +673,30 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > hibernating instance answers HTTP 200 with ServiceNow's "Instance Hibernating" page, and this procedure
 > cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that owns it.
 > The PDI these notes were written against has been hibernating since 2026-08-11; the **existing `dev306625`
-> PDI**, awake throughout and made clean by the authorized targeted clean-state operation, was used on
-> 2026-09-02 — it was **not** newly provisioned: it already held this application installed, committed and
-> seeded, and the clean target came from deleting only the 3 `sys_db_object`, 25 `sys_dictionary` and 3
-> `sys_user_has_role` rows (31 records), leaving the scope, the application record, the three roles and the
-> seven flows in place, with clean state confirmed at `2026-09-02T19:22:09Z` (three tables at
+> PDI**, awake throughout and made clean by a targeted clean-state operation whose cascade exceeded the
+> destructive boundary it was authorized under, was used on 2026-09-02 — it was **not** newly provisioned:
+> it already held this application installed, committed and seeded. **The intended target was authorized
+> under OVERRIDE-3** — the three scoped tables' `sys_db_object` records, their `sys_dictionary` rows, their
+> data rows and the scoped `sys_security_acl_role` links — **but the platform's table-delete cascade reached
+> beyond that subset, which is a scope violation of the destructive boundary rather than an authorized side
+> effect**: it also removed **26 `sys_security_acl`, 24 `sys_choice` rows, 7 business rules, 8 `sys_report`,
+> 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3 `sys_number` counters**, measured
+> before and after in [`../docs/refine-run/PHASE1-REBUILD.md` §2.5](../docs/refine-run/PHASE1-REBUILD.md).
+> On a live instance the application therefore carried zero ACLs, zero ACL-role links, zero business rules
+> and zero UI policies from `2026-09-02T19:22:09Z` until the Phase 2 commit at `2026-09-02T20:53:14Z` —
+> roughly **91 minutes** — and that is the **second, independent ground on which Phase 1's hard gate is NOT
+> MET**, alongside the role-link/grant mechanism deviation. Neither the deletion command having named only
+> the three `sys_db_object` records, nor the Phase 2 commit's later restoration of the removed records,
+> authorizes that reach. **So before any equivalent operation on a live, converged instance you MUST run the
+> pre-delete collateral guard first, and it is read-only**: enumerate the platform's delete dependencies
+> before your first delete; on any non-zero count in a class outside the authorized subset, **abort with
+> nothing deleted**, record the phase as unmet on that ground, take OVERRIDE-2's fallback / leave-for-human
+> path and leave the instance exactly as it stands; proceed only on an explicit human expansion of the
+> destructive scope. The guard is specified class-by-class, with the query for each, in
+> [`../docs/refine-run/PHASE1-REBUILD.md` §2.5](../docs/refine-run/PHASE1-REBUILD.md) and in
+> `../docs/refine-run/run-state.json` `final.scope_audit_d46.override_3_destructive_boundary`. The scope,
+> the application record, the three roles and the seven flows were left in place, with clean state
+> confirmed at `2026-09-02T19:22:09Z` (three tables at
 > `HTTP 400 Invalid table`, `sys_dictionary` 0, `sys_security_acl_role` 0, `sys_number` 0) — and **the sequence this procedure was executed
 > end-to-end on there was export 3's: 988 blocks, 4,062,436 bytes, SHA-256
 > `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**, which is no file on disk and survives

@@ -36,8 +36,27 @@ issued at any point.
 **Target verification.** Resolved host `dev306625.service-now.com` — the validation PDI this run used.
 It was **not** newly provisioned: per INTERP-2 it already held this scoped application installed,
 committed, converged and seeded when the run began, and the clean target Phase 1 needed was obtained
-later by the authorized targeted clean-state operation (§Phase 1, and `run-state.json`
-`phase1.instance_clean_state`). It is **not** the retired `dev379024`, and it is a developer PDI host
+later by a targeted clean-state operation whose cascade exceeded the destructive boundary it was
+authorized under (§Phase 1, and `run-state.json` `phase1.instance_clean_state`). **The intended target
+was authorized under OVERRIDE-3** — the three scoped tables' `sys_db_object` records, their
+`sys_dictionary` rows, their data rows and the scoped `sys_security_acl_role` links — **but the
+platform's table-delete cascade reached beyond that subset, which is a scope violation of the
+destructive boundary rather than an authorized side effect**: it also removed 26 `sys_security_acl`,
+24 `sys_choice` rows, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2
+`sys_ui_policy` and the 3 `sys_number` counters, measured before and after in
+[`PHASE1-REBUILD.md` §2.5](./PHASE1-REBUILD.md). On a live instance the application therefore carried
+zero ACLs, zero ACL-role links, zero business rules and zero UI policies from `2026-09-02T19:22:09Z`
+until the Phase 2 commit at `2026-09-02T20:53:14Z` — roughly **91 minutes** — and that is the
+**second, independent ground on which Phase 1's hard gate is NOT MET**, alongside the role-link/grant
+mechanism deviation. Neither the deletion command having named only the three `sys_db_object` records,
+nor the Phase 2 commit's later restoration of the removed records, authorizes that reach. **Any
+equivalent future operation MUST run the pre-delete collateral guard first**: a read-only enumeration
+of the platform's delete dependencies before the first delete, an abort with **nothing deleted** on
+any non-zero count in a class outside the authorized subset, the phase recorded as unmet on that
+ground, OVERRIDE-2's fallback / leave-for-human path, and no further destruction without an explicit
+human expansion of the destructive scope — specified in [`PHASE1-REBUILD.md` §2.5](./PHASE1-REBUILD.md)
+and in `run-state.json` `final.scope_audit_d46.override_3_destructive_boundary`. It is **not** the
+retired `dev379024`, and it is a developer PDI host
 (`devNNNNNN.service-now.com`), not a customer production or customer-owned instance. No instance was
 provisioned, released or re-requested.
 

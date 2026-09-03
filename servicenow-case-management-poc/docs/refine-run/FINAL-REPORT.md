@@ -838,11 +838,28 @@ statement families were false and are now corrected:
 4. **That "no preview has been run on the shipping bytes", that Gate 7 is therefore a conditional
    pass, and that nothing has been re-measured because the verification instance is hibernating** —
    the package's **988 payload records** were previewed to zero problems of any type and committed on
-   2026-09-02, in export 3's byte sequence (`eee9fabd…`), on the **existing `dev306625` PDI after the
-   targeted clean-state operation** — not on a newly provisioned instance. That PDI already held this
-   application installed, committed and seeded (INTERP-2); the clean target came from the authorized targeted
-   deletion of the 3 `sys_db_object`, 25 `sys_dictionary` and 3 `sys_user_has_role` rows (31 records), with the
-   scope, application record, three roles and seven flows preserved, and clean state confirmed at
+   2026-09-02, in export 3's byte sequence (`eee9fabd…`), on the **existing `dev306625` PDI after a
+   targeted clean-state operation whose cascade exceeded the destructive boundary it was authorised
+   under** — not on a newly provisioned instance. That PDI already held this application installed,
+   committed and seeded (INTERP-2); the **intended** target was authorised under OVERRIDE-3 — the three
+   scoped tables' `sys_db_object` records, their `sys_dictionary` rows, their data rows and the scoped
+   `sys_security_acl_role` links — **but the platform's table-delete cascade reached beyond that subset,
+   which is a scope violation of the destructive boundary rather than an authorised side effect**: it also
+   removed 26 `sys_security_acl`, 24 `sys_choice` rows, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`,
+   1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3 `sys_number` counters, measured before and after
+   in [`PHASE1-REBUILD.md` §2.5](./PHASE1-REBUILD.md), which left the application on a live instance with
+   zero ACLs, zero ACL-role links, zero business rules and zero UI policies from `2026-09-02T19:22:09Z`
+   until the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly **91 minutes** — the second, independent
+   ground on which Phase 1's hard gate is NOT MET, as part (b) above and the **VIOLATED** row of the
+   compliance matrix already state. Neither the deletion command having named only the three
+   `sys_db_object` records, nor the commit's later restoration of the removed records, authorises that
+   reach; and any equivalent future operation MUST run the pre-delete collateral guard first — the
+   read-only enumeration of the platform's delete dependencies before the first delete, the abort with
+   nothing deleted on any non-zero count in a class outside the authorised subset, the phase recorded as
+   unmet on that ground, OVERRIDE-2's fallback / leave-for-human path, and no further destruction without
+   an explicit human expansion of the destructive scope ([`PHASE1-REBUILD.md` §2.5](./PHASE1-REBUILD.md);
+   `run-state.json` `final.scope_audit_d46.override_3_destructive_boundary`). The
+   scope, application record, three roles and seven flows were preserved, and clean state confirmed at
    `2026-09-02T19:22:09Z`: three tables at `HTTP 400 Invalid table`, `sys_dictionary` 0,
    `sys_security_acl_role` 0, `sys_user_has_role` 0, `sys_number` 0 (part (b) above; `run-state.json`
    `phase1.instance_clean_state`). Those

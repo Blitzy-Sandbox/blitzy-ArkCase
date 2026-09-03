@@ -22,7 +22,8 @@
         template, virtual_type, formula, reference_floats, ...) are its own
         serialization, not a formatting choice made here;
       - the <sys_scope>/<sys_package> elements are the platform's own serialization of
-        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
         verbatim; the only sys_id this file introduces of its own accord is none - the
         rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
         platform write the reference.
@@ -48,9 +49,10 @@
     starting value, format `CASE0000001`) is configured by a separate
     sys_number record in `../numbers/sys_number_x_casemgmt_case.xml`. The
     parent table record `../tables/x_casemgmt_case.xml` connects this field
-    to that auto-number generator via its `<number_ref>` element (which
-    already resolves to `x_casemgmt_case_number` via `source` lookup). No
-    redundant linkage is authored here.
+    to that auto-number generator via its `<number_ref>` element, which the
+    platform serialized as the captured sys_number record id
+    (display_value="CASE", no `source` attribute). No redundant linkage is
+    authored here.
 
     Semantic source-side reference (read-only, NOT byte-for-byte ported):
       - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
@@ -72,15 +74,34 @@
     Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
       - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
         within the scoped application, and `<sys_scope>` / `<sys_package>`
-        bind THIS dictionary record to the same scope by `source` attribute
-        lookup. NO global-scope writes - the OOB tables `task`, `incident`,
-        `sys_user`, etc. are never modified.
-      - Zero hardcoded cross-reference sys_ids: the `<sys_scope>` and
-        `<sys_package>` text-node values resolve by scope source name
-        (`x_casemgmt`), not by literal sys_id. The `<sys_id>`
-        text-node value is THIS record's own deterministic primary key
-        (MD5 of the canonical field identifier `x_casemgmt_case.number`)
-        and is NOT a reference to any other record.
+        bind THIS dictionary record to the same scope through the
+        scope-record id the platform serialized into both elements (the
+        rebuild resolved the scope by query, so this is NOT a `source`
+        attribute lookup). NO global-scope writes - the OOB tables `task`,
+        `incident`, `sys_user`, etc. are never modified.
+      - No cross-reference sys_id was hand-authored here, and the ids that
+        ARE present are the platform's own. The rebuild resolved the scope
+        by query (sys_scope?scope=x_casemgmt) and let ServiceNow serialize
+        every reference, so what it wrote is literal, not a by-name token:
+        `<sys_package>` carries display_value="x_casemgmt Case Management"
+        and source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af, and `<sys_scope>` carries
+        display_value only over that same scope-record id, with no
+        `source` attribute at all. Both text nodes are that id. This is
+        ServiceNow's native serialization of a reference field and is
+        AUTHORIZED by the refine PR's native-capture directive, which
+        supersedes the hand-authored origin for this path (see
+        docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value 14da6c5e938b435009aa70d19dba1078 is
+        the identity the platform assigned this record when it created it:
+        this record's own primary key, NOT a reference to any other
+        record, and NOT derived from the field identifier
+        `x_casemgmt_case.number`. Re-running the rebuild would yield a
+        different id, so this file is NOT reproducible byte-for-byte by
+        regeneration; the no-hard-coded-sys_id rule is satisfied BY
+        PROVENANCE (nothing here was composed by hand) rather than by the
+        absence of literal ids. Re-import matches the existing row on this
+        id, which is why the captured value must be preserved verbatim.
       - The concrete scope identifier `casemgmt` is used per AAP convention;
         ServiceNow Update Set imports use a standard XML parser, so the
         scope id must be concrete in the XML before export.
@@ -153,12 +174,14 @@
         (parent table), since `<name>x_casemgmt_case</name>` references
         the table by name.
       - This record SHOULD load alongside or before
-        `../numbers/sys_number_x_casemgmt_case.xml`. The auto-number
-        generator's `<table>` field references the parent table by name,
-        and the parent table's `<number_ref>` already targets the
-        sys_number record by `source` attribute - so the dictionary
-        entry, the sys_number, and the table all resolve correctly
-        regardless of strict ordering once their `name` columns exist.
+        `../numbers/sys_number_x_casemgmt_case.xml`. Ordering is
+        satisfied because this dictionary entry and the sys_number
+        record both key off the table `name` (`<name>` here, `<table>`
+        there), while the parent table's `<number_ref>` carries the
+        captured sys_number record id that ServiceNow serialized
+        (a bare literal with no `source` attribute, matched on import
+        by that id) - so the dictionary entry, the sys_number, and the
+        table all resolve correctly regardless of strict ordering.
       - This record MUST load BEFORE the consumers that read or write
         the `number` column:
           * ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml

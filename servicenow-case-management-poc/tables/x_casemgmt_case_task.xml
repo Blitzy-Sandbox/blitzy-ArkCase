@@ -22,7 +22,8 @@
         template, virtual_type, formula, reference_floats, ...) are its own
         serialization, not a formatting choice made here;
       - the <sys_scope>/<sys_package> elements are the platform's own serialization of
-        the x_casemgmt scope reference (display_value / source attribute), reproduced
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
         verbatim; the only sys_id this file introduces of its own accord is none - the
         rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
         platform write the reference.
@@ -79,12 +80,31 @@
     Constraints honored:
       - Scoped-namespace exclusivity: every cross-reference resolves into
         the x_casemgmt scope; no global-scope writes.
-      - Zero hardcoded sys_id literals in any reference field; sys_scope,
-        sys_package, and number_ref all resolve by scope name via the
-        `source` attribute. The sys_id element below is THIS record's own
-        primary key (deterministic MD5 of the table name
-        `x_casemgmt_case_task` = f9fd58b1a8c6ecc0cf653c0b50ecc5a3) and is
-        not a reference to any other record.
+      - No sys_id was hand-authored in any reference field, and the ids
+        that ARE present are the platform's own. The rebuild resolved the
+        scope by query (sys_scope?scope=x_casemgmt) and let ServiceNow
+        serialize the references, so what it wrote is literal, not a
+        by-name token: <sys_package> carries
+        display_value="x_casemgmt Case Management" and source="x_casemgmt"
+        over the text node 82b99028936f74320d74d6f88357a5af; <sys_scope>
+        carries display_value only over that same scope-record id, with no
+        `source` attribute; and <number_ref> carries
+        display_value="TASK" over the bare literal sys_number record id
+        ee298f5e8c95d67c6fa9a97f5b390782, with no `source` attribute
+        either. This is ServiceNow's native serialization of a reference
+        field and is AUTHORIZED by the refine PR's native-capture
+        directive, which supersedes the hand-authored origin for this path
+        (../docs/refine-run/PHASE1-REBUILD.md).
+      - The <sys_id> element below is the identity the platform assigned
+        this record when it created it (7bca2c5e938b435009aa70d19dba1095):
+        this record's own primary key, not a reference to any other record,
+        and NOT derived from the table name `x_casemgmt_case_task`.
+        Re-running the rebuild would yield a different id, so this file is
+        not reproducible byte for byte by regeneration; the
+        no-hard-coded-sys_id rule is satisfied by PROVENANCE (nothing here
+        was composed by hand) rather than by the absence of literal ids.
+        Re-import matches the existing row on this id, which is why the
+        captured value must be preserved verbatim.
       - super_class is EMPTY: this table extends NOTHING. Critically, it
         does NOT extend the OOB `task` table even though the source entity
         is named AcmTask and the conceptual mapping aligns with task
@@ -110,10 +130,15 @@
         ONLY via the dictionary entry in
         ../dictionary/x_casemgmt_case_task_assigned_to.xml, never via
         super_class.
-      - The concrete scope identifier casemgmt is used throughout per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export. At Update Set import time, the platform
-        resolves every `source="x_casemgmt"` reference
-        against the scope's `name` field on sys_scope / sys_app rather than
-        via sys_id, guaranteeing portability across PDIs.
+      - The concrete scope identifier casemgmt is used throughout per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export. The one
+        source="x_casemgmt" attribute the platform emitted sits on
+        <sys_package>; <sys_scope> and <number_ref> carry no source
+        attribute, so on import those two references are matched by the
+        literal sys_id text node they hold, and this record itself is
+        matched by its own captured sys_id. Portability therefore rests on
+        the referenced scope, package and sys_number rows arriving with
+        those same ids (they travel in this same Update Set), not on a
+        by-name lookup.
       - CROSS-SCOPE ACCESS IS LEAST PRIVILEGE: READ ONLY, AND THE COLUMNS ARE
         BOOLEAN, NOT STRINGS. On sys_db_object only `access` is a string
         (public | package_private); ws_access, read_access, create_access,
