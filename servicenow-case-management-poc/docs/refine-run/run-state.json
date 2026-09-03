@@ -1651,20 +1651,22 @@
     "classification": "b",
     "issue": "pre-existing documentation defect: the retired host dev379024 is still cited in the package documentation",
     "measured_counts": {
-     "six_documents_this_review_covers": 26,
+     "measurement_basis": "every CURRENT figure below was re-measured on the tree of the CR3 settlement pass (2026-09-03, parent commit 40ed3cca451ae4a4399763a83e7a3c5ef2769b9f) AFTER all of that pass's wording edits were complete. Each carries the command that re-derives it. Both package scopes are self-referential - they rise whenever a document names the host, including in historical context - so every figure is stamped to the tree it was taken on and none of them stands as a permanent value.",
+     "six_documents_this_review_covers_current": 39,
      "six_documents_command": "cat README.md docs/deployment.md docs/validation-gates.md scripts/round_trip_verify.md docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md | grep -o dev379024 | wc -l",
      "six_documents_scope": "README.md, docs/deployment.md, docs/validation-gates.md, scripts/round_trip_verify.md, docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md, docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, run from servicenow-case-management-poc/",
-     "tracked_files_excluding_this_runs_own_reports": 33,
+     "tracked_files_excluding_this_runs_own_reports_current": 46,
      "tracked_files_excluding_this_runs_own_reports_command": "git ls-files servicenow-case-management-poc -z | tr '\\0' '\\n' | grep -v '^servicenow-case-management-poc/docs/refine-run/' | tr '\\n' '\\0' | xargs -0 grep -o dev379024 | wc -l",
      "tracked_files_excluding_this_runs_own_reports_at_pre_refine_baseline_c1b8d239": 33,
-     "tracked_files_excluding_this_runs_own_reports_note": "identical at the baseline and now, so the operator-facing documentation gained no new citation of the retired host. This is the load-bearing scope.",
-     "every_tracked_file_including_docs_refine_run": 44,
+     "tracked_files_excluding_this_runs_own_reports_note": "HISTORICAL 33 at baseline c1b8d239, CURRENT 46 on the settlement tree. The count has RISEN. The earlier claim that operator-facing documentation 'gained no new citation' was FALSE and is withdrawn: the CR3 settlement pass names the host repeatedly while converting section 0.11 and section 10.0 item 0 of the limitations register into dated historical context, and that is where the increase comes from. No new operational instruction points a reader at dev379024, but the raw citation count is higher than the baseline and must not be reported as unchanged.",
+     "every_tracked_file_including_docs_refine_run_current": 69,
      "every_tracked_file_including_docs_refine_run_command": "git ls-files servicenow-case-management-poc -z | xargs -0 grep -o dev379024 | wc -l",
-     "every_tracked_file_including_docs_refine_run_measured_at_commit": "7d144e9f5dbb2146d165b6970d80d3f626bf98f7, before the CR3 remediation pass",
-     "every_tracked_file_including_docs_refine_run_note": "self-referential scope: it rises whenever the run's own reports in docs/refine-run/ quote the host name, so it is recorded with its commit rather than as a standing figure",
-     "environment_handover_six_document_set": 31,
+     "every_tracked_file_including_docs_refine_run_historical": "44 at commit 7d144e9f5dbb2146d165b6970d80d3f626bf98f7, before the CR3 remediation pass - retained as a dated historical measurement, superseded as a description of the tree by the CURRENT figure above",
+     "environment_handover_six_document_set_current": 44,
+     "environment_handover_six_document_set_scope": "the handover's own set, which swaps docs/deployment.md for docs/WORKFLOW_TRYOUT_GUIDE.md; command: cat README.md docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md docs/WORKFLOW_TRYOUT_GUIDE.md docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md docs/validation-gates.md scripts/round_trip_verify.md | grep -o [the host name] | wc -l, run from servicenow-case-management-poc/ on the settlement tree",
      "measured_at_utc": "2026-09-03",
-     "withdrawn_figure": "an earlier version of this record said 'cited 16 times'. That figure is not reproducible under any of the scopes above and is withdrawn; a count must carry its command, its scope and its date, never stand as a bare number"
+     "withdrawn_figure": "an earlier version of this record said 'cited 16 times'. That figure is not reproducible under any of the scopes above and is withdrawn; a count must carry its command, its scope and the tree it was measured on, never stand as a bare number",
+     "environment_handover_six_document_set_historical": "31 on the pre-refine baseline tree c1b8d239 and again before the CR3 settlement pass; the current 44 is higher for the same reason the other scopes are - the settlement pass's historical-context wording in the limitations register, which is one of that set's six documents"
     },
     "readme_file_count_defect": {
      "asserted_previously": "README's file count is stale",
@@ -1737,7 +1739,7 @@
    },
    {
     "ref": "I4",
-    "item": "pre-existing documentation defect left in place: the retired host dev379024 - 26 occurrences across the six documents this review covers; 33 across every tracked file under servicenow-case-management-poc/ excluding this run's own reports in docs/refine-run/, identical to the 33 at the pre-refine baseline c1b8d239; 44 across every tracked file including docs/refine-run/ as measured at commit 7d144e9f5d before the CR3 remediation pass (a self-referential scope); 31 across the environment handover's own six-document set. All measured 2026-09-03 with the commands at final.classified_issues I4.measured_counts. The README file-count item is withdrawn: its 234-file census is correct",
+    "item": "pre-existing documentation defect left in place: the retired host dev379024. Counts re-measured on the tree of the CR3 settlement pass (2026-09-03) after its wording edits: 39 across the six documents this review covers, 46 across every tracked file under servicenow-case-management-poc/ excluding this run's own reports in docs/refine-run/, 69 across every tracked file including them, and 44 across the environment handover's own six-document set (31 at the pre-refine baseline). HISTORICAL, retained as dated measurements: 33 in the excluding-reports scope at the pre-refine baseline c1b8d239, and 44 in the all-files scope at commit 7d144e9f5d. The count has RISEN rather than held: the earlier 'gained no new citation' conclusion was false and is withdrawn - the settlement pass itself names the host while converting the outage record to historical context. Commands and scopes in final.classified_issues I4.measured_counts",
     "options": [
      "schedule a separate documentation pass: replace dev379024 with dev306625 and resolve the scope sys_id by query instead of a literal, then re-measure with the same two commands (cat README.md docs/deployment.md docs/validation-gates.md scripts/round_trip_verify.md docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md | grep -o dev379024 | wc -l , and git ls-files servicenow-case-management-poc -z | xargs -0 grep -o dev379024 | wc -l)",
      "no file re-count is needed: git ls-files servicenow-case-management-poc | wc -l = 234 = find servicenow-case-management-poc -type f | wc -l, exactly the census README line 69 states"
@@ -1944,7 +1946,7 @@
     }
    ],
    "deliberately_left_alone": [
-    "the retired host dev379024 - a pre-existing class (b) documentation defect, outside this pass’s mandate. Measured at review time (2026-09-03), not estimated: 26 occurrences across the six documents this review covers, 33 across every tracked file under servicenow-case-management-poc/ excluding this run’s own reports (identical to the 33 at the pre-refine baseline c1b8d239, so nothing was added), and 31 across the environment handover’s own six-document set - commands, scopes and dates at final.classified_issues I4.measured_counts",
+    "the retired host dev379024 - a pre-existing class (b) documentation defect, outside this pass's mandate. Measured on the tree of the CR3 settlement pass (2026-09-03), not estimated: 39 occurrences across the six documents this review covers, 46 across every tracked file under servicenow-case-management-poc/ excluding this run's own reports, 69 including them, and 44 across the environment handover's own six-document set (31 at the pre-refine baseline). That is UP from 33 in the excluding-reports scope at the pre-refine baseline c1b8d239, because this pass names the host while converting the outage record to historical context; the earlier 'nothing was added' wording was false and is withdrawn. Commands, scopes and the tree each figure was taken on are in final.classified_issues I4.measured_counts",
     "NOT left alone because it is not a defect: README’s file count. git ls-files servicenow-case-management-poc | wc -l = 234 and find servicenow-case-management-poc -type f | wc -l = 234, exactly the census README line 69 states, so the earlier stale-file-count claim is withdrawn",
     "every statement that remains true: sys_choice 0 for the three tables, the post-commit seed_demo_data.js step for the seed linkage, opened_date empty on 8 of 10 cases"
    ],
