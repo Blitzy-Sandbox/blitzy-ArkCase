@@ -39,7 +39,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 1. **Upload** the Update Set XML to the verification PDI.
 2. **Preview** the Update Set and verify zero errors.
 3. **Commit** the Update Set after a clean preview.
-4. **Remediate** — **updated 2026-09-02: on the package that ships today this phase is no longer mandatory for the schema or the role links.** The native-rebuild run committed the shipping bytes once on a clean instance and got physical storage for all three tables and all 27 `sys_security_acl_role` links out of the commit itself, with the remediation script never run and no second commit ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Still needed post-commit: the **choice rows** (`sys_choice` is empty for the three tables), the seed-row linkage and `opened_date` — the last two by running `scripts/seed_demo_data.js` in scope. The text that follows describes the retained original package (`../update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`), for which this phase was mandatory: run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed — a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md).
+4. **Remediate** — **updated 2026-09-02: mandatory, because the elected deliverable is the retained original package.** Run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed — a commit alone leaves the three tables without physical storage and the 26 ACLs without their 27 role links, since the elected package carries **0** `sys_security_acl_role` rows. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md). **On the retained rebuilt package this phase shrinks**, and that is the one difference the promotion buys: committing `../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` once on a clean instance produced physical storage for all three tables and all 27 `sys_security_acl_role` links out of the commit itself, with the remediation script never run and no second commit ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)); still needed post-commit even there are the **choice rows** (`sys_choice` is empty for the three tables), the seed-row linkage and `opened_date` — the last two by running `scripts/seed_demo_data.js` in scope.
 5. **Re-verify** all six functional gates (Gates 1–6) on the verification PDI.
 6. **Assert self-sufficiency** — record, explicitly, everything the package did *not* do for itself.
 
@@ -69,26 +69,35 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 - No upload error message displayed.
 - **The child `sys_update_xml` count is exactly 926.** Assert this, do not eyeball it — see the warning below
   for why it is the one number that catches the most common mistake in this procedure. **Updated 2026-09-02:
-  the file that ships today is the native-rebuild package — 988 blocks, 4,062,436 bytes, SHA-256 `90ee0249…` —
-  so assert 988 for it.** 926 (3,781,097 bytes, SHA-256 `7292a6fe…`) is the block count of the retained
-  original, `../update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`; if you are verifying an archived revision,
-  assert *its* count instead — 925 for `e49a7654…`, 913 for `89638c17…` and for `7272edfc…`. Re-derive it from
+  the elected deliverable is the retained original package —
+  `../update-set/x_casemgmt_case_management_update_set.xml`, 926 blocks, 3,781,097 bytes, SHA-256
+  `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to `…FALLBACK.xml` — so
+  926 is the number to assert for the deliverable.** If you are running this procedure on the retained
+  native-rebuild package, `../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`
+  (988 blocks, 4,062,436 bytes, SHA-256 `90ee0249…`), assert **988** instead; and if you are verifying an
+  archived revision,
+  assert *its* count — 925 for `e49a7654…`, 913 for `89638c17…` and for `7272edfc…`. Re-derive it from
   the file rather than trusting this line: `grep -c '<sys_update_xml ' <the XML>`.
 
 > ⚠️ **Uploading this file onto an instance that already holds it REUSES the same Retrieved Update Set row and
 > APPENDS its children — it does not replace them. Use a clean, dedicated instance for this procedure.**
 > Measured directly: the `<sys_remote_update_set>` descriptor
-> in this file hard-codes a `sys_id`, so the loader matches on it — `9929f50df18ccec91ea13b2a3bccfc90` on the
-> 913-block revision this behaviour was measured on, and
-> **`0b3b7452934f435009aa70d19dba100d` in the shipping 988-block file**. That shipping descriptor is not a
-> hypothetical collision: `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns
-> that row with **`state=committed`** on the provisioned instance — it is the retrieved set that carries the
-> 2026-09-02 preview and commit evidence — so an upload there would append this file's 988 children to it and
-> mutate that record. This is why the outstanding run recorded under *Pass / Fail Decision* below requires a
+> in this file hard-codes a `sys_id`, so the loader matches on it —
+> **`9929f50df18ccec91ea13b2a3bccfc90` in the elected 926-block deliverable**, the same descriptor the
+> 913-block revision this behaviour was measured on carried, and
+> `0b3b7452934f435009aa70d19dba100d` in the retained 988-block native-rebuild file. Neither is a
+> hypothetical collision. The provisioned instance holds the elected file's retrieved set in
+> **`state=committed`**, so an upload there appends the deliverable's 926 children to it; and
+> `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns
+> that row with **`state=committed`** too — it is the retrieved set that carries the
+> 2026-09-02 preview and commit evidence — so an upload of the retained file would append its 988 children to
+> it and mutate that record. This is why the outstanding run recorded under *Pass / Fail Decision* below
+> requires a
 > clean, dedicated PDI rather than the instance the application is already installed on. Two
 > successive uploads onto a row that already carried one committed batch took the child count
 > **913 → 1,826 → 2,739** (observed on the 913-block revision; the multiples track whatever the current
-> block count is — 988 today, so expect 988 → 1,976 → 2,964), and the second upload silently reset the row's state from `previewed` back to
+> block count is — 926 for the elected deliverable, so expect 926 → 1,852 → 2,778, and 988 → 1,976 → 2,964 for
+> the retained rebuilt file), and the second upload silently reset the row's state from `previewed` back to
 > `loaded`, discarding the first preview. `sys_updated_on` cannot tell the loads apart, because each load stamps
 > it back to the file's literal `2026-04-30 12:00:00`.
 >
@@ -98,7 +107,8 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 >   each problem to its originating batch through `remote_update` → that child's `sys_created_on`.
 > - **This procedure's zero-problem criterion is only meaningful from a clean slate**, which is what Phase 0's
 >   teardown is for. On a fresh PDI that has never seen this application, the count is the file's own block count —
->   988 for the `90ee0249…` bytes that ship today — and the question does not arise.
+>   926 for the elected `7292a6fe…` deliverable, 988 for the retained `90ee0249…` rebuild — and the question
+>   does not arise.
 >
 > Related trap when diffing two loads: **preview rewrites `sys_update_xml.name`**, re-canonicalising a
 > `<table>_<sys_id>` name into a human-readable one (e.g. `sys_dictionary_0bf56c20…` →
@@ -184,17 +194,23 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 - Use the **Back out** action on the Retrieved Update Set record to reverse the commit.
 - Return to the source PDI to investigate; this typically indicates a deeper integrity issue not caught by preview.
 
-## Phase 4 — Post-Import Remediation (mandatory for the retained original package only)
+## Phase 4 — Post-Import Remediation (mandatory on the elected deliverable)
 
-> **Updated 2026-09-02.** On the package that ships today this whole phase is optional for the schema and the
-> role links: a single commit of the shipping bytes on a clean instance produced three tables with physical
+> **Updated 2026-09-02.** The elected deliverable is the retained original package
+> (`../update-set/x_casemgmt_case_management_update_set.xml`, 926 blocks, SHA-256 `7292a6fe…`), so **this phase
+> is mandatory** — it carries 0 `sys_security_acl_role` rows and the hand-authored schema records, so a commit
+> alone leaves the tables without physical storage and the 26 ACLs without their 27 role links. On the retained
+> native-rebuild package
+> (`../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`) this phase is optional
+> for the schema and the
+> role links: a single commit of those bytes on a clean instance produced three tables with physical
 > storage (21 / 14 / 13 columns) and all 27 ACL role links by itself
-> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Run the steps below only against
-> the retained original (`…FALLBACK.xml`), or when you need the choice rows, the seed linkage or `opened_date`
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). Either way you still run the
+> steps below when you need the choice rows, the seed linkage or `opened_date`
 > — for which `scripts/seed_demo_data.js` in scope is the relevant step.
 
-On the retained original package, a successful commit does **not** produce a working application, and nothing in
-that package runs by itself. This phase was required on every install of it. It is the same seven-step primary procedure documented in
+On the elected deliverable, a successful commit does **not** produce a working application, and nothing in
+that package runs by itself. This phase is required on every install of it. It is the same seven-step primary procedure documented in
 [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), reduced here to
 the checklist a round-trip verifier needs.
 
@@ -482,47 +498,62 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 
 > **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
 > 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is three revisions behind the one that ships today.
-> **Updated 2026-09-02: today's package is the native-rebuild one — 988 blocks, 4,062,436 bytes, SHA-256
-> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` — and criteria 1, 2 and 3 do NOT yet
-> hold on the bytes in your hands. This gate is binary: until this procedure is run on those exact bytes the
-> AAP §0.7.1 Update Set gate is NOT MET on them — not partially met, not conditionally met — and the artifact
-> is not cleared for hand-over.** They hold on the
-> pre-reorder, previewed-and-committed byte sequence — the same 988 records at the same 4,062,436 bytes, SHA-256
+> **Updated 2026-09-02: the elected deliverable is the retained original —
+> `../update-set/x_casemgmt_case_management_update_set.xml`, 926 blocks, 3,781,097 bytes, SHA-256
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to `…FALLBACK.xml` — and
+> criteria 1, 2 and 3 do NOT hold on it, because no preview of any kind was ever run on its bytes. This gate is
+> binary: until this procedure is run on those exact bytes the
+> AAP §0.7.1 Update Set gate is NOT MET on them — not partially met, not conditionally met. Electing that
+> package settled which bytes ship; it passed no gate.** The criteria hold on
+> **export 3's byte sequence** — 988 records, 4,062,436 bytes, SHA-256
 > `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, measured `2026-09-02T20:53:14Z`: State =
 > Loaded, 0 `type=error` and 0 `type=warning` preview problems from a genuinely clean slate, then a UI-action
 > commit that succeeded 100% — 613 inserted / 375 updated / 0 collisions
-> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). The post-review CR1
-> re-sequencing then reordered the `sys_update_xml` blocks into AAP §0.5.2 dependency order, which changed the
-> file's digest to the `90ee0249…` value you are asked to assert in Phase 1. **Running this procedure on
-> `90ee0249…` is the outstanding step** — under this run's frozen rule the recorded checksum is stale once the
-> package changes after verification, so AAP §0.7.1 is satisfied for the previewed sequence and outstanding for
-> the sequence that ships, and nothing below may be read as a result on it. What is established about the
-> reordered file is corroboration, not this procedure's result: `xmllint --noout` clean, 988 blocks, a per-block
+> ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). That sequence is no file on
+> disk, and its block order is what the CR1 review's AAP §0.5.2 finding rejected. The post-review CR1
+> re-sequencing reordered those same `sys_update_xml` blocks into AAP §0.5.2 dependency order, producing
+> **`../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`** — 988 blocks,
+> 4,062,436 bytes, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` — which is
+> retained rather than shipped, and **this procedure was never run on its bytes either**. So: export 3's
+> sequence is the one whose records were previewed and committed; the retained rebuilt file is the file that
+> carries those records in dependency order; and the elected 926-block deliverable has never been previewed at
+> all. **Running this procedure is what closes the gate for whichever artifact it is run on** — on the elected
+> deliverable, asserting **926** children and recording `7292a6fe…` as verified with that run's timestamp; or on
+> the retained rebuilt file, asserting **988** children and recording `90ee0249…`, after which that file may be
+> promoted back to the deliverable path. Under this run's frozen rule the recorded checksum is stale once a
+> package changes after verification, so nothing below may be read as a result on either file. What is
+> established about the
+> retained rebuilt file is corroboration, not this procedure's result: `xmllint --noout` clean, 988 blocks, a per-block
 > digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and
 > 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST confirming the
 > instance's captured set still holds 988 children whose update names are set-identical to the file's — which
-> bounds the difference to block sequence alone. **The re-run needs a clean, dedicated target, for three
+> bounds the difference to block sequence alone. **The run needs a clean, dedicated target, for three
 > measured reasons.** *(1)* The single provisioned PDI is not a clean target: it holds this application
 > installed, committed, converged and seeded — `x_casemgmt_case` **10** rows, `x_casemgmt_case_task` **10**,
 > `x_casemgmt_case_party` **8**, all three tables live
 > ([`../docs/refine-run/PHASE2.md`](../docs/refine-run/PHASE2.md)) — so step one of the gate fails on it, and
 > making it clean means deleting the scoped application, which this repository's environment directive names
 > as destroying a verified environment. *(2)* **The Phase 1 warning above is not hypothetical here — this is
-> its concrete instance.** The shipping file's `<sys_remote_update_set>` descriptor carries
+> its concrete instance**, and it applies to both files under their own descriptors. The elected deliverable's
+> `<sys_remote_update_set>` descriptor carries `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, whose retrieved set
+> that instance holds in **`state=committed`**, so an upload there would REUSE that row and **APPEND** the
+> deliverable's 926 children to it. The retained rebuilt file's descriptor carries
 > `sys_id` `0b3b7452934f435009aa70d19dba100d`, and
 > `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns that row with
-> **`state=committed`** — the retrieved-set record that carries the original preview and commit evidence. An
-> upload of this file onto that instance would match the descriptor, REUSE that row and **APPEND** its 988
+> **`state=committed`** — the retrieved-set record that carries the original preview and commit evidence — so
+> an upload of that file would append its 988
 > children to it, mutating the very record the live evidence rests on. Use a clean, dedicated instance for
 > this procedure, for that reason. *(3)* A preview
 > against a populated instance returns `Found a local update that is newer than this one` collisions instead of
 > the clean-slate zero-problem result criterion 2 requires. Discharge it by running
 > [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) against the
-> `90ee0249…` file on a genuinely clean PDI — upload, assert 988 children, preview to zero `type=error`, commit
-> through the native "Commit Update Set" UI action, confirm physical storage and all 27 role links — and then
-> record `90ee0249…` as verified with that run's timestamp. **The 926-block, 3,781,097-byte,
-> `7292a6fe…` bytes discussed below are the retained original, and no preview was ever run on them** — see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c for the 13-payload + 1-block delta from
-> `e49a7654…` and for what was measured on it instead. The paragraph below describes the **925-block
+> file under test on a genuinely clean PDI — upload, assert its child count (926 elected / 988 retained
+> rebuilt), preview to zero `type=error`, commit
+> through the native "Commit Update Set" UI action, confirm physical storage and all 27 role links (which on the
+> elected package means running `scripts/post_import_remediation.js`, since it carries none) — and then
+> record that file's digest as verified with that run's timestamp. For what *was* measured on the elected
+> `7292a6fe…` bytes instead, see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c — the 13-payload + 1-block
+> delta from `e49a7654…` and the live-parity checks taken on it. The paragraph below describes the **925-block
 > `e49a7654…`** revision, which is what the 31-problem preview belongs to. Those bytes differ from the intermediate
 > 913-block `89638c17…` revision in the 28 re-shaped seed records (parent key in the `display_value`
 > attribute with an empty element body, plus deterministic pinned numbers `CASE9000001-10` /
@@ -533,7 +564,8 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > count asserted at **925**, then preview → **31 problems, every one
 > `Found a local update that is newer than this one`, ZERO `Could not find a record`** (63 → 0), with all 31
 > targets confirmed to hold a local `sys_update_version` in state `current`. **Phases 1-3 have NOT been
-> re-executed on either `e49a7654…` or the shipping `7292a6fe…`** — no teardown, and no commit, because the
+> re-executed on either `e49a7654…` or the elected `7292a6fe…` deliverable** — no teardown, and no commit,
+> because the
 > verification instance is shared.
 > Phases 1-3 were executed on the `7272edfc…` bytes after a proven teardown —
 > `state=loaded` with the child count asserted at exactly 913; preview problems **41 → 298 → 0 of any type**,
@@ -542,9 +574,10 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > criteria also held earlier on the 916-block `32a064d6…` revision, which is retained as history in
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of
 > that document is the current record. Criterion 4
-> holds two ways: on the shipping bytes, **27 of 27 links straight out of a single commit, with no remediation
-> run at all** (2026-09-02); on the retained original, `verified=true` with 27 of 27 links only after two
-> remediation runs separated by a second commit.
+> holds two ways: on the elected deliverable, `verified=true` with 27 of 27 links only after two
+> remediation runs separated by a second commit — the package carries none of the links itself; on the retained
+> rebuilt package, **27 of 27 links straight out of a single commit, with no remediation
+> run at all** (2026-09-02).
 > Criterion 5 holds for Workflow, for Data model and ACLs **on all three tables** after remediation, **and now for
 > Dashboards and for both portal pages as well** — the packaging defects that made those three fail have each been
 > fixed and re-verified in a browser: both dashboards render every widget with the seed data (Agent Workspace 3 of

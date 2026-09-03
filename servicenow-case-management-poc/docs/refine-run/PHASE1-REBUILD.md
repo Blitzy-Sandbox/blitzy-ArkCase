@@ -711,18 +711,20 @@ obligation recorded below.
 | --- | --- | --- |
 | **2 (MEDIUM)** — payload-class census | The S4a census keyed each payload off the update-record/target label, so the one `sys_script_fix` row (the post-import remediation Fix Script, `sys_script_fix_227b757f182d8f3e1d9b774187ae8358`) was folded into `sys_script` and reported as 8. The mis-key propagated into the derived class totals: §2.2 put the baseline at 41 classes where there are 42, and §2.7 put the numerically identical count at 39 where it is 41 | §2.7's table now carries a distinct `sys_script_fix` row (`sys_script` 7, `sys_script_fix` 1, both `+0` in both packages) and an explicit class census; §2.2 reads **42** baseline classes; §2.7 reads **41 of the 44** numerically unchanged; §4's row names the 39 baseline classes outside the five swap classes. No count, line item, total or verdict moved — `926 − 31 + 93 = 988` stands unchanged |
 | **3 (MEDIUM)** — repository-impact inventory | §3's table put the number of files added under `dictionary/` at zero and left the "The new files are:" list blank, though this unit created 35 serialized artifacts | §3 now records **3 table files updated, 25 dictionary files updated, 35 dictionary files created, 0 removed**, with the complete 35-path inventory grouped as 30 `sys_documentation` label records, 3 collection dictionary records and 2 field dictionary records for the live-only `number` columns |
-| **1 (HIGH)** — AAP §0.5.2 dependency ordering | Not this report's defect, and not this unit's artifact: the deliverable update-set XML carried the 988 payload blocks in the order the native re-export produced them | The deliverable's blocks were re-assembled into dependency-safe order by the group holding that file. **Block sequence only**: header, tail and every payload block byte-identical, size unchanged at 4,062,436 bytes, 988 blocks, and the 44-class census unchanged. Because the byte sequence changed, the file that ships now hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` instead of export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, and under D36 that puts a Phase 2 S1–S6 re-run on the new bytes **owed** — see below |
+| **1 (HIGH)** — AAP §0.5.2 dependency ordering | Not this report's defect, and not this unit's artifact: the deliverable update-set XML carried the 988 payload blocks in the order the native re-export produced them | The deliverable's blocks were re-assembled into dependency-safe order by the group holding that file. **Block sequence only**: header, tail and every payload block byte-identical, size unchanged at 4,062,436 bytes, 988 blocks, and the 44-class census unchanged. Because the byte sequence changed, the re-sequenced file hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` instead of export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, and under D36 that puts a Phase 2 S1–S6 re-run on the new bytes **owed**. Those bytes are now retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` and the deliverable path holds the elected fallback — see below |
 
 **What the Phase 2 evidence covers, and what is still owed.** Phase 2's verified digest is
 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — export 3's bytes. That
 byte sequence was uploaded onto a clean instance, previewed to zero problems of any type and
-committed, and it is the only sequence that evidence covers. The digest of the file that
-ships is `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and those bytes
-have never been uploaded, previewed or committed anywhere. **Under D36 the package changed
+committed, and it is the only sequence that evidence covers. The digest of the re-sequenced
+rebuilt package is `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and
+those bytes have never been uploaded, previewed or committed anywhere; the elected fallback
+that ships in their place (`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`)
+was never previewed either. **Under D36 the package changed
 after the S6 checksum, so the recorded checksum is stale and Phase 2 (S1 clean confirm, S2
 checksum, S3a preview, S3b zero `type=error`, S4 UI-action commit, S5 storage/role-link
-confirmation, S6 recorded checksum) must re-run on the `90ee0249…` bytes before the package
-is ship-ready again. That re-run has not been performed** — not by this unit, which predates
+confirmation, S6 recorded checksum) must re-run on the `90ee0249…` bytes before the rebuilt
+package is ship-ready. That re-run has not been performed** — not by this unit, which predates
 the change, and not by the CR1 pass, which took no instance action of any kind.
 
 What that pass did instead was **corroborating, not the D36 gate**: `xmllint --noout` clean,
@@ -734,15 +736,24 @@ rows last — the 28 rows on the three scoped tables plus the 10 demo
 user/group/membership/grant/company rows, at payload indices 950–987). That bounds the change
 to block sequence alone; it does not discharge the re-run.
 
-**The delivery position that follows, stated the same way here as everywhere else.** The gate is
-binary: **NOT MET** for `90ee0249…`, the byte sequence that ships, and **MET** for `eee9fabd…`,
-export 3's sequence. The deliverable path therefore **holds** the reordered rebuilt package with
-**shipping status BLOCKED**, no claim of ship-readiness attaches to it, and the election between
-verifying those bytes (one clean instance and one operator pass, the only path satisfying both
-AAP §0.5.2 and AAP §0.7.1) and invoking the never-previewed fallback is a **human decision that is
-unmade**. The full account — both paths with their measured costs, the measured reasons the gate has
-not been run, and why directive D3 does not designate the fallback here — is in
+**The delivery position that follows, stated the same way here as everywhere else.** The election is
+**made, and the frozen directive made it**: with the exact-byte gate on the `90ee0249…` bytes
+unavailable, OVERRIDE-2 (directive **D3**) authorizes the untouched fallback by name, so the
+deliverable path holds the **elected fallback** — 926 payload blocks, 3,781,097 bytes,
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to
+`…_update_set.FALLBACK.xml` — labelled as **not** carrying this round's native rebuild (0
+`sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so
+an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role
+links. This unit's rebuilt package, re-sequenced, is **retained, not shipped**, at
+`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks,
+4,062,436 bytes, `90ee0249…`) with every AAP §0.5.2 assertion passing, and one clean-PDI S1–S6 run on
+those exact bytes would let it be promoted back to the deliverable path. Electing settles the
+shipping decision and not the gate: it is binary and stays **NOT MET** for the elected fallback and
+for the retained rebuilt package alike, **MET** only for `eee9fabd…`, export 3's sequence. The full
+account — both paths with their measured costs, the measured reasons the exact-byte gate was
+unavailable, and why the directive elects the fallback here — is in
 [`FINAL-REPORT.md`](./FINAL-REPORT.md) under "Post-review remediation — code review CR1" and part
 (d), and in [`PHASE2.md`](./PHASE2.md) §7.1; the machine-readable one is under
-`final.delivery_position`, `final.owed_verification` and `final.post_review_cr1_remediation` in
-[`run-state.json`](./run-state.json).
+`final.shipping_package`, `final.election_made`, `final.election_owner`,
+`final.retained_rebuilt_package`, `final.delivery_position`, `final.owed_verification` and
+`final.post_review_cr1_remediation` in [`run-state.json`](./run-state.json).

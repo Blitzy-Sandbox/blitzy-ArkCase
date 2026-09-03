@@ -48,38 +48,52 @@ number anywhere else in this document.
 **Read every measurement here as of its stated date.** The instance this section was measured on has been
 hibernating since 2026-08-11 and serves no application surface, so nothing here was re-measured on it — §0.11
 states what that leaves unproven. **A newly provisioned validation PDI was used on 2026-09-02**, where the
-rebuilt deliverable's preview, commit, post-commit census and ATF suite were re-measured:
+**rebuilt** package's preview, commit, post-commit census and ATF suite were re-measured — that package is
+retained rather than shipped (§0.1), so every "from the package alone" result taken on it belongs to it and not
+to the elected deliverable:
 [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md).
 
 ### 0.1 Package identity
 
-> **Updated 2026-09-02 — the shipping deliverable changed.** The master Update Set was rebuilt so that its
+> **Updated 2026-09-02 — the delivery election is made, and the shipping deliverable is the retained original.**
+> A master Update Set was rebuilt so that its
 > table, dictionary and role-link records are the platform's own captured records
 > (`sys_db_object` 3 · `sys_dictionary` 30 platform-named · `sys_documentation` 30 · **`sys_security_acl_role`
-> 27** · `sys_user_has_role` 3), and the file now at the path below is **988 blocks, 4,062,436 bytes, SHA-256
-> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — the digest to verify the artifact on
-> disk against. **This splits in two, and both halves matter.** *(1) What was verified live:* those 988 records
+> 27** · `sys_user_has_role` 3). **That rebuilt package is retained rather than shipped**, at
+> `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` — **988 blocks, 4,062,436
+> bytes, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — and it is the
+> **available upgrade path**: it satisfies AAP §0.5.2 dependency ordering and carries the platform-captured
+> schema records and all 27 role links, and §10.0 item 1a states the single run that promotes it back to the
+> deliverable path. **This splits three ways, and every part matters.** *(1) What was verified live:* those 988
+> records
 > were uploaded onto an instance holding none of the three tables, previewed to **0 `type=error` and 0
 > `type=warning`** problems and then committed by the native UI action ("Succeeded 100%", 613 inserted /
-> 375 updated / 0 collisions) — measured `2026-09-02T20:53:14Z` on the **pre-reorder,
-> previewed-and-committed byte sequence, 988 blocks / 4,062,436 bytes / SHA-256
-> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**. *(2) What ships:* the file was then
+> 375 updated / 0 collisions) — measured `2026-09-02T20:53:14Z` on **export 3's
+> byte sequence, 988 blocks / 4,062,436 bytes / SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**, which is no file on disk and whose
+> block order is exactly what the CR1 review's HIGH AAP §0.5.2 finding rejected. *(2) The retained rebuilt
+> file:* it was
 > re-sequenced into AAP §0.5.2 dependency order and carries those same 988 records byte-for-byte at the
 > same 4,062,436 bytes, differing from the previewed bytes **only in `<sys_update_xml>` block order** — hence
-> the digest above. **The exact-byte round trip on `90ee0249…` is owed and has not been run**, so under this
+> its `90ee0249…` digest. **The exact-byte round trip on it has never been run**, so under this
 > run's frozen rule (a package that changes after Phase 2 has a stale recorded checksum and re-runs the whole
-> gate before it is ship-ready) the recorded checksum **is** stale, AAP §0.7.1 is satisfied for the previewed
-> sequence and outstanding for the sequence that ships, and the "Clean-slate upload → preview → commit on these
-> bytes" row further down this table is therefore closed **for the previewed sequence only** — §10.0 item 1a
-> is re-opened for the shipping one. The reorder was verified statically (`xmllint --noout` clean, 988 blocks,
+> gate before it is ship-ready) that checksum **is** unverified, and the "Clean-slate upload → preview → commit
+> on these bytes" row further down this table is closed **for export 3's sequence only**. The reorder was
+> verified statically (`xmllint --noout` clean, 988 blocks,
 > block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class census,
 > every §0.5.2 dependency assertion passing) and read-only REST confirmed the instance's captured set still
 > holds 988 children whose update names are set-identical to the file's, which bounds the difference to block
 > sequence alone; that is corroboration, not the gate. The reordered bytes were **not** themselves re-uploaded,
-> re-previewed or re-committed.
-> **The identity recorded in the rest of §0.1 — 926 blocks, 3,781,097 bytes, `7292a6fe…` — is the previous
-> revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`**, and every
-> measurement in §0.2, §0.3, §0.3b and §0.3c belongs to that lineage. Full record:
+> re-previewed or re-committed. *(3) What ships:* the exact-byte gate could not be completed on any instance
+> available to that run, so under checkpoint OVERRIDE-2 the **untouched original package was elected** as the
+> deliverable. **The identity recorded in the rest of §0.1 — 926 blocks, 3,781,097 bytes, `7292a6fe…` — is
+> therefore the shipping identity again**, at `update-set/x_casemgmt_case_management_update_set.xml` and
+> byte-identical to `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`, and every
+> measurement in §0.2, §0.3, §0.3b and §0.3c belongs to it. **It does not include this round's native-rebuild
+> fix** — 0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows —
+> so the 27 ACL-role links must be created by `scripts/post_import_remediation.js`, and **no preview of any
+> kind was ever run on its bytes, so AAP §0.7.1 is unsatisfied for the artifact that ships**: electing it
+> settled which package ships and passed no gate. §10.0 item 1a stands open against it. Full record:
 > [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md).
 
 | Property | Value |
@@ -347,9 +361,9 @@ qualified to outright passes when the Service Portal layout records were authore
 handling was corrected, so both portal pages now render and work anonymously (§0.3b). **Gate 6 moved from an
 outright failure to an outright pass** in the QA-findings pass: both dashboards were re-authored onto the tables
 this release actually has and both now render every widget with live data, for the personas the AAP names
-(§0.3c, §0.5). Gate 7 moved the other way, from an outright pass to **NOT MET**, because that pass belongs to an
-earlier revision than the one that ships — see §0.3b and §0.3c for exactly what is and is not proven on today's
-bytes, and §10.0 for the two paths that can close it:
+(§0.3c, §0.5). Gate 7 moved the other way, from an outright pass to **NOT MET**, because every pass on record
+belongs to a byte sequence other than the elected deliverable's — see §0.3b and §0.3c for exactly what is and is
+not proven on the elected `7292a6fe…` bytes, and §10.0 for the single run that closes it:
 
 | Gate | Current status |
 |---|---|
@@ -359,7 +373,7 @@ bytes, and §10.0 for the two paths that can close it:
 | 4 Portal submission | ✅ Pass — the anonymous **REST contract** and the submission **page** both work; the missing Service Portal layout records were authored and the widget response-envelope defect fixed (§0.3b, §9.6 E8-P) |
 | 5 Portal lookup | ✅ Pass — the anonymous **REST contract** and the lookup **page** both work, returning only `status` / `subject` / `opened_date` and the verbatim not-found literal (§0.3b, §9.6 E8-P) |
 | 6 Dashboards | ✅ Pass — **Agent Workspace renders 3 of 3 widgets and Manager View 5 of 5**, all with live data, correct chart types and zero console errors; verified as `admin` and then by impersonation for all five (persona, dashboard) pairs the AAP §0.4.4 defines, with the two pairs that must be refused still refused (§0.5) |
-| 7 Update Set | ❌ **NOT MET / BLOCKED** — this gate is binary and it is not met on the byte sequence that ships; §10.0 carries the two paths and the measured cost of each. The measurements that exist: 41 → 298 → **0** problems of any type, then `committed`, measured on the earlier `7272edfc…` revision (§0.3); **zero `Could not find a record` problems** (63 → 0) with 31 local-history collisions remaining and commit withheld, measured on the 925-block `e49a7654…` revision (§0.3b); **no preview run on the shipping 926-block bytes**, whose 13-payload + 1-block delta is characterised in §0.3c |
+| 7 Update Set | ❌ **NOT MET for the ELECTED deliverable** — this gate is binary, and **no preview of any kind has ever been run on the elected 926-block / 3,781,097-byte / `7292a6fe…` bytes**, whose 13-payload + 1-block delta from the previous revision is characterised in §0.3c; §10.0 item 1a carries the single run that closes it. Stated per sequence so no result is borrowed by another: **MET** on export 3's `eee9fabd…` (988 blocks — 0 `type=error` / 0 `type=warning`, then committed by the native UI action, `2026-09-02T20:53:14Z`), the sequence the CR1 §0.5.2 ordering finding rejected and which is no file on disk; **NOT MET** on the retained rebuilt `90ee0249…` (988 blocks, `…REBUILT-DEPENDENCY-ORDERED.xml`, never previewed on its own bytes); **NOT MET** on the elected `7292a6fe…` that ships. The older measurements, for completeness: 41 → 298 → **0** problems of any type, then `committed`, on the 913-block `7272edfc…` revision (§0.3); **zero `Could not find a record` problems** (63 → 0) with 31 local-history collisions remaining and commit withheld, on the 925-block `e49a7654…` revision (§0.3b) |
 
 **On the count.** Earlier revisions of this document claimed *"2 pass, 3 qualified, 1 fail"* (which does not sum
 to 7) and then *"3 pass · 3 qualified · 1 fail"* (which was correct before gate 6 was fixed). The count above is
@@ -375,10 +389,12 @@ qualification is ever lost by rounding. What must never be written is any count 
 **Read the two remaining qualifications precisely, because "qualified" must not be read as "fine".** Gates 1
 and 3 are correct once an operator has run the Global remediation script, and **incorrect until then** — until
 that run the three tables are metadata with no physical storage and all 26 ACLs have zero role links, which
-denies everything. **Gate 7 is not a qualification at all: it is binary and it is NOT MET**, because the proof
-belongs to a byte sequence other than the one that ships — see §0.3c, and §10.0 for the election that closes it.
-While it is unmet the deliverable is BLOCKED from hand-over and nothing here presents it as verified,
-shippable or ready to deliver. An earlier revision of this paragraph read *"Gates 4 and 5 pass at the
+denies everything. **Gate 7 is not a qualification at all: it is binary and it is NOT MET for the artifact that
+ships**, because every proof on record belongs to a byte sequence other than the elected one — see §0.3c, and
+§10.0 item 1a for the single run that closes it. The delivery election **is** settled: under checkpoint
+OVERRIDE-2 the untouched original package is the deliverable, which fixes *which* package ships and passes
+*no* gate, so this row stays NOT MET and nothing here presents the deliverable as verified, gate-passed or
+round-tripped. An earlier revision of this paragraph read *"Gates 4 and 5 pass at the
 contract level and fail at the surface level … a human visiting either portal page sees a blank screen"*, and
 *"Gate 6 fails outright"*; both statements were true when written and are **withdrawn** — the portal layout
 records were authored (§0.3b) and the dashboards were re-authored and verified rendering (§0.5). What remains
@@ -778,8 +794,8 @@ read against the packaged seed rows alone.
 
 | Capability | Runtime status on the PDI |
 |---|---|
-| 3 custom tables + fields + choices + auto-number | ⚠️ **Updated 2026-09-02: the physical schema now comes from the package alone** — one commit of the rebuilt package produced three tables at HTTP 200 with 21 / 14 / 13 columns and the three number counters, with the remediation never run ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)); **the choice lists still do not** (`sys_choice` remains empty for the three tables post-commit). The assessment that follows describes the retained original package: ⚠️ **Working, but not from the package alone.** The physical schema is built by `../scripts/post_import_remediation.js`. The package ships that script as a Fix Script so the body is auditable, but it ships **no trigger and nothing that runs by itself**: an auto-execute Business Rule was built, was measured firing on commit, was measured failing with 121 `SecurityException`s (the commit engine forces the record's `sys_scope` to the application, and `GlideTableDescriptor`/`GlideSecurityManager` are then refused in scoped execution), and was subsequently **removed from the package** for that reason and for the security reason in §0.7. On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage** until an operator performs the manual sequence in §9.5, **steps 1-3**. Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
-| 3 roles + ACL role × CRUD matrix (manager/agent/viewer, incl. assigned-only + field ACLs) | ✅ **Updated 2026-09-02: working from the package alone** — the rebuilt package carries the 27 `sys_security_acl_role` link records, and one commit produced 27 of 27 (manager 14 / agent 10 / viewer 3) with no remediation run ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). The assessment that follows describes the retained original package: ⚠️ **Working, but not from the package alone.** A clean commit produces the 26 ACLs with **0 of 27** `sys_security_acl_role` links; the 27 links and the security-cache flush appear only after the remediation is run manually (§9.4–§9.5). Once run, the live 12-cell matrix is correct: manager full CRUD on all three tables; agent create with **no blanket** read/write and `delete=false`; viewer read-only. **Record-level narrowing empirically confirmed for both halves of the AAP §0.5.6 "Assigned only" definition** — impersonated agent sees 9 of 14 cases; `CASE0000453` and `CASE0000458` are visible with an *empty* `assigned_agent`, so group membership is the only possible grant path, and the five cases with neither group nor agent are absent. Direct-URL access to an unassigned row returns "Security constraints prevent access to requested page". Field-level ACLs confirmed too: the agent sees `assigned_group` read-only while `assigned_agent` stays editable. **Child-table narrowing: historically broken, now passing.** An earlier revision's `case_task`/`case_party` agent conditions could not compile (`case` is a JavaScript reserved word, so a `current.case` dot-walk fails); with the `current.getElement('case')` accessor the impersonated agent sees its assigned task and party rows (10 and 8) with write but not delete, and `ATF 07` passes — green in the current suite run `TES0001015` (§8.3). The failure is retained in §9.6 E-ATF as diagnosis only; it is **not** an open defect. |
+| 3 custom tables + fields + choices + auto-number | ⚠️ **Updated 2026-09-02: the elected deliverable is the retained original package, so the assessment below holds as written.** One commit of the **rebuilt** package — retained, not shipped (§0.1) — produced three tables at HTTP 200 with 21 / 14 / 13 columns and the three number counters, with the remediation never run ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)); **the choice lists still did not** (`sys_choice` remained empty for the three tables post-commit). That "from the package alone" result belongs to the retained rebuilt file and **not** to the elected deliverable, which ships the hand-authored schema records. On the elected package: ⚠️ **Working, but not from the package alone.** The physical schema is built by `../scripts/post_import_remediation.js`. The package ships that script as a Fix Script so the body is auditable, but it ships **no trigger and nothing that runs by itself**: an auto-execute Business Rule was built, was measured firing on commit, was measured failing with 121 `SecurityException`s (the commit engine forces the record's `sys_scope` to the application, and `GlideTableDescriptor`/`GlideSecurityManager` are then refused in scoped execution), and was subsequently **removed from the package** for that reason and for the security reason in §0.7. On a genuinely clean instance the tables therefore arrive as metadata with **no physical storage** until an operator performs the manual sequence in §9.5, **steps 1-3**. Auto-numbering itself *is* carried by the package artifacts (§2 Defect E): after remediation a fresh insert produced `CASE0000448`, matching `^CASE[0-9]{7}$`. |
+| 3 roles + ACL role × CRUD matrix (manager/agent/viewer, incl. assigned-only + field ACLs) | ⚠️ **Updated 2026-09-02: the elected deliverable is the retained original package, so the assessment below holds as written.** The **rebuilt** package — retained, not shipped (§0.1) — carries the 27 `sys_security_acl_role` link records, and one commit of it produced 27 of 27 (manager 14 / agent 10 / viewer 3) with no remediation run ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)). The elected deliverable carries **0** of those link records, so that result belongs to the retained rebuilt file alone. On the elected package: ⚠️ **Working, but not from the package alone.** A clean commit produces the 26 ACLs with **0 of 27** `sys_security_acl_role` links; the 27 links and the security-cache flush appear only after the remediation is run manually (§9.4–§9.5). Once run, the live 12-cell matrix is correct: manager full CRUD on all three tables; agent create with **no blanket** read/write and `delete=false`; viewer read-only. **Record-level narrowing empirically confirmed for both halves of the AAP §0.5.6 "Assigned only" definition** — impersonated agent sees 9 of 14 cases; `CASE0000453` and `CASE0000458` are visible with an *empty* `assigned_agent`, so group membership is the only possible grant path, and the five cases with neither group nor agent are absent. Direct-URL access to an unassigned row returns "Security constraints prevent access to requested page". Field-level ACLs confirmed too: the agent sees `assigned_group` read-only while `assigned_agent` stays editable. **Child-table narrowing: historically broken, now passing.** An earlier revision's `case_task`/`case_party` agent conditions could not compile (`case` is a JavaScript reserved word, so a `current.case` dot-walk fails); with the `current.getElement('case')` accessor the impersonated agent sees its assigned task and party rows (10 and 8) with write but not delete, and `ATF 07` passes — green in the current suite run `TES0001015` (§8.3). The failure is retained in §9.6 E-ATF as diagnosis only; it is **not** an open defect. |
 | Prohibited-transition guards (Any→Draft, Closed→*) | ✅ Working (Business Rules). Since the QA-remediation pass this also covers a Closed row's **fields**, not just its status: a field-only edit to a Closed case raises the same verbatim message, while a save that changes nothing is still accepted (§9.6 **E13**) |
 | Transition-graph enforcement (only the edges AAP §0.5.5 lists are legal) | ✅ Working (Business Rule order 250, STEP 0). Was previously **absent** — only each target status's precondition was checked, so all 8 illegal skip/backward edges were accepted and `Draft→Closed` could reach the terminal state unassigned with an empty `closed_date`. Now refused with a message naming the attempted edge and the legal next status; 16/16 attempts blocked across both case types (§9.6 **E12**) |
 | The six transition **UI Actions** (`Open`, `Start Progress`, `Set Pending`, `Resume`, `Resolve`, `Close`) | ✅ Working. Visibility is correct for all 18 identity × status combinations, including zero buttons for the read-only viewer, after the four over-length conditions moved into `CaseTransitionValidator.canShowAction()` (§9.6 **E3**); and `Set Pending`, which could never reach the server because of a reserved `sysverb_` prefix in its `gsftSubmit` call, now performs its transition (§9.6 **E11**) |
@@ -1012,17 +1028,22 @@ Acceptance path **(b)**, not (a).
   already contains the correct scripts**, a clean fresh import does not reproduce this defect — it was a
   deployment state-sync artifact.
 
-### Defect 9 — ACL → role link records entirely missing  *(FIXED 2026-09-02 by the native rebuild; the analysis below describes the retained original package)*
+### Defect 9 — ACL → role link records entirely missing  *(OPEN on the elected deliverable; fixed only in the retained rebuilt package)*
 
-> **Fixed on the shipping bytes.** The root cause recorded below is that role links cannot be shipped as
+> **Not fixed on the elected bytes — the remediation run is mandatory.** The root cause recorded below is that
+> role links cannot be shipped as
 > hand-authored records. The 2026-09-02 rebuild had the **platform** create the role assignments, so the
 > platform captured 27 `sys_security_acl_role` rows into the Update Set, and committing it on a clean instance
 > produced **27 of 27** links (manager 14 / agent 10 / viewer 3) with `post_import_remediation.js` never run
-> and no second commit — see [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). Everything below
-> remains accurate for the retained original package,
-> `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`.
+> and no second commit — see [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **That package is
+> retained, not shipped**, at
+> `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (§0.1), so the fix travels
+> with it and not with the deliverable. The **elected** deliverable is the untouched original,
+> `update-set/x_casemgmt_case_management_update_set.xml` (byte-identical to `…FALLBACK.xml`, SHA-256
+> `7292a6fe…`), which carries **0** `sys_security_acl_role` rows — so everything below applies to the package
+> that ships and `scripts/post_import_remediation.js` must be run to create the 27 links.
 
-**Verdict (retained original package): NOT automated end-to-end. A human step is required.** The 27 links cannot be shipped as records at
+**Verdict (the elected deliverable): NOT automated end-to-end. A human step is required.** The 27 links cannot be shipped as records at
 all (two independent measured reasons below), so a script is the only mechanism available — and the script's
 auto-execute path fires but fails, for the same commit-time scope rewrite as Defect C, because
 `GlideSecurityManager` is refused in scoped execution (§9.4). The links and the security-cache flush appear only
@@ -1754,7 +1775,8 @@ so future operators don't mistake them for bugs.
 >   ships**, which is a question of which bytes carry which proof rather than of a defect: the
 >   zero-problems-of-any-type result belongs to the earlier `7272edfc…` revision (41 → 298 → **0**, then
 >   `committed`; §0.3), the zero-reference-problems result to `e49a7654…` (§0.3b), and **no preview has been run
->   on the shipping `7292a6fe…` bytes** (§0.3c). §10.0 carries the two paths that can close it.
+>   on the shipping `7292a6fe…` bytes** (§0.3c). §10.0 item 1a carries the single run that closes it, for the
+>   elected deliverable or for the retained rebuilt package if that one is promoted in its place.
 > - **Outright failure (0):** none.
 >
 > **How this relates to the counts recorded in earlier revisions and in §9.10.** The progression of this line is
@@ -2549,14 +2571,18 @@ and correct on the clean install (`counters_already=3`, `number_default_already=
 
 ### 9.5 Residual manual footprint, per defect, with the precise step
 
-> **Updated 2026-09-02 — the footprint shrank.** On the rebuilt package that now ships, rows **1** (Defect C's
-> physical storage) and **3** (Defect 9's 27 ACL role links) no longer apply: one commit on a clean instance
+> **Updated 2026-09-02 — the footprint below is the elected deliverable's, in full.** The **rebuilt** package
+> shrinks it: on that package rows **1** (Defect C's
+> physical storage) and **3** (Defect 9's 27 ACL role links) do not apply — one commit on a clean instance
 > produced three tables at HTTP 200 with 21 / 14 / 13 columns and 27 of 27 role links, with no remediation run
-> and no second commit, so row **2** (the second commit) does not apply either. What remains on today's bytes:
+> and no second commit, so row **2** (the second commit) does not apply either, leaving only
 > the **0 `sys_choice` rows** named in row 1, the seed-row linkage and `opened_date` (both addressed by
 > `../scripts/seed_demo_data.js` in scope), and the instance prerequisites in row 6. Measurements:
-> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **The table below is the footprint of the
-> retained original package** (`../update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`).
+> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). **That package is retained, not shipped**
+> (`../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, §0.1), so its shorter
+> footprint arrives only if it is promoted (§10.0, Path A). **The elected deliverable is the untouched original**
+> (`../update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to `…FALLBACK.xml`, SHA-256
+> `7292a6fe…`), and **every row of the table below applies to it as written** — rows 1, 2 and 3 included.
 
 Everything that could be automated is in the package. What remains, in the order it must be performed:
 
@@ -2877,7 +2903,7 @@ and where the two disagree §0 is correct.
 | Teardown | Staged application-level teardown, every query anchored on the app's `sys_scope` or the `x_casemgmt_` prefix. Verified complete: every census counter **0**, and the three tables moved from HTTP **403** to HTTP **400** — a useful distinction, since 400 means *table absent* whereas 403 means *table exists but cross-scope refused* (E9) |
 | Clean-slate preview | First pass **296 problems, 100 % collisions**, zero missing references and zero missing tables — caused by the teardown's own deletions being captured locally (a local DELETE is "newer" than the package's INSERT). Purging only the local rows whose `<name>` the retrieved set itself carries (299 `sys_update_xml` + 1891 `sys_update_version`) and re-previewing gave **ZERO PROBLEMS OF ANY TYPE** — zero errors *and* zero warnings. Progression **54 → 296 → 0** |
 | Commit | `SNC.PreviewerManager().doPreview()` leaves `state=loaded`, so the platform's own predicate refused (`shouldDisplay=false`). After setting `state=previewed`: `unresolvedProblems=false`, `shouldDisplay=true` — the predicate was checked, not assumed. The AJAX contract was read out of the platform's own **Commit Update Set** UI action: `validateCommitRemoteUpdateSet` → `commitRemoteUpdateSet` with `sysparm_remote_updateset_sys_id` and `sysparm_skip_app_installs=false`. **previewed → committing → committed** |
-| Package-alone state (this row describes the retained original package; **on the rebuilt package that ships since 2026-09-02 the same census reads `sys_dictionary` 30 with real physical storage 21/14/13 and `sys_security_acl_role` 27 of 27, while `sys_choice` stays 0** — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)) | scope 1, `sys_db_object` 3, `sys_dictionary` 25, **`sys_choice` 0** (Defect C), `sys_number` 3, roles 3, ACLs 26, **acl_role links 0** (Defect 9), flows 7, reports 8, dashboards 2, REST 2+2, portal 1+2+3, ATF 20, demo users 3 |
+| Package-alone state (this row describes the **elected** deliverable, the untouched original; **on the retained rebuilt package — not shipped, §0.1 — the same census reads `sys_dictionary` 30 with real physical storage 21/14/13 and `sys_security_acl_role` 27 of 27, while `sys_choice` stays 0** — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)) | scope 1, `sys_db_object` 3, `sys_dictionary` 25, **`sys_choice` 0** (Defect C), `sys_number` 3, roles 3, ACLs 26, **acl_role links 0** (Defect 9), flows 7, reports 8, dashboards 2, REST 2+2, portal 1+2+3, ATF 20, demo users 3 |
 | Auto-execute trigger | **Zero `X_CASEMGMT_REMEDIATION` marker rows at or after the commit start — and that is the expected result because no auto-execute record exists to fire.** The package ships **1 Fix Script and no bootstrap Business Rule, `sysauto_script` or `sys_trigger` of any kind** (§0.1 "Installer records", §9.4); the bootstrap rule an earlier revision carried was removed from the package. An earlier version of this row asserted that the rule "ships `active=false`" and quoted a committed record's field values — **that was stale and factually wrong.** Nothing of the kind is in the package or on the instance: 0 `x_casemgmt`-scoped Business Rules on any update-set table, 0 `sysauto_script` rows, 0 `sys_trigger` rows. Post-import remediation is therefore a **documented manual step**, not an automatic one — run the packaged Fix Script, or `../scripts/post_import_remediation.js`, from Global scope after commit (§9.5). |
 
 **Path (b) was then executed exactly as §9.5 prescribes**, which produced the two corrections now folded into
@@ -2959,28 +2985,35 @@ deliberately conservative.
 
 ### 10.0 Do this first
 
-> **Updated 2026-09-02: item 1a was closed and is now RE-OPENED for the bytes that ship.** The clean-slate trip
+> **Updated 2026-09-02: the delivery election is made, and item 1a stands open against the elected bytes.** A
+> clean-slate trip
 > was executed on the rebuilt package's 988 records — against an instance holding none of the three tables:
 > preview **0 `type=error`, 0 `type=warning`**, then a native UI-action commit, "Succeeded 100%", with physical
-> storage and 27 of 27 ACL role links confirmed afterwards. **It was executed on the pre-reorder,
-> previewed-and-committed byte sequence — 988 blocks / 4,062,436 bytes / SHA-256
-> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, measured `2026-09-02T20:53:14Z`.** The
-> post-review CR1 pass then re-sequenced those same 988 blocks into AAP §0.5.2 dependency order, so the file
-> that ships is a different byte sequence — 988 blocks / 4,062,436 bytes / `90ee0249…` — and **the trip has not
-> been run on it.** Under this run's frozen rule the recorded checksum is stale the moment the package changes
-> after verification, so item 1a stands open against the `90ee0249…` bytes and is restated in the table below.
+> storage and 27 of 27 ACL role links confirmed afterwards. **It was executed on export 3's
+> byte sequence — 988 blocks / 4,062,436 bytes / SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, measured `2026-09-02T20:53:14Z`** — a
+> sequence that is no file on disk and whose block order the CR1 review's HIGH AAP §0.5.2 finding rejected. The
+> post-review CR1 pass re-sequenced those same 988 blocks into AAP §0.5.2 dependency order, producing
+> `90ee0249…`, and **the trip was never run on those bytes either.** Because the exact-byte gate could not be
+> completed on any instance this run had, **checkpoint OVERRIDE-2 was invoked and the untouched original package
+> was elected as the deliverable**: `update-set/x_casemgmt_case_management_update_set.xml`, **926 blocks /
+> 3,781,097 bytes / SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`**,
+> byte-identical to `…FALLBACK.xml`. The rebuilt package is retained, not shipped, at
+> `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, and it is the available
+> upgrade path. **No preview of any kind was ever run on the elected bytes**, so item 1a stands open against
+> them and is restated in the table below; electing the package settled which bytes ship and passed no gate.
 > Item 0 in its original form is moot: the verification PDI used on 2026-09-02 was `dev306625`, awake for the
-> whole run — but it is no longer a clean target, which is part of why 1a could not be closed here. See
+> whole run — but it is no longer a clean target, which is why 1a could not be closed here. See
 > [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) and
 > [`refine-run/PHASE2.md` §7.1](./refine-run/PHASE2.md). The other open item from this section is the
 > ATF re-run (item 2), which was executed on 2026-09-02 with 14 of 20 tests passing and the six failures
 > itemized by name in that report.
 
 Item 1 — the clean-slate round trip — was done, and is recorded in §0.3 and in §10.5 under its original number.
-**It was done on the `7272edfc…` revision, and the deliverable changed twice after that**, so a round trip *on
-the bytes that ship* was outstanding again and was re-listed below as item 1a. It was then satisfied on the
-rebuilt package's pre-reorder, previewed-and-committed `eee9fabd…` sequence and **re-opened by the §0.5.2
-re-sequencing**, which is the form the
+**It was done on the `7272edfc…` revision, and the deliverable changed after that**, so a round trip *on
+the bytes that ship* was outstanding again and was re-listed below as item 1a. It was satisfied on export 3's
+`eee9fabd…` sequence, left unmet by the §0.5.2 re-sequencing that produced the retained `90ee0249…` file, and
+**is open against the elected 926-block `7292a6fe…` deliverable**, which is the form the
 table below carries. Three items remain here; **item 0's precondition — an instance that answers at all — is
 met on `dev306625`, but item 1a additionally needs a target that is genuinely clean**, which no instance
 available to this run is (§0.11).
@@ -2988,35 +3021,48 @@ available to this run is (§0.11).
 | # | Work | Why | Estimate |
 |---|---|---|---|
 | 0 | **Wake the verification PDI `dev379024` from the ServiceNow Developer Program account that owns it, then re-measure the final gate.** In order: read the case and task the 502 save touched to establish whether that write committed; delete the ten `QA-FINAL` fixture rows; re-run the §3.4 form observations, the §9.7 assertion harness and the ATF suite; then proceed to 1a and 2 | Since 2026-08-11 every route on the instance returns ServiceNow's hibernation placeholder (§0.11), so items 1a and 2 cannot begin and **nothing in this register can be re-measured**. Waking requires developer-portal credentials that a build environment does not hold — instance `admin` credentials cannot authenticate to the Developer Program portal | 15 min to wake · ~2 h to re-measure |
-| 1a | **RE-OPENED — run the full S1–S6 gate on the exact shipping byte sequence `90ee0249…`** (988 blocks / 4,062,436 bytes) on a genuinely clean, dedicated instance, and record the problem count by type. Exactly what remains, in the Phase 2 step names: **S1** confirm the instance is clean, **S2** compute the checksum of the file under test, **S3a** upload it as a retrieved update set and assert **988** children, **S3b** preview to zero `type=error` (and record `type=warning`), **S4** commit through the native "Commit Update Set" UI action, **S5** confirm physical storage on all three tables and all **27** `sys_security_acl_role` links, **S6** record `90ee0249…` as the verified checksum with that run's timestamp. Procedure to follow verbatim: [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) | **The gate was met on a byte sequence that is no longer the one that ships.** Preview to 0 `type=error` / 0 `type=warning` and the "Succeeded 100%" commit were measured on the pre-reorder, previewed-and-committed sequence `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` at `2026-09-02T20:53:14Z`; the post-review CR1 §0.5.2 re-sequencing then changed the deliverable's bytes to `90ee0249…`. Under the run's frozen rule the recorded checksum is stale and the whole gate re-runs before the package is ship-ready, so AAP §0.7.1 is satisfied for the previewed sequence and **outstanding for the sequence that ships** ([`refine-run/PHASE2.md` §7.1](./refine-run/PHASE2.md)). What bounds the risk, as corroboration and not as the gate: `xmllint --noout` clean, 988 blocks, a per-block digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST showing the instance's captured set still holding 988 set-identical children — the difference is block sequence alone. **Why it could not be closed here:** the one provisioned PDI already holds this application installed, committed, converged and seeded, and re-running the deployment, re-committing or backing it out would destroy that verified environment; the review boundary this work ran under allowed read-only REST only; AAP §0.7.1 wants a *fresh* PDI and provisioning or re-requesting an instance is prohibited, while the available instance is not clean, so a preview there returns `Found a local update that is newer than this one` collisions instead of the clean-slate zero-problem result; and this file's `<sys_remote_update_set>` descriptor makes the loader **reuse** the existing retrieved set and **append** its children (`../scripts/round_trip_verify.md`, Phase 1 warning), so an upload would mutate the committed record the live evidence rests on. The earlier lineage is unchanged history: the absolute zero-problems result on `7272edfc…` (§0.3), the populated-instance preview of `e49a7654…` with the reference class at zero and commit withheld (§0.3b), and **no preview of any kind on the retained `7292a6fe…` fallback** (§0.3c) | 1–2 h on a dedicated, genuinely clean PDI |
+| 1a | **OPEN against the ELECTED deliverable — run the full S1–S6 gate on the exact elected byte sequence `7292a6fe…`** (926 blocks / 3,781,097 bytes) on a genuinely clean, dedicated instance, and record the problem count by type. Exactly what remains, in the Phase 2 step names: **S1** confirm the instance is clean, **S2** compute the checksum of the file under test, **S3a** upload it as a retrieved update set and assert **926** children, **S3b** preview to zero `type=error` (and record `type=warning`), **S4** commit through the native "Commit Update Set" UI action, **S5** confirm physical storage on all three tables and — because the elected package carries **0** `sys_security_acl_role` rows — run `../scripts/post_import_remediation.js` in Global and confirm all **27** ACL role links afterwards, **S6** record `7292a6fe…` as the verified checksum with that run's own timestamp. **The same gate run on the retained rebuilt bytes closes it for that artifact instead:** `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, `90ee0249…`, asserting **988** children, with all 27 role links arriving in the package rather than from remediation — after which it may be promoted back to the deliverable path (the Path A / Path B block below). Procedure to follow verbatim: [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) | **No preview of any kind has ever been run on the elected bytes**, so AAP §0.7.1 is unsatisfied for the artifact that ships (§0.3c). Stated per sequence, because no result here may be borrowed by another file: preview to 0 `type=error` / 0 `type=warning` and the "Succeeded 100%" commit were measured on export 3's sequence `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` at `2026-09-02T20:53:14Z`, which is no file on disk and whose block order the CR1 §0.5.2 finding rejected; the post-review re-sequencing produced the retained `90ee0249…`, **never previewed on its own bytes**; and the elected `7292a6fe…` deliverable has never been previewed at all. Under the run's frozen rule a package whose bytes changed after verification has a stale recorded checksum and re-runs the whole gate before it is ship-ready ([`refine-run/PHASE2.md` §7.1](./refine-run/PHASE2.md)). What bounds the risk on the retained file, as corroboration and not as the gate: `xmllint --noout` clean, 988 blocks, a per-block digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST showing the instance's captured set still holding 988 set-identical children — the difference is block sequence alone. What bounds the risk on the elected file: its 13-payload + 1-block delta from the `e49a7654…` revision is characterised record-by-record in §0.3c, and every changed payload was read back from the live instance field-for-field identical to its artifact. **Why it could not be closed here:** the one provisioned PDI already holds this application installed, committed, converged and seeded — `x_casemgmt_case` **10** rows, `x_casemgmt_case_task` **10**, `x_casemgmt_case_party` **8**, all three tables live — so **step S1 fails on it**, and making it clean means deleting the scoped application, which the environment directive for this repository names as destroying a verified environment; the review boundary this work ran under allowed read-only REST only; AAP §0.7.1 wants a *fresh* PDI and provisioning or re-requesting an instance is prohibited, so a preview there returns `Found a local update that is newer than this one` collisions instead of the clean-slate zero-problem result; and each file's `<sys_remote_update_set>` descriptor makes the loader **reuse** the matching retrieved set and **append** its children — the elected file's descriptor is `9929f50df18ccec91ea13b2a3bccfc90` (the retrieved set recorded `state=committed` on this instance, so an upload appends its 926 children to it) and the retained rebuilt file's is `0b3b7452934f435009aa70d19dba100d`, which `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns with **`state=committed`**, so an upload would append its 988 children to the record the live evidence rests on (`../scripts/round_trip_verify.md`, Phase 1 warning). The earlier lineage is unchanged history: the absolute zero-problems result on `7272edfc…` (§0.3) and the populated-instance preview of `e49a7654…` with the reference class at zero and commit withheld (§0.3b) | 1–2 h on a dedicated, genuinely clean PDI, per artifact verified |
 | 2 | **Re-load every `atf/*.xml` artifact into the instance and re-run the suite**, recording the verdict against the re-loaded bytes | Still open, but **much narrower than earlier revisions of this row implied**, and the residual risk is now quantified rather than assumed. What has been measured (§8.3): a full re-diff of the packaged `sys_variable_value` blocks against the live rows returns **539 of 540 byte-identical, 1 differing, 0 only-in-package, 0 only-in-live**; the one difference is `ATF 18` step 9 and is **17 `//` comment lines with 0 non-comment lines changed** (comment-stripped md5 `91822682b141` on both sides), so the **executable code of all 540 inputs is identical to the package**. Provenance is measured too: all 20 tests, all 180 steps and the suite carry `sys_mod_count = 0` with the package's `2025-01-01 00:00:00` stamps, and **180 / 180 `step_config` plus 540 / 540 input `variable` references resolve** to live rows with **0** zero-input steps and **0** duplicate `(document_key, variable)` pairs — i.e. the green verdicts already recorded were taken on the as-installed package records, not on hand-edited copies. What remains unmeasured is narrow and specific: a re-load performed *on the current bytes*, followed by a suite run, which would close both the one comment-only delta and the last of the "expectation is not measurement" gap in one operation. Note also that the delta cannot be closed by patching the row — `PATCH sys_variable_value/7b1f7b99…` answers `403 ACL Exception Update Failed due to security constraints` — and should not be, since a hand-write would destroy the `sys_mod_count = 0` provenance above | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
 
-> **The election that closes item 1a is a HUMAN decision, and this pass does not make it.** Two paths are
-> available, both of them are costed below from measurement, and until a human elects one and it is executed the
-> AAP §0.7.1 Update Set gate is **NOT MET** for the byte sequence that ships and the deliverable's shipping
-> status is **BLOCKED**. That gate is binary — met on a byte sequence or not met on it — so neither path may be
-> recorded as a partial or qualified outcome.
+> **Path B was TAKEN: the election is made, and Path A remains available as a promotion.** The exact-byte gate
+> could not be completed on any instance this run had (the measured reasons are below), so under checkpoint
+> OVERRIDE-2 — which authorizes the untouched original package by name as the correct outcome when the hard gate
+> cannot be completed — **the fallback was elected as the shipping package** and sits at the deliverable path.
+> That settles *which bytes ship*; it passes **no** gate. AAP §0.7.1 and the Update Set gate remain **NOT MET**
+> for the elected artifact, because its own bytes were never previewed. That gate is binary — met on a byte
+> sequence or not met on it — so neither path may be recorded as a partial or qualified outcome.
 >
-> - **Path A — verify the rebuilt package. This is the only path that satisfies AAP §0.5.2 and AAP §0.7.1
->   together.** On a genuinely clean, dedicated PDI, run the full gate on the exact
->   `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` bytes: confirm the target is clean;
->   checksum the bytes under test; upload as a retrieved update set and assert **988** children; preview to zero
->   `type=error` (recording `type=warning`); commit through the native "Commit Update Set" UI action; confirm
->   physical storage for all three tables and all **27** `sys_security_acl_role` links; then record
->   `90ee0249…` as the verified checksum with **that run's own timestamp**. One pass closes the gate, item 1a
->   and the Update Set row of [`validation-gates.md`](./validation-gates.md) together. Cost: 1–2 h plus a
->   dedicated clean instance. It preserves everything the refine directives ordered.
-> - **Path B — invoke the fallback**, `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`
->   (SHA-256 `7292a6fe…`, recorded in full in §0.1, **926** blocks, **3,781,097** bytes). Its measured
->   composition is the cost: it carries **0 `sys_documentation` rows, 0 `sys_security_acl_role` rows and 25
->   hand-authored `sys_dictionary` rows**. Electing it therefore **drops all
->   27 ACL-role links and all 30 field/table label rows**, **reverts the native table/dictionary swap that
->   directives D2 and D21 ordered**, and **re-introduces the random-32-hex hand-authored schema record names**
->   (`sys_db_object_bd806f5b…`, `sys_dictionary_0bf56c20…`). And because **its own bytes were never previewed
->   at all** (§0.3c), electing it does **not** satisfy AAP §0.7.1 either — it exchanges one unmet gate for the
->   same unmet gate plus the loss of the role links and the labels.
+> - **Path B — TAKEN. The elected deliverable is the untouched original**,
+>   `update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to
+>   `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` (SHA-256
+>   `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, recorded in full in §0.1, **926**
+>   blocks, **3,781,097** bytes). **Its measured composition is the cost, and a deployer must know all of it:**
+>   it carries **0 `sys_documentation` rows, 0 `sys_security_acl_role` rows and 25
+>   hand-authored `sys_dictionary` rows** with random-32-hex names (`sys_db_object_bd806f5b…`,
+>   `sys_dictionary_0bf56c20…`). So the elected package **does not include this round's native-rebuild fix**:
+>   the 27 ACL-role links and the 30 field/table label rows are **not in it**, the native table/dictionary swap
+>   that directives D2 and D21 ordered is **not in it**, and the 27 links must therefore be created by
+>   `../scripts/post_import_remediation.js` after commit — exactly as the pre-refine deployment did, and exactly
+>   as [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) already documents at step
+>   5 and step 7. And because **its own bytes were never previewed at all** (§0.3c), electing it does **not**
+>   satisfy AAP §0.7.1: item 1a stands open against it, in the form the table above carries.
+> - **Path A — still available, now as a promotion of the retained rebuilt package.** That package is retained
+>   on disk, not shipped, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`
+>   — **988** blocks, **4,062,436** bytes, SHA-256
+>   `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. It **satisfies AAP §0.5.2 dependency
+>   ordering** and it **carries the platform-captured table and dictionary records and all 27
+>   `sys_security_acl_role` links in the package itself**, so nothing about the schema or the role links depends
+>   on remediation. **One action makes it shippable, and it is the only path that satisfies AAP §0.5.2 and AAP
+>   §0.7.1 together:** on a genuinely clean, dedicated PDI, run the full gate on those exact bytes — confirm the
+>   target is clean; checksum the bytes under test; upload as a retrieved update set and assert **988**
+>   children; preview to zero `type=error` (recording `type=warning`); commit through the native "Commit Update
+>   Set" UI action; confirm physical storage for all three tables and all **27** `sys_security_acl_role` links;
+>   then record `90ee0249…` as the verified checksum with **that run's own timestamp**. After that run the file
+>   may be promoted back to the deliverable path, and one pass closes the gate, item 1a and the Update Set row
+>   of [`validation-gates.md`](./validation-gates.md) together for it. Cost: 1–2 h plus a dedicated clean
+>   instance. It preserves everything the refine directives ordered.
 >
-> **Why the run was not performed here — these are measured facts, not judgements.** *(1) The one provisioned
+> **Why neither run was performed here — these are measured facts, not judgements.** *(1) The one provisioned
 > instance is not a clean target.* The post-commit census of the 2026-09-02 run recorded `x_casemgmt_case`
 > **10** rows, `x_casemgmt_case_task` **10** rows and `x_casemgmt_case_party` **8** rows, with all three tables
 > live ([`refine-run/PHASE2.md`](./refine-run/PHASE2.md),
@@ -3026,11 +3072,14 @@ available to this run is (§0.11).
 > mutate the record that carries the original evidence.*
 > `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d`
 > returns that row with **`state=committed`**, and `0b3b7452934f435009aa70d19dba100d` is the `sys_id` in the
-> `<sys_remote_update_set>` descriptor **inside the shipping file** — so a loader on this instance would match
-> it and **APPEND** the file's 988 children to the committed retrieved-set record rather than create a new one.
-> That is the concrete instance of the append behaviour documented in
-> [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md), Phase 1. Both facts are why Path A needs
-> a clean, dedicated instance and cannot be discharged on the one this work had.
+> `<sys_remote_update_set>` descriptor **inside the retained rebuilt file** — so a loader on this instance would
+> match it and **APPEND** that file's 988 children to the committed retrieved-set record rather than create a
+> new one. The elected file has the same exposure under its own descriptor,
+> `9929f50df18ccec91ea13b2a3bccfc90`, whose retrieved set this instance also holds in `state=committed`: an
+> upload there appends its 926 children. That is the concrete instance of the append behaviour documented in
+> [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md), Phase 1. Both facts are why closing item
+> 1a — for either artifact — needs a clean, dedicated instance and could not be discharged on the one this work
+> had.
 
 ### 10.1 Blocking — the application is not demonstrable through its intended UI without these
 
@@ -3088,5 +3137,6 @@ this deliverable ships no repository-level CI tooling of its own.
 **Production deployment to a customer instance**, **UAT sign-off**, and **demo-data cleanup** remain out of
 scope and are unaffected by this pass. Nothing above should be read as a step toward production readiness: this
 is a proof of concept. §10.1 no longer holds any open work — every user-facing surface renders — so what stands
-between this package and a clean, self-contained demonstration is now §10.0 alone: a round trip on the shipping
-bytes, and a re-run of the ATF suite against re-loaded artifacts.
+between this package and a clean, self-contained demonstration is now §10.0 alone: a round trip on the elected
+shipping bytes (926 blocks / `7292a6fe…`), or on the retained rebuilt `90ee0249…` bytes if that package is
+promoted in their place, and a re-run of the ATF suite against re-loaded artifacts.

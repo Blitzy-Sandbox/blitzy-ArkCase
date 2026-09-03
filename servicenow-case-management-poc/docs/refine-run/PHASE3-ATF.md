@@ -17,9 +17,9 @@ appears in this file or in any committed artifact.**
 Phase 3 was entered. Phase 2 committed the package cleanly (`state=committed`, "Succeeded 100%",
 988 children, 0 collisions, no partial apply) on export 3's byte sequence, so **Phase 2 had already
 returned its verdict before this phase began**. Per **D4/OVERRIDE-4** nothing in this document gates
-delivery — and nothing in it settles delivery either: the delivery position, including the gate's
-verdict on the byte sequence that ships, is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d) and
-`final.delivery_position` in [`run-state.json`](./run-state.json).
+delivery — and nothing in it settles delivery either: the delivery position, including the elected
+shipping package and the gate's verdict on its bytes, is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part
+(d) and `final.delivery_position` in [`run-state.json`](./run-state.json). §5.5 states what ships.
 
 **Availability.** Instance liveness was confirmed **by content** (a JSON body, not the hibernation
 HTML splash) and a read-only API heartbeat (`GET /api/now/table/sys_user?sysparm_limit=1`, 10-minute
@@ -358,10 +358,10 @@ outside this unit's scope. The consequences, stated plainly:
 | Question | Answer |
 | --- | --- |
 | Was any fix applied? | **No** |
-| Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload |
-| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order, so the file that ships hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run on the `90ee0249…` bytes owed** — not performed by this phase, and not by the CR1 pass that made the change |
-| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It **is** owed on the shipping bytes for the reason in the row above, and it has not been performed |
-| What ships? | **Not settled here, and not settled by this phase.** The deliverable path holds export 3's 988 payload records re-sequenced into AAP §0.5.2 dependency order after this phase; for that byte sequence (`90ee0249…`) the S1–S6 gate is **NOT MET**, its shipping status is **BLOCKED**, and the election between verifying it and invoking the fallback is an unmade human decision. **This phase presented nothing unverified** — while it ran, the deliverable was still export 3's Phase-2-verified byte sequence. The delivery position is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d), [`PHASE2.md`](./PHASE2.md) §7.1, and `final.delivery_position` in [`run-state.json`](./run-state.json) |
+| Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload, and the re-verification pass after it elected the untouched fallback onto the deliverable path and retained the re-sequenced bytes at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` |
+| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run on the `90ee0249…` bytes owed** — not performed by this phase, and not by the CR1 pass that made the change |
+| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It is owed on the retained rebuilt bytes for the reason in the row above, it has not been performed, and it is equally unperformed on the elected fallback that now ships |
+| What ships? | **The elected fallback.** The deliverable path holds the original unmodified package — 926 payload blocks, 3,781,097 bytes, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to `…FALLBACK.xml` — elected under OVERRIDE-2 / directive **D3** on the unmet-exit-condition path and labelled as **not** carrying this round's native-rebuild fix (0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role links. The S1–S6 gate is **NOT MET** for those elected bytes and for the retained rebuilt package `90ee0249…` alike, and **MET** for export 3's sequence only: electing settles the shipping decision, not the gate. **This phase presented nothing unverified** — while it ran, the deliverable was export 3's Phase-2-verified byte sequence, and **the ATF suite ran against the rebuilt content as committed on the instance**, not against the elected fallback. The delivery position is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d), [`PHASE2.md`](./PHASE2.md) §7.1, and `final.delivery_position` in [`run-state.json`](./run-state.json) |
 
 **D6 two-attempt cap: 0 of 2 attempts consumed.** No class (a) or actionable class (b) issue arose, so
 no fix-and-re-verify loop was entered; nothing was abandoned mid-loop and nothing hit the cap.
@@ -456,7 +456,7 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 | XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files) |
 | JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
-| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (The file was re-sequenced after this phase and now hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`; under D36 that makes the recorded checksum stale and the S1–S6 re-run on those bytes owed — §5.5) |
+| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (The file was re-sequenced after this phase into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, which is retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, and the deliverable path now holds the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`; under D36 the re-sequencing makes the recorded checksum stale and the S1–S6 re-run on those bytes owed — §5.5) |
 | No binaries staged | `git status` | no PNG/video staged; `blitzy/screenshots/*.png` remain untracked |
 
 ---
@@ -484,10 +484,13 @@ Phase 3 is **informational only**. The byte sequence Phase 2 verified —
 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — cleared Phase 2's gate on that
 sequence, and **this phase neither gates nor settles delivery** (D4/OVERRIDE-4). **This phase applied
 no fix and changed no artifact**, so nothing here made that checksum stale. It was made stale
-afterwards: the CR1 pass re-sequenced the deliverable's block order, the file that ships now hashes
-to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and for that byte sequence the
-S1–S6 gate is **NOT MET** — the run is owed and has not been performed, the deliverable's shipping
-status is **BLOCKED**, and the delivery election is an unmade human decision (§5.5, and
+afterwards: the CR1 pass re-sequenced the deliverable's block order into
+`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, for which the S1–S6 gate is **NOT
+MET** and the run is owed and unperformed. The re-verification pass then **elected the untouched
+fallback** as the shipping package under OVERRIDE-2 / directive D3, so the deliverable holds
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — labelled as not carrying this
+round's fix — while the re-sequenced bytes are retained at
+`…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. The gate stays **NOT MET** for both (§5.5, and
 [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d) for the position).
 
 ### Known issues handed to the FINAL REPORT (U5), by name

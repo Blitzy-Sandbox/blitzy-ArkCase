@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed on the byte sequence that ships (SHA-256 `90ee0249…`); the note below states exactly which sequence carries the preview and commit result, and the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it.**
+This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed on the elected deliverable's byte sequence (926 blocks, 3,781,097 bytes, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`) — no preview of any kind was ever run on it. The delivery election has been made and the elected package ships; the note below states which sequence carries the preview and commit result and which artifact is retained as the upgrade path, and the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it.**
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -24,38 +24,49 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > history and cannot occur on a fresh PDI. **Commit was withheld on those bytes** — the verification instance
 > is shared — so "0 of any type" remains proven only on `7272edfc…`.
 >
-> **Superseded on 2026-09-02, and it splits in two — and the gate it reports is binary, so read both halves in
-> order: MET on the sequence that was previewed, NOT MET on the sequence that ships.** *(1) Where the gate is
+> **Superseded on 2026-09-02, and the delivery election has since been made — the gate it reports is binary and
+> takes one verdict per byte sequence, so read all three in order.** *(1) Where the gate is
 > MET:* the full trip was measured
-> on the **pre-reorder, previewed-and-committed byte sequence — 988 blocks, 4,062,436 bytes, SHA-256
+> on **export 3's byte sequence — 988 blocks, 4,062,436 bytes, SHA-256
 > `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, `2026-09-02T20:53:14Z`**: 0 `type=error`
 > and 0 `type=warning` preview problems on a genuinely clean instance, then a single UI-action commit that
 > succeeded 100% (613 inserted / 375 updated / 0 collisions), with physical storage and all 27 ACL role links
-> confirmed afterwards. *(2) What ships:* the file was then re-sequenced into the AAP §0.5.2 dependency order,
-> so the deliverable is **988 blocks, 4,062,436 bytes, SHA-256
-> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — the same 988 records byte-for-byte at
-> the same byte count, differing from the previewed bytes **only in the order of the `<sys_update_xml>`
-> blocks**. That digest is the value to verify a copy of the file against; it is not a round-tripped digest.
-> **The round trip on those exact bytes is outstanding: it has not been run, so the Update Set gate is NOT MET
-> for the file you hold, this artifact is not cleared for delivery, and nobody may read this walkthrough as
-> already executed on it.** Which package is finally handed over — running the owed gate on `90ee0249…`
-> (Path A) or invoking the retained fallback (Path B) — is a human decision this run does not make; both are
-> costed in §10.0 of
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Under this run's frozen
-> rule the recorded checksum is
-> stale once the package changes after verification, which makes the zero-preview-error requirement stated at
-> the top of this document satisfied for the previewed sequence and **owed for the sequence that ships**; §5 of
-> [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), run against the `90ee0249…` file
-> on a genuinely clean PDI, is what discharges it. The reorder was checked statically — `xmllint --noout` clean,
+> confirmed afterwards. Those bytes are no file on disk — they survive only in git history — and their block
+> order is exactly what the CR1 review's HIGH AAP §0.5.2 finding rejected. *(2) The retained rebuilt artifact:*
+> the file was then re-sequenced into the AAP §0.5.2 dependency order, giving **988 blocks, 4,062,436 bytes,
+> SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — the same 988 records
+> byte-for-byte at the same byte count, differing from the previewed bytes **only in the order of the
+> `<sys_update_xml>` blocks**. The round trip on that exact sequence was never run, so it is retained, **not
+> shipped**, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. It satisfies
+> AAP §0.5.2 dependency ordering and carries the platform-captured schema records and all 27
+> `sys_security_acl_role` links, which makes it **the available upgrade path**: run the full gate on those exact
+> bytes on a genuinely clean, dedicated PDI — confirm a clean target, checksum the bytes, upload asserting
+> **988** children, preview to zero `type=error`, commit through the native "Commit Update Set" UI action,
+> confirm physical storage for all three tables and all 27 role links, record the digest as verified with that
+> run's timestamp — and it can then be promoted back to the deliverable path (§10.0 of
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). It was checked statically —
+> `xmllint --noout` clean,
 > 988 blocks, block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class
 > census, every §0.5.2 dependency assertion passing — and the reordered bytes were **not** re-uploaded,
-> re-previewed or re-committed anywhere; that is corroboration, not a round trip of this exact byte sequence.
+> re-previewed or re-committed anywhere; that is corroboration, not a round trip of that exact byte sequence.
 > The record is
-> [`../docs/refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The remainder of this note describes the
-> **previous** revision, retained verbatim as `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`:
+> [`../docs/refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). *(3) What ships:* the exact-byte gate
+> could not be completed on any instance available to this run, so under checkpoint OVERRIDE-2 the untouched
+> original package was **elected** as the deliverable, and it is the artifact the remainder of this note
+> describes. It sits at `update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to
+> `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`. **It does not include this round's
+> native-rebuild fix** — measured on the file, 0 `sys_documentation` rows, 0 `sys_security_acl_role` rows and 25
+> hand-authored `sys_dictionary` rows — so the 27 ACL-role links are absent from it and
+> `scripts/post_import_remediation.js` must be run to create them, exactly as
+> [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) documents. **Electing it
+> settled which package ships; it did not pass the gate.** §5 of that guide, run against the elected file on a
+> genuinely clean PDI and asserting **926** children, is what discharges the zero-preview-error requirement
+> stated at the top of this document for the artifact a reader holds:
 >
-> **Those retained bytes are 926 blocks, 3,781,097 bytes, SHA-256
-> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, and NO preview was ever run on them.**
+> **The elected bytes are 926 blocks, 3,781,097 bytes, SHA-256
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, and NO preview was ever run on them, so
+> the Update Set gate is NOT MET for the deliverable and this walkthrough must not be read as already executed
+> on it.**
 > Be precise about which measurement belongs to which artifact, because five digests appear in this deliverable's
 > history (`32a064d6…`, `7272edfc…`, `89638c17…`, `e49a7654…` and today's `7292a6fe…`) and only two of them carry a
 > preview result. What changed from `e49a7654…` is small and fully enumerated: **13 payloads** re-synced
@@ -166,16 +177,18 @@ For the comprehensive manual round-trip verification procedure, see [`../scripts
 
 Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify the following are present and functional post-commit: all 3 custom tables visible in App Engine Studio; Both Flow Designer flows active (not draft); Experience Portal accessible at `[instance URL]/x_casemgmt_portal` (or equivalent portal URL); Both dashboards accessible to users with correct roles; Synthetic demo data visible in case list."
 
-> **On the package that ships today, a commit alone does reach this walkthrough's state for the schema and the
-> role links.** The 2026-09-02 native-rebuild run committed those 988 records once on a clean instance and the
-> commit itself produced physical storage for all three tables (HTTP 200; dictionary 21 / 14 / 13) and all **27**
-> ACL role links (manager 14 / agent 10 / viewer 3), with the remediation script never run and no second commit
-> — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md). The paragraph below records the behaviour of
-> the **retained original** package (`update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`), and the
-> one shortfall that still applies to today's bytes is the **choice lists**: `sys_choice` rows are absent for the
+> **On the elected package, a commit alone does NOT reach this walkthrough's state — the paragraph below applies
+> in full.** A single commit reaching physical storage for all three tables (HTTP 200; dictionary 21 / 14 / 13)
+> and all **27** ACL role links (manager 14 / agent 10 / viewer 3) with the remediation script never run was
+> measured on the 2026-09-02 native-rebuild run's 988 records
+> — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) — and **that package is retained rather than
+> shipped** (`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`), so the result
+> does not transfer to the elected deliverable. The elected package carries 0 `sys_security_acl_role` rows and
+> the 25 hand-authored `sys_dictionary` rows, which is why both manual steps are required on it. The **choice
+> lists** are outstanding on either package: `sys_choice` rows are absent for the
 > three tables, so choices — with the seed-row linkage and `opened_date` — still need a post-commit step.
 >
-> **On the retained original package, a commit alone did not reach it.** A clean-instance
+> **On the elected package — the retained original — a commit alone did not reach it.** A clean-instance
 > round trip established that after commit the three tables exist as metadata with **no physical storage** and the
 > 26 ACLs have **0 of 27** role links. That same trip also found the dashboards' child records failing to commit
 > and the portal pages rendering blank; **both of those were packaging defects and both are fixed** (see the
@@ -276,13 +289,17 @@ Per AAP Section 0.7.2: "Provide the exported Update Set XML file path and the po
 This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifacts beyond what is enumerated in AAP Section 0.3.1 are produced; per AAP Section 0.7.2 (Minimal-Change Clause), no additional capabilities are added.
 
 > **Sub-step 3's "confirmation that all 7 validation gates passed" cannot be given for the artifact as it
-> stands.** The Update Set gate is binary and it is **NOT MET** on the shipping byte sequence
-> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, because the upload → preview → commit
-> trip on those exact bytes has not been run (the note under *Purpose* above, and §10.0 of
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Until that run is performed
-> — or a human elects the retained fallback instead, with the cost §10.0 records — **this artifact is not
-> cleared for delivery and this step cannot be completed.** Running Step 2 against the `90ee0249…` file on a
-> genuinely clean, dedicated PDI is what makes the deliverable deliverable.
+> stands.** The Update Set gate is binary and it is **NOT MET** on the elected deliverable's byte sequence
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, because no upload → preview → commit
+> trip of any kind has been run on those bytes (the note under *Purpose* above, and §10.0 of
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). The delivery election is
+> settled — the elected package is what ships — but electing it passed no gate, so **this step cannot be
+> completed as written and the confirmation must not be given.** Running Step 2 against the elected file on a
+> genuinely clean, dedicated PDI, asserting **926** children, is what makes the deliverable deliverable; running
+> it against the retained `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`,
+> asserting **988**, is the upgrade path that would additionally restore the 27 packaged role links. What can be
+> reported honestly today is the measured rollup in [`validation-gates.md`](./validation-gates.md): **4 gates
+> pass outright, 2 pass with a documented qualification, and the Update Set gate is NOT MET.**
 
 ## Rollback Procedure
 
@@ -321,7 +338,7 @@ The following constraints apply throughout deployment. They derive from AAP Sect
 - [`validation-gates.md`](./validation-gates.md) — Gate 7 (Update Set) is what this document operationalizes; the Pre-Deployment Checklist references Gates 1–6 as prerequisites.
 - [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md) — manual procedure for the fresh-PDI re-import preview gate referenced by [Step 2](#step-2-verify-update-set-integrity).
 - [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js) — idempotent server-side seed script used for post-commit data verification in [Step 3](#step-3-confirm-deployed-state) sub-step 11.
-- [`../update-set/`](../update-set/) — destination directory for the exported XML; only one file (`x_casemgmt_case_management_update_set.xml`) lives here.
+- [`../update-set/`](../update-set/) — destination directory for the exported XML. Three files live here: `x_casemgmt_case_management_update_set.xml` (the **elected deliverable**, 926 blocks, `7292a6fe…`), `x_casemgmt_case_management_update_set.FALLBACK.xml` (the retained original, byte-identical to it) and `x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks, `90ee0249…`, retained but **not shipped** — the upgrade path).
 - [`../README.md`](../README.md) — overall POC overview with quick deployment summary; this file is the authoritative detailed walkthrough referenced from there.
 - [`./data-model.md`](./data-model.md) — schema reference for the 25 fields verified in [Step 1](#step-1-export-the-update-set) sub-step 3.
 - [`./state-machine.md`](./state-machine.md) — transition matrix and blocking-error messages exercised by the seed data in [Step 3](#step-3-confirm-deployed-state) sub-step 11.
