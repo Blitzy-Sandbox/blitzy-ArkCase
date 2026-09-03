@@ -4,13 +4,18 @@
  * Idempotent server-side script that seeds the scoped application with the
  * minimum demo dataset required to exercise all validation gates.
  *
- * Run from: System Definition -> Scripts - Background, or as a Fix Script
- * inside the Update Set. Either way, the bottom-of-file `seedDemoData()`
- * invocation triggers the full seed pipeline.
+ * Run from: System Definition -> Scripts - Background in the x_casemgmt
+ * application scope. The body may also be installed as a Fix Script, but an
+ * Update Set commit installs that record without executing it; an operator
+ * must explicitly run the installed Fix Script. Once this file is evaluated,
+ * the bottom-of-file `seedDemoData()` invocation triggers the full pipeline.
  *
  * Re-running this script is safe: every record creation is preceded by a
- * GlideRecord existence check; only missing records are inserted. A second
- * run produces zero new records and emits no warnings.
+ * GlideRecord existence check; only missing records are inserted, and an
+ * existing row is adopted - each column the delivery path could not populate
+ * (or populated with a value that resolves to nothing) is repaired exactly
+ * once. A second consecutive run therefore produces zero new records, zero
+ * repairs, and no warnings.
  *
  * Constraints honored (per AAP Sections 0.7.1, 0.7.2, 0.4.1):
  *   - No hard-coded sys_id literals anywhere. Every cross-record reference
@@ -20,10 +25,17 @@
  *     description, and requester name is a fabricated synthetic value.
  *   - No email triggers. No gs.eventQueue(), no event.queue(), no
  *     notification dispatch. Email is disabled on the PDI.
- *   - All gr.update() calls (used for opened_date/closed_date overrides on
- *     Closed seed cases) call gr.setWorkflow(false) first, bypassing the
- *     scoped flows and Before-Update business rules so the seed never
- *     accidentally triggers a flow validation.
+ *   - All gr.update() calls (the opened_date/closed_date settlement on
+ *     inserted cases, and the adoption repair that links a committed row to
+ *     its parent case, group, agent, person, or organization) call
+ *     gr.setWorkflow(false) first, bypassing the scoped flows and
+ *     Before-Update business rules so the seed never accidentally triggers a
+ *     flow validation.
+ *   - Every case this script touches - adopted or inserted - ends with
+ *     opened_date populated: the spec's historical override where there is one
+ *     (cases 06 and 10), otherwise the run-time now-timestamp that the
+ *     x_casemgmt_set_opened_date Before-Insert rule would have written had the
+ *     Update Set commit engine let it run.
  *   - Scoped-namespace exclusivity: writes go to x_casemgmt_*, plus the
  *     OOB user/group/role/membership/company tables required for any
  *     ServiceNow demo dataset. No global ACL or sys_db_object writes.
@@ -221,9 +233,11 @@ var PINNED = {
 // SEED_STATS accumulates what the run actually did, so the completion trace can
 // report inserted / adopted / repaired counts instead of a fixed sentence. A
 // row is "adopted" when it already existed (packaged by the Update Set or left
-// by a previous run) and "repaired" when adoption had to fill at least one
-// empty field on it. Both are normal on the commit path and both must fall to
-// zero repairs on a second consecutive run - that is the idempotency contract.
+// by a previous run) and "repaired" when adoption had to write at least one
+// column on it - either because the column was empty, or because a reference
+// column held a value that does not resolve to a row (see adoptReference()).
+// Both are normal on the commit path and both must fall to zero repairs on a
+// second consecutive run - that is the idempotency contract.
 var SEED_STATS = {
     cases:   { inserted: 0, adopted: 0, repaired: 0 },
     tasks:   { inserted: 0, adopted: 0, repaired: 0 },
@@ -231,9 +245,20 @@ var SEED_STATS = {
 };
 
 /**
- * Fills a single field on an already-loaded GlideRecord ONLY when that field is
- * currently empty, and records the field name in `changed`. Never overwrites a
- * value a human (or an earlier run) already put there - repair is additive.
+ * Fills a single SCALAR field (String, Choice, Date, DateTime, or the pinned
+ * `number`) on an already-loaded GlideRecord ONLY when that field is currently
+ * empty, and records the field name in `changed`. Never overwrites a value a
+ * human (or an earlier run) already put there - repair is additive.
+ *
+ * Scope note: this helper is deliberately NOT used for reference columns
+ * (case, assigned_group, assigned_agent, assigned_to, person, organization).
+ * A nonempty scalar is self-evidently a usable value, but a nonempty REFERENCE
+ * column is not: the import engine can leave a human-readable lookup key
+ * (CASE9000003, Synthetic Org Alpha, x_casemgmt_demo_agent) sitting in the
+ * column as a raw string that resolves to nothing, and a row it once pointed at
+ * can be deleted afterwards, leaving a dangling sys_id. Both are nonempty and
+ * both are broken, so reference columns go through adoptReference() instead,
+ * which validates before it decides.
  *
  * @param {GlideRecord} gr - loaded record
  * @param {String} field - column name
@@ -251,6 +276,133 @@ function fillIfEmpty(gr, field, value, changed) {
     gr.setValue(field, value);
     changed.push(field);
     return true;
+}
+
+/**
+ * True when `value` has the exact shape of a platform-issued primary key: 32
+ * hexadecimal characters and nothing else. This is the cheap, query-free test
+ * that separates "this column holds a sys_id" from "this column holds a raw
+ * lookup key the import engine never resolved" (CASE9000003, Synthetic Org
+ * Alpha, x_casemgmt_demo_agent are all 11-19 characters and contain non-hex
+ * letters, so they fail the test unambiguously).
+ *
+ * @param {String} value - stored column value
+ * @return {Boolean} true when the value is 32 hex characters
+ */
+function isSysIdShaped(value) {
+    return (/^[0-9a-f]{32}$/i).test(String(value === null || value === undefined ? '' : value));
+}
+
+/**
+ * True when `table` actually holds a row whose primary key is `sysId`. Used to
+ * tell a live reference from a dangling one: a sys_id-shaped value whose target
+ * row no longer exists reads exactly like a healthy reference through
+ * getValue(), but every dot-walk, related list, and report join through it
+ * yields nothing.
+ *
+ * Returns false for anything that is not sys_id-shaped without issuing a query,
+ * so a raw lookup key never costs a database roundtrip.
+ *
+ * @param {String} table - the reference field's target table
+ * @param {String} sysId - candidate primary key
+ * @return {Boolean} true when the target row exists
+ */
+function referenceResolves(table, sysId) {
+    if (!isSysIdShaped(sysId)) {
+        return false;
+    }
+    var g = new GlideRecord(table);
+    return g.get(sysId) ? true : false;
+}
+
+/**
+ * Adopts a single REFERENCE column on an already-loaded GlideRecord against the
+ * sys_id the seed spec expects it to carry, and records the field name in
+ * `changed` when it writes. This is the reference-aware counterpart of
+ * fillIfEmpty() and the reason a committed seed row ends up actually linked to
+ * its parent.
+ *
+ * `expectedSysId` MUST have been resolved by one of the stable-key lookup
+ * helpers (lookupCaseSysId by number, lookupUserSysId by user_name,
+ * lookupGroupSysId / lookupCompanySysId by name). No sys_id literal appears
+ * anywhere in this file, per AAP Section 0.7.2's no-hardcoded-sys_id constraint.
+ *
+ * Decision table, in evaluation order:
+ *
+ *   stored value                     | action                       | why
+ *   ---------------------------------+------------------------------+-----------------------------
+ *   (no expectedSysId resolved)      | leave untouched              | nothing authoritative to
+ *                                    |                              | adopt from; the caller has
+ *                                    |                              | already warned about the
+ *                                    |                              | failed lookup
+ *   equal to expectedSysId           | leave untouched, no repair   | already exactly right - this
+ *                                    |                              | is the whole second-run path
+ *   empty                            | write expectedSysId          | the attribute-only packaged
+ *                                    |                              | shape commits the column
+ *                                    |                              | EMPTY by design, so the
+ *                                    |                              | link is completed here
+ *   not 32-hex (raw lookup key)      | write expectedSysId + warn   | an unresolved key string is
+ *                                    |                              | not a reference; leaving it
+ *                                    |                              | keeps the row detached
+ *   32-hex but target row is absent  | write expectedSysId + warn   | dangling reference; the row
+ *                                    |                              | it named is gone
+ *   32-hex, resolves, different row  | leave untouched, no repair   | a valid reference an operator
+ *                                    |                              | (or a later transition) put
+ *                                    |                              | there outranks the seed spec
+ *
+ * The last row is the deliberate trade-off: once a reference resolves, the seed
+ * treats it as operator-managed and never re-points it, exactly as
+ * fillIfEmpty() never overwrites a populated scalar. Only unusable values -
+ * empty, raw, or dangling - are replaced, which keeps repair additive and keeps
+ * a second consecutive run silent (the value now equals expectedSysId, so the
+ * first branch returns without writing or logging).
+ *
+ * @param {GlideRecord} gr - loaded record
+ * @param {String} field - reference column name
+ * @param {String|null} expectedSysId - sys_id resolved from a stable key
+ * @param {String} referenceTable - the column's reference target table
+ * @param {Array} changed - accumulator of changed column names
+ * @param {String} context - human-readable row identity for the warn trace
+ * @return {Boolean} true when the field was written
+ */
+function adoptReference(gr, field, expectedSysId, referenceTable, changed, context) {
+    // Normalize both sides to primitive JS strings before comparing: on
+    // Rhino-based releases the platform hands back Java string objects, and two
+    // of those never compare equal with === even when their characters match,
+    // which would make an already-correct reference look like a repair on every
+    // single run.
+    var expected = (expectedSysId === null || expectedSysId === undefined)
+        ? '' : String(expectedSysId);
+    if (expected === '') {
+        return false;
+    }
+    var stored = String(gr.getValue(field) || '');
+    if (stored === expected) {
+        return false;
+    }
+    if (stored === '') {
+        gr.setValue(field, expected);
+        changed.push(field);
+        return true;
+    }
+    if (!isSysIdShaped(stored)) {
+        gs.warn('Seed repair: ' + field + ' on ' + context + ' held the raw ' +
+                'unresolved key "' + stored + '" instead of a ' + referenceTable +
+                ' reference; relinking it by stable-key lookup.');
+        gr.setValue(field, expected);
+        changed.push(field);
+        return true;
+    }
+    if (!referenceResolves(referenceTable, stored)) {
+        gs.warn('Seed repair: ' + field + ' on ' + context + ' pointed at a ' +
+                'missing ' + referenceTable + ' row; relinking it by stable-key ' +
+                'lookup.');
+        gr.setValue(field, expected);
+        changed.push(field);
+        return true;
+    }
+    // Valid reference to a different row: operator-managed, preserved as-is.
+    return false;
 }
 
 
@@ -421,6 +573,26 @@ function daysAgoDate(n) {
     var dt = daysAgoDateTime(n);
     // GlideDateTime.getValue() returns 'yyyy-MM-dd HH:mm:ss'; trim to date.
     return dt.substring(0, 10);
+}
+
+/**
+ * Returns the current platform time as a canonical 'yyyy-MM-dd HH:mm:ss' (UTC)
+ * string - the run-time `gs.nowDateTime()` default this seed applies to
+ * opened_date when the spec carries no explicit historical override.
+ *
+ * It is deliberately expressed as new GlideDateTime().getValue() rather than
+ * gs.nowDateTime() itself: gs.nowDateTime() renders in the *session's* display
+ * format and time zone, which setValue() on a glide_date_time column would
+ * misparse, whereas getValue() yields the internal format the column stores.
+ * This is the same instant, in the same representation the
+ * x_casemgmt_set_opened_date Before-Insert business rule writes
+ * (`current.opened_date = new GlideDateTime()`), so a case opened by the seed
+ * and a case opened through the form carry indistinguishable timestamps.
+ *
+ * @return {String} current UTC datetime in platform-canonical internal format
+ */
+function nowDateTime() {
+    return daysAgoDateTime(0);
 }
 
 // ----- Ensure helpers (write side) ------------------------------------------
@@ -615,23 +787,27 @@ function ensureCompany(companyName, fields) {
  *
  * Insert pipeline:
  *   1. Existence check on the pinned `number` OR the subject. On hit the row
- *      is ADOPTED: every field the spec supplies that is still EMPTY on the
- *      row is filled (including the pinned number itself, the two assignment
- *      references resolved by group name / user_name, and the dates), the
- *      repair is applied with setWorkflow(false), and one line is logged
- *      naming exactly which columns were repaired. Nothing already populated
- *      is ever overwritten, so a second consecutive run repairs nothing and
- *      logs nothing - that is the idempotency contract. Adoption is what makes
- *      the Update Set commit path work. The packaged XML carries
- *      human-readable keys rather than sys_ids (AAP Section 0.5.2), in two
- *      measured shapes: references to x_casemgmt_case and core_company carry
- *      the key in a display_value ATTRIBUTE with an EMPTY body, because a body
- *      holding a number or a company name makes Update Set preview report
- *      "Could not find a record ..." - those columns therefore arrive EMPTY and
- *      this function fills them. References to sys_user / sys_user_group carry
- *      the key in the body as well, which preview does not check and the import
- *      engine does resolve, so those arrive already LINKED and the repair below
- *      is a no-op safety net for them.
+ *      is ADOPTED: every scalar field the spec supplies that is still EMPTY on
+ *      the row is filled (the pinned number itself, the choices, the text, the
+ *      dates), and each reference column is adopted through adoptReference(),
+ *      which repairs it when it is empty, when it holds a raw unresolved lookup
+ *      key, or when it dangles, and preserves it when it already resolves. The
+ *      repair is applied with setWorkflow(false) and one line is logged naming
+ *      exactly which columns were repaired. Nothing usable is ever overwritten,
+ *      so a second consecutive run repairs nothing and logs nothing - that is
+ *      the idempotency contract. Adoption is what makes the Update Set commit
+ *      path work. The packaged XML carries human-readable keys rather than
+ *      sys_ids (AAP Section 0.5.2), in two measured shapes: references to
+ *      x_casemgmt_case and core_company carry the key in a display_value
+ *      ATTRIBUTE with an EMPTY body, because a body holding a number or a
+ *      company name makes Update Set preview report "Could not find a record
+ *      ..." and, once committed, stores that key as a raw string that resolves
+ *      to nothing - those columns therefore arrive EMPTY by design and this
+ *      function links them. References to sys_user / sys_user_group carry the
+ *      key in the body as well, and the import engine has been observed to
+ *      resolve those - but "observed to resolve" is not "guaranteed valid", so
+ *      the repair below verifies rather than assumes: a nonempty reference is
+ *      trusted only when it is sys_id-shaped AND its target row exists.
  *   2. On miss: initialize a fresh GlideRecord, set the pinned number, set
  *      every in-scope field, optionally resolve assigned_group_name ->
  *      sys_user_group sys_id and assigned_agent_user_name -> sys_user sys_id
@@ -642,12 +818,15 @@ function ensureCompany(companyName, fields) {
  *      Update-Set-seeded instances are number-identical. The set_opened_date
  *      Before-Insert business rule auto-populates opened_date =
  *      gs.nowDateTime().
- *   4. If the caller provided opened_date and/or closed_date overrides
- *      (used by Closed seed cases 06 and 10 to give the
- *      avg_time_to_close dashboard non-trivial multi-day spans), perform
- *      a follow-up update with setWorkflow(false) so the date-correction
- *      update does NOT trigger any flow or Before-Update business rule.
- *      This is critical because:
+ *   4. Settle the dates in a follow-up update with setWorkflow(false): apply the
+ *      opened_date / closed_date overrides when the caller supplied them (Closed
+ *      seed cases 06 and 10, which need non-trivial multi-day spans for the
+ *      avg_time_to_close dashboard), and when no opened_date override exists,
+ *      populate the column with the run-time now-timestamp if the Before-Insert
+ *      rule left it empty - so an inserted case, exactly like an adopted one,
+ *      always ends with opened_date set. The follow-up update runs with
+ *      setWorkflow(false) so the date correction does NOT trigger any flow or
+ *      Before-Update business rule. This is critical because:
  *        - block_terminal_closed Before-Update would normally abort
  *          updates to a Closed case, and the seed needs to set
  *          closed_date AFTER inserting at status=Closed.
@@ -685,7 +864,9 @@ function ensureCompany(companyName, fields) {
  *     assigned_group_name (String, optional - resolved via lookupGroupSysId),
  *     assigned_agent_user_name (String, optional - resolved via lookupUserSysId),
  *     pending_reason (Choice: Awaiting Info|Awaiting Third Party|Other; optional),
- *     opened_date (DateTime, optional override),
+ *     opened_date (DateTime, optional historical override; when absent the
+ *                  run-time now-timestamp is applied so the column is never
+ *                  left empty),
  *     closed_date (DateTime, optional override)
  *   }
  * @return {Object} { sys_id, number }
@@ -696,6 +877,16 @@ function ensureCase(fields) {
     // row created by an earlier run of this script has). Either way the row is
     // adopted rather than duplicated, and every field the commit engine could
     // not populate is repaired from the spec below.
+    //
+    // openedDateValue is the one value the spec does not always supply and the
+    // seed must nonetheless guarantee. Cases 06 and 10 pass an explicit
+    // historical opened_date (they need a multi-day span for the
+    // avg_time_to_close widget) and that override always wins; every other case
+    // gets the run-time now-timestamp, which is what the
+    // x_casemgmt_set_opened_date Before-Insert business rule would have written
+    // had the commit engine let it run. Resolved once here so the adoption path
+    // and the insert path apply exactly the same value.
+    var openedDateValue = fields.opened_date ? fields.opened_date : nowDateTime();
     var c = new GlideRecord(TABLES.CASE);
     var q = c.addQuery('subject', fields.subject);
     if (fields.number) {
@@ -714,26 +905,31 @@ function ensureCase(fields) {
         fillIfEmpty(c, 'requester_email', fields.requester_email, changed);
         fillIfEmpty(c, 'pending_reason', fields.pending_reason, changed);
         // References are resolved by human-readable key per AAP Section 0.5.2:
-        // group by name, user by user_name. The packaged XML carries those two
-        // keys in the element body as well as the display_value attribute, and
-        // the import engine resolves sys_user / sys_user_group bodies - so on a
-        // committed row these are normally already linked and the fills below
-        // are a no-op. They still run because this same helper adopts rows that
-        // were created some other way (a partial seed run, or a row whose
-        // reference was cleared), and fillIfEmpty never overwrites a value.
-        if (fields.assigned_group_name && String(c.getValue('assigned_group') || '') === '') {
+        // group by name, user by user_name. They go through adoptReference()
+        // rather than fillIfEmpty() because a nonempty reference column is not
+        // proof of a working link: the import engine can leave the lookup key
+        // itself (x_casemgmt_demo_team, x_casemgmt_demo_agent) in the column as
+        // a raw string, and a group or user row deleted after an earlier run
+        // leaves a dangling sys_id behind. adoptReference() relinks empty, raw,
+        // and dangling values, and preserves any reference that already
+        // resolves - so a manager who reassigned a case keeps their assignment.
+        var adoptContext = 'case ' + (c.getValue('number') || fields.number) +
+                           ' (' + fields.subject + ')';
+        if (fields.assigned_group_name) {
             var adoptGroup = lookupGroupSysId(fields.assigned_group_name);
             if (adoptGroup) {
-                fillIfEmpty(c, 'assigned_group', adoptGroup, changed);
+                adoptReference(c, 'assigned_group', adoptGroup, 'sys_user_group',
+                               changed, adoptContext);
             } else {
                 gs.warn('ensureCase(adopt): assigned_group not found by name: ' +
                         fields.assigned_group_name + ' (case ' + fields.subject + ')');
             }
         }
-        if (fields.assigned_agent_user_name && String(c.getValue('assigned_agent') || '') === '') {
+        if (fields.assigned_agent_user_name) {
             var adoptAgent = lookupUserSysId(fields.assigned_agent_user_name);
             if (adoptAgent) {
-                fillIfEmpty(c, 'assigned_agent', adoptAgent, changed);
+                adoptReference(c, 'assigned_agent', adoptAgent, 'sys_user',
+                               changed, adoptContext);
             } else {
                 gs.warn('ensureCase(adopt): assigned_agent not found by user_name: ' +
                         fields.assigned_agent_user_name + ' (case ' + fields.subject + ')');
@@ -743,7 +939,18 @@ function ensureCase(fields) {
         // the time-based dashboard widgets (avg time to close, cases opened in
         // the last 30 days) keep working however long after authoring the
         // Update Set is committed.
-        fillIfEmpty(c, 'opened_date', fields.opened_date, changed);
+        //
+        // opened_date is guaranteed rather than merely copied: the commit engine
+        // suppresses the x_casemgmt_set_opened_date Before-Insert business rule,
+        // so a packaged case that carries no explicit override arrives with the
+        // column EMPTY, which reads as a blank "Opened Date" on the portal
+        // lookup and drops the case out of the cases-opened-30-days widget.
+        // openedDateValue below is the spec's historical override when there is
+        // one (cases 06 and 10) and the run-time gs.nowDateTime() equivalent
+        // otherwise, so every adopted case ends this block with the column
+        // populated. fillIfEmpty still guards the write, so a case that already
+        // has a date keeps it and a second run repairs nothing.
+        fillIfEmpty(c, 'opened_date', openedDateValue, changed);
         fillIfEmpty(c, 'closed_date', fields.closed_date, changed);
         SEED_STATS.cases.adopted++;
         if (changed.length) {
@@ -795,21 +1002,41 @@ function ensureCase(fields) {
         }
     }
     var sysId = c.insert();
-    // Apply opened_date / closed_date overrides AFTER insert. Setting them
-    // pre-insert would not survive set_opened_date's Before-Insert rule.
-    if (fields.opened_date || fields.closed_date) {
-        // Re-fetch by sys_id to obtain the just-inserted record (the
-        // GlideRecord `c` may still hold the pre-insert state in some
-        // older Rhino-based scoping contexts; .get() guarantees a fresh
-        // load on every supported PDI release).
-        var c2 = new GlideRecord(TABLES.CASE);
-        if (c2.get(sysId)) {
-            if (fields.opened_date) {
-                c2.opened_date = fields.opened_date;
+    // Settle the two date columns AFTER insert. Setting opened_date pre-insert
+    // would not survive set_opened_date's Before-Insert rule, and closed_date is
+    // written by a Before-Update rule that does not fire on insert at all.
+    //
+    // Re-fetch by sys_id to obtain the just-inserted record (the GlideRecord `c`
+    // may still hold the pre-insert state in some older Rhino-based scoping
+    // contexts; .get() guarantees a fresh load on every supported PDI release).
+    var c2 = new GlideRecord(TABLES.CASE);
+    if (c2.get(sysId)) {
+        var dateChanged = [];
+        if (fields.opened_date) {
+            // Explicit historical override (cases 06 and 10): it must replace
+            // whatever set_opened_date wrote, so it is applied whenever the
+            // stored value differs from the override - which also means a row
+            // that already carries the override is left alone. Both sides are
+            // normalized to primitive strings so a Rhino Java-string value
+            // cannot make an equal pair compare unequal.
+            if (String(c2.getValue('opened_date') || '') !== String(fields.opened_date)) {
+                c2.setValue('opened_date', fields.opened_date);
+                dateChanged.push('opened_date');
             }
-            if (fields.closed_date) {
-                c2.closed_date = fields.closed_date;
-            }
+        } else if (String(c2.getValue('opened_date') || '') === '') {
+            // No override and the Before-Insert rule did not populate the column
+            // (it is inactive, or this run is executing where it is suppressed).
+            // Guarantee the field rather than shipping a case with a blank
+            // "Opened Date" that no time-based report can see.
+            c2.setValue('opened_date', openedDateValue);
+            dateChanged.push('opened_date');
+        }
+        if (fields.closed_date &&
+                String(c2.getValue('closed_date') || '') !== String(fields.closed_date)) {
+            c2.setValue('closed_date', fields.closed_date);
+            dateChanged.push('closed_date');
+        }
+        if (dateChanged.length) {
             c2.setWorkflow(false);
             c2.update();
         }
@@ -882,12 +1109,23 @@ function ensureTask(fields) {
     if (t.next()) {
         var changed = [];
         fillIfEmpty(t, 'number', fields.number, changed);
-        fillIfEmpty(t, 'case', caseSysId, changed);
         fillIfEmpty(t, 'subject', fields.subject, changed);
         fillIfEmpty(t, 'type', fields.type, changed);
         fillIfEmpty(t, 'status', fields.status, changed);
         fillIfEmpty(t, 'due_date', fields.due_date, changed);
-        fillIfEmpty(t, 'assigned_to', assignedToSysId, changed);
+        // The two reference columns go through adoptReference(), not
+        // fillIfEmpty(): `case` arrives EMPTY on the commit path (the payload
+        // carries the parent's number in a display_value attribute, which is the
+        // only shape that previews clean), and if a key string ever does land in
+        // the column it is a raw value that resolves to nothing rather than a
+        // link - nonempty and still detached. adoptReference() relinks empty,
+        // raw, and dangling values by stable-key lookup and leaves a reference
+        // that already resolves alone.
+        var taskContext = 'task ' + (t.getValue('number') || fields.number) +
+                          ' (' + fields.subject + ')';
+        adoptReference(t, 'case', caseSysId, TABLES.CASE, changed, taskContext);
+        adoptReference(t, 'assigned_to', assignedToSysId, 'sys_user', changed,
+                       taskContext);
         SEED_STATS.tasks.adopted++;
         if (changed.length) {
             t.setWorkflow(false);
@@ -986,10 +1224,13 @@ function ensureParty(fields) {
         }
     }
     // Adoption: a party packaged in the Update Set arrives with `case` EMPTY,
-    // and an Organization party also arrives with `organization` EMPTY (both
-    // are attribute-only shapes; a Person party's `person` resolves at import
-    // because sys_user bodies do resolve), so the composite tuple below cannot
-    // find it. The pinned number is the only key that can,
+    // and an Organization party also arrives with `organization` EMPTY (both are
+    // attribute-only shapes, which is the only shape that previews clean and
+    // commits without storing an unresolvable raw key; a Person party's `person`
+    // travels in the element body and the import engine has been observed to
+    // resolve it, which adoptReference() re-verifies rather than assumes), so
+    // the composite tuple below cannot find it. The pinned number is the only
+    // key that can,
     // which is exactly why every packaged party row carries one: the tuple
     // (party_type, role_label) is NOT unique across the demo set - parties 01
     // and 06 are both Person/Requester and 02 and 07 are both
@@ -1018,11 +1259,24 @@ function ensureParty(fields) {
     if (p.next()) {
         var changed = [];
         fillIfEmpty(p, 'number', fields.number, changed);
-        fillIfEmpty(p, 'case', caseSysId, changed);
         fillIfEmpty(p, 'party_type', fields.party_type, changed);
         fillIfEmpty(p, 'role_label', fields.role_label, changed);
-        fillIfEmpty(p, 'person', personSysId, changed);
-        fillIfEmpty(p, 'organization', orgSysId, changed);
+        // All three reference columns go through adoptReference(), not
+        // fillIfEmpty(): `case` and (on Organization rows) `organization` arrive
+        // EMPTY on the commit path because their keys can only travel in a
+        // display_value attribute, and a key that ever does land in the column
+        // body is a raw string that resolves to nothing - nonempty and still
+        // detached. personSysId is null on Organization rows and orgSysId is
+        // null on Person rows, and adoptReference() writes nothing when it has
+        // no expected sys_id, so the polymorphic invariant (exactly one of the
+        // two populated) is preserved untouched.
+        var partyContext = 'party ' + (p.getValue('number') || fields.number) +
+                           ' (' + fields.party_type + '/' + fields.role_label +
+                           ' on ' + fields.case_number + ')';
+        adoptReference(p, 'case', caseSysId, TABLES.CASE, changed, partyContext);
+        adoptReference(p, 'person', personSysId, 'sys_user', changed, partyContext);
+        adoptReference(p, 'organization', orgSysId, 'core_company', changed,
+                       partyContext);
         SEED_STATS.parties.adopted++;
         if (changed.length) {
             p.setWorkflow(false);
@@ -1740,8 +1994,9 @@ function seedDemoData() {
 //
 //   - Scripts - Background paste: the entire file is evaluated; the call
 //     below dispatches the pipeline at the end.
-//   - Fix Script: the platform evaluates the script body on Update Set
-//     commit; the call dispatches the pipeline.
+//   - Manually executed Fix Script: after an Update Set installs the Fix Script
+//     record, an operator explicitly runs it; the call below then dispatches
+//     the pipeline. Installing or committing the record alone does not run it.
 //   - Script Action / Inbound Action / scripted endpoint: same evaluation
 //     model.
 //

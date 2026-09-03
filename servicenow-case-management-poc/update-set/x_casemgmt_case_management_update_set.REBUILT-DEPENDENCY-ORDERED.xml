@@ -1867,54 +1867,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_3e7609e334c65bf732756bc25d9f21c2</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>General Inquiry</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>3e7609e334c65bf732756bc25d9f21c2</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>General Inquiry</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Complaint</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>82d6b899a325f343095766a013d6255e</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Complaint</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_type</name>
+<record_name>x_casemgmt_case.type</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="type" table="x_casemgmt_case" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>type</element><name>x_casemgmt_case</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:26:19</sys_created_on><sys_id>edf8ef0e9343435009aa70d19dba10f3</sys_id><sys_mod_count>1</sys_mod_count><sys_name>type</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_type</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>type</element><hint /><inactive>false</inactive><label>General Inquiry</label><language>en</language><name>x_casemgmt_case</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:49</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>3e7609e334c65bf732756bc25d9f21c2</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:49</sys_updated_on><value>General Inquiry</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>type</element><hint /><inactive>false</inactive><label>Complaint</label><language>en</language><name>x_casemgmt_case</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:49</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>82d6b899a325f343095766a013d6255e</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:49</sys_updated_on><value>Complaint</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -1925,11 +1880,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case.type</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case</table>
+<target_name>Case.Type</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>aa164e14a6b69a5d2cbd0af63d4d3c2b</update_guid>
+<update_guid>b74d24df588c8cfa58c8bfe5bd9c8e9c</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
@@ -1939,142 +1894,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_469743ab68c473967a2b400e96b9ec3b</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Draft</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>469743ab68c473967a2b400e96b9ec3b</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Draft</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Open</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>c7016389461b0514a6c32ef560c8cc15</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Open</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>In Progress</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>300</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>c6f64c7588534aa4afc57b3ddb9b94be</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>In Progress</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Pending</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>400</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>b7e4f3630eba2bbb58369d1de1c9f64f</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Pending</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Resolved</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>500</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>c07dd6871aa382dadba4c1462574ad88</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Resolved</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Closed</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>600</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>e954f5727169003243f2db2ae9c872e0</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Closed</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_status</name>
+<record_name>x_casemgmt_case.status</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="status" table="x_casemgmt_case" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>status</element><name>x_casemgmt_case</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:26:19</sys_created_on><sys_id>e9f8ef0e9343435009aa70d19dba10ff</sys_id><sys_mod_count>0</sys_mod_count><sys_name>status</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_status</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Draft</label><language>en</language><name>x_casemgmt_case</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>469743ab68c473967a2b400e96b9ec3b</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Draft</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Open</label><language>en</language><name>x_casemgmt_case</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>c7016389461b0514a6c32ef560c8cc15</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Open</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>In Progress</label><language>en</language><name>x_casemgmt_case</name><sequence>300</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>c6f64c7588534aa4afc57b3ddb9b94be</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>In Progress</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Pending</label><language>en</language><name>x_casemgmt_case</name><sequence>400</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>b7e4f3630eba2bbb58369d1de1c9f64f</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Pending</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Resolved</label><language>en</language><name>x_casemgmt_case</name><sequence>500</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>c07dd6871aa382dadba4c1462574ad88</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Resolved</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Closed</label><language>en</language><name>x_casemgmt_case</name><sequence>600</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>e954f5727169003243f2db2ae9c872e0</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Closed</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2085,11 +1907,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case.status</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case</table>
+<target_name>Case.Status</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>4a7587c36870da752b7c3ead3ea5d53c</update_guid>
+<update_guid>4c0f01586f2d4629129a8aa796dc9c60</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
@@ -2099,76 +1921,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_4c80901f97d80493815d6e5035350545</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>pending_reason</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Awaiting Info</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>4c80901f97d80493815d6e5035350545</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Awaiting Info</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>pending_reason</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Awaiting Third Party</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>f9f1b37a725e88b044b6b7e39c215670</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Awaiting Third Party</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>pending_reason</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Other</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>300</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>6bfddaadc6361fe46d2756027eefec2f</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Other</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_pending_reason</name>
+<record_name>x_casemgmt_case.pending_reason</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="pending_reason" table="x_casemgmt_case" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>pending_reason</element><name>x_casemgmt_case</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:26:20</sys_created_on><sys_id>f1f8234e9343435009aa70d19dba102e</sys_id><sys_mod_count>0</sys_mod_count><sys_name>pending_reason</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_pending_reason</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>pending_reason</element><hint /><inactive>false</inactive><label>Awaiting Info</label><language>en</language><name>x_casemgmt_case</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:47</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>4c80901f97d80493815d6e5035350545</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:47</sys_updated_on><value>Awaiting Info</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>pending_reason</element><hint /><inactive>false</inactive><label>Awaiting Third Party</label><language>en</language><name>x_casemgmt_case</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:47</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>f9f1b37a725e88b044b6b7e39c215670</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:47</sys_updated_on><value>Awaiting Third Party</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>pending_reason</element><hint /><inactive>false</inactive><label>Other</label><language>en</language><name>x_casemgmt_case</name><sequence>300</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:47</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>6bfddaadc6361fe46d2756027eefec2f</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:47</sys_updated_on><value>Other</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2179,11 +1934,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case.pending_reason</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case</table>
+<target_name>Case.Pending Reason</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>7487c64f3165bc0f049749f7f5bd75ed</update_guid>
+<update_guid>cc62daa3243d66134103b352a5417b59</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
@@ -2193,98 +1948,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_6224e4afe120474dd8d1257b4a406d37</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>priority</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Low</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>6224e4afe120474dd8d1257b4a406d37</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Low</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>priority</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Medium</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>7cdfc33aa8fe789423d712565ee468bc</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Medium</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>priority</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>High</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>300</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>d7ca8d1e5a898400629bddebe06a9824</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>High</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>priority</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Critical</label>
-    <language>en</language>
-    <name>x_casemgmt_case</name>
-    <sequence>400</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>34a378616cc6fe411402335b0c0243da</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Critical</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_priority</name>
+<record_name>x_casemgmt_case.priority</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="priority" table="x_casemgmt_case" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>priority</element><name>x_casemgmt_case</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:26:20</sys_created_on><sys_id>69f8234e9343435009aa70d19dba101b</sys_id><sys_mod_count>0</sys_mod_count><sys_name>priority</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_priority</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>priority</element><hint /><inactive>false</inactive><label>Low</label><language>en</language><name>x_casemgmt_case</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:47</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>6224e4afe120474dd8d1257b4a406d37</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:47</sys_updated_on><value>Low</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>priority</element><hint /><inactive>false</inactive><label>Medium</label><language>en</language><name>x_casemgmt_case</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>7cdfc33aa8fe789423d712565ee468bc</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Medium</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>priority</element><hint /><inactive>false</inactive><label>High</label><language>en</language><name>x_casemgmt_case</name><sequence>300</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>d7ca8d1e5a898400629bddebe06a9824</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>High</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>priority</element><hint /><inactive>false</inactive><label>Critical</label><language>en</language><name>x_casemgmt_case</name><sequence>400</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>34a378616cc6fe411402335b0c0243da</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Critical</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2295,11 +1961,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case.priority</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case</table>
+<target_name>Case.Priority</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>614302801b25da6b9edb2cbf60f84078</update_guid>
+<update_guid>3dcb23cf58eab1ae5952fe372bc61d67</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
@@ -2309,54 +1975,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_8980a8a92620d4409c084f61a81d5dcb</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>party_type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Person</label>
-    <language>en</language>
-    <name>x_casemgmt_case_party</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>8980a8a92620d4409c084f61a81d5dcb</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Person</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>party_type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Organization</label>
-    <language>en</language>
-    <name>x_casemgmt_case_party</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>1c3db1ba6f9ad0bac44139983f64f7d5</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Organization</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_party_party_type</name>
+<record_name>x_casemgmt_case_party.party_type</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="party_type" table="x_casemgmt_case_party" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>party_type</element><name>x_casemgmt_case_party</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:32:30</sys_created_on><sys_id>8c6ae3029383435009aa70d19dba1094</sys_id><sys_mod_count>0</sys_mod_count><sys_name>party_type</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_party_party_type</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>party_type</element><hint /><inactive>false</inactive><label>Person</label><language>en</language><name>x_casemgmt_case_party</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:47</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>8980a8a92620d4409c084f61a81d5dcb</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:47</sys_updated_on><value>Person</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>party_type</element><hint /><inactive>false</inactive><label>Organization</label><language>en</language><name>x_casemgmt_case_party</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:47</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>1c3db1ba6f9ad0bac44139983f64f7d5</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:47</sys_updated_on><value>Organization</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2367,11 +1988,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case_party.party_type</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case_party</table>
+<target_name>Case Party.Party Type</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>10d3ecbf510937e6165bc0b3a1a26e39</update_guid>
+<update_guid>5fb8f2e17b16b8226d23ce85ac02ed12</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
@@ -2381,98 +2002,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_c509a1c2ee11b17bb33984334f603baf</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Investigation</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>c509a1c2ee11b17bb33984334f603baf</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Investigation</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Review</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>b0337f92dc4ec6a9eb8e5a3e4faeccaf</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Review</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Follow-up</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>300</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>13e5648ac5e3de04d88ab1aef64f0165</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Follow-up</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>type</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Other</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>400</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>2edff77acab5fc790a92ad36e2772600</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Other</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_task_type</name>
+<record_name>x_casemgmt_case_task.type</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="type" table="x_casemgmt_case_task" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>type</element><name>x_casemgmt_case_task</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:32:29</sys_created_on><sys_id>7f5ae3029383435009aa70d19dba1035</sys_id><sys_mod_count>0</sys_mod_count><sys_name>type</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_task_type</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>type</element><hint /><inactive>false</inactive><label>Investigation</label><language>en</language><name>x_casemgmt_case_task</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>c509a1c2ee11b17bb33984334f603baf</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Investigation</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>type</element><hint /><inactive>false</inactive><label>Review</label><language>en</language><name>x_casemgmt_case_task</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>b0337f92dc4ec6a9eb8e5a3e4faeccaf</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Review</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>type</element><hint /><inactive>false</inactive><label>Follow-up</label><language>en</language><name>x_casemgmt_case_task</name><sequence>300</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>13e5648ac5e3de04d88ab1aef64f0165</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Follow-up</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>type</element><hint /><inactive>false</inactive><label>Other</label><language>en</language><name>x_casemgmt_case_task</name><sequence>400</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>2edff77acab5fc790a92ad36e2772600</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Other</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2483,11 +2015,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case_task.type</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case_task</table>
+<target_name>Case Task.Type</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>4e43dfd7902d82397ccf0250ef96b2f6</update_guid>
+<update_guid>9d32a81ee6bc4e1510529ba9755ff7c3</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
@@ -2497,76 +2029,9 @@
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments/>
-<name>sys_choice_db2d244d7bce6bd6a9b0984fa4f67d66</name>
-<payload><![CDATA[<unload unload_date="2025-01-01 00:00:00">
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Open</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>100</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>db2d244d7bce6bd6a9b0984fa4f67d66</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Open</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>In Progress</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>200</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>3127c03954bedb860746122fdb78d244</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>In Progress</value>
-</sys_choice>
-<sys_choice action="INSERT_OR_UPDATE">
-    <dependent_value/>
-    <element>status</element>
-    <hint/>
-    <inactive>false</inactive>
-    <label>Closed</label>
-    <language>en</language>
-    <name>x_casemgmt_case_task</name>
-    <sequence>300</sequence>
-    <sys_class_name>sys_choice</sys_class_name>
-    <sys_created_by>admin</sys_created_by>
-    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-    <sys_domain>global</sys_domain>
-    <sys_id>3e06456307a50567a8aaf02e62bda209</sys_id>
-    <sys_mod_count>0</sys_mod_count>
-    <sys_overrides/>
-    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-    <sys_updated_by>admin</sys_updated_by>
-    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-    <value>Closed</value>
-</sys_choice>
-</unload>
-]]></payload>
+<name>sys_choice_x_casemgmt_case_task_status</name>
+<record_name>x_casemgmt_case_task.status</record_name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_choice action="INSERT_OR_UPDATE" field="status" table="x_casemgmt_case_task" version="3"><sys_choice_set action="INSERT_OR_UPDATE"><element>status</element><name>x_casemgmt_case_task</name><sys_class_name>sys_choice_set</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-02 14:32:30</sys_created_on><sys_id>8c6ae3029383435009aa70d19dba106d</sys_id><sys_mod_count>0</sys_mod_count><sys_name>status</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy /><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_choice_x_casemgmt_case_task_status</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 15:55:00</sys_updated_on></sys_choice_set><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Open</label><language>en</language><name>x_casemgmt_case_task</name><sequence>100</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>db2d244d7bce6bd6a9b0984fa4f67d66</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Open</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>In Progress</label><language>en</language><name>x_casemgmt_case_task</name><sequence>200</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>3127c03954bedb860746122fdb78d244</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>In Progress</value></sys_choice><sys_choice action="INSERT_OR_UPDATE"><dependent_value /><element>status</element><hint /><inactive>false</inactive><label>Closed</label><language>en</language><name>x_casemgmt_case_task</name><sequence>300</sequence><synonyms /><sys_created_by>admin</sys_created_by><sys_created_on>2026-09-03 16:02:48</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>3e06456307a50567a8aaf02e62bda209</sys_id><sys_mod_count>0</sys_mod_count><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-09-03 16:02:48</sys_updated_on><value>Closed</value></sys_choice></sys_choice></record_update>]]></payload>
 <payload_hash/>
 <remote_update_set display_value="x_casemgmt_case_management v1.0.0 (native rebuild)">0b3b7452934f435009aa70d19dba100d</remote_update_set>
 <replace_on_upgrade>false</replace_on_upgrade>
@@ -2577,11 +2042,11 @@
 <sys_recorded_at>2026-04-30 12:00:00</sys_recorded_at>
 <sys_updated_by>admin</sys_updated_by>
 <sys_updated_on>2026-09-02 20:25:48</sys_updated_on>
-<table>sys_choice</table>
-<target_name>x_casemgmt_case_task.status</target_name>
-<type>Choice List</type>
+<table>x_casemgmt_case_task</table>
+<target_name>Case Task.Status</target_name>
+<type>Choice list</type>
 <update_domain>global</update_domain>
-<update_guid>35ac5859d41d7d0aa4fc58d8bdf4a77a</update_guid>
+<update_guid>c4ad3a0e625c88fced03bf0ab7ce701e</update_guid>
 <update_guid_history/>
 <update_set display_value=""/>
 <view/>
