@@ -2,7 +2,7 @@
 
 A proof-of-concept ServiceNow scoped application that re-platforms a subset of ArkCase's case-management functional domain onto the ServiceNow Now Platform.
 
-This subdirectory contains the ServiceNow scoped application, delivered as a **single self-contained Update Set XML** at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It targets a ServiceNow Personal Developer Instance (PDI); it has been built and verified on `dev379024`, running **Australia Patch 3**. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
+This subdirectory contains the ServiceNow scoped application, delivered as a **single self-contained Update Set XML** at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It targets a ServiceNow Personal Developer Instance (PDI); the current validation instance is `dev306625`, running **Zurich Patch 10** (`glide-zurich-07-01-2025__patch10-05-22-2026_06-12-2026_2311`), where the 2026-09-02 run took its measurements. It was originally built and gate-measured on `dev379024` (**Australia Patch 3**), a host that is now **retired and not used** — figures dated to it are dated evidence from that host, never current state. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
 
 > **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and four things are open. Read this before planning around it:
 >
@@ -66,7 +66,7 @@ The following ArkCase locations were consulted as semantic source-of-truth when 
 
 ## Directory Layout
 
-Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`234` files in total, README included — re-derive with `find servicenow-case-management-poc -type f | wc -l`).
+Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`235` files in total, README included — re-derive with `find servicenow-case-management-poc -type f | wc -l`).
 
 ```plaintext
 servicenow-case-management-poc/
@@ -85,7 +85,19 @@ servicenow-case-management-poc/
 │                                      artifact: the platform derives sys_scope from sys_app
 │                                      on commit, so shipping one would duplicate it.
 ├── tables/                        [3] case, case_task, case_party (sys_db_object)
-├── dictionary/                   [60] every field on the three tables (sys_dictionary)
+├── dictionary/                   [60] 30 sys_dictionary field/collection rows (27 fields + the 3
+│                                      table-level *_collection rows) + 30 sys_documentation label
+│                                      rows, for the three tables
+│                                      ⚠️ tables/ and dictionary/ serialize the RETAINED REBUILT
+│                                      records — the platform-captured ones, with platform-assigned
+│                                      sys_ids — and NOT the elected package's. The shipping
+│                                      deliverable (7292a6fe…) carries 3 sys_db_object + 25
+│                                      hand-authored sys_dictionary records with different sys_ids
+│                                      and zero sys_documentation rows. When the two disagree, the
+│                                      Update Set XML is what installs; these files are the record
+│                                      of the rebuilt schema that the retained
+│                                      REBUILT-DEPENDENCY-ORDERED package carries — the upgrade
+│                                      path named in item 4 of the note at the top of this file.
 ├── choices/                       [7] every Choice list (sys_choice)
 ├── numbers/                       [3] auto-numbering counters (sys_number)
 ├── roles/                         [3] the three scoped roles (sys_user_role)
@@ -136,7 +148,7 @@ servicenow-case-management-poc/
 │                                      (ATF 01-20) + x_casemgmt_atf_test_suite.xml. These
 │                                      serialize to 761 of the package's 926 blocks.
 ├── docs/                         [17] see the Documentation Index below
-└── scripts/                       [5] post_import_remediation.js — the mandatory Global
+└── scripts/                       [6] post_import_remediation.js — the mandatory Global
                                        post-import script (Defect C + Defect 9)
                                        sys_script_fix_x_casemgmt_post_import_remediation.xml —
                                        the Fix Script wrapper that carries that body inside
@@ -144,6 +156,11 @@ servicenow-case-management-poc/
                                        seed_demo_data.js — idempotent demo-data seeder
                                        transition_logic_regression_assertions.js — server-side
                                        regression assertions for the transition guards
+                                       pre_delete_collateral_guard.js — read-only guard that
+                                       MUST be run before any authorised targeted deletion of
+                                       the three scoped tables; enumerates the platform's
+                                       delete dependencies and aborts before the first delete
+                                       on anything outside the authorised subset
                                        round_trip_verify.md — the re-import/preview procedure
 ```
 
@@ -269,8 +286,11 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
 
 ## Current Status
 
-All statements below were measured on `https://dev379024.service-now.com` (Australia Patch 3). Nothing here is
-projected.
+Every statement below is a measurement, not a projection, and each stands as of the date it was taken. Figures
+dated before 2026-08-11 were measured on `https://dev379024.service-now.com` (Australia Patch 3) — **that host is
+retired and is not used**, so they remain dated evidence from it and were never re-taken there. The 2026-09-02
+figures were measured on the current validation instance `https://dev306625.service-now.com` (**Zurich Patch
+10**).
 
 **The package**
 
@@ -461,13 +481,18 @@ disagrees with; Section 9.5 is the install procedure, Section 9.6 lists every kn
 and Section 10.0 gives the recommended next steps in priority order. The measured status of each of the seven
 validation gates is in [`docs/validation-gates.md`](docs/validation-gates.md#measured-status).
 
-> **Instance note.** The reachable verification instance is `https://dev379024.service-now.com`. The
-> `dev364430` host named in some older documentation in this repository is stale and returns HTTP 401.
+> **Instance note.** The reachable verification instance is `https://dev306625.service-now.com`, running
+> **Zurich Patch 10**; its Table API answered read-only queries on 2026-09-03. The earlier
+> `https://dev379024.service-now.com` host is **retired and is not used** — every figure dated to it stays as
+> dated evidence from that host and never as current state. The `dev364430` host named in some older
+> documentation in this repository is stale and returns HTTP 401.
 
 > **Running the ATF suite needs one instance setting that the package deliberately does not carry.** Set
 > `sn_atf.runner.enabled = true` under *sys_properties*, then start the suite from a browser-attached client
 > runner (open `/atf_test_runner.do?sysparm_nostack=true` first and select it under "Pick a Browser").
-> Headless execution is **off** on `dev379024` and could not be enabled there, so it is unverified. The
+> Headless execution is **off** on the current validation instance `dev306625` — `sn_atf.headless.enabled` reads
+> `false` over the Table API on 2026-09-03, and `sn_atf.runner.enabled` already reads `true` there — as it was on
+> the retired `dev379024`, where it could not be enabled, so headless remains unverified. The
 > property is instance configuration and is excluded from the package on purpose — importing an app should not
 > silently enable test execution on someone's instance.
 

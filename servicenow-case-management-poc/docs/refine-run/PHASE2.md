@@ -200,8 +200,32 @@ Poll trace (5 s interval, 600 s cap), triggered 20:26:22Z: `previewing` at t=0 s
 **Final result on export 3 — the deliverable's 988 records:**
 `GET /api/now/table/sys_update_preview_problem?sysparm_query=remote_update_set=0b3b7452934f435009aa70d19dba100d^type=error`
 → **empty array, count 0**. The `type=warning` query is also **0**, so there are no warning
-descriptions to log. Total problem rows for the set: **0**. (Pre-refine baseline on this instance:
-**54** `type=error`.)
+descriptions to log. Total problem rows for the set: **0**.
+
+**Scale for that 0 — re-measured, and corrected.** An earlier revision of this section put the
+pre-refine committed package's baseline at "54 `type=error`"; that figure does not reproduce under
+any query variant and is withdrawn. The baseline was counted again, read-only, at
+**`2026-09-03T11:56:17Z` (UTC)**, with the repository at HEAD `3222514ab7`:
+
+```
+GET /api/now/table/sys_update_preview_problem
+  ?sysparm_query=remote_update_set=9929f50df18ccec91ea13b2a3bccfc90
+  &sysparm_fields=type,status
+→ HTTP 200, 13 rows — every one type=error, every one status=ignored
+```
+
+`9929f50df18ccec91ea13b2a3bccfc90` is the pre-refine committed retrieved update set. So the
+comparison is **13, not 54** — and the 13 are **`status=ignored`** rows, i.e. problems that were
+silenced to let that package commit, not live blockers standing against it. The same query re-run at
+`11:59:03Z` returned the identical 13 rows. An instance-wide census of `sys_update_preview_problem`
+at `11:59:08Z` found **16** rows in total: those 13, plus **3** on this run's superseded attempt 1
+(`7af37c12930f435009aa70d19dba105a`) carrying an empty `status`. That census is a present-state count
+of surviving rows, not a replay of what each preview reported at the time it ran.
+
+Export 3's own result is unaffected by the correction and is restated exactly as measured:
+`type=error` **0**, `type=warning` **0**, total **0** — and, unlike the 13 above, reached with
+**nothing** resolved, skipped or ignored. The census above independently corroborates it: it returns
+no row at all for `0b3b7452934f435009aa70d19dba100d`.
 
 The gate was **not** met on the first attempt, and no problem row was ever resolved, skipped, ignored
 or otherwise silenced. Both issues were fixed at their cause and re-verified; the full history:

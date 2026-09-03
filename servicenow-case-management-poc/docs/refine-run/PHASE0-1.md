@@ -198,6 +198,26 @@ moment a Retrieved Update Set record page or a commit-result page must stay open
 `GET sys_user` for the duration and switch back to the rendered `home.do` navigation as
 soon as the page is no longer needed, recording both transitions.
 
+**(f) STANDING CONTROL — mechanism selection for every future run on this package. This is
+a rule, not an observation: an executor is bound by it and does not re-derive it.** The
+failure in (b)/(c) is one of mechanism selection, not of cadence — the 10-minute clock ran
+on its own throughout, per (b); what went wrong is that the exception's mechanism was
+chosen once, globally, at Phase 0 and never switched back. The control therefore fixes
+*which* mechanism is in force at every moment of a run, and makes each change of mechanism
+a recorded event:
+
+| # | Rule | Applies |
+| --- | --- | --- |
+| **f1** | The **browser/UI beat is the DEFAULT**: a rendered navigation to `home.do` in the authenticated browser session, judged live **by content** (hibernation markers absent, application chrome and server-computed data present), on the independent ~10-minute clock, never paused and never merged into another wait | every interval of every phase that is not covered by **f2** |
+| **f2** | The API-context beat (`GET /api/now/table/sys_user?sysparm_limit=1`, read-only) is the **narrow exception** and is used **only** for the intervals that fall inside the window where a Retrieved Update Set record page or a commit-result page must stay open — the Phase 2 Commit step and its RESUME CHECK. It is licensed by nothing else: not convenience, not the phase being long, not the browser being busy | the record/commit-result window only |
+| **f3** | The beat **switches back to f1 the moment that page is no longer needed** — the commit outcome having been read and the RESUME CHECK answered — and not at the end of the phase, the end of the next interval, or any later point of convenience | at the close of every **f2** window |
+| **f4** | **Both transitions are recorded**, browser→API and API→browser, each with its UTC timestamp, the page that opened or released the window, and the mechanism in force after the switch. A run that reports no transition pair must state that no **f2** window arose, as (e) does for the CR2 pass — silence is not a record | every **f2** window, and every run that has none |
+| **f5** | The clock is independent of the mechanism: a switch under **f2** or **f3** does not restart, delay or skip an interval, and the ~10-minute cadence is unbroken across the boundary | every switch |
+
+This control governs mechanism selection **from its adoption forward**. It does not, and
+cannot, repair the intervals in (b) — Phases 0 through 3 ran on the **f2** mechanism where
+**f1** was required, and §2.5 records that deviation as unresolved for the original run.
+
 ### 2.5 Phase 0 exit condition
 
 > Live, authenticated, non-hibernating session confirmed by content, with heartbeat running.
@@ -217,9 +237,13 @@ commit-result page had to stay open, and both transitions recorded around the Co
 re-execution is barred: the single provisioned instance is protected by the environment directive and
 already holds the committed application, and provisioning or re-requesting a clean one is prohibited
 ("never release/re-request a new instance"). The browser-context heartbeat executed in the CR2
-remediation pass (§2.4(e)) demonstrates the mandated mechanism and corrects the selection going
-forward; it performed no commit, so it records no browser→API→browser transition pair and it does
-**not** retroactively replace the mechanism used through Phases 0–3.
+remediation pass (§2.4(e)) demonstrates the mandated mechanism, and the standing control **§2.4(f)**
+binds mechanism selection for every future run — browser `home.do` beat by default, the read-only
+`GET sys_user` beat only inside the record/commit-result window, switched back the moment that page
+is no longer needed, with both transitions recorded. Together they correct the selection going
+forward and nothing more: the CR2 pass performed no commit, so it records no browser→API→browser
+transition pair, and neither it nor §2.4(f) retroactively replaces the mechanism used through
+Phases 0–3.
 
 ---
 

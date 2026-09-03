@@ -20,7 +20,8 @@ Before starting this procedure, all of the following MUST hold. If ANY prerequis
 - A **fresh, separate PDI** is available with an admin account ready (the verification PDI must NOT be the same instance as the source PDI). Re-importing on the source PDI does not exercise the portability gate as strongly.
 
   > **What was actually done, and why.** A second PDI was not available for this build, so the round trip was
-  > performed on `dev379024` after an **application-level clean slate**: every `x_casemgmt` artifact and every
+  > performed on `dev379024` — the host used at that time, now **retired and not used**, which makes this a dated
+  > record of what was done there — after an **application-level clean slate**: every `x_casemgmt` artifact and every
   > row in the three scoped tables was removed, so the import genuinely created the application from nothing
   > rather than updating it. This is the AAP-approved substitute for a second instance (override C6) and it is
   > what produced the 0-error / 0-warning preview. It is weaker than a genuinely fresh PDI in one specific
@@ -356,7 +357,8 @@ The package's one Fix Script, `x_casemgmt Post-Import Remediation`, is subject t
 
 Phases 1–5 establish that the package *imports* and installs. Phase 6 establishes whether it imports **into a working
 application with no manual step**, which is the actual acceptance question. These assertions were executed on
-`https://dev379024.service-now.com` after an application-level clean slate; the outcome is recorded inline so a
+`https://dev379024.service-now.com` — now the **retired** host, so they are dated evidence from it — after an
+application-level clean slate; the outcome is recorded inline so a
 future verifier can tell a regression from a known state. The measured detail is in
 [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
 
@@ -704,7 +706,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). **Neither artifact on disk was
 > part of that run** — not the elected 926-block `7292a6fe…` deliverable (never previewed on any instance) and
 > not the retained 988-block `90ee0249…` rebuild (never uploaded, previewed or committed) — consistent with the
-> *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 1a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — item 1a is the open round trip; item 0's wake of `dev379024` is superseded and gates nothing.
+> *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 1a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — item 1a is the open round trip; item 0's wake of the retired `dev379024` is superseded and gates nothing.
 
 ### Fail Criteria (Any One Triggers Fail)
 

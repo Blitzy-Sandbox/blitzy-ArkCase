@@ -408,7 +408,9 @@ The numbered procedure below cross-references [`validation-gates.md`](./validati
       reached…"* panel appears and that `No case found with that number.` does **not** appear anywhere on the page.
       Restore the network and press Look Up again; confirm it recovers without a reload.
 
-**Measured outcome of the procedure above, on `dev379024`.** Steps 1-9 pass anonymously: `POST` returns **201** with
+**Measured outcome of the procedure above, taken on `dev379024` (Australia Patch 3).** That host is now
+**retired and is not used**, so the figures below are dated evidence from it, not a reading of the current
+validation instance. Steps 1-9 pass anonymously: `POST` returns **201** with
 `{"number":"CASE…","message":"Your case has been submitted"}`, every response carries `x-is-logged-in: false`, the
 found panel holds exactly three `dt`/`dd` pairs and `Object.keys(response)` is exactly
 `["status","subject","opened_date"]`, an audit of the rendered `<main>` for the eight internal field names returns

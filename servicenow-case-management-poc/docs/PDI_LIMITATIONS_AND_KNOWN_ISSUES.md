@@ -35,6 +35,23 @@
 > **Chronology matters in this document.** §2–§9 are a record of successive passes, and several results in them
 > were later superseded. Anything marked *historical* is kept because the diagnosis is still useful, not
 > because it is the current state. **Where §0 and any later section disagree, §0 is correct.**
+>
+> **Which instance the measurements come from.** The current validation instance is
+> `https://dev306625.service-now.com`, release **Zurich Patch 10**
+> (`glide-zurich-07-01-2025__patch10-05-22-2026_06-12-2026_2311`, read from `sys_properties.glide.war` over the
+> Table API on 2026-09-03); it holds the application installed and committed, and it is the host the 2026-09-02
+> figures were taken on. The earlier host `dev379024` (Australia Patch 3) is **retired and is not used.** It is
+> still named throughout this document for one reason only: a measurement taken on it stays attributed to it, so
+> **every `dev379024` mention below is either a figure measured on that host before 2026-08-11 — dated evidence,
+> never current state — or a record of its outage and of the superseded work items that named it (§0.11, §10.0
+> item 0, §10.4 item 11).** Point no procedure at it; §0.11 has the two residual questions that would need it
+> woken and records that they gate nothing.
+>
+> The same rule applies to every `sys_id` quoted in this document: each one is a value **measured** on the
+> instance it is quoted against, never an input to copy. AAP §0.7.2 forbids a hardcoded `sys_id` in an input
+> position, so resolve the scope on your own instance with
+> `GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id` and pass that, exactly as
+> [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §3](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) does with `$SCOPE_SYS_ID`.
 
 ---
 
@@ -151,7 +168,8 @@ separate 2026-09-02 zero-problem preview and commit belong to **export 3's** `ee
 file in this repository (§0.1). §0.3a, §0.3b and §0.3c state precisely how this revision's result carries — and
 does not carry — to today's `7292a6fe…` bytes; three revisions separate them.
 
-The trip was run on `https://dev379024.service-now.com` (Australia Patch 3). It is the same procedure the
+The trip was run on `https://dev379024.service-now.com` (Australia Patch 3), the host that pass used and now
+the **retired** one, so every figure in this subsection is dated evidence from it. It is the same procedure the
 earlier revision went through, executed again from a genuine teardown, and every figure below is an observation:
 
 | Stage | Measured result |
@@ -493,7 +511,8 @@ three scoped tables, so the platform falls back to `read`, which the scoped ACLs
 
 Earlier text in this register said gate 6 fails on **one** mis-serialized element (`pa_tab` where this release
 has `pa_tabs`) and that fixing it is "a rename, not an investigation". **That was measured and is wrong.** On
-`dev379024`, Australia Patch 3:
+`dev379024`, Australia Patch 3 — the then-verification host, now **retired**, so these readings are dated
+evidence from it:
 
 - `pa_tab` → HTTP 400 `Invalid table pa_tab`; the real table is **`pa_tabs`**.
 - `pa_dashboard_widgets` → HTTP 400 `Invalid table pa_dashboard_widgets`; the real table is **`pa_widgets`**.
@@ -521,7 +540,8 @@ rendering, charting and the data are all healthy.
 > **Disclosure — a side effect of measuring this, since cleaned up.** Those two empty `pa_tabs` rows and their
 > two link rows were created by the platform on a plain read-only page view; no "Add tab"/"Add widget" affordance
 > was used and no write API was called. They were **deleted** when the fix was applied, so that the live state of
-> `dev379024` equals what a clean import of these artifacts produces — one tab per dashboard, named `Overview`
+> `dev379024` at that time — the host is now **retired**, so this is a dated reading of it — equalled what a
+> clean import of these artifacts produces: one tab per dashboard, named `Overview`
 > and `Operational KPIs`, each with exactly one `pa_m2m_dashboard_tabs` link. Re-measured after the cleanup: the
 > two scoped canvases carry **exactly one `pa_tabs` row each** and no `New Tab 1` row of ours survives — the rows
 > still named `New Tab` on this instance are out-of-box ones from 2018 and 2020.
@@ -1974,7 +1994,8 @@ so future operators don't mistake them for bugs.
 
 The table above covers Defects A–F. The QA-findings pass fixed a separate set, all in the presentation layer, and
 every one of them lives in **both** carriers — the standalone artifact and the matching `<payload>` in the Update
-Set — plus, in each case, the live record on `dev379024` so the result could be measured. None of them needs an
+Set — plus, in each case, the live record on `dev379024`, then the verification host and now the **retired** one,
+so the result could be measured there. None of them needs an
 operational step, with the single exception noted for the related lists.
 
 | Fix | Artifact(s) | Update Set block(s) | Operational step |
@@ -2481,11 +2502,13 @@ assert the refusal, the non-write and the exact server-side string, not the rend
 
 > This section records what could only be learned by tearing the application down and re-importing it. It was
 > produced by the final unit of the Refine-PR pass, which owns the Section-2 acceptance proof. Every number
-> below is a measurement taken on `https://dev379024.service-now.com`, not an expectation.
+> below is a measurement taken on `https://dev379024.service-now.com`, not an expectation — and that host is
+> now **retired and is not used**, so read all of §9 as dated evidence from it rather than as current state.
 
 ### 9.1 What "clean instance" meant here, and why
 
-The Refine-PR brief asks for a **fresh PDI import**. Only one instance is reachable: `dev379024`. The
+The Refine-PR brief asks for a **fresh PDI import**. At the time of that pass exactly one instance was
+reachable: `dev379024`, since **retired**. The
 `dev364430` host still named in some of this repository's older documentation is **stale — it returns HTTP 401**,
 and no developer.servicenow.com credentials exist in this environment to provision another PDI. "Clean instance"
 was therefore implemented as an **application-level clean slate on `dev379024`**: the `x_casemgmt` scope and
@@ -2525,7 +2548,8 @@ Two root causes were found on the way, and both are worth knowing for the next g
    All 916 blocks carried human-readable names (`x_casemgmt_case.type`, `ATF 01 - Data model…`, `Case Management`),
    so nothing in the set could satisfy anything else in the set and every cross-reference reported as missing.
    Verified against the instance's own `sys_update_version` history, where platform-written names take exactly
-   the canonical form (`sys_app_82b99028936f74320d74d6f88357a5af`). **This is inherited, not introduced by this
+   the canonical form (`sys_app_82b99028936f74320d74d6f88357a5af` — the scope `sys_id` measured on that
+   instance; resolve your own by query as the §0 preamble states). **This is inherited, not introduced by this
    pass** — the pre-refine 148-record package used human-readable names too.
 2. **Deleting metadata while a local Update Set is in progress captures DELETE updates.** The staged teardown
    caused 362 canonically-named DELETE rows to be captured into the local "Default" set; once the package's own
@@ -2738,7 +2762,8 @@ java.lang.SecurityException: GlideSecurityManager is not allowed in scoped appli
 **Why automation was not achievable.** The package shipped both the Fix Script and the bootstrap Business Rule
 with `sys_scope=global` — it still ships the Fix Script that way, and no longer ships the rule at all — but
 **the commit engine forces every committed record's `sys_scope` to the Update Set's application.** Reading the records back after commit confirms it: the Fix Script's `sys_scope` is
-`82b99028936f74320d74d6f88357a5af` (its `sys_package` is still global), and the bootstrap rule is app-scoped,
+`82b99028936f74320d74d6f88357a5af` — the scope `sys_id` read back on that instance, not a value to reuse (its
+`sys_package` is still global) — and the bootstrap rule is app-scoped,
 `active=true`, on `sys_remote_update_set`, `when=after`, `order=1000`,
 `condition=current.state.changesTo('committed')`. The remediation needs `GlideTableDescriptor` (to materialise
 physical storage) and `GlideSecurityManager` (to flush the security cache); both are unavailable to scoped
@@ -2995,9 +3020,12 @@ synthetic and on `@example.invalid`. Demo-data cleanup remains out of scope.
 
 ### 9.8a Demo data as it stands now — measured after the §0.3 round trip
 
-This is the **current** census, taken on `dev379024` after the clean-slate round trip, the §9.5 install sequence
-and a re-seed with `scripts/seed_demo_data.js`. It is a separate measurement from §9.8 and from §9.7; where a
-reader wants "the census now", this is the row set to quote.
+This is the census as it stood at the end of that pass, taken on `dev379024` after the clean-slate round trip,
+the §9.5 install sequence and a re-seed with `scripts/seed_demo_data.js`. **That host is retired, so these rows
+are dated evidence from it and not the live census** — §0 is the authoritative current-state record, and on the
+current validation instance `dev306625` the three tables held **10 cases / 10 tasks / 8 parties** when counted
+over the Table API on 2026-09-03. It is a separate
+measurement from §9.8 and from §9.7; quote it as the end-of-pass census on that host, with its date attached.
 
 The packaged seed rows had to be removed before re-seeding, exactly as **E1/E2** predict: all 10 packaged cases
 committed with an **empty `number`**, and all 10 packaged tasks and 8 packaged parties held their parent as a
@@ -3031,8 +3059,8 @@ the two companies remain `Synthetic Org Alpha` and `Synthetic Org Beta`.
 
 Everything in §9.2–§9.8 was measured as the pass progressed; every gate was then measured **again, from
 scratch, at the end of that pass** — after the round trip, after the remediation, after the re-seed and after the
-ATF runs. All of the following was observed on `dev379024`, and nothing was repaired between measuring and
-recording.
+ATF runs. All of the following was observed on `dev379024` — the **retired** host, so it is dated evidence from
+it — and nothing was repaired between measuring and recording.
 
 > **This table is a snapshot of the end of THAT pass, not the current state.** An earlier revision of this
 > paragraph certified that "no number here is stale"; two later package-changing passes have since landed, so the
@@ -3311,7 +3339,7 @@ item 2 in §10.0 because it is part of closing the packaging proof.
 | # | Work | Why | Estimate |
 |---|---|---|---|
 | 10 | **Collapse the two-pass install into one** by finding a packaging route that yields physical storage without a table rebuild — e.g. shipping the tables via an application *installation* rather than an Update Set | The current procedure needs two commits because dropping `sys_db_object` cascades the ACLs (§9.5 steps 1–3) | investigation, 1 day |
-| 11 | **Correct the stale instance hostname** wherever it still appears; `dev364430` returns HTTP 401 and `dev379024` is the reachable instance | Anyone following the older documentation will hit a 401 and conclude the credentials are wrong | 30 min |
+| 11 | ~~**Correct the stale instance hostname** wherever it still appears~~ — ✅ **DONE 2026-09-03, across the package-facing documents.** Every operational statement — which instance to sign in to, which portal URL to open, which host a shell variable points at — now names the reachable instance `https://dev306625.service-now.com` (**Zurich Patch 10**, read from `sys_properties.glide.war` over the Table API on 2026-09-03) or reads it from `$SERVICENOW_INSTANCE_URL`. `dev379024` survives only where a figure was measured on it and in §0.11's outage record, each marking it as the **retired, superseded** host, and `dev364430` (HTTP 401) is named only as a stale host to recognise | Anyone following the older documentation would hit a 401 or a hibernation page and conclude the credentials were wrong | — |
 | 12 | **Replace the single-DELETE rollback instruction** with the staged teardown this pass had to use | `DELETE /api/now/table/sys_scope/{id}` returns HTTP 500 *maximum execution time exceeded* at this data volume and does not cascade (§9.1) | 30 min |
 
 ### 10.5 Completed — kept for provenance, not for planning
@@ -3322,7 +3350,7 @@ open work.
 
 | Former # | Work | Outcome | Effort |
 |---|---|---|---|
-| 1 | ~~**Clean-slate upload → preview → commit the current package**~~ — ✅ **DONE, on the `7272edfc…` revision** | Run end to end on `dev379024` against sha256 `7272edfc…`, 3,618,378 bytes, 913 records. The revision current *when this row was written* (`89638c17…`, 3,643,389 bytes, still 913 records) differed only in the 9 payloads the QA-remediation pass re-synced, and was measured preview-neutral against this revision by a matched A/B preview (§0.3a). **Two revisions have shipped since, so this row does not cover today's bytes** — 926 blocks / 3,781,097 bytes / `7292a6fe…` (§0.1), which is why the work is re-listed as open item 1a. Pre-flight passed (using the corrected `upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` predicate, since the documented `state=executing` one is invalid on this release). Staged teardown proven complete — scope `[]`, every census counter 0, all three tables at HTTP 400. Upload asserted the child count at exactly 913. Preview problems **by type**: 41 before on the populated instance → 298 on the first clean-slate pass (all `Found a local update that is newer than this one`) → **0 of any type**, confirmed by the platform's own `unresolvedProblems=false` / `shouldDisplay=true` predicate. Commit reached **`state=committed`**. The §9.5 C/9 sequence then reported **`verified=true`, `acl_links_total=27`, `errors=0`**. All seven gates were re-measured (§0.4) and the hash re-computed from the file on disk is unchanged. **Full record in §0.3** | — |
+| 1 | ~~**Clean-slate upload → preview → commit the current package**~~ — ✅ **DONE, on the `7272edfc…` revision** | Run end to end on `dev379024` — the **retired** host, so this row is dated evidence from it — against sha256 `7272edfc…`, 3,618,378 bytes, 913 records. The revision current *when this row was written* (`89638c17…`, 3,643,389 bytes, still 913 records) differed only in the 9 payloads the QA-remediation pass re-synced, and was measured preview-neutral against this revision by a matched A/B preview (§0.3a). **Two revisions have shipped since, so this row does not cover today's bytes** — 926 blocks / 3,781,097 bytes / `7292a6fe…` (§0.1), which is why the work is re-listed as open item 1a. Pre-flight passed (using the corrected `upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` predicate, since the documented `state=executing` one is invalid on this release). Staged teardown proven complete — scope `[]`, every census counter 0, all three tables at HTTP 400. Upload asserted the child count at exactly 913. Preview problems **by type**: 41 before on the populated instance → 298 on the first clean-slate pass (all `Found a local update that is newer than this one`) → **0 of any type**, confirmed by the platform's own `unresolvedProblems=false` / `shouldDisplay=true` predicate. Commit reached **`state=committed`**. The §9.5 C/9 sequence then reported **`verified=true`, `acl_links_total=27`, `errors=0`**. All seven gates were re-measured (§0.4) and the hash re-computed from the file on disk is unchanged. **Full record in §0.3** | — |
 | 2 | ~~**Fix the four child-table ACL conditions** — replace `current.case` with `current.getValue('case')`~~ — ✅ **DONE** | `case` is a JS reserved word, so the conditions could not compile and denied every row; the agent had no access to tasks or parties (§9.6 E-ATF). Implemented as `current.getElement('case')`, which measurement showed to be the accessor that supports every operation the conditions need. The impersonated agent now sees 10 task rows and 8 party rows with `canWrite=true` and `canDelete=false`, and `ATF 07` passes with 58 checks across five parent fixtures — green in `TES0001014`. No functional access-control gap remains | 1 h incl. re-running ATF 07 — spent |
 | 3 | ~~**Reduce each table to a single display field**~~ — ✅ **DONE in this pass**, in the packaged `Dictionary` blocks **and** in `post_import_remediation.js` | Was: every reference to a case rendered blank, and re-running the remediation reintroduced the problem. Now: the package ships one display field per table, and the script reconciles and verifies it (§9.6 E7) | — |
 | 7 | ~~**Shorten the four over-length UI Action conditions** to ≤ 254 characters, or move the logic into the action script~~ — ✅ **DONE** | The truncated conditions made the guards fail open, so `Start Progress`, `Set Pending`, `Resume` and `Resolve` rendered for every status and every identity, including the read-only viewer (§9.6 **E3**). Implemented by moving the expression into `CaseTransitionValidator.canShowAction()`, leaving each condition a 71–78 character call. Re-measured as an 18-cell matrix on the live instance: 18/18 cells correct, the viewer now sees none of the six buttons and no `Update`, and all five server-side buttons still perform their transition when clicked | 1 h — spent |

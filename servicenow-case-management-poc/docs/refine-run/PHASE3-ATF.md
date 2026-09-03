@@ -484,8 +484,8 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files) |
-| JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files) |
+| XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files at the time of this phase; 212 today) |
+| JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files at the time of this phase; **4 today** — the CR6 pass added `scripts/pre_delete_collateral_guard.js`, which passes the same gate) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
 | **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (The file was re-sequenced after this phase into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, which is retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, and the deliverable path now holds the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`; under D36 the re-sequencing makes the recorded checksum stale and the S1–S6 re-run on those bytes owed — §5.5) |
 | No binaries staged | `git status` | no PNG/video staged; `blitzy/screenshots/*.png` remain untracked |

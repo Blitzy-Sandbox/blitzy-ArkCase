@@ -136,8 +136,34 @@ The only classes that moved were `sys_db_object` 3→0, `sys_dictionary` 25→0 
 `sys_security_acl`** payloads. Both sets were re-verified **byte-for-byte** by per-payload
 SHA-256 after every subsequent step; the combined guard hash never changed.
 
-### 2.4 S3 — role links and grants created by direct server-side insert — DEVIATION from D2/D21/INTERP-1
+### 2.4 S3 — role links and grants created by direct server-side insert — the D2 OBJECTIVE IS UNDELIVERED for this half
 
+> **THE PR'S OBJECTIVE IS NOT TRUE OF THE DELIVERED WORK — stated first, because the
+> mechanism detail below reads as a technicality otherwise.** Directive lines 5–10 state the
+> objective in one sentence: rebuild the master Update Set so that **all** table **and
+> role-link** records are created via native platform actions (Table API, **role-assignment
+> action**). That sentence is **undelivered**, and it is undelivered on two counts, not one:
+>
+> 1. **Mechanism.** The 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants
+>    were never created by the native role-assignment action — on this instance or on any
+>    other, in this run or in any remediation pass since. The table/dictionary half genuinely
+>    was (3 `sys_db_object` + 30 `sys_dictionary` platform-captured, §2.5); the role-link half
+>    never was.
+> 2. **Delivery.** The package that ships is the elected fallback
+>    `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, which is
+>    byte-identical to the pre-refine file. It carries **0** `sys_security_acl_role` rows and
+>    the **25 hand-authored** `sys_dictionary` records this PR existed to replace. So the
+>    delivered artifact contains **neither** half of the objective — not even the half that
+>    was rebuilt natively, which lives only in the retained
+>    `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`.
+>
+> This is not "the objective was met but its verification is outstanding". The objective's own
+> requirement is unmet for half the records and absent from the shipping bytes for all of
+> them. What is delivered instead is a working, previously-verified package plus a measured
+> account of exactly what remains — which D3 authorises as a complete delivery for this run,
+> and which is a different thing from the objective being achieved. The closure path a human
+> must take is in this section's last bullet and in §4's "What would clear it".
+>
 > **DEVIATION — mechanism selection for the 27 role links and the 3 user→role grants.**
 >
 > - **Required mechanism (D2 lines 5–10, D21 lines 124–128, INTERP-1):** the 27
@@ -338,11 +364,50 @@ does not shorten the interval above. The 255 delete captures landed in the ABSOR
 shipping set stayed at 895 rows with its choice and ACL payloads byte-identical, so the
 package itself carries no damage from any of this.
 
-#### Corrective control — the pre-delete collateral guard (required; not performed in this run)
+#### Corrective control — the pre-delete collateral guard (not performed before this run's deletion; now IMPLEMENTED as an executable script)
 
 Any future execution of an authorised **targeted deletion** MUST run this guard before the
 first table delete. It is written so the next executor runs it verbatim instead of
 re-deriving it.
+
+> **STATUS — the control is no longer specification-only.** It is implemented at
+> [`../../scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js)
+> and executes on the platform. That closes the gap this heading previously recorded: the
+> guard was **not** run before this run's deletion, which is history and cannot change, but a
+> future executor no longer has to build it from the prose below — the prose is now the
+> specification the script implements, kept here unchanged as the authority for what the
+> script must do.
+>
+> **Verified by running it, read-only, against this converged instance on
+> 2026-09-03 (`measured_at_utc=2026-09-03 12:21:53`, background script, Global scope):**
+>
+> ```
+> VERDICT=ABORT|reasons=14|targets=x_casemgmt_case,x_casemgmt_case_task,x_casemgmt_case_party
+>   |classes_enumerated=39|scope=x_casemgmt|measured_at_utc=2026-09-03 12:21:53
+>   |phase=Phase 1 S6 (delete the created tables/role links)|phase_exit_condition=UNMET
+>   |instance_writes=0|deleted=0
+> ```
+>
+> The 14 reasons are the cascade itself, measured class by class: `sys_security_acl` 10 / 8 /
+> 8 across the three tables, `sys_script` 7, `sys_report` 7 / 1, `sys_ui_list` 1 / 1 / 1,
+> `sys_ui_related_list` 1, `sys_ui_policy` 2, `sys_number` 1 / 1 / 1. Had it run at
+> `19:22:09Z`, it would have aborted S6 before its first delete and taken the path "What
+> should have happened" describes above. (`sys_choice` counts 0 today only because of the
+> separate package-alone choice-row defect; on an instance carrying its choice rows it would
+> add three more reasons.)
+>
+> The run also recorded the Step 3 obligations in full — the phase as
+> `exit_condition=UNMET` with the destructive boundary named, all 39 enumeration rows
+> verbatim, and `instance_writes=0|no insert, update or delete was issued by this guard` —
+> and the Step 4 fallback text. The script contains no write API call of any kind, holds no
+> `sys_id` literal, and resolves the scope and the three roles by query.
+>
+> **One correction the live run forced, recorded because the prose below still carries the
+> original shorthand.** Step 1 row 3 writes the role-link condition as `roleIN<ROLES>`.
+> `sys_security_acl_role` has no `role` column — the reference to `sys_user_role` is named
+> `sys_user_role`, and querying `role` is rejected outright ("Unknown field role in table
+> sys_security_acl_role"). The script queries `sys_user_role`, which is what the shorthand
+> means; its header records the same correction. Nothing else in Step 1 changed.
 
 **Step 0 — resolve the scope and the roles by query, never from a literal.** No `sys_id` is
 an input to this guard:
@@ -824,7 +889,7 @@ the serializer asserts element-by-element that no text or CDATA content changed.
 | Instance is clean | **met** | §2.9: HTTP 400 "Invalid table" ×3, zero dictionary rows, zero links, zero grants |
 | Single-test result reported before the full-package result | **met** | §1 precedes §2 |
 | **Native creation by the mandated mechanism — tables and dictionary half** | **met** | §2.5–§2.6: 3 × `POST /api/now/table/sys_db_object` and 27 × `POST /api/now/table/sys_dictionary`, all HTTP 201, every row platform-written and platform-captured |
-| **Native creation by the mandated mechanism — role-link and grant half (D2 lines 5–10, D21 lines 124–128, INTERP-1)** | **NOT MET** | §2.4 deviation block and §5 item 9: the 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's native role-assignment action. The records are correct and in scope, but their provenance is not platform-attested |
+| **Native creation by the mandated mechanism — role-link and grant half (D2 lines 5–10, D21 lines 124–128, INTERP-1)** | **NOT MET — and the D2 OBJECTIVE ITSELF IS UNDELIVERED, not merely unverified** | §2.4's opening block and §5 item 9: the 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's native role-assignment action — never, on any instance, in this run or since. The records are correct and in scope, but their provenance is not platform-attested. And because the **elected fallback** ships (0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` records), the delivered artifact carries **neither** half of the objective, so D2's sentence is untrue of the delivered work on two independent counts |
 | **Destructive work confined to OVERRIDE-3's authorised subset — the three tables, their dictionary rows and data, and the scoped role links** | **NOT MET** | §2.5 verdict: the table-delete cascade also removed 26 `sys_security_acl`, 24 `sys_choice`, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3 `sys_number` counters — all outside that subset — leaving the application on a live instance with no authorisation and no transition controls from `2026-09-02T19:22:09Z` until the Phase 2 commit at `2026-09-02T20:53:14Z`. The collateral was foreseen (§2.4) and the pre-delete collateral guard in §2.5 should have aborted the operation before its first delete |
 
 **VERDICT: EXIT CONDITION PARTIALLY MET — 2026-09-02T19:22:09Z (UTC).** Every requirement
@@ -863,12 +928,12 @@ it does not make this gate met.
 | 1 | The brief expected a platform-captured table to be named `sys_db_object_x_casemgmt_case`. The platform in fact names it `sys_db_object_<sys_id>`; the name-pattern discriminator holds for `sys_dictionary` only. | Reported, not worked around. The swap is proven by sys_id instead (§2.5, §2.6). |
 | 2 | `sys_user_has_role` is not auto-captured by update sets. | Delivered through the platform's own update-set writer rather than hand-authored XML (§2.4). |
 | 3 | Re-created role links necessarily get new sys_ids (the platform assigns a GUID; the old composite ids were produced by `post_import_remediation.js`). | Pairing reproduced exactly, 27 links, 14/10/3. Identity change is inherent to re-creating the links at all, by whichever mechanism. |
-| 4 | The platform's table-delete cascade also removed the 26 ACLs, 24 choices, 7 business rules, 8 reports, the layouts and the 3 counters from the **live instance**. | **SCOPE VIOLATION of OVERRIDE-3's destructive boundary** — not an authorised side effect. Those classes sit outside the authorised subset (the three tables, their dictionary rows and data, and the scoped role links), and neither the command having named only the three `sys_db_object` records nor the Phase 2 commit's later restoration authorises their removal: the application stood on a live instance without authorisation or transition controls from `2026-09-02T19:22:09Z` to the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. The verdict, the enumerated cascade and the **pre-delete collateral guard** that should have aborted the operation before its first delete are in §2.5; it is the second, independent ground on which Phase 1's hard gate is NOT MET (§4). The payloads do remain in the package and U3's commit restored them, which mitigates the outcome without licensing the act. |
+| 4 | The platform's table-delete cascade also removed the 26 ACLs, 24 choices, 7 business rules, 8 reports, the layouts and the 3 counters from the **live instance**. | **SCOPE VIOLATION of OVERRIDE-3's destructive boundary** — not an authorised side effect. Those classes sit outside the authorised subset (the three tables, their dictionary rows and data, and the scoped role links), and neither the command having named only the three `sys_db_object` records nor the Phase 2 commit's later restoration authorises their removal: the application stood on a live instance without authorisation or transition controls from `2026-09-02T19:22:09Z` to the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. The verdict, the enumerated cascade and the **pre-delete collateral guard** that should have aborted the operation before its first delete are in §2.5 — and that guard is now **implemented and platform-verified** at [`../../scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js), which returns `VERDICT=ABORT` with 14 collateral reasons against this instance; it is the second, independent ground on which Phase 1's hard gate is NOT MET (§4). The payloads do remain in the package and U3's commit restored them, which mitigates the outcome without licensing the act. |
 | 5 | `sys_number` identity — first attempt used `setValue('sys_id')`, which the platform ignores. | **The only fix-and-re-verify loop in this phase: 2 attempts of the 2 permitted, resolved** with `setNewGuidValue()` and confirmed in the captured payloads (§2.5). |
 | 6 | `x_casemgmt_case_task`/`_case_party` `number_ref` were dangling pre-refine; they now resolve. Known cosmetic defect #2 (no label row for `duration_to_close`) is also incidentally repaired, because the platform writes a `sys_documentation` row for every column it creates. | Improvements produced by the native path. Reported, not hidden. |
 | 7 | Known pre-existing defect: `opened_date` empty on 8 of 10 seeded cases. | Untouched by this unit. The live data was destroyed with the tables (authorised), so the defect will reappear from the package's own seed rows after U3's commit; it is classified under D5 and is not caused here. |
 | 8 | Recovery cycles used | **0 of 3.** The heartbeat (read-only, 10-minute interval) reported HTTP 200 throughout; the instance never hibernated during this phase. |
-| 9 | **DEVIATION (mechanism selection).** The 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's **native role-assignment action** required by D2 (lines 5–10), D21 (lines 124–128) and INTERP-1. | **Recorded as a deviation, not as compliance** (§2.4, deviation block). The write skipped ACL evaluation and the native action's audit trail, and no `security_admin` elevation was ever obtained. Every measured result stands: 27 links `created=27 failed=0`, pair-for-pair identical on (operation, ACL name, role), manager 14 / agent 10 / viewer 3, all in the `x_casemgmt` scope; 3 grants `state=active`, `inherited=false`. **Open work for a human:** perform the native role-assignment action on a genuinely clean, dedicated PDI with the master Local Update Set current, then re-run Phase 2 S1–S6 on those exact bytes — it could not be done in this pass, for the five reasons enumerated in §2.4. |
+| 9 | **THE D2 OBJECTIVE IS UNDELIVERED for this half, by way of a mechanism substitution.** The 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's **native role-assignment action** required by D2 (lines 5–10), D21 (lines 124–128) and INTERP-1 — and since the elected fallback ships, the delivered package carries neither this half nor the natively rebuilt table half (§2.4, opening block). | **Recorded as a deviation, not as compliance** (§2.4, deviation block). The write skipped ACL evaluation and the native action's audit trail, and no `security_admin` elevation was ever obtained. Every measured result stands: 27 links `created=27 failed=0`, pair-for-pair identical on (operation, ACL name, role), manager 14 / agent 10 / viewer 3, all in the `x_casemgmt` scope; 3 grants `state=active`, `inherited=false`. **Open work for a human:** perform the native role-assignment action on a genuinely clean, dedicated PDI with the master Local Update Set current, then re-run Phase 2 S1–S6 on those exact bytes — it could not be done in this pass, for the five reasons enumerated in §2.4. |
 | 10 | **DEVIATION (mechanism selection).** The availability heartbeat ran in the **API context** (`GET /api/now/table/sys_user?sysparm_limit=1`) for the whole unit, where directive lines 76–84 require the **browser/UI heartbeat** (rendered navigation to `home.do`) outside the narrow Retrieved-Update-Set / commit-page exception. | **Recorded as a deviation, not as compliance** (`PHASE0-1.md` §2.4). Observed impact: none — 0 hibernation events and 0 recovery cycles in this unit, and both variants are read-only. The mandated browser heartbeat was executed in the CR2 remediation pass; see `PHASE0-1.md` §2.4 for its two beats and screenshots. |
 
 Except for the two mechanism-selection deviations recorded at items 9 and 10 above — the

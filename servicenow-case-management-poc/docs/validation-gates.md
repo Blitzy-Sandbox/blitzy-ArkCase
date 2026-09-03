@@ -32,8 +32,11 @@ The following table is preserved verbatim from AAP Section 0.7.3 and serves as t
 ## Measured Status
 
 The table above is the frozen AAP criteria and is reproduced verbatim; it is deliberately left unaltered. The
-table below is the **measured outcome** of those criteria on `https://dev379024.service-now.com` (Australia
-Patch 3). Every entry is an observation, not an expectation. Where a gate's outcome depends on an operational
+table below is the **measured outcome** of those criteria: the pre-2026-08-11 entries were measured on
+`https://dev379024.service-now.com` (Australia Patch 3), a host that is now **retired and is not used**, so they
+stand as dated evidence from it; the 2026-09-02 re-exercise was measured on the current validation instance
+`https://dev306625.service-now.com` (**Zurich Patch 10**), as the attribution notes below and in the rows state.
+Every entry is an observation, not an expectation. Where a gate's outcome depends on an operational
 step, that is stated rather than folded into a pass.
 
 **Read the evidence attribution carefully — the measurements come from three different runs, and they are not
@@ -462,7 +465,7 @@ In addition, every Gate's Pass Condition (column 3 of the Seven Gates table abov
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §10](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md), where running the round
 > trip on the elected bytes — and, as the upgrade path, on the retained
 > `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` — is item 1a. **Item 0, the
-> wake of the hibernating `dev379024`, is superseded rather than open**: the re-measurement it existed to
+> wake of the hibernating — and now **retired, superseded** — `dev379024`, is superseded rather than open**: the re-measurement it existed to
 > unblock was performed on `dev306625` on 2026-09-02, so item 1a's blocker is no longer an unreachable instance
 > but the need for a genuinely clean, dedicated one (§0.11 and §10.0 item 0).
 >

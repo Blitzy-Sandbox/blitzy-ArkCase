@@ -1700,9 +1700,26 @@
      "evidence": "git ls-files servicenow-case-management-poc | wc -l = 234 and find servicenow-case-management-poc -type f | wc -l = 234, which is exactly the census README line 69 states"
     },
     "caused_by_this_pr": false,
-    "fixed": false,
-    "reason_not_fixed": "this unit’s documentation mandate is limited to statements THIS RUN falsified; sweeping the retired-host references up would exceed it. Reported as a human decision item instead",
-    "flagged_for_human_decision": true
+    "fixed": true,
+    "reason_not_fixed": null,
+    "flagged_for_human_decision": false,
+    "fixed_at_utc": "2026-09-03",
+    "fixed_in": "code review CR6 remediation pass",
+    "discharge": {
+     "why_it_was_owed": "D5 lines 31-35 says of class (b) \"pre-existing and unambiguous - fix it\". The earlier ground - that this unit's documentation mandate covered only statements THIS RUN falsified - did not discharge a (b) the run itself had assigned, so the sweep was performed.",
+     "method": "every citation judged individually rather than by blanket replace: a blanket rewrite would have turned true dated measurements into false current-state claims, a worse defect than the one being fixed.",
+     "operational_citations_rewritten": 16,
+     "operational_citations_remaining": 0,
+     "operational_definition": "text a reader would act on, or that asserts a CURRENT reachability, verification or configuration state. These now name the current validation instance dev306625 (Zurich Patch 10) or resolve it from $SERVICENOW_INSTANCE_ADMIN_URL / $SERVICENOW_INSTANCE_URL.",
+     "survivors_kept_and_why": "dated measurements genuinely taken on that host, plus the section 0.11 historical outage record and the superseded work items that reference it. Each is explicitly marked as the retired host, so none can be acted on.",
+     "counts_tracked_excluding_reports": "46 before -> 39 after",
+     "counts_all_tracked": "58 before -> 50 after, over every tracked file under servicenow-case-management-poc including this run's own reports: git ls-files servicenow-case-management-poc -z | xargs -0 grep -o 'dev[3]79024' | wc -l. The residual sits in the four docs/refine-run run-record files, where naming the retired host IS the historical record. This scope is self-referential - it moves whenever any tracked file's text names the host - which is why the load-bearing figure is the package-facing one above (46 -> 39, 0 operational).",
+     "scope_sys_id_input_positions_resolved_by_query": 3,
+     "scope_sys_id_input_positions_detail": "docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md: the scope-gotcha bullet, the numbering-probe comment and the section 5g seed invocation now take SCOPE_SYS_ID captured from GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt, per AAP section 0.7.2. The two remaining literals are recorded measurements and now say the value must be resolved per instance.",
+     "files_swept": "README.md, docs/validation-gates.md, docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md, docs/WORKFLOW_TRYOUT_GUIDE.md, docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, docs/ATF_MANUAL_TEST_PLAN.md, docs/portal-pages.md, scripts/round_trip_verify.md (docs/deployment.md carried no citation - verified 0)",
+     "reproduce": "git grep -o 'dev[3]79024' -- servicenow-case-management-poc ':!servicenow-case-management-poc/docs/refine-run' | wc -l   (the bracket expression matches the host name while the command text adds no occurrence to the scope it counts - the same convention the rest of this record uses)"
+    },
+    "flagged_for_human_decision_note": "no longer a human decision item: D5(b) mandated the fix and the fix is done. What remains is dated historical record, correct as it stands."
    },
    {
     "id": "I5",
@@ -1722,8 +1739,21 @@
    }
   ],
   "class_a_regressions": {
-   "count": 0,
-   "evidence": "13/13 harness assertions PASS, identical to the pre-refine baseline TOTAL=13 PASSED=13 FAILED=0; the whole RBAC/ACL matrix passes (ATF 02-07); every script-path transition test passes (ATF 08, 09, 11, 12, 13, 14); both lookup tests pass (ATF 19, 20); two documented package-alone defects (Defect 9 role links, Defect C storage half) are now FIXED by the rebuild"
+   "count": 1,
+   "count_note": "corrected in the CR6 remediation pass. This field previously read 0, which contradicted the run's own disclosure that its CR3 pass had ADDED retired-host citations. The one class (a) item is documentation-only and is now remedied.",
+   "items": [
+    {
+     "id": "A1",
+     "regression": "this run added 13 citations of the retired host dev379024 to the package-facing documentation: 33 occurrences at pre-refine HEAD c1b8d239 -> 46 at HEAD 3222514ab7 in the tracked-excluding-reports scope. The CR3 pass introduced them while converting the outage record to historical context.",
+     "caused_by_this_pr": true,
+     "severity": "documentation-only: no artifact, no instance record and no behaviour is affected",
+     "fix_attempts": "1 of the 2 D6 permits",
+     "resolved": true,
+     "resolution": "the CR6 sweep at classified_issues[I4].discharge removed every operational citation (16 rewritten, 0 remaining) and brought the scope to 39 - below the 46 this run reached, and above the 33 baseline only in dated/historical statements that are correct as they stand.",
+     "measured_at_utc": "2026-09-03"
+    }
+   ],
+   "functional_evidence": "unchanged and still true: 13/13 harness assertions PASS, identical to the pre-refine baseline TOTAL=13 PASSED=13 FAILED=0; the whole RBAC/ACL matrix passes (ATF 02-07); every script-path transition test passes (ATF 08, 09, 11, 12, 13, 14); both lookup tests pass (ATF 19, 20); two documented package-alone defects (Defect 9 role links, Defect C storage half) are FIXED by the rebuild. No FUNCTIONAL class (a) regression exists."
   },
   "human_decision_items": [
    {
@@ -1900,6 +1930,11 @@
      "records": "ATF run side effects",
      "licence": "suite execution",
      "classification": "rollback clean: recovered delete 2, modified 3, inserted 37, exceptions 0"
+    },
+    {
+     "records": "1 local update set dfadf8d6934f435009aa70d19dba101e, 988 children, created at the commit second 2026-09-02 20:36:27",
+     "licence": "platform-created local mirror of the committed retrieved set - written by the commit engine, not by any agent action. Verified as the platform's own pattern: both pre-refine commits produced an identically named local set with the same child count.",
+     "classification": "authorized side effect of the in-scope commit; disclosed for completeness and to disambiguate it from the master set 1109981a930b435009aa70d19dba1098"
     }
    ],
    "override_3_destructive_boundary": {
@@ -2040,13 +2075,23 @@
      "no rollback, no deleteApplication, no scope deletion and no back-out occurred at any point in the run",
      "the admin apps.current_app preference was preserved and never repointed",
      "the elected fallback remains authorized under OVERRIDE-2"
-    ]
+    ],
+    "corrective_control": {
+     "specification": "docs/refine-run/PHASE1-REBUILD.md section 2.5, \"Corrective control - the pre-delete collateral guard\" (Steps 0-5), retained unchanged",
+     "implementation": "scripts/pre_delete_collateral_guard.js - read-only, no write API call anywhere, no sys_id literal, scope and the three roles resolved by query",
+     "status": "IMPLEMENTED and platform-verified in the CR6 remediation pass. It was NOT run before this run's deletion - that is history and does not change - but it is no longer specification-only.",
+     "verified_live": "background script, Global scope, 2026-09-03: VERDICT=ABORT|reasons=14|targets=x_casemgmt_case,x_casemgmt_case_task,x_casemgmt_case_party|classes_enumerated=39|scope=x_casemgmt|measured_at_utc=2026-09-03 12:21:53|phase=Phase 1 S6 (delete the created tables/role links)|phase_exit_condition=UNMET|instance_writes=0|deleted=0",
+     "collateral_it_detected": "sys_security_acl 10/8/8, sys_script 7, sys_report 7/1, sys_ui_list 1/1/1, sys_ui_related_list 1, sys_ui_policy 2, sys_number 1/1/1 - the cascade classes this run removed unguarded. sys_choice counts 0 today only because of the separate package-alone choice-row defect.",
+     "specification_correction": "section 2.5 Step 1 row 3 writes the condition as roleIN<ROLES>; sys_security_acl_role has no role column (the reference is named sys_user_role) and querying role is rejected by the platform. The implementation queries sys_user_role, which is what the shorthand means."
+    }
    },
    "leftover_records_on_the_instance": [
     "2 superseded retrieved update sets 7af37c12930f435009aa70d19dba105a and 23467496930f435009aa70d19dba1013, both state=previewed, never committed",
     "the pre-refine committed retrieved set 9929f50df18ccec91ea13b2a3bccfc90, still committed with its original 926 children",
-    "the loaded import envelope b4861cf7bbe24b36926fcaff4583b5bf, 0 children after the child move"
-   ]
+    "the loaded import envelope b4861cf7bbe24b36926fcaff4583b5bf, 0 children after the child move",
+    "the local update set dfadf8d6934f435009aa70d19dba101e - name \"x_casemgmt_case_management v1.0.0 (native rebuild)\", description byte-identical to the master's, state=complete, 988 children, created 2026-09-02 20:36:27 (the commit second). It is the platform-created LOCAL MIRROR of the committed retrieved set, not an agent action: both pre-refine commit attempts produced the same signature (59a5a3069343435009aa70d19dba10e8 at 14:11:50, 066c23c69383435009aa70d19dba10d3 at 14:41:23). Recorded here because this inventory enumerates comparable platform side effects, and because two identically named Complete 988-child local sets now sit on the instance: THE MASTER IS 1109981a930b435009aa70d19dba1098, dfadf8d6... is the mirror."
+   ],
+   "master_update_set_identification": "INTERP-3 realized \"the master set\" as a Local Update Set. Two records stand for it in the log and both are intended: the loaded retrieved set b4861cf7bbe24b36926fcaff4583b5bf and the Local set 1109981a930b435009aa70d19dba1098, which IS the master. A third, dfadf8d6934f435009aa70d19dba101e, is the platform's commit mirror - same name, same 988 children, created at the commit second - and is not the master."
   },
   "doc_updates": {
    "performed": true,
@@ -2361,6 +2406,14 @@
    "promotion_outcome": "whoever completes that run may promote these bytes back to final.deliverable_path as the shipping package, which restores the D2/D21 native table/dictionary swap and the 27 ACL-role links and satisfies AAP 0.7.1 for the shipping artifact"
   },
   "deliverable_byte_identical_to_fallback": true,
-  "deliverable_byte_identical_to_fallback_note": "measured: sha256sum reports 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 for both servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml and servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml, at 3,781,097 bytes and 926 <sys_update_xml action=\"INSERT_OR_UPDATE\"> blocks each. That is exactly the outcome OVERRIDE-2 describes for this path"
+  "deliverable_byte_identical_to_fallback_note": "measured: sha256sum reports 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 for both servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml and servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml, at 3,781,097 bytes and 926 <sys_update_xml action=\"INSERT_OR_UPDATE\"> blocks each. That is exactly the outcome OVERRIDE-2 describes for this path",
+  "post_review_cr6_remediation": {
+   "performed_at_utc": "2026-09-03",
+   "findings_addressed": "CR6-1 through CR6-10",
+   "instance_actions": "read-only only: REST GETs, and one read-only background script (scripts/pre_delete_collateral_guard.js) that writes nothing. No import, export, preview, commit, delete, impersonation or ATF run.",
+   "shipping_package_unchanged": true,
+   "shipping_package_unchanged_note": "the deliverable bytes were not touched: update-set/x_casemgmt_case_management_update_set.xml remains byte-identical to ...FALLBACK.xml and to the pre-refine file, sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7. INTERP-9 is therefore not triggered and no checksum went stale in this pass.",
+   "d2_objective_status": "UNDELIVERED, and now recorded as such rather than as an unverified deviation: the role-link half was never created by the native role-assignment action, and the elected fallback carries neither that half nor the natively rebuilt table half. The native re-do remains unavailable on this instance - the master set is Complete/locked (D25), Phase 2 needs a genuinely clean target obtainable only by repeating the D46-breaching cascade, no human expansion of the destructive scope exists, and D47 forbids provisioning another PDI."
+  }
  }
 }

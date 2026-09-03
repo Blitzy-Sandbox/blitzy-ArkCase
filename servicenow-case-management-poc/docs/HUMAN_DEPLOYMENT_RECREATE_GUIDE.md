@@ -110,9 +110,10 @@
 
 ## 0. Outcome you should expect
 
-After completing this guide, on `https://dev379024.service-now.com` you will have:
+After completing this guide, on the instance you targeted — the current validation instance is
+`https://dev306625.service-now.com` — you will have:
 
-- Scoped application **`x_casemgmt` ("Case Management")** with a single scope/`sys_app` record (`sys_id 82b99028936f74320d74d6f88357a5af`).
+- Scoped application **`x_casemgmt` ("Case Management")** with a single scope/`sys_app` record (`sys_id 82b99028936f74320d74d6f88357a5af` on the current validation instance — that is a **measured value, not an input**: on any instance, yours included, resolve it with `GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id` rather than reusing the literal).
 - **3 physical tables**: `x_casemgmt_case` (with auto-number `CASE0000001`), `x_casemgmt_case_task`, `x_casemgmt_case_party`, each with all dictionary fields and choice lists.
 - **3 roles**: `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`.
 - **26 ACLs + 27 role-link records** enforcing the role × CRUD matrix (manager full / agent assigned-only / viewer read-only).
@@ -139,7 +140,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 
 | Item | Value / Requirement |
 |---|---|
-| Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
+| Target instance | **The current validation instance is `https://dev306625.service-now.com`, release Zurich Patch 10** (`glide-zurich-07-01-2025__patch10-05-22-2026_06-12-2026_2311`, read from `sys_properties.glide.war` over the Table API on 2026-09-03). The application is installed and committed there, and on 2026-09-02 the upload → preview → commit half of this procedure was executed on it — on export 3's byte sequence, not on either file now on disk (see the Deliverable row). **The full procedure as written was executed end to end on `https://dev379024.service-now.com`, release Australia Patch 3** — a host that is now **retired and is not used**, so its figures stand as dated evidence from it and never as current state. Those are the only two instances and the only two releases this procedure has been executed against, and only the Australia Patch 3 execution covered every step. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but for the steps outside that measured half that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
 | Deliverable | **Updated 2026-09-02 — the delivery election is made:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is the **ELECTED** package — the untouched original, elected under checkpoint OVERRIDE-2 because the exact-byte gate could not be completed on any instance available to that run. **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` is the digest to check before you upload**, over a **3,781,097-byte, 926-block** file, and **926 is the child count to assert** in §4. **Read its status before you plan around it: the AAP §0.7.1 Update Set gate is binary and it is NOT MET on these bytes — no preview of any kind was ever run on them — so the artifact is not verified by round trip; running §5 against it is what closes that gate.** And know what it does not carry: measured on the file, **0 `sys_documentation` rows, 0 `sys_security_acl_role` rows and 25 hand-authored `sys_dictionary` rows**, so the 27 ACL role links are **not in the package** and §5's remediation passes must create them. **The rebuilt package is retained, not shipped**, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`: UTF-8, no BOM, **4,062,436 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. It satisfies AAP §0.5.2 dependency ordering and carries the platform-captured schema records and all 27 role links, and it is the **available upgrade path** — run §5 against it asserting **988** children on a genuinely clean PDI and it can be promoted back to the deliverable path (§10.0 of [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Its 988 records are the records that were previewed and committed on 2026-09-02 — but that was measured on **export 3's byte sequence, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** (the same 988 records at the same byte count), because the file was afterwards re-sequenced into AAP §0.5.2 dependency order. The reordered file was verified statically (`xmllint --noout` clean, 988 blocks, block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class census, every §0.5.2 dependency assertion passing) rather than by a further upload or preview, so **the upload → preview → commit trip on the `90ee0249…` bytes has never been run either.** The elected deliverable's own figures: UTF-8, no BOM, **3,781,097 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. **Verify the digest before uploading** — this row has named three different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The immediately previous revision was 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition). Note that **no update-set preview has been run on these bytes** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
@@ -150,7 +151,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 The deployment uses HTTP Basic auth. Supply credentials via environment variables (never hard-code or echo the password):
 
 ```bash
-export SERVICENOW_INSTANCE_URL="https://dev379024.service-now.com"
+export SERVICENOW_INSTANCE_URL="https://dev306625.service-now.com"   # your target PDI
 export SERVICENOW_USERNAME="admin"
 export SERVICENOW_PASSWORD="<the PDI admin password>"
 ```
@@ -294,7 +295,7 @@ cat > "$SNRUN/bg.sh" <<'BG'
 SNRUN="${SNRUN:?bg.sh needs the private scratch directory - export SNRUN=<the path printed by Section 1.1> first}"
 umask 077
 SCRIPTFILE="$1"; SCOPE="${2:-global}"
-SN="https://dev379024.service-now.com"; CJ="$SNRUN/cookies.txt"
+SN="${SERVICENOW_INSTANCE_URL:?bg.sh needs SERVICENOW_INSTANCE_URL - export it as in Section 1.1}"; CJ="$SNRUN/cookies.txt"
 curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -o "$SNRUN/bg_form.html" "$SN/sys.scripts.do"
 CK=$(grep -oE "g_ck['\"]?[ ]*=[ ]*['\"][^'\"]{32,}" "$SNRUN/bg_form.html" | grep -oE "[A-Za-z0-9_+/=,-]{32,}" | tail -1)
 [ -z "$CK" ] && CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' "$SNRUN/bg_form.html" | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//')
@@ -307,9 +308,26 @@ BG
 chmod +x "$SNRUN/bg.sh"
 ```
 
+**Resolve the scope sys_id from the instance — never type a literal.** Every in-scope call below passes
+`"$SCOPE_SYS_ID"`, and this is the one place it is produced. The value differs per instance, so a literal
+copied out of a report is wrong everywhere except the instance it was measured on:
+
+```bash
+: "${SN:=$SERVICENOW_INSTANCE_URL}"
+SCOPE_SYS_ID=$(curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
+  "$SN/api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id" \
+  | python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]; print(r[0]["sys_id"] if r else "")')
+export SCOPE_SYS_ID
+echo "scope sys_id: ${SCOPE_SYS_ID:-<not present yet>}"
+```
+
+An empty result is the expected answer on a clean instance where the package has not been committed yet (the
+same condition Section 2.3 reports): commit the package in Section 4, then re-run this one block before any
+in-scope call. Every later step that says "run IN SCOPE" means `"$SNRUN/bg.sh" <script> "$SCOPE_SYS_ID"`.
+
 > **Scope gotchas (proven on this PDI):**
 > - To **write** the scoped `x_casemgmt_*` tables from a background script you must run **in scope** — pass the
->   scope sys_id `82b99028936f74320d74d6f88357a5af` as the `SCOPE` argument. A `global` script may **read** them
+>   resolved scope sys_id (`"$SCOPE_SYS_ID"`, from the block above) as the `SCOPE` argument. A `global` script may **read** them
 >   (`read_access` is open, which is what the REST gate and the ATF client runner need) but every cross-scope
 >   **write** is refused by design: *"Create operation against 'x_casemgmt_case' from scope 'rhino.global' has
 >   been refused due to the table's cross-scope access policy."* That is deliberate least privilege, not a
@@ -736,7 +754,7 @@ Both are mirrored into the deliverable's `Dictionary` and `Number Maintenance` p
 Verify — insert one synthetic case **in scope** and check the format, then delete it:
 
 ```javascript
-// run IN SCOPE (82b99028936f74320d74d6f88357a5af)
+// run IN SCOPE: "$SNRUN/bg.sh" <this script> "$SCOPE_SYS_ID"   (Section 3 resolves SCOPE_SYS_ID by query)
 var c = new GlideRecord('x_casemgmt_case');
 c.initialize();
 c.setValue('subject','numbering check - delete me');
@@ -874,8 +892,10 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 
 ```bash
 # This is step 7 of the primary procedure. Note the scope argument: seeding runs IN SCOPE,
-# unlike the remediation, which must run in Global.
-"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/seed_demo_data.js 82b99028936f74320d74d6f88357a5af
+# unlike the remediation, which must run in Global. SCOPE_SYS_ID comes from the Section 3
+# query block - re-run that one block now if it was empty before the commit.
+: "${SCOPE_SYS_ID:?resolve it first with the sys_scope query in Section 3}"
+"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/seed_demo_data.js "$SCOPE_SYS_ID"
 ```
 
 Do **not** delete the packaged seed rows first — that instruction belonged to an earlier revision. Every
@@ -969,7 +989,8 @@ curl -s -H "Content-Type: application/json" -X POST \
 curl -s -w "\nlookup HTTP %{http_code}\n" "$SN/api/x_casemgmt/case_status_lookup?number=CASE9999999"
 ```
 
-Portal UI: `https://dev379024.service-now.com/x_casemgmt_case_portal`.
+Portal UI: `$SERVICENOW_INSTANCE_URL/x_casemgmt_case_portal` — on the current validation instance,
+`https://dev306625.service-now.com/x_casemgmt_case_portal`.
 
 > **Both portal pages render and work anonymously.** Earlier revisions of this guide warned that they came up
 > blank; that was a real packaging defect and it is fixed. Two things were wrong: the Service Portal layout
@@ -1050,11 +1071,11 @@ suite by hand if an instance refuses the serialized records.
 
 | Artifact | Identifier |
 |---|---|
-| Scope / `sys_app` | `x_casemgmt` — `82b99028936f74320d74d6f88357a5af` |
+| Scope / `sys_app` | `x_casemgmt` — `82b99028936f74320d74d6f88357a5af` **on the current validation instance only**; resolve it per instance with `GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id` (Section 3) and pass `"$SCOPE_SYS_ID"`, never this literal |
 | Roles | `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer` |
 | Demo users | `x_casemgmt_demo_manager`, `x_casemgmt_demo_agent`, `x_casemgmt_demo_viewer` |
 | Demo group | `x_casemgmt_demo_team` (member: Demo Agent) |
-| Portal URL | `https://dev379024.service-now.com/x_casemgmt_case_portal` |
+| Portal URL | `<instance URL>/x_casemgmt_case_portal` — `https://dev306625.service-now.com/x_casemgmt_case_portal` on the current validation instance |
 | REST submit | `POST /api/x_casemgmt/case_submit` |
 | REST lookup | `GET /api/x_casemgmt/case_status_lookup?number=<CASE…>` |
 | Dashboards | `x_casemgmt_agent_workspace` (3 widgets; shared with the agent and manager roles), `x_casemgmt_manager_view` (5 widgets; manager only) — both `pa_dashboards`, each gated by a `pa_dashboards_permissions` share row **and** `restrict_to_roles` |
