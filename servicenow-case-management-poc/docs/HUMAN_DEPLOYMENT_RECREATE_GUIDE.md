@@ -155,14 +155,61 @@ export SERVICENOW_USERNAME="admin"
 export SERVICENOW_PASSWORD="<the PDI admin password>"
 ```
 
-A convenient curl config that keeps the password out of the process list (create with `umask 077`):
+Everything this procedure writes to disk — the curl config holding the password, the cookie jar holding the
+authenticated UI session, the scraped CSRF pages, the response bodies and the `bg.sh` runner — goes into **one
+private per-run directory** and never a fixed `/tmp` name. Those files carry live session and CSRF material,
+and file mode alone does not protect them: `umask 077` excludes other Unix users but **not** other processes
+running as the *same* user, which is the normal case on a shared build or jump host, and a predictable name
+additionally invites read, replacement, truncation, symlink collision and races between writing a file and
+using it. So the directory must be unpredictable, mode `0700`, every file inside it created exclusively, and
+the whole thing removed when you are done.
+
+Allocate it once, before anything else (`$SCRATCH` lets you place it on a volume you control; otherwise
+`$TMPDIR`, otherwise `/tmp`):
 
 ```bash
-umask 077
-cat > /tmp/sn_curl.cfg <<EOF
+# Unpredictable, freshly-created, private. Refuse to continue if it cannot be allocated.
+SNRUN="$(mktemp -d "${SCRATCH:-${TMPDIR:-/tmp}}/snrun.XXXXXXXXXX")" || {
+  echo "FATAL: no private scratch directory - do not continue with credentials on a shared host" >&2
+  exit 1
+}
+chmod 700 "$SNRUN"
+export SNRUN                                    # bg.sh (Section 3) inherits the path from here
+trap 'rm -rf -- "$SNRUN"' EXIT HUP INT TERM     # cleanup, including on Ctrl-C or a dropped session
+
+umask 077        # every file created below is 0600
+set -C           # noclobber: an existing path is REFUSED, never followed or overwritten
+
+# The curl config keeps the password out of the process list. It is the only file that holds it.
+cat > "$SNRUN/sn_curl.cfg" <<EOF
 user = "${SERVICENOW_USERNAME}:${SERVICENOW_PASSWORD}"
 EOF
+
+# Sourced by the verification blocks in Sections 5a / 5d / 5f. It carries NO password - every
+# authenticated call in this guide reads the credential from sn_curl.cfg with `curl -K`.
+cat > "$SNRUN/env.sh" <<EOF
+SN="${SERVICENOW_INSTANCE_URL}"
+SERVICENOW_INSTANCE_URL="${SERVICENOW_INSTANCE_URL}"
+SERVICENOW_USERNAME="${SERVICENOW_USERNAME}"
+EOF
+
+echo "scratch: $SNRUN"    # note this path if you will use more than one shell
 ```
+
+**Working across several shell invocations.** The `trap` deletes the directory when *this* shell exits, which
+is what you want for a single sitting. If you run the sections from separate shells, allocate the directory
+once, note the path printed above, and in each new shell `export SNRUN="<that path>"` — do **not** re-run
+`mktemp`, do not re-create files that already exist (`set -C` will correctly refuse), and do not install the
+`trap` in the follow-on shells. When the deployment is finished, delete it yourself:
+
+```bash
+rm -rf -- "$SNRUN"
+```
+
+The rule that follows from this, and it has no exceptions in this guide: **never place a cookie jar, a curl
+config, a scraped CSRF page, a response body or a runnable script at a fixed shared path.** If `set -C` refuses
+a file, treat the pre-existing path as hostile — do not delete it and reuse the name; allocate a fresh
+directory.
 
 ---
 
@@ -172,7 +219,7 @@ EOF
 SN="$SERVICENOW_INSTANCE_URL"
 
 # 2.1 Reachability + credential validity  -> expect HTTP 200
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" -o /dev/null -w "reachable: HTTP %{http_code}\n" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" -o /dev/null -w "reachable: HTTP %{http_code}\n" \
   "$SN/api/now/table/sys_remote_update_set?sysparm_limit=1"
 
 # 2.2 Instance not mid-upgrade  -> expect empty result array
@@ -180,11 +227,11 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" -o /dev/null -w "reach
 #     sysparm_query is silently IGNORED - so the `state=executing` condition published in the
 #     deployment instructions returns UNFILTERED rows and always looks like an upgrade is running.
 #     Query the columns that exist instead: started but not finished.
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_upgrade_history?sysparm_limit=1&sysparm_query=upgrade_startedISNOTEMPTY%5Eupgrade_finishedISEMPTY"
 
 # 2.3 Scope existence (clean install vs update)  -> zero records = clean
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_scope?sysparm_query=scope=x_casemgmt"
 ```
 
@@ -208,20 +255,31 @@ That page needs an interactive **form-login** UI session — Basic auth alone is
 authenticates REST/Table API only). Establish the session once:
 
 ```bash
-SN="$SERVICENOW_INSTANCE_URL"; CJ=/tmp/sn_cookies.txt
-rm -f "$CJ"
+: "${SNRUN:?run Section 1.1 first, or export SNRUN=<the path it printed>}"
+SN="$SERVICENOW_INSTANCE_URL"; CJ="$SNRUN/cookies.txt"
+rm -f -- "$CJ"
 # (a) GET the login form, scrape its CSRF token
-curl -s -c "$CJ" -b "$CJ" -o /tmp/lf.html "$SN/login.do"
-LCK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]+"' /tmp/lf.html | grep -oE 'value="[^"]+"' | sed 's/value="//;s/"//' | head -1)
+curl -s -c "$CJ" -b "$CJ" -o "$SNRUN/login_form.html" "$SN/login.do"
+LCK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]+"' "$SNRUN/login_form.html" | grep -oE 'value="[^"]+"' | sed 's/value="//;s/"//' | head -1)
 # (b) POST credentials  -- sys_action=sysverb_login is REQUIRED  -> expect HTTP 302 -> login_redirect.do
+#     The password is read from a 0600 file inside $SNRUN, never passed as an argument: a command
+#     line is readable by every process on the host. printf is a shell builtin, so writing the file
+#     does not expose it either - and it writes NO trailing newline, which matters: a newline would
+#     be sent as %0A and the login would fail.
+rm -f -- "$SNRUN/pw"
+( umask 077; set -C; printf '%s' "$SERVICENOW_PASSWORD" > "$SNRUN/pw" ) || {
+  echo "FATAL: could not create $SNRUN/pw exclusively - see Section 1.1" >&2
+  exit 1
+}
 curl -s -c "$CJ" -b "$CJ" \
   --data-urlencode "user_name=${SERVICENOW_USERNAME}" \
-  --data-urlencode "user_password=${SERVICENOW_PASSWORD}" \
+  --data-urlencode "user_password@$SNRUN/pw" \
   --data-urlencode "sysparm_ck=${LCK}" \
   --data-urlencode "sys_action=sysverb_login" \
   -o /dev/null -w "login HTTP %{http_code}\n" "$SN/login.do"
+rm -f -- "$SNRUN/pw"        # the file exists only for the duration of this one POST
 # (c) follow the post-login redirect to finalize the session
-curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -L -o /dev/null "$SN/login_redirect.do?sysparm_stack=no"
+curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -L -o /dev/null "$SN/login_redirect.do?sysparm_stack=no"
 ```
 
 A reusable **background-script runner** `bg.sh` (runs JS server-side in a chosen scope, persists the
@@ -229,20 +287,24 @@ session cookie, scrapes the `g_ck` CSRF token each call). The `SCOPE` argument i
 `global` or the **sys_id of a scope** (to run *in* that scoped application):
 
 ```bash
-cat > /tmp/bg.sh <<'BG'
+cat > "$SNRUN/bg.sh" <<'BG'
 #!/bin/bash
+# Refuse to run without the private scratch directory: this script needs the session cookie jar
+# and the curl config that live in it, and it must not fall back to a shared path.
+SNRUN="${SNRUN:?bg.sh needs the private scratch directory - export SNRUN=<the path printed by Section 1.1> first}"
+umask 077
 SCRIPTFILE="$1"; SCOPE="${2:-global}"
-SN="https://dev379024.service-now.com"; CJ=/tmp/sn_cookies.txt
-curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -o /tmp/bgform.html "$SN/sys.scripts.do"
-CK=$(grep -oE "g_ck['\"]?[ ]*=[ ]*['\"][^'\"]{32,}" /tmp/bgform.html | grep -oE "[A-Za-z0-9_+/=,-]{32,}" | tail -1)
-[ -z "$CK" ] && CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' /tmp/bgform.html | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//')
+SN="https://dev379024.service-now.com"; CJ="$SNRUN/cookies.txt"
+curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -o "$SNRUN/bg_form.html" "$SN/sys.scripts.do"
+CK=$(grep -oE "g_ck['\"]?[ ]*=[ ]*['\"][^'\"]{32,}" "$SNRUN/bg_form.html" | grep -oE "[A-Za-z0-9_+/=,-]{32,}" | tail -1)
+[ -z "$CK" ] && CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' "$SNRUN/bg_form.html" | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//')
 [ -z "$CK" ] && { echo "NO_CK (session expired - re-run section 3)"; exit 2; }
-curl -s -K /tmp/sn_curl.cfg --max-time 600 -c "$CJ" -b "$CJ" -o /tmp/bg_out.html -w "HTTP %{http_code}\n" \
+curl -s -K "$SNRUN/sn_curl.cfg" --max-time 600 -c "$CJ" -b "$CJ" -o "$SNRUN/bg_out.html" -w "HTTP %{http_code}\n" \
   --data-urlencode "script@${SCRIPTFILE}" --data-urlencode "sysparm_ck=${CK}" \
   --data-urlencode "runscript=Run script" --data-urlencode "sys_scope=${SCOPE}" \
   --data-urlencode "quota_managed_transaction=on" "$SN/sys.scripts.do"
 BG
-chmod +x /tmp/bg.sh
+chmod +x "$SNRUN/bg.sh"
 ```
 
 > **Scope gotchas (proven on this PDI):**
@@ -295,35 +357,42 @@ XML="servicenow-case-management-poc/update-set/x_casemgmt_case_management_update
 
 # Upload (multipart via the UI upload processor; the Table-API POST returns HTTP 400 for this payload).
 # Establish the UI session per Section 3 first, then run these four steps IN ORDER.
-CJ=/tmp/sn_cookies.txt
+: "${SNRUN:?run Section 1.1 first, or export SNRUN=<the path it printed>}"
+CJ="$SNRUN/cookies.txt"
 
 # (1) PRIME the session with one REST GET. Do not skip this on a cold session: scraping the upload
 #     form first returns a session-timeout page variant that carries NO token, and re-requesting the
 #     same page does not recover — you have to prime, then scrape.
-curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -o /dev/null -w "prime: HTTP %{http_code}\n" \
+curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -o /dev/null -w "prime: HTTP %{http_code}\n" \
   "$SN/api/now/table/sys_remote_update_set?sysparm_limit=1"
 
 # (2) GET the upload FORM for this target (this is the page that carries the token to use)
-curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" -o /tmp/upload_form.html \
+curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -o "$SNRUN/upload_form.html" \
   "$SN/upload.do?sysparm_target=sys_remote_update_set"
 
 # (3) Scrape that form's OWN sysparm_ck (not g_ck from a list page - a list-page token is a
 #     different form's token and the upload processor rejects it)
-UP_CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' /tmp/upload_form.html \
+UP_CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' "$SNRUN/upload_form.html" \
   | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//' | head -1)
 [ -z "$UP_CK" ] && { echo "NO_CK on the upload form - session is cold or expired; re-run section 3, then step (1)"; exit 2; }
 
 # (4) POST the file as multipart to /sys_upload.do
-curl -s -K /tmp/sn_curl.cfg -c "$CJ" -b "$CJ" \
+curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" \
   -F "sysparm_ck=${UP_CK}" -F "sysparm_target=sys_remote_update_set" \
   -F "attachFile=@${XML};type=text/xml" \
-  "$SN/sys_upload.do" -o /tmp/upload_result.html -w "upload: HTTP %{http_code}\n"
+  "$SN/sys_upload.do" -o "$SNRUN/upload_result.html" -w "upload: HTTP %{http_code}\n"
 ```
 
 Those four steps are the mandated sequence — prime → `GET /upload.do?sysparm_target=…` → scrape that form's
 `sysparm_ck` → multipart `POST /sys_upload.do` — and they are what the 2026-09-02 upload used. Confirm the load
 afterwards by reading the retrieved set's `state` and its child `sys_update_xml` count (§4.1 step 1 gives the
 count to assert).
+
+Every file this block touches — the cookie jar, the scraped upload form and the result page — holds live
+session or CSRF material, so all of them live in the private `0700` per-run directory from §1.1 and none at a
+fixed shared path: on a shared host, file mode does not exclude other processes running as the same Unix user,
+so a unique directory, exclusive creation and the cleanup trap are what actually protect an authenticated
+admin session.
 
 **Preview may be scripted; Commit may not.** Preview is driven through `UpdateSetPreviewAjax` — the only
 AJAX processor this procedure authorizes — with a `POST /xmlhttp.do` carrying
@@ -347,7 +416,7 @@ After the load, verify zero **error**-type preview problems:
 
 ```bash
 RUSET="<remote_update_set_sys_id>"
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_update_preview_problem?sysparm_query=remote_update_set=${RUSET}^type=error"
 # -> result array MUST be empty before committing
 ```
@@ -469,7 +538,7 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > Run the remediation like this — **in `global`, never in scope**:
 >
 > ```bash
-> /tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+> "$SNRUN/bg.sh" servicenow-case-management-poc/scripts/post_import_remediation.js global
 > ```
 >
 > **Steps 4 and 6 are the same command run twice.** That is deliberate, not a typo: the script is idempotent, and
@@ -544,11 +613,11 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 >
 > ```bash
 > # The SUMMARY line is the proof. Expect verified=true and errors=0.
-> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+> curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 >   "$SERVICENOW_INSTANCE_URL/api/now/table/syslog?sysparm_query=messageSTARTSWITHX_CASEMGMT_REMEDIATION%5EORDERBYDESCsys_created_on&sysparm_fields=sys_created_on,message&sysparm_limit=100"
 >
 > # Corroborating, no log reading needed: exactly 27 ACL role links must exist.
-> curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+> curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 >   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
 > ```
 >
@@ -561,7 +630,7 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > §5c, §5e and §5g are unchanged.
 
 Where a step below still needs a script, run it via `bg.sh`. Read results back from the response
-(`/tmp/bg_out.html`) — extract `*** Script:` lines for `global` scripts, or query `syslog` for `gs.info`
+(`$SNRUN/bg_out.html`) — extract `*** Script:` lines for `global` scripts, or query `syslog` for `gs.info`
 markers from in-scope scripts. **All cross-references are resolved by name/number lookup — never by
 hard-coded `sys_id`.**
 
@@ -571,7 +640,7 @@ hard-coded `sys_id`.**
 it cannot complete (see the preamble). You must do this yourself — and it is **one command**:
 
 ```bash
-/tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/post_import_remediation.js global
 ```
 
 The script performs the `sys_db_object` deletion and the table rebuild itself. Measured on a clean install of the
@@ -606,10 +675,10 @@ with workflow **ON** does trigger it — which is what the remediation does, fro
 Verify (as admin):
 
 ```bash
-source /tmp/snow/env.sh
+source "$SNRUN/env.sh"
 for T in x_casemgmt_case x_casemgmt_case_task x_casemgmt_case_party; do
   printf '%s -> ' "$T"
-  curl -s -o /dev/null -w '%{http_code}\n' -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" \
+  curl -s -o /dev/null -w '%{http_code}\n' -K "$SNRUN/sn_curl.cfg" \
     -H "Accept: application/json" "$SN/api/now/table/$T?sysparm_limit=1"
 done      # These return HTTP 200 once the package's access flags are in place: ws_access and
           # read_access are open, so the REST Table API can READ all three tables as admin.
@@ -638,7 +707,7 @@ Critical); `case.pending_reason` (Awaiting Info, Awaiting Third Party, Other); `
 **Manual fallback** (only if the summary line is missing — see the note at the top of §5):
 
 ```bash
-/tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/post_import_remediation.js global
 ```
 
 Note this must run in **`global`**, not in scope. An earlier revision of this guide said "Run **in scope**";
@@ -702,7 +771,7 @@ the resulting paths are `POST /api/x_casemgmt/case_submit` and `GET /api/x_casem
 Verify anonymously — this is the real test, so send **no** credentials (§6.2 exercises the same three calls):
 
 ```bash
-source /tmp/snow/env.sh
+source "$SNRUN/env.sh"
 curl -s -o /dev/null -w 'lookup unknown -> %{http_code}\n' \
   "$SN/api/x_casemgmt/case_status_lookup?number=CASE9999999"     # expect 404
 ```
@@ -724,7 +793,7 @@ returns HTTP 404 `{"error":"No case found with that number."}` for an unknown nu
 scope **Global** *after* the second commit:
 
 ```bash
-/tmp/bg.sh servicenow-case-management-poc/scripts/post_import_remediation.js global
+"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/post_import_remediation.js global
 ```
 
 The security-cache flush (`GlideSecurityManager.get().reset()`) happens inside that same run, so there is no
@@ -786,8 +855,8 @@ a shortfall reports `verified=false` rather than silently leaving an ACL that de
 Verify:
 
 ```bash
-source /tmp/snow/env.sh
-curl -s -u "$SERVICENOW_USERNAME:$SERVICENOW_PASSWORD" -H "Accept: application/json" \
+source "$SNRUN/env.sh"
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_name&sysparm_limit=100" \
   | python3 -c "import sys,json;print(len(json.load(sys.stdin)['result']),'links (expect 27)')"
 ```
@@ -806,7 +875,7 @@ parties (Person + Organization mix). It resolves all references by `user_name` /
 ```bash
 # This is step 7 of the primary procedure. Note the scope argument: seeding runs IN SCOPE,
 # unlike the remediation, which must run in Global.
-/tmp/bg.sh servicenow-case-management-poc/scripts/seed_demo_data.js 82b99028936f74320d74d6f88357a5af
+"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/seed_demo_data.js 82b99028936f74320d74d6f88357a5af
 ```
 
 Do **not** delete the packaged seed rows first — that instruction belonged to an earlier revision. Every
@@ -865,21 +934,21 @@ The role and scope checks below **do** work over REST, because those are global 
 ```bash
 SN="$SERVICENOW_INSTANCE_URL"
 for r in x_casemgmt_case_manager x_casemgmt_case_agent x_casemgmt_case_viewer; do
-  curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+  curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
     "$SN/api/now/table/sys_user_role?sysparm_query=name=$r&sysparm_fields=name"
 done
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=scope,sys_id"
 
 # The single most informative post-install check: the ACL role links must number EXACTLY 27.
 # 0 means step 6 has not run; anything other than 27 means it has not converged.
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
 
 # Corroborating counts: 26 ACLs, 7 case Business Rules, and 7 flows all active AND published.
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_security_acl?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=name,operation&sysparm_limit=50"
-curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
+curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_hub_flow?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=internal_name,active,status&sysparm_limit=20"
 ```
 

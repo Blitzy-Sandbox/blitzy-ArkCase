@@ -296,11 +296,115 @@ deletes — this is wider than the tables themselves and is reported rather than
 | data rows (case / task / party) | 12 / 10 / 8 | 0 / 0 / 0 |
 | **survived**: `sys_ui_action` 6, `sys_hub_flow` 7, `sys_user_role` 3, `sys_scope` 1, `sys_app` 1 | — | unchanged |
 
-None of those collateral classes was *targeted*: the deletion command named only the three
-`sys_db_object` records. Every collateral record's payload remains in the shipping package,
-so U3's commit restores them, and S6 requires the tables absent regardless. The 255 delete
-captures landed in the ABSORBER; the shipping set stayed at 895 rows with its choice and
-ACL payloads byte-identical.
+**VERDICT — this cascade EXCEEDED the destructive boundary OVERRIDE-3 set, and that is a
+scope violation rather than an authorised side effect.** OVERRIDE-3 authorised destruction of
+a closed subset: the three scoped tables, their dictionary rows and their data, and the
+scoped role links. Eight of the classes in the table above sit outside that subset — 26
+`sys_security_acl`, 24 `sys_choice`, 7 `sys_script` business rules, 8 `sys_report`, 3
+`sys_ui_list`, 1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3 `sys_number` counters —
+and every one of them went to zero on a live instance. The dictionary rows, the data rows and
+the 27 role links are inside the authorised subset; those eight classes never were.
+
+**Two arguments were previously recorded here for treating the removal as authorised, and
+both are rejected.** (1) *Non-targeting.* The deletion command named only the three
+`sys_db_object` records — true, and it narrows nothing: a boundary measures the reach of the
+operation, not the argument list of the command, and a cascade you invoke is a deletion you
+perform. (2) *Later restoration.* Restoration after the fact does not authorise a destructive
+act. Between `instance_clean_at` **2026-09-02T19:22:09Z** and the Phase 2 commit at
+**2026-09-02T20:53:14Z** — roughly **91 minutes** — the application stood on a live instance
+with zero ACLs, zero ACL-role links, zero business rules and zero UI policies: its
+authorisation and its transition controls were absent, which is precisely the state the
+boundary exists to prevent. S6's requirement that the three tables be absent bears on the
+authorised subset only and licenses nothing beyond it.
+
+**It was foreseen, which makes this a decision and not an accident.** §2.4 records that the
+27 role links were created *before* the tables were deleted **because** the platform's
+table-delete cascade removes the 26 ACLs. The collateral was known in advance and sequenced
+around, so a pre-delete enumeration — and an abort on what it returned — was available at the
+time and was not performed.
+
+**What should have happened.** Enumerate the platform's delete dependencies before the first
+delete; on detecting any collateral class, abort *before* that delete with nothing deleted,
+record Phase 1 as unmet on this ground, and take OVERRIDE-2's fallback / leave-for-human
+path; proceed only on an explicit human expansion of the destructive scope. This is a
+**second, independent ground on which Phase 1's hard gate is NOT MET** — alongside the
+role-assignment mechanism deviation already recorded in §2.4 — and §4 states it as such. The
+control that would have caught it is specified immediately below.
+
+**Consequences and mitigations, stated as consequences and not as licence.** Every collateral
+record's payload does exist in the shipping package and the Phase 2 commit did restore those
+records on the instance: that mitigates the outcome, it does not authorise the act, and it
+does not shorten the interval above. The 255 delete captures landed in the ABSORBER; the
+shipping set stayed at 895 rows with its choice and ACL payloads byte-identical, so the
+package itself carries no damage from any of this.
+
+#### Corrective control — the pre-delete collateral guard (required; not performed in this run)
+
+Any future execution of an authorised **targeted deletion** MUST run this guard before the
+first table delete. It is written so the next executor runs it verbatim instead of
+re-deriving it.
+
+**Step 0 — resolve the scope and the roles by query, never from a literal.** No `sys_id` is
+an input to this guard:
+
+* `GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id,scope`
+  → carry the returned `sys_id` as `SCOPE` for the queries below.
+* `GET /api/now/table/sys_user_role?sysparm_query=nameINx_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer&sysparm_fields=sys_id,name`
+  → carry the three returned `sys_id` values as `ROLES`.
+
+**Step 1 — enumerate, per table `T` to be deleted, before deleting anything.** Every row is a
+read-only count (`GET /api/now/stats/<class>?sysparm_count=true&sysparm_query=…`, or the
+equivalent `GlideAggregate` in a server-side script):
+
+| # | Class | Query for the table `T` | Inside the authorised subset? |
+| --- | --- | --- | --- |
+| 1 | `sys_dictionary` | `name=T` | yes — the table's own dictionary rows |
+| 2 | `T` itself (data rows) | `/api/now/stats/T?sysparm_count=true` | yes — the table's own data |
+| 3 | `sys_security_acl_role` | `roleIN<ROLES>` intersected with the ACLs of `T` (row 4's query) | yes — the scoped role links |
+| 4 | `sys_security_acl` | `sys_scope=<SCOPE>^name=T^ORnameSTARTSWITHT.` | **NO — aborts** |
+| 5 | `sys_choice` | `name=T` | **NO — aborts** |
+| 6 | `sys_script` (business rules) | `sys_scope=<SCOPE>^collection=T` | **NO — aborts** |
+| 7 | `sys_report` | `sys_scope=<SCOPE>^table=T` | **NO — aborts** |
+| 8 | `sys_ui_list` | `name=T` | **NO — aborts** |
+| 9 | `sys_ui_related_list` | `name=T` | **NO — aborts** |
+| 10 | `sys_ui_policy` | `sys_scope=<SCOPE>^table=T` | **NO — aborts** |
+| 11 | `sys_number` | `category=T` | **NO — aborts** |
+
+`sys_documentation` (`name=T`) accompanies the dictionary rows of row 1 and is counted for the
+record; where an executor is unsure whether a class belongs to the authorised subset at all,
+the fail-closed reading is the correct one — treat it as collateral and abort.
+
+**Step 2 — the abort rule, single and unconditional.** Any non-zero count in a class marked
+**NO** aborts the operation **before the first delete, having deleted nothing**. There is no
+partial variant: not "delete the tables and let the commit restore the rest", not "delete
+what the authorisation covers and accept the cascade". The guard writes nothing on the
+instance; it is read-only from Step 0 to Step 3.
+
+**Step 3 — what is recorded on abort.** (a) the enumeration verbatim — class, query, count,
+the queried scope and the UTC timestamp of the measurement; (b) the phase whose step required
+the deletion, recorded as **unmet**, with the destructive boundary named as the reason; (c)
+the fact that no instance write took place.
+
+**Step 4 — the fallback.** OVERRIDE-2's leave-for-human path: leave the instance exactly as
+it stands — no rollback, no back-out, no `deleteApplication`, no scope deletion — ship the
+fallback package labelled for what it is, and hand the enumeration to a human as the decision
+item. Proceeding is permitted **only** on an explicit human expansion of the destructive
+scope, recorded with **who authorised it**, **what classes and counts it covers** and
+**when**; the enumeration is then re-run immediately before the delete and aborts again if it
+no longer matches what was authorised.
+
+**Step 5 — one exclusion, stated explicitly because it would otherwise be mis-applied.** This
+control governs deletion on a **live, converged instance under a narrower authorisation**. It
+does **not** reclassify the documented two-commit **install** path
+([`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5/§5a,
+[`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §9.5
+step 2), which deliberately relies on the same platform cascade on a target where the second
+commit restores those records by design; that path stands as documented. For the same reason
+the guard must **not** be bolted onto `scripts/post_import_remediation.js`: its rebuild path
+deletes only provably metadata-only, provably package-owned rows, and the install path depends
+on that cascade. That is an observation carried in this record — no change was made to that
+script, to either install document or to any instance by the correction that added this
+control.
 
 **Creation.** With the shipping set current and the scope resolved by query:
 
@@ -581,7 +685,7 @@ RESUME CHECK first, exactly as D26 requires:
 | `x_casemgmt_case_task` (14 dictionary rows) | yes | deleted (`7bca2c5e938b435009aa70d19dba1095`) |
 | `x_casemgmt_case_party` (13) | yes | deleted (`c4da2c5e938b435009aa70d19dba10fa`) |
 | `x_casemgmt_case` (21) | yes | deleted (`13cae85e938b435009aa70d19dba10e0`) |
-| `sys_security_acl_role` for the 3 scoped roles | **no — already 0** (cascade-removed by the S3 table deletion, after they had been captured) | **not re-attempted** |
+| `sys_security_acl_role` for the 3 scoped roles | **no — already 0** (cascade-removed by the S3 table deletion, after they had been captured — the reach of that same cascade is adjudicated in §2.5) | **not re-attempted** |
 | `sys_user_has_role` for the 3 scoped roles | yes, 3 | deleted (3) |
 
 Clean-state proof, each assertion observed:
@@ -594,8 +698,13 @@ Clean-state proof, each assertion observed:
 | `sys_dictionary` rows for the three tables | **0** (0 / 0 / 0) |
 | `sys_security_acl_role` for the three scoped roles | **0** |
 | `sys_user_has_role` for the three scoped roles | **0** |
-| `sys_number` for the three categories | **0** (cascade) |
+| `sys_number` for the three categories | **0** (cascade — a class outside OVERRIDE-3's authorised subset; §2.5) |
 | Preserved and verified present | 3 scoped roles, `sys_scope`, `sys_app`, 7 flows, the `apps.current_app` preference |
+
+**The proof above is evidence of the state that was reached, not evidence that the destructive
+boundary held.** Part of that state was produced by a cascade that exceeded OVERRIDE-3's
+authorised subset — the verdict, and the pre-delete collateral guard that should have aborted
+the operation, are in §2.5.
 
 **instance_clean_at = 2026-09-02T19:22:09Z.** No `deleteApplication`, no scope deletion, no
 Rollback, no back-out was invoked at any point.
@@ -716,15 +825,22 @@ the serializer asserts element-by-element that no text or CDATA content changed.
 | Single-test result reported before the full-package result | **met** | §1 precedes §2 |
 | **Native creation by the mandated mechanism — tables and dictionary half** | **met** | §2.5–§2.6: 3 × `POST /api/now/table/sys_db_object` and 27 × `POST /api/now/table/sys_dictionary`, all HTTP 201, every row platform-written and platform-captured |
 | **Native creation by the mandated mechanism — role-link and grant half (D2 lines 5–10, D21 lines 124–128, INTERP-1)** | **NOT MET** | §2.4 deviation block and §5 item 9: the 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's native role-assignment action. The records are correct and in scope, but their provenance is not platform-attested |
+| **Destructive work confined to OVERRIDE-3's authorised subset — the three tables, their dictionary rows and data, and the scoped role links** | **NOT MET** | §2.5 verdict: the table-delete cascade also removed 26 `sys_security_acl`, 24 `sys_choice`, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3 `sys_number` counters — all outside that subset — leaving the application on a live instance with no authorisation and no transition controls from `2026-09-02T19:22:09Z` until the Phase 2 commit at `2026-09-02T20:53:14Z`. The collateral was foreseen (§2.4) and the pre-delete collateral guard in §2.5 should have aborted the operation before its first delete |
 
 **VERDICT: EXIT CONDITION PARTIALLY MET — 2026-09-02T19:22:09Z (UTC).** Every requirement
-above is met **except the role-link and grant half of the native-creation requirement, which
-is NOT MET**. Phase 1 is a **HARD GATE**, and this record does not claim it was cleared in
-full: it was cleared for the table/dictionary half and for every other requirement, and it
-stands **unmet for the mechanism D2/D21/INTERP-1 named for the 30 security-assignment
-records**. Phase 2 (U3) proceeded on the exit condition **as it was recorded at the time**,
-which read `met`; the qualification here is the correction, not a re-narration of what Phase 2
-saw. The fallback package was not invoked at this point (it was elected later — see §7).
+above is met **except two, and each is NOT MET on its own independent ground**: the role-link
+and grant half of the native-creation requirement, and the requirement that destructive work
+stay inside OVERRIDE-3's authorised subset. Phase 1 is a **HARD GATE**, and this record does
+not claim it was cleared in full: it was cleared for the table/dictionary half and for every
+other requirement, and it stands **unmet for the mechanism D2/D21/INTERP-1 named for the 30
+security-assignment records**, and **unmet a second time for the destructive boundary** — the
+table-delete cascade reached eight classes outside the authorised subset, on a live instance,
+and no pre-delete enumeration aborted it (§2.5, and §5 item 4). The two grounds are of
+different kinds — one is mechanism selection, the other is a scope violation — and neither
+substitutes for the other. Phase 2 (U3) proceeded on the exit condition **as it was recorded
+at the time**, which read `met`; the qualifications here are the correction, not a
+re-narration of what Phase 2 saw. The fallback package was not invoked at this point (it was
+elected later — see §7).
 
 **What would clear it, and why it was not cleared here.** The gate closes only when all 27
 links and all 3 grants are created through the actual native role-assignment action, on a
@@ -747,7 +863,7 @@ it does not make this gate met.
 | 1 | The brief expected a platform-captured table to be named `sys_db_object_x_casemgmt_case`. The platform in fact names it `sys_db_object_<sys_id>`; the name-pattern discriminator holds for `sys_dictionary` only. | Reported, not worked around. The swap is proven by sys_id instead (§2.5, §2.6). |
 | 2 | `sys_user_has_role` is not auto-captured by update sets. | Delivered through the platform's own update-set writer rather than hand-authored XML (§2.4). |
 | 3 | Re-created role links necessarily get new sys_ids (the platform assigns a GUID; the old composite ids were produced by `post_import_remediation.js`). | Pairing reproduced exactly, 27 links, 14/10/3. Identity change is inherent to re-creating the links at all, by whichever mechanism. |
-| 4 | The platform's table-delete cascade also removed the 26 ACLs, 24 choices, 7 business rules, 8 reports, the layouts and the 3 counters from the **live instance**. | Consequence of the OVERRIDE-3-authorised table deletion, not a targeted deletion. Enumerated in §2.5. All payloads remain in the package, so U3's commit restores them; S6 requires the tables absent anyway. |
+| 4 | The platform's table-delete cascade also removed the 26 ACLs, 24 choices, 7 business rules, 8 reports, the layouts and the 3 counters from the **live instance**. | **SCOPE VIOLATION of OVERRIDE-3's destructive boundary** — not an authorised side effect. Those classes sit outside the authorised subset (the three tables, their dictionary rows and data, and the scoped role links), and neither the command having named only the three `sys_db_object` records nor the Phase 2 commit's later restoration authorises their removal: the application stood on a live instance without authorisation or transition controls from `2026-09-02T19:22:09Z` to the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. The verdict, the enumerated cascade and the **pre-delete collateral guard** that should have aborted the operation before its first delete are in §2.5; it is the second, independent ground on which Phase 1's hard gate is NOT MET (§4). The payloads do remain in the package and U3's commit restored them, which mitigates the outcome without licensing the act. |
 | 5 | `sys_number` identity — first attempt used `setValue('sys_id')`, which the platform ignores. | **The only fix-and-re-verify loop in this phase: 2 attempts of the 2 permitted, resolved** with `setNewGuidValue()` and confirmed in the captured payloads (§2.5). |
 | 6 | `x_casemgmt_case_task`/`_case_party` `number_ref` were dangling pre-refine; they now resolve. Known cosmetic defect #2 (no label row for `duration_to_close`) is also incidentally repaired, because the platform writes a `sys_documentation` row for every column it creates. | Improvements produced by the native path. Reported, not hidden. |
 | 7 | Known pre-existing defect: `opened_date` empty on 8 of 10 seeded cases. | Untouched by this unit. The live data was destroyed with the tables (authorised), so the defect will reappear from the package's own seed rows after U3's commit; it is classified under D5 and is not caused here. |
@@ -777,7 +893,7 @@ zero).
 | SCRATCH set from S1 (never export) | `4999985a930b435009aa70d19dba102e`, `state=complete`, 6 rows |
 | Pre-existing committed retrieved set (leave alone) | `9929f50df18ccec91ea13b2a3bccfc90`, `state=committed` |
 | Current Update Set left as | the global **Default** set — nothing can be captured into the completed master set |
-| Clean-instance precondition for Phase 2 S1 | the three tables return HTTP 400 "Invalid table"; zero scoped dictionary rows, zero `sys_security_acl_role`, zero `sys_user_has_role`; scope, `sys_app`, 3 roles and 7 flows still present; 26 ACLs and 24 choices absent (cascade — the package restores them on commit) |
+| Clean-instance precondition for Phase 2 S1 | the three tables return HTTP 400 "Invalid table"; zero scoped dictionary rows, zero `sys_security_acl_role`, zero `sys_user_has_role`; scope, `sys_app`, 3 roles and 7 flows still present; 26 ACLs and 24 choices absent (cascade — the package restores them on commit; those two classes lie **outside** OVERRIDE-3's authorised subset, and §2.5 records their removal as a scope violation that the restoration mitigates but does not authorise) |
 | `apps.current_app` preference | intact (`8749eb4e9343435009aa70d19dba1085` → the x_casemgmt scope). Do not delete or repoint it. |
 
 ---
@@ -841,3 +957,29 @@ unavailable, and why the directive elects the fallback here — is in
 `final.shipping_package`, `final.election_made`, `final.election_owner`,
 `final.retained_rebuilt_package`, `final.delivery_position`, `final.owed_verification` and
 `final.post_review_cr1_remediation` in [`run-state.json`](./run-state.json).
+
+---
+
+## 8. Post-review corrections — code review CR4 (2026-09-03)
+
+Delta code review CR4 (security and constraint-hygiene lens) raised one blocking finding
+against this report, **F3 (CRITICAL)**, shared with [`FINAL-REPORT.md`](./FINAL-REPORT.md) and
+[`run-state.json`](./run-state.json). It was resolved on **2026-09-03**. Like the CR1 pass
+before it, this is a code-review resolution pass and not a sixth unit: it took **no action on
+the instance** — no upload, no preview, no commit, no write of any kind — and it ran no phase.
+It changed **no measurement**: every count, `sys_id`, digest, byte size, block count,
+timestamp and record total in this report stands exactly as it was measured. What changed is
+the classification of one already-measured event.
+
+| Finding | What it said | What changed in this file |
+| --- | --- | --- |
+| **F3 (CRITICAL)** — the table-delete cascade exceeded OVERRIDE-3's destructive boundary | §2.5 classified the cascade's removal of 26 ACLs, 24 choice rows, 7 business rules, 8 reports, 3 list layouts, 1 related list, 2 UI policies and the 3 number counters as authorised, on two grounds: that none of those classes was named by the deletion command, and that the shipping package restores them on commit. Both grounds are invalid — a boundary measures the reach of an operation, not the argument list of a command, and restoration after the fact does not authorise a destructive act. During the interval the application had no authorisation and no transition controls on a live instance | §2.5's measured before/after cascade table is **unchanged** (it is the evidence). The paragraph that followed it is replaced by the **verdict**: the cascade exceeded the authorised subset and is a **scope violation**; non-targeting and later restoration are both rejected as authorisation; the controls-absent interval is named with both timestamps (`2026-09-02T19:22:09Z` → `2026-09-02T20:53:14Z`, roughly 91 minutes); §2.4's own record shows the collateral was foreseen and sequenced around, so a pre-delete enumeration and abort was available; and what should have happened instead is stated. The two true operational facts are retained as consequence and mitigation. A new **corrective control — the pre-delete collateral guard** follows the verdict in §2.5, with its enumeration (scope and roles resolved by query), its abort rule, what is recorded on abort, OVERRIDE-2's fallback, the explicit-human-expansion requirement, and the exclusion for the documented two-commit install path and for `scripts/post_import_remediation.js`. §5 item 4's disposition is rewritten as the scope violation; §2.9 and §6 keep their measurements and gain cross-references to §2.5 so no reader takes the clean-state proof as evidence the boundary held; and §4 now carries the destructive boundary as a **second, independent ground on which Phase 1's hard gate is NOT MET**, alongside the role-assignment mechanism deviation |
+
+**What this correction does not touch.** No remedial action was taken on the instance and none
+is claimed: the live records the Phase 2 commit restored were neither re-checked nor rewritten
+by this pass. The run's other verdicts stand unchanged and uncontradicted — no rollback, no
+`deleteApplication`, no scope deletion and no back-out occurred at any point; the
+`apps.current_app` preference was preserved and never repointed; the elected fallback remains
+authorized under OVERRIDE-2, and electing it still makes neither the Phase 1 hard gate met nor
+the Phase 2 gate met for the fallback's own bytes. CR4's other two findings were resolved in
+their own files and are not described here.

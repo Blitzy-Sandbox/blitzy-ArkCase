@@ -26,14 +26,17 @@ hashes recomputed on disk, instance state re-queried by REST, screenshot paths r
 | Phase | Exit condition | Verdict | Confirmed (UTC) | Entered only after the prior confirmation? |
 | --- | --- | --- | --- | --- |
 | **0** — establish a live instance | Live, authenticated, non-hibernating session confirmed by content, with heartbeat running | **MET — with a recorded mechanism deviation, not full directive compliance** | `2026-09-02T17:52:29Z` | first phase |
-| **1** — native creation for tables and role links **[HARD GATE]** | Import (S0), scratch validation (S1–S2), native rebuild (S3–S4), count check (S4a) confirmed; master set Complete with the full package and the swap applied; instance clean; **and every one of those created by the mandated native mechanism** | **PARTIALLY MET — NOT MET for the role-link and grant half** | `2026-09-02T19:22:09Z` (the value Phase 2 read; qualified by the CR2 pass) | yes — Phase 1's first write (the S0 upload) was `17:55:18Z`, after Phase 0's `17:52:29Z` |
+| **1** — native creation for tables and role links **[HARD GATE]** | Import (S0), scratch validation (S1–S2), native rebuild (S3–S4), count check (S4a) confirmed; master set Complete with the full package and the swap applied; instance clean; **and every one of those created by the mandated native mechanism** | **PARTIALLY MET — NOT MET on two independent grounds: the role-link and grant half, and OVERRIDE-3's destructive boundary** | `2026-09-02T19:22:09Z` (the value Phase 2 read; qualified by the CR2 pass and by the CR4 pass) | yes — Phase 1's first write (the S0 upload) was `17:55:18Z`, after Phase 0's `17:52:29Z` |
 | **2** — verify the final package **[HARD GATE]** | Preview and commit both clean on this checksum, against a genuinely clean instance, storage and role links confirmed after | **MET** | `2026-09-02T20:53:14Z` | yes — Phase 2 read `phase1.exit_condition = met` at `19:47:16Z` and took its first action at `19:53:13Z` |
 | **3** — ATF suite **[NON-BLOCKING]** | Full suite executed with every result captured and classified; 100% pass **not** required | **MET** | `2026-09-02T22:10:59Z` | yes — Phase 3 read `phase2.exit_condition = met` (`20:53:14Z`) and ran its single test at `21:20:29Z` |
 
 **Two exit conditions are qualified, and this table states them as qualified rather than clear.**
 Nothing blocked the run at the time and it did not stop early — every requirement each phase measured
-was measured and reported — but two mechanism-selection deviations mean two of these verdicts are not
-full directive compliance, and the CR2 remediation pass corrected the record accordingly:
+was measured and reported — but **two mechanism-selection deviations** mean two of these verdicts are
+not full directive compliance, and the CR2 remediation pass corrected the record accordingly. Phase 1
+additionally fails on a **third item of a different kind — a scope violation rather than a mechanism
+deviation**: its table-delete cascade reached outside the destructive subset OVERRIDE-3 authorised.
+The CR4 pass corrected that classification:
 
 - **Phase 1's hard gate is PARTIALLY MET.** Its native-creation requirement is met for the
   table/dictionary half (3 `sys_db_object` + 27 `sys_dictionary` Table-API creations, all HTTP 201,
@@ -43,6 +46,16 @@ full directive compliance, and the CR2 remediation pass corrected the record acc
   lines 124–128, INTERP-1). [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.4 and §4 carry what would
   clear it and why it could not be cleared here — the clean dedicated PDI it needs would have to be
   provisioned, and provisioning or re-requesting an instance is prohibited.
+- **Phase 1's hard gate is also NOT MET on a second, independent ground — OVERRIDE-3's destructive
+  boundary was exceeded.** Deleting the three table records cascaded onto 26 `sys_security_acl`, 24
+  `sys_choice` rows, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2
+  `sys_ui_policy` and the 3 `sys_number` counters — classes outside the authorised subset — leaving
+  the application on a live instance with no authorisation and no transition controls from
+  `2026-09-02T19:22:09Z` until the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. This
+  is a **scope violation**, not a mechanism deviation, and it is not cured by the commit's later
+  restoration of those records. The abort that should have happened, and the pre-delete collateral
+  guard that any future authorised targeted deletion must run first, are in
+  [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5.
 - **Phase 0's exit condition is met with a recorded deviation.** A heartbeat *was* running, which is
   what the condition literally required, but on the API variant where directive lines 76–84 required
   the browser/UI variant outside the commit-page exception — so it is not full compliance. Observed
@@ -230,8 +243,15 @@ HTTP 400 "Invalid table"; 0 scoped dictionary rows; 0 `sys_security_acl_role`; 0
 0 `sys_number`. Deliberately preserved: the 3 roles, `sys_scope`, `sys_app`, the 7 flows and the
 `apps.current_app` preference (without which the platform refuses scoped metadata deletes). The
 table-delete cascade also removed 26 ACLs, 24 choice rows, 7 business rules, 8 reports, 3 UI lists,
-1 related list, 2 UI policies and 30 data rows — every one of them carried by the package and
-restored by the Phase 2 commit.
+1 related list, 2 UI policies and 30 data rows. **Every class in that list except the 30 data rows
+lies outside the destructive subset OVERRIDE-3 authorised** — the three tables, their dictionary
+rows and data, and the scoped role links — so the cascade **exceeded that boundary, which is a scope
+violation**: [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5 carries the verdict, the
+controls-absent interval (`2026-09-02T19:22:09Z` → the Phase 2 commit at `2026-09-02T20:53:14Z`,
+roughly 91 minutes with no ACLs, no role links, no business rules and no UI policies on a live
+instance) and the pre-delete collateral guard that should have aborted the operation before its
+first delete. Every one of those records is carried by the package and was restored by the Phase 2
+commit, which mitigates the outcome and does not authorise the act.
 
 **Repository impact.** The 3 `tables/*.xml` and 25 `dictionary/*.xml` artifacts were **updated** to
 match the platform-captured records, and **35 files were created** under `dictionary/` for captured
@@ -735,21 +755,33 @@ The standing policies in the PR's header were adjudicated for the whole run, not
 | Policy | Verdict | Evidence |
 | --- | --- | --- |
 | **Sequence gating** — each phase a prerequisite for the next, entered only after the prior exit condition is explicitly confirmed | **EXECUTED IN ORDER, AGAINST THE VALUES RECORDED AT THE TIME — historical execution, not settled compliance** | The timestamped table at the top of this report. Each successor read the predecessor's `exit_condition` from `run-state.json` before acting and no phase was entered out of order: Phase 2 read `phase1.exit_condition = met` at `19:47:16Z` — the value recorded at that moment — and Phase 3 read `phase2.exit_condition = met` (`20:53:14Z`). The CR2 pass later qualified Phase 1 to `partially_met` with the hard gate NOT MET, so what this row certifies is the ordering as executed against the then-recorded value; it does **not** certify that every predecessor condition is met on the settled verdicts. Nothing was re-entered or re-run after the qualification |
-| **Hard gate + fallback** — rebuilt package ships only if Phases 1 and 2 both complete cleanly; otherwise the fallback ships, labeled | **PHASE 1 PARTIALLY MET — HARD GATE NOT MET; PHASE 2 MET ON EXPORT 3'S BYTES; THE FALLBACK IS ELECTED ON THAT PATH AND SHIPS, LABELED** | Phase 1's exit condition is **not** reached in full: the role-link and grant half was created by direct server-side insert rather than the native role-assignment action (D2 lines 5–10, D21 lines 124–128, INTERP-1), so the hard gate is NOT MET at `19:22:09Z` — part (b). Phase 2's gate is MET at `20:53:14Z` on export 3's byte sequence `eee9fabd…`, cleanly or via the permitted fix-and-re-verify. Two independent routes therefore lead to the same place: Phase 1's unmet half, and — after the post-review re-sequencing made the checksum stale, with D36's exact-byte re-run unavailable on the one provisioned instance — Phase 2's gate not being reached for the artifact on the deliverable path. On both, OVERRIDE-2 / directive D3 authorizes the untouched fallback by name. It is elected, it ships from the deliverable path, and it is labeled as not carrying this round's fix (`post_import_remediation.js` required) — part (d). The fallback file itself is byte-unmodified; the re-sequenced rebuilt package is retained at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` |
+| **Hard gate + fallback** — rebuilt package ships only if Phases 1 and 2 both complete cleanly; otherwise the fallback ships, labeled | **PHASE 1 PARTIALLY MET — HARD GATE NOT MET; PHASE 2 MET ON EXPORT 3'S BYTES; THE FALLBACK IS ELECTED ON THAT PATH AND SHIPS, LABELED** | Phase 1's exit condition is **not** reached in full: the role-link and grant half was created by direct server-side insert rather than the native role-assignment action (D2 lines 5–10, D21 lines 124–128, INTERP-1), so the hard gate is NOT MET at `19:22:09Z` — part (b) — and it is NOT MET on a second, independent ground as well, the table-delete cascade having exceeded OVERRIDE-3's destructive boundary (the VIOLATED row below, and [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5). Phase 2's gate is MET at `20:53:14Z` on export 3's byte sequence `eee9fabd…`, cleanly or via the permitted fix-and-re-verify. Two independent routes therefore lead to the same place: Phase 1's unmet half, and — after the post-review re-sequencing made the checksum stale, with D36's exact-byte re-run unavailable on the one provisioned instance — Phase 2's gate not being reached for the artifact on the deliverable path. On both, OVERRIDE-2 / directive D3 authorizes the untouched fallback by name. It is elected, it ships from the deliverable path, and it is labeled as not carrying this round's fix (`post_import_remediation.js` required) — part (d). The fallback file itself is byte-unmodified; the re-sequenced rebuilt package is retained at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` |
 | **No rollback** — Rollback / `deleteApplication` never invoked; the PR's instruction overrides the Environment Setup rollback rows | **SATISFIED** | No `deleteApplication` call, no scope deletion, no back-out anywhere in the run. Verified live: `sys_scope` and `sys_app` `82b99028…` v1.0.0 both resolve, the three roles resolve, the three tables answer HTTP 200 with 27 role links, and zero retrieved sets on the instance are in `commit_failed`/`error` |
 | **Partial writes** — a partial commit or write must be reported as such, never described as "untouched" | **NO PARTIAL APPLY** | Commit "Succeeded 100%", 613 inserted / 375 updated / 0 collisions / 988 total, progress worker Complete/Success, 0 commit-log rows, 0 children with a disposition. The instance is described as **fully applied** — and explicitly not as "untouched", since the PR itself required the tables and links to be deleted and the package re-committed |
 | **Failure classification** — (a) regression / (b) unambiguous pre-existing / (c) judgment call | **APPLIED** | Zero class (a). Four class (c) items (choice rows, seed linkage, `opened_date`, donut cosmetics) shipped and flagged. One class (b) set (documentation defects) reported rather than fixed, because this unit's documentation mandate is limited to statements this run falsified |
 | **Two-attempt cap** per issue, counted independently of hibernation recovery | **SATISFIED** | Fix ledger: `sys_number` identity 2/2 resolved · global-scope attribution on the 3 grants 1/2 resolved · "local update newer" 60 errors 2/2 resolved · `sys_choice` 0/2, unresolved and itemized as a known issue. **No issue exceeded two attempts, and no issue hit the cap while still unresolved.** Recovery cycles: **0 of 3 in every unit**, 0 hibernation events, consuming none of the fix budget |
 | **Scope — in** | **ALL PERFORMED, one of them by a substituted mechanism** | Table/dictionary rebuild by the real Table API, and the role links and grants re-created — but **by direct server-side insert rather than the native role-assignment action D2/D21/INTERP-1 require, a deviation** recorded in part (b) and in [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.4 / §5 item 9 · scratch-then-master sequencing (SCRATCH `4999985a…` never shipped; 0 `refine_probe` matches in the deliverable) · checksum-gated preview/commit · ATF suite execution · fallback not needed by any phase of the run, and elected afterwards by the frozen directive when D36's exact-byte re-run proved unavailable (part (d)) |
 | **Mechanism fidelity** — the mandated mechanism must be the one used, and any substitution reported as a deviation | **TWO DEVIATIONS, BOTH REPORTED** | (1) The 27 `sys_security_acl_role` links and 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's **native role-assignment action** (D2 lines 5–10, D21 lines 124–128, INTERP-1): ACL evaluation and the native action's audit trail were skipped and no `security_admin` elevation was obtained — measured results unaffected, human closure path recorded ([`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.4, §5 item 9). (2) The availability heartbeat ran in the **API context** for the whole run where directive lines 76–84 require the **browser/UI** variant outside the record/commit-page exception; observed impact none (0 hibernation events, 0 recovery cycles, both variants read-only), and the mandated browser heartbeat was executed in the CR2 remediation pass (part (a), item (e)) |
-| **Scope — out** | **RESPECTED** | No new ATF tests authored (the 20 tests / 180 steps are the package's own) · no instance released or re-requested · delivery not blocked by Phase 3's findings · `apps.current_app` preserved (verified live) |
+| **OVERRIDE-3's destructive boundary** — destructive work confined to the three tables, their dictionary rows and data, and the scoped role links | **VIOLATED** | The table-delete cascade also removed 26 `sys_security_acl`, 24 `sys_choice` rows, 7 business rules, 8 `sys_report`, 3 `sys_ui_list`, 1 `sys_ui_related_list`, 2 `sys_ui_policy` and the 3 `sys_number` counters — every one of those classes outside the authorised subset, measured before and after in [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5. The application therefore stood on a live instance with no ACLs, no ACL-role links, no business rules and no UI policies from `2026-09-02T19:22:09Z` until the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. The collateral was foreseen and sequenced around (§2.4), so a pre-delete enumeration and abort was available; neither the command's argument list nor the commit's later restoration authorises the removal. What should have happened: abort before the first delete, record Phase 1 as unmet on this ground, and take OVERRIDE-2's fallback / leave-for-human path, proceeding only on an explicit human expansion of the destructive scope. The corrective control — the pre-delete collateral guard — is specified in §2.5; this pass added it to the record and took no instance action |
+| **Scope — out** | **RESPECTED ON THE ITEMS LISTED HERE — this row does not certify the destructive boundary, which is VIOLATED in the row above** | No new ATF tests authored (the 20 tests / 180 steps are the package's own) · no instance released or re-requested · delivery not blocked by Phase 3's findings · `apps.current_app` preserved (verified live) |
 
-**Platform records touched outside the table/role-link subset, each with its licence.** Every one of
-these is a consequence of an action the PR ordered, and none is a unilateral change: 30
-`sys_documentation` label rows, written by the platform for every column it creates; 3 `sys_number`
-counters re-created carrying the package's own identities after the table-delete cascade removed
-them; the cascade's own removal and the commit's restoration of 26 ACLs, 24 choice rows, 7 business
-rules, 8 reports, 3 list layouts, 1 related list, 2 UI policies and 30 data rows; two throwaway local
+**Platform records touched outside the table/role-link subset, each with its licence — and one of
+them has no licence.** Each item below is a consequence of an action the PR ordered, but "the PR
+ordered the action" is not by itself a licence for whatever that action reached: the cascade item is
+a **scope violation** and is stated as one. 30 `sys_documentation` label rows, written by the
+platform for every column it creates; 3 `sys_number` counters whose **removal belongs to the
+violated cascade below** while their **re-creation carrying the package's own identities is
+remedial**, restoring what the cascade should never have removed; **the cascade's own removal of 26
+ACLs, 24 choice rows, 7 business rules, 8 reports, 3 list layouts, 1 related list and 2 UI policies —
+classes outside the subset OVERRIDE-3 authorised, so their deletion EXCEEDED the authorised
+destructive boundary and should have triggered the pre-delete abort and OVERRIDE-2's fallback / stop
+path instead of proceeding** (the authorised subset is the three tables, their dictionary rows and
+data, and the scoped role links, so the 30 data rows removed alongside them are inside it; the Phase
+2 commit's restoration of all of these records mitigates the outcome and licenses nothing, and
+neither does the fact that the deletion command named only the three `sys_db_object` records; the
+verdict, the ≈91-minute controls-absent interval `2026-09-02T19:22:09Z` → `2026-09-02T20:53:14Z` and
+the required pre-delete collateral guard are in [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5, and
+this is the second, independent ground on which Phase 1's hard gate is NOT MET); two throwaway local
 update sets (SCRATCH `4999985a…` with 6 children, ABSORBER `25d86c1a…` with **266 children as
 counted before Phase 2** — a historical, pre-Phase-2 figure, since 215 of the 256 DELETE-capture rows
 Phase 2's fix loop removed were inside it, leaving the **settled count of 51**, which live REST
@@ -958,6 +990,38 @@ for exactly what it is.** The whole position is recorded machine-readably under
 `final.shipping_package`, `final.election_made`, `final.election_owner`,
 `final.retained_rebuilt_package`, `final.delivery_position` and `final.owed_verification` in
 [`run-state.json`](./run-state.json).
+
+## Post-review remediation — code review CR4 (2026-09-03)
+
+Delta code review CR4 (security and constraint-hygiene lens) read the refine diff and raised three
+blocking findings. **F3 (CRITICAL)** is the one against this report, and it was resolved on
+**2026-09-03** in the three refine-run evidence artifacts it spans — this file,
+[`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) and [`run-state.json`](./run-state.json). Like the CR1
+pass, this is a code-review resolution pass and not a further unit: it took **no action on the
+instance** — no upload, no preview, no commit, no write of any kind — ran **no phase**, and changed
+**no measurement**. Every count, `sys_id`, digest, byte size, block count, timestamp and record total
+in this report stands as measured; what changed is one classification and the verdicts that follow
+from it. CR4's F1 and F2 were resolved in their own files —
+[`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) and
+[`PHASE0-1.md`](./PHASE0-1.md) — by the groups holding them, and are not described here.
+
+| Finding | What it said | What changed in this file |
+| --- | --- | --- |
+| **F3 (CRITICAL)** — the table-delete cascade exceeded OVERRIDE-3's destructive boundary, and the reports normalised it as authorised because the commit later restored the records | Restoration after the fact does not make the earlier destructive operation in-scope, and the fact that the deletion command named only the three `sys_db_object` records does not narrow what the operation reached. During the interval the application's authorisation and transition controls were absent on a live instance. The reports had to state the cascade as exceeding the authorised boundary and as a ground for the hard-gate fallback/stop path, and to carry the corrective control | Five places in this file were corrected. (1) The **S6 paragraph** in part (b) keeps its measured list and now states that every class in it except the 30 data rows lies outside the authorised subset, that the cascade therefore **exceeded the boundary — a scope violation**, with the ≈91-minute controls-absent interval (`2026-09-02T19:22:09Z` → `2026-09-02T20:53:14Z`) and a pointer to [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5; restoration is kept as a mitigation. (2) **"Platform records touched outside the table/role-link subset"** no longer opens by treating "the PR ordered the action" as a blanket licence: the cascade item is stated as the scope violation that should have triggered the pre-delete abort and OVERRIDE-2's fallback / stop path, and the 3 `sys_number` counters are split — their **removal** belongs to the violated cascade, their **re-creation** is remedial. The other items' licences are unchanged. (3) The **"Scope and policy compliance"** table gains an explicit **OVERRIDE-3's destructive boundary — VIOLATED** row with its evidence, and the "Scope — out" row no longer implies the boundary was respected while keeping its four true items. (4) The **Phase-1 exit row and its narrative** now carry the boundary as a third item of a different kind — a scope violation, distinct from the two mechanism-selection deviations, whose count is unchanged. (5) The **"Hard gate + fallback"** row now names the boundary as the second, independent ground on which Phase 1's gate is NOT MET, alongside the role-link half; its shipping verdicts and the "No rollback" row are untouched |
+
+**What this remediation did not do, stated so it cannot be read the other way.** No remedial action
+was taken on the instance and none is claimed. The run's other verdicts are unchanged and
+uncontradicted: **no rollback, no `deleteApplication`, no scope deletion and no back-out** occurred
+at any point in the run; the `apps.current_app` preference was preserved and never repointed; and the
+elected fallback remains **authorized under OVERRIDE-2**, with electing it still making neither the
+Phase 1 hard gate met nor the Phase 2 gate met for the fallback's own bytes. The corrective control this finding requires — the **pre-delete collateral guard** —
+is specified once, in [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.5, and encoded machine-readably
+under `final.scope_audit_d46.override_3_destructive_boundary` in
+[`run-state.json`](./run-state.json), together with
+`final.post_review_cr4_remediation`. It governs deletion on a live, converged instance under a
+narrower authorisation and deliberately does **not** reclassify the documented two-commit install
+path, which relies on the same platform cascade on a target where the second commit restores those
+records by design.
 
 ## Screenshot index
 

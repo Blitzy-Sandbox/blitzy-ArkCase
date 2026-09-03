@@ -417,7 +417,7 @@
     "sys_hub_flow": 7,
     "apps_current_app_preference": true
    },
-   "cascade_removed_and_restored_by_the_package_on_commit": {
+   "cascade_removed_outside_the_authorized_destructive_boundary": {
     "sys_security_acl": 26,
     "sys_choice": 24,
     "business_rules": 7,
@@ -427,6 +427,18 @@
     "sys_ui_policy": 2,
     "data_rows": 30
    },
+   "cascade_classification": "SCOPE VIOLATION of the destructive boundary OVERRIDE-3 set. OVERRIDE-3 authorized destruction of a closed subset: the three scoped tables, their sys_dictionary rows, their data rows and the scoped sys_security_acl_role links. The sys_security_acl, sys_choice, business_rules, sys_report, sys_ui_list, sys_ui_related_list and sys_ui_policy rows counted above, together with the 3 sys_number counters recorded at phase1.instance_clean_state.sys_number, are OUTSIDE that subset; only data_rows are inside it. A boundary measures the reach of the operation, not the argument list of the command, so the deletion command having named only the three sys_db_object records does not narrow it, and a cascade you invoke is a deletion you perform.",
+   "restoration_by_the_phase2_commit_does_not_authorize_it": true,
+   "controls_absent_interval": {
+    "from_utc": "2026-09-02T19:22:09Z",
+    "from": "phase1.instance_clean_at",
+    "to_utc": "2026-09-02T20:53:14Z",
+    "to": "the phase 2 commit",
+    "approximate_duration_minutes": 91,
+    "state_during_the_interval": "on a live instance the application carried zero sys_security_acl, zero sys_security_acl_role, zero business rules and zero sys_ui_policy rows - its authorization and its transition controls were absent, which is precisely the state the boundary exists to prevent"
+   },
+   "cascade_detail": "final.scope_audit_d46.override_3_destructive_boundary",
+   "cascade_report_section": "docs/refine-run/PHASE1-REBUILD.md section 2.5 - the verdict and the required pre-delete collateral guard",
    "set_unchanged_after_deletions": {
     "state": "complete",
     "child_count": 988
@@ -438,7 +450,9 @@
   "hard_gate_native_creation": {
    "tables_and_dictionary_half": "MET - 3 POST /api/now/table/sys_db_object and 27 POST /api/now/table/sys_dictionary, all HTTP 201, every row platform-written and platform-captured",
    "role_link_and_grant_half": "NOT MET - the 27 sys_security_acl_role links and the 3 sys_user_has_role grants were created by direct server-side insert, not by the platform native role-assignment action required by D2 lines 5-10, D21 lines 124-128 and INTERP-1. See phase1.native_role_assignment_action_deviation and PHASE1-REBUILD.md sections 2.4, 4 and 5 item 9.",
-   "gate_verdict": "PARTIALLY MET - this record does not claim the phase 1 hard gate was cleared in full",
+   "destructive_boundary_override_3_half": "NOT MET - the table-delete cascade also removed 26 sys_security_acl, 24 sys_choice, 7 business rules, 8 sys_report, 3 sys_ui_list, 1 sys_ui_related_list, 2 sys_ui_policy and the 3 sys_number counters, every one of those classes outside the destructive subset OVERRIDE-3 authorized, leaving the application on a live instance with no authorization and no transition controls from 2026-09-02T19:22:09Z until the phase 2 commit at 2026-09-02T20:53:14Z. The collateral was foreseen and sequenced around (phase1.mechanism_notes, PHASE1-REBUILD.md section 2.4), so a pre-delete enumeration and abort was available and was not performed. Neither non-targeting nor the commit's later restoration authorizes it. See phase1.instance_clean_state.cascade_classification, final.scope_audit_d46.override_3_destructive_boundary and PHASE1-REBUILD.md sections 2.5, 4 and 5 item 4.",
+   "gate_verdict": "PARTIALLY MET - this record does not claim the phase 1 hard gate was cleared in full. It is NOT MET on two independent grounds of different kinds: (1) MECHANISM SELECTION - the role-link and grant half; (2) SCOPE - the table-delete cascade exceeded the destructive boundary OVERRIDE-3 set. Neither ground substitutes for the other.",
+   "what_would_clear_it_applies_to": "the role_link_and_grant_half ground only. The destructive-boundary ground cannot be cleared retroactively - it is a completed act on a live instance; the corrective control for any future authorized targeted deletion is final.scope_audit_d46.override_3_destructive_boundary.required_pre_delete_collateral_guard.",
    "what_would_clear_it": "create all 27 links and all 3 grants through the actual native role-assignment action on a genuinely clean dedicated PDI with the master Local Update Set current, reconcile the 27/3 counts and the manager 14 / agent 10 / viewer 3 split, then re-run phase 2 S1-S6 on the resulting exact bytes",
    "why_it_was_not_cleared_in_the_cr2_remediation_pass": "a clean dedicated target would have to be PROVISIONED, and provisioning or re-requesting an instance is prohibited by the environment directive, which also protects the single instance that exists; the five further instance-specific reasons are in phase1.native_role_assignment_action_deviation.not_performed_in_the_cr2_remediation_pass_because",
    "elected_fallback_note": "the elected fallback remains authorized under OVERRIDE-2 and is not a defect; electing it does not make this gate met"
@@ -1852,7 +1866,9 @@
     "new_atf_tests_authored": 0,
     "instance_released_or_re_requested": false,
     "delivery_blocked_by_phase3": false,
-    "apps_current_app_preference_preserved": true
+    "apps_current_app_preference_preserved": true,
+    "override_3_destructive_boundary_respected": false,
+    "override_3_destructive_boundary_respected_detail": "final.scope_audit_d46.override_3_destructive_boundary - the table-delete cascade removed records outside the authorized destructive subset, so this compliance item is VIOLATED. The four items above remain true and are unaffected by it."
    },
    "platform_records_touched_outside_the_table_role_link_subset": [
     {
@@ -1862,13 +1878,13 @@
     },
     {
      "records": "sys_number 3 counters re-created carrying the package identities",
-     "licence": "the OVERRIDE-3 table-delete cascade removed them",
-     "classification": "authorized side effect"
+     "licence": "split: the REMOVAL of the 3 counters belongs to the cascade recorded in the next item and is part of that scope violation, because sys_number is outside the authorized subset; their RE-CREATION carrying the package identities is remedial - it restored what the cascade should never have removed",
+     "classification": "removal: part of the scope violation in the next item. Re-creation: remedial, and captured with the package's own identities"
     },
     {
      "records": "cascade removed and commit restored: 26 sys_security_acl, 24 sys_choice rows, 7 business rules, 8 reports, 3 sys_ui_list, 1 sys_ui_related_list, 2 sys_ui_policy, 30 data rows",
-     "licence": "consequence of the OVERRIDE-3 authorized targeted table deletion",
-     "classification": "authorized, restored by the commit"
+     "licence": "NONE for the removal. OVERRIDE-3 authorized destruction of a closed subset - the three tables, their dictionary rows and data, and the scoped role links - and every class listed here except the 30 data rows is outside it, so the cascade EXCEEDED the authorized destructive boundary. The deletion command having named only the three sys_db_object records does not narrow the reach of the operation, and the commit's later restoration mitigates the outcome without authorizing the act. It should have triggered a pre-delete abort and OVERRIDE-2's fallback / leave-for-human stop path instead of proceeding.",
+     "classification": "SCOPE VIOLATION of OVERRIDE-3's destructive boundary - see final.scope_audit_d46.override_3_destructive_boundary and PHASE1-REBUILD.md section 2.5; restoration by the phase 2 commit is a mitigation, not authorization, and this is the second independent ground on which the phase 1 hard gate is NOT MET"
     },
     {
      "records": "2 throwaway local update sets: SCRATCH 4999985a930b435009aa70d19dba102e (6 children), ABSORBER 25d86c1a938b435009aa70d19dba101b (266 children as counted before Phase 2 - historical; the settled/current count is 51, because 215 of the 256 DELETE-capture rows Phase 2's fix loop removed were inside it, and live REST confirms 51)",
@@ -1886,6 +1902,146 @@
      "classification": "rollback clean: recovered delete 2, modified 3, inserted 37, exceptions 0"
     }
    ],
+   "override_3_destructive_boundary": {
+    "authorized_subset": [
+     "the three scoped tables x_casemgmt_case, x_casemgmt_case_task and x_casemgmt_case_party - their sys_db_object records",
+     "their sys_dictionary rows",
+     "their data rows",
+     "the scoped sys_security_acl_role links for the three x_casemgmt roles"
+    ],
+    "records_removed_outside_the_authorized_subset": {
+     "sys_security_acl": 26,
+     "sys_choice": 24,
+     "business_rules_sys_script": 7,
+     "sys_report": 8,
+     "sys_ui_list": 3,
+     "sys_ui_related_list": 1,
+     "sys_ui_policy": 2,
+     "sys_number": 3
+    },
+    "measured_in": "docs/refine-run/PHASE1-REBUILD.md section 2.5 before/after cascade table, and phase1.instance_clean_state",
+    "verdict": "VIOLATED",
+    "compliant": false,
+    "restoration_does_not_authorize": true,
+    "non_targeting_does_not_authorize": true,
+    "why_both_defences_fail": [
+     "non-targeting: a boundary measures the reach of the operation, not the argument list of the command. The deletion command named only the three sys_db_object records, and a cascade you invoke is a deletion you perform.",
+     "later restoration: restoration after the fact does not authorize a destructive act. Between 2026-09-02T19:22:09Z and the phase 2 commit at 2026-09-02T20:53:14Z, roughly 91 minutes, the application stood on a live instance with zero ACLs, zero ACL-role links, zero business rules and zero UI policies - its authorization and transition controls absent, which is the state the boundary exists to prevent."
+    ],
+    "foreseen": "phase1.mechanism_notes and PHASE1-REBUILD.md section 2.4 record that the 27 role links were created BEFORE the tables were deleted BECAUSE the platform table-delete cascade removes the 26 ACLs. The collateral was foreseen and sequenced around, so a pre-delete enumeration and an abort on its result were available at the time and were not performed. This makes it a decision rather than an accident.",
+    "controls_absent_interval": {
+     "from_utc": "2026-09-02T19:22:09Z",
+     "to_utc": "2026-09-02T20:53:14Z",
+     "approximate_duration_minutes": 91,
+     "state_during_the_interval": "zero sys_security_acl, zero sys_security_acl_role, zero business rules and zero sys_ui_policy rows on a live instance"
+    },
+    "what_should_have_been_done": [
+     "enumerate the platform's delete dependencies before the first delete",
+     "on any non-zero count in a class outside the authorized subset, abort BEFORE that delete, having deleted nothing",
+     "record phase 1 as unmet on this ground",
+     "take OVERRIDE-2's fallback / leave-for-human path and leave the instance exactly as it stands",
+     "proceed only on an explicit human expansion of the destructive scope"
+    ],
+    "required_pre_delete_collateral_guard": {
+     "applies_to": "any future execution of an authorized targeted deletion on a live, converged instance under a narrower authorization",
+     "run_before": "the first table delete",
+     "read_only": true,
+     "scope_and_role_resolution": "resolve the scope by query (sys_scope?sysparm_query=scope=x_casemgmt) and the three roles by name (sys_user_role?sysparm_query=nameINx_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer). No sys_id is an input to this guard.",
+     "enumerate": [
+      {
+       "class": "sys_dictionary",
+       "query": "name=<T>",
+       "inside_authorized_subset": true
+      },
+      {
+       "class": "<T> data rows",
+       "query": "/api/now/stats/<T>?sysparm_count=true",
+       "inside_authorized_subset": true
+      },
+      {
+       "class": "sys_security_acl_role",
+       "query": "role IN the three queried scoped roles, intersected with the ACLs of <T>",
+       "inside_authorized_subset": true
+      },
+      {
+       "class": "sys_security_acl",
+       "query": "sys_scope=<queried scope>^name=<T>^ORnameSTARTSWITH<T>.",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_choice",
+       "query": "name=<T>",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_script (business rules)",
+       "query": "sys_scope=<queried scope>^collection=<T>",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_report",
+       "query": "sys_scope=<queried scope>^table=<T>",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_ui_list",
+       "query": "name=<T>",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_ui_related_list",
+       "query": "name=<T>",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_ui_policy",
+       "query": "sys_scope=<queried scope>^table=<T>",
+       "inside_authorized_subset": false
+      },
+      {
+       "class": "sys_number",
+       "query": "category=<T>",
+       "inside_authorized_subset": false
+      }
+     ],
+     "sys_documentation_note": "sys_documentation (name=<T>) accompanies the sys_dictionary rows and is counted for the record; where membership of the authorized subset is uncertain for any class, the fail-closed reading applies - treat it as collateral and abort.",
+     "abort_rule": "any non-zero count in a class with inside_authorized_subset=false aborts the operation BEFORE the first delete, having deleted nothing. There is no partial variant: not deleting the tables and relying on a later commit to restore the rest, and not deleting what the authorization covers while accepting the cascade.",
+     "recorded_on_abort": [
+      "the enumeration verbatim - class, query, count, the queried scope and the UTC timestamp of the measurement",
+      "the phase whose step required the deletion, recorded as unmet, with the destructive boundary named as the reason",
+      "that no instance write took place"
+     ],
+     "fallback_on_abort": "OVERRIDE-2's leave-for-human path: leave the instance exactly as it stands - no rollback, no back-out, no deleteApplication, no scope deletion - ship the fallback package labelled for what it is, and hand the enumeration to a human as the decision item.",
+     "explicit_human_authorization_required_to_proceed": {
+      "required": true,
+      "must_record": [
+       "who authorized the expansion",
+       "what classes and counts it covers",
+       "when it was authorized"
+      ],
+      "re_enumerate_immediately_before_the_delete": true,
+      "abort_again_if": "the re-run enumeration no longer matches what was authorized"
+     },
+     "specified_in": "docs/refine-run/PHASE1-REBUILD.md section 2.5, block 'Corrective control - the pre-delete collateral guard'",
+     "performed_in_this_run": false
+    },
+    "exclusion_documented_two_commit_install_path": {
+     "excluded_from_this_control": true,
+     "paths": [
+      "docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md sections 5 and 5a",
+      "docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.5 step 2"
+     ],
+     "reason": "the documented two-commit INSTALL path deliberately relies on the same platform cascade, on a target where the second commit restores those records by design. This control governs deletion on a live, converged instance under a narrower authorization and does not reclassify that path, which stands as documented.",
+     "post_import_remediation_script_note": "the guard must NOT be bolted onto scripts/post_import_remediation.js: its rebuild path only ever deletes provably metadata-only, provably package-owned rows, and the install path depends on that cascade. Observation carried in the record - no change was made to that script, to either install document or to any instance."
+    },
+    "phase1_hard_gate_consequence": "a SECOND, INDEPENDENT ground on which the phase 1 hard gate is NOT MET, alongside the role-assignment mechanism deviation - see phase1.hard_gate_native_creation.destructive_boundary_override_3_half",
+    "instance_action_taken_by_this_correction": "none - the CR4 resolution pass wrote no instance state, ran no phase and performed no upload, preview or commit",
+    "unaffected_verdicts": [
+     "no rollback, no deleteApplication, no scope deletion and no back-out occurred at any point in the run",
+     "the admin apps.current_app preference was preserved and never repointed",
+     "the elected fallback remains authorized under OVERRIDE-2"
+    ]
+   },
    "leftover_records_on_the_instance": [
     "2 superseded retrieved update sets 7af37c12930f435009aa70d19dba105a and 23467496930f435009aa70d19dba1013, both state=previewed, never committed",
     "the pre-refine committed retrieved set 9929f50df18ccec91ea13b2a3bccfc90, still committed with its original 926 children",
@@ -2034,6 +2190,34 @@
     "delta_formula": "926 - 31 + 93 = 988",
     "figures_apply_to": "the re-sequenced rebuilt package produced by this pass, retained at final.retained_rebuilt_package.path; the deliverable path now holds the elected fallback at 3781097 bytes / 926 payload blocks"
    }
+  },
+  "post_review_cr4_remediation": {
+   "what_it_is": "the code-review resolution pass for delta code review CR4 (security and constraint-hygiene lens), dated 2026-09-03. Not a new unit in the run's U1-U5 sequence: it changed no instance state, ran no phase and performed no upload, preview or commit. It changed no measurement either - every count, sys_id, digest, byte size, block count, timestamp and record total in this file stands exactly as measured; what changed is the classification of one already-measured event and the verdicts that follow from it.",
+   "date": "2026-09-03",
+   "resolved_findings": {
+    "finding_3_critical": {
+     "issue": "the three refine-run evidence artifacts classified the table-delete cascade's removal of 26 sys_security_acl, 24 sys_choice, 7 business rules, 8 sys_report, 3 sys_ui_list, 1 sys_ui_related_list, 2 sys_ui_policy and 3 sys_number rows as authorized, on two grounds - that none of those classes was named by the deletion command, and that the shipping package restores them on commit. Both grounds are invalid: a boundary measures the reach of an operation rather than the argument list of a command, and restoration after the fact does not authorize a destructive act. For roughly 91 minutes on a live instance the application had no authorization and no transition controls.",
+     "change": "the cascade is now classified as a SCOPE VIOLATION of OVERRIDE-3's destructive boundary in all three artifacts. In this file: phase1.instance_clean_state's normalizing key was renamed to cascade_removed_outside_the_authorized_destructive_boundary with its counts unchanged and classification siblings added (cascade_classification, restoration_by_the_phase2_commit_does_not_authorize_it, controls_absent_interval, cascade_detail, cascade_report_section); phase1.hard_gate_native_creation gained destructive_boundary_override_3_half as NOT MET and its gate_verdict now names both independent grounds; final.scope_audit_d46.out_of_scope_respected carries override_3_destructive_boundary_respected=false; final.scope_audit_d46.platform_records_touched_outside_the_table_role_link_subset item 3 carries the scope-violation licence and classification, and item 2 splits the sys_number counters' removal (part of the violated cascade) from their re-creation (remedial); and final.scope_audit_d46.override_3_destructive_boundary encodes the authorized subset, the records removed outside it, verdict VIOLATED, what should have been done, the required pre-delete collateral guard, the install-path exclusion and the phase 1 hard-gate consequence.",
+     "reports_changed": [
+      "docs/refine-run/PHASE1-REBUILD.md - section 2.5 verdict and the new corrective-control block, section 5 item 4, cross-references in sections 2.9 and 6, the second NOT MET ground in section 4, and a new section 8 recording this correction",
+      "docs/refine-run/FINAL-REPORT.md - the S6 paragraph, the platform-records-touched paragraph, a VIOLATED row in the scope-and-policy compliance table, the phase 1 exit row and narrative, and a new post-review CR4 remediation section",
+      "docs/refine-run/run-state.json - this file"
+     ],
+     "corrective_control": "final.scope_audit_d46.override_3_destructive_boundary.required_pre_delete_collateral_guard, specified in prose once in docs/refine-run/PHASE1-REBUILD.md section 2.5",
+     "not_claimed": "no remedial action was taken on the instance and none is claimed. The live records the phase 2 commit restored were neither re-checked nor rewritten by this pass, and no measurement anywhere in the run's record was altered."
+    }
+   },
+   "findings_resolved_elsewhere": "CR4's F1 (HIGH - session and credential handling in docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) and F2 (LOW - credential shape metadata in docs/refine-run/PHASE0-1.md) were resolved in those files by the groups holding them; their content is not described here.",
+   "instance_touched": false,
+   "phase_run": false,
+   "upload_preview_or_commit_performed": false,
+   "measurements_changed": 0,
+   "package_touched": false,
+   "verdicts_left_unchanged": [
+    "no rollback, no deleteApplication, no scope deletion and no back-out occurred at any point in the run",
+    "the admin apps.current_app preference was preserved and never repointed",
+    "the elected fallback remains authorized under OVERRIDE-2, and electing it still makes neither the phase 1 hard gate met nor the phase 2 gate met for the fallback's own bytes"
+   ]
   },
   "shipping_status": "SHIPPING THE ELECTED FALLBACK - Update Set gate NOT MET for its bytes",
   "shipping_status_detail": "the deliverable at final.deliverable_path holds the elected fallback: 926 payload records, 3,781,097 bytes, sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, byte-identical to fallback_package.path. The election is made and the frozen directive made it (final.election_owner). Electing settles the shipping decision only: the Update Set gate and AAP 0.7.1 remain NOT MET for the elected bytes, which were never previewed on any instance, and equally for the retained rebuilt package 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7. No field in this file designates either artifact platform-verified. phase2.shippable remains true only under phase2.shippable_scope, which binds it to export 3's byte sequence at the time Phase 2 ran.",

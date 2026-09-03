@@ -23,13 +23,14 @@ before a session exists.
 
 | Variable | Presence | Format check | Result |
 | --- | --- | --- | --- |
-| `SERVICENOW_DEV_LOGIN_USERNAME` | present, len 17 | non-empty, no whitespace, email-shaped | PASS |
-| `SERVICENOW_DEV_LOGIN_PASSWORD` | present, len 19 | non-empty, length ≥ 8 | PASS |
-| `SERVICENOW_INSTANCE_ADMIN_URL` | present, len 33 | matches `^https://dev[0-9]+\.service-now\.com/?$` | PASS |
-| `SERVICENOW_INSTANCE_ADMIN_USERNAME` | present, len 5 | non-empty, no whitespace | PASS |
-| `SERVICENOW_INSTANCE_ADMIN_PASSWORD` | present, len 12 | non-empty, length ≥ 8 | PASS |
+| `SERVICENOW_DEV_LOGIN_USERNAME` | `present=true` | `format_plausible=true` — non-empty, no whitespace, email-shaped | PASS |
+| `SERVICENOW_DEV_LOGIN_PASSWORD` | `present=true` | `format_plausible=true` — non-empty, minimum-length policy satisfied | PASS |
+| `SERVICENOW_INSTANCE_ADMIN_URL` | `present=true` | `format_plausible=true` — matches `^https://dev[0-9]+\.service-now\.com/?$` | PASS |
+| `SERVICENOW_INSTANCE_ADMIN_USERNAME` | `present=true` | `format_plausible=true` — non-empty, no whitespace | PASS |
+| `SERVICENOW_INSTANCE_ADMIN_PASSWORD` | `present=true` | `format_plausible=true` — non-empty, minimum-length policy satisfied | PASS |
 
-Only lengths and masked prefixes were ever emitted. No interactive prompt for a credential was
+Each check emitted and committed a boolean decision only: no length, prefix, substring or any other
+shape metadata about any of these values was recorded. No interactive prompt for a credential was
 issued at any point.
 
 **Target verification.** Resolved host `dev306625.service-now.com` — the validation PDI this run used.
