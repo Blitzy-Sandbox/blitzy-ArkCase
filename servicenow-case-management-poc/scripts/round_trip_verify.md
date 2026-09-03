@@ -520,9 +520,17 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 - [ ] Re-run the ATF suite through the client runner at `/atf_test_runner.do?sysparm_nostack=true`
       (`sn_atf.runner.enabled` must be `true`; `sn_atf.headless.enabled` cannot be enabled here, so a real
       browser runner must be registered *before* launching the suite). Report per-test verdicts, not just the
-      suite status. **Result: 20 ran / 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180 step results
-      Success, in about 4 minutes, leaving no test residue — reproduced twice independently** (`TES0001016` and
-      `TES0001017`, both 2026-08-10, the second dispatched through the product UI with a browser runner attached).
+      suite status. **Current result, 2026-09-02, measured on the package alone with no remediation run
+      (`TES0001002`, `run_time 00:02:04`): 20 ran / 14 Success / 6 Failure / 0 Error / 0 Skipped, with 180 of 180
+      steps executed and no test unable to execute, leaving no test residue.** The six failures are `ATF 01`,
+      `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18` — one shared root cause, `sys_choice` rows absent for
+      the three scoped tables while the dictionary keeps the four `case` fields choice-typed; per-failure step and
+      assertion text in [`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md) §(e). Expect
+      that outcome from a bare commit, and expect the remediation step to change it: **the historical
+      post-remediation rollup is 20 ran / 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180 step
+      results Success, in about 4 minutes — reproduced twice independently** (`TES0001016` and
+      `TES0001017`, both 2026-08-10, the second dispatched through the product UI with a browser runner attached),
+      on an instance where `post_import_remediation.js` had already created the 24 `sys_choice` rows.
       **Record your own rollup rather than quoting a `TES…` number:** `sys_atf_test_suite_result` rows are not
       durable on this shared instance, and the two rows this document previously cited — `TES0001015` and
       `TES0001014` — no longer resolve on it (§8.3 of the limitations register). An earlier
@@ -646,22 +654,38 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > Criterion 6 is met in the second sense — the package is
 > not self-sufficient, and the footprint is fully documented in
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Criterion 7
-> holds: 13 / 13 before and after, and the ATF suite scored **20 / 20 tests and 180 / 180 steps**, reproduced twice
-> (`TES0001016`, `TES0001017` — record your own rollup, because suite-result rows are not durable here and the
-> `TES0001015` row this line used to cite no longer resolves).
+> holds in the sense it is written — the regression harness is 13 / 13 before and after, and the test-suite
+> failures are reported by name below rather than relaxed — but **the suite itself does not pass**. The
+> **current** ATF verdict — `TES0001002`, measured 2026-09-02 on the package alone, `21:45:31Z → 21:47:35Z`,
+> `run_time 00:02:04` — is **20 tests, 14 Success / 6 Failure / 0 Error / 0 Skipped, with 180 of 180 steps
+> executed**. The six failures are **`ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18`**, all
+> classification (c) and all one root cause: `sys_choice` rows absent for the three scoped tables (0 rows; the
+> package's own choice `sys_id` `3e7609e334c65bf732756bc25d9f21c2` answers HTTP 404) while the dictionary keeps
+> the four `case` fields choice-typed. Per-failure failing step and assertion text:
+> [`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md) §(e). **The `20 / 20 tests and
+> 180 / 180 steps` rollup this line used to carry is historical post-remediation evidence** — reproduced twice
+> (`TES0001016`, `TES0001017`, 2026-08-10) on an instance where `post_import_remediation.js` had already created
+> the 24 `sys_choice` rows. Both stand, dated: 20 / 20 with the choice rows present, 14 / 6 without them. Record
+> your own rollup, because suite-result rows are not durable here and the `TES0001015` row this line used to cite
+> no longer resolves.
 >
 > ⚠️ **Before you start, check the instance is awake.** Detect hibernation by CONTENT, not HTTP status: a
 > hibernating instance answers HTTP 200 with ServiceNow's "Instance Hibernating" page, and this procedure
 > cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that owns it.
-> The PDI these notes were written against has been hibernating since 2026-08-11; a newly provisioned
-> validation PDI, awake throughout, was used on 2026-09-02 — and **the sequence this procedure was executed
+> The PDI these notes were written against has been hibernating since 2026-08-11; the **existing `dev306625`
+> PDI**, awake throughout and made clean by the authorized targeted clean-state operation, was used on
+> 2026-09-02 — it was **not** newly provisioned: it already held this application installed, committed and
+> seeded, and the clean target came from deleting only the 3 `sys_db_object`, 25 `sys_dictionary` and 3
+> `sys_user_has_role` rows (31 records), leaving the scope, the application record, the three roles and the
+> seven flows in place, with clean state confirmed at `2026-09-02T19:22:09Z` (three tables at
+> `HTTP 400 Invalid table`, `sys_dictionary` 0, `sys_security_acl_role` 0, `sys_number` 0) — and **the sequence this procedure was executed
 > end-to-end on there was export 3's: 988 blocks, 4,062,436 bytes, SHA-256
 > `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**, which is no file on disk and survives
 > only in git history
 > ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). **Neither artifact on disk was
 > part of that run** — not the elected 926-block `7292a6fe…` deliverable (never previewed on any instance) and
 > not the retained 988-block `90ee0249…` rebuild (never uploaded, previewed or committed) — consistent with the
-> *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 0](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+> *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 1a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — item 1a is the open round trip; item 0's wake of `dev379024` is superseded and gates nothing.
 
 ### Fail Criteria (Any One Triggers Fail)
 

@@ -32,8 +32,11 @@ before a session exists.
 Only lengths and masked prefixes were ever emitted. No interactive prompt for a credential was
 issued at any point.
 
-**Target verification.** Resolved host `dev306625.service-now.com` — the newly provisioned
-validation PDI. It is **not** the retired `dev379024`, and it is a developer PDI host
+**Target verification.** Resolved host `dev306625.service-now.com` — the validation PDI this run used.
+It was **not** newly provisioned: per INTERP-2 it already held this scoped application installed,
+committed, converged and seeded when the run began, and the clean target Phase 1 needed was obtained
+later by the authorized targeted clean-state operation (§Phase 1, and `run-state.json`
+`phase1.instance_clean_state`). It is **not** the retired `dev379024`, and it is a developer PDI host
 (`devNNNNNN.service-now.com`), not a customer production or customer-owned instance. No instance was
 provisioned, released or re-requested.
 

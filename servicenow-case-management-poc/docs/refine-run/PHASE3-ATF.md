@@ -181,7 +181,8 @@ Suite"** UI action was clicked on its form (Name verified as `x_casemgmt Case Ma
 The **"Pick a Browser" dialog appeared this time**, exactly as S1 predicted. Verbatim: title
 **"Pick a Browser"**; body *"The test you have selected includes client-side steps. Choose a browser
 to run the test."*; radio 1 **pre-selected** = **"Chrome  151.0.0.0 (Linux ) (Current session)"**
-(agent `52cc8d1a93cf435009aa70d19dba1083`); radio 2 unchecked = "Cloud Runner …"; buttons "Cancel" /
+(agent `52cc8d1a93cf435009aa70d19dba1083`); radio 2 unchecked = "Cloud Runner - Configure an admin
+user to run tests using the Cloud Runner"; buttons "Cancel" /
 "Run Test Suite". **The pre-selected current session was accepted unchanged.**
 
 **Impersonation.** ATF drove it itself — the runner showed
@@ -418,8 +419,13 @@ at **22:05:09Z** (`syslog.sys_created_on`, UTC as the Table API returns it).
 
 **Read back with INTERP-8's exact query**
 (`GET /api/now/table/syslog?sysparm_query=messageSTARTSWITHU1ASSERT^ORDERBYDESCsys_created_on&sysparm_limit=1`).
-Raw line, verbatim (assertion labels abbreviated only in this leading quote; every one is listed in
-full below):
+The complete line is 2,684 characters and is held byte-for-byte in
+[`run-state.json`](./run-state.json) → `phase3.harness.raw_syslog_line`; it is also reproduced in
+full, without ellipsis, in [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (e). What follows is an
+**abbreviated excerpt, not the whole line and not a verbatim reproduction of it**: every character
+shown is byte-exact, the first `…` stands for A1's `expected`/`actual` values and for assertions A2
+through A12 in their entirety, and the second stands for A13's label and values. Each elided
+assertion is listed in full in the per-assertion table underneath.
 
 ```
 U1ASSERT|TOTAL=13 PASSED=13 FAILED=0 |CLEANUP tasks=4 cases=7 remainingCases=10 |PASS A1 … ||| PASS A13 …
@@ -529,6 +535,30 @@ round's fix — while the re-sequenced bytes are retained at
    procedure, saying so plainly in the install docs). Option 3 (hand-populating the 24 rows) is
    available but **not recommended** — it masks the package-alone defect. Re-running the six named
    tests is the re-verification step once an option is chosen.
+
+   **Amendment — 2026-09-03, after the settled election.** The Option 1 / Option 2 wording above is
+   the handoff **as it was written on 2026-09-02** and is kept as the record of it. It is no longer
+   current advice, because "the verified package" in it names a byte sequence that is not on disk.
+   Three sequences must be kept apart, and only the first has ever cleared a gate:
+
+   - **Export 3, `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — the
+     historical verification and the only complete round trip of this run: uploaded onto a clean
+     instance, previewed to **0 `type=error` and 0 `type=warning`**, committed at
+     `2026-09-02T20:53:14Z`. It survives in git history; **no file on disk holds these bytes**, so it
+     cannot be the package a reader ships today.
+   - **The elected fallback, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** —
+     what actually ships, at `update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to
+     `…FALLBACK.xml` (both confirmed by `sha256sum`). **No preview of any kind was ever run on these
+     bytes**, so it is unverified rather than verified, and it does not carry this round's native
+     rebuild — `scripts/post_import_remediation.js` is required with it.
+   - **The retained rebuild, `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** —
+     at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, never
+     uploaded, previewed or committed; static corroboration only, and a full Phase-2 S1–S6 run on its
+     own exact bytes is owed before it may be promoted.
+
+   So Option 2 today reads: **ship the elected fallback labelled as unverified**, with §9.5's
+   post-commit remediation as the install procedure — not "accept the verified package".
+
 2. **`opened_date` empty on 8 of 10 seeded cases** — pre-existing, unchanged, and **not** exercised by
    the suite (ATF 19 passed on its own fixture). Carried forward as a known issue, not as a Phase 3
    failure.

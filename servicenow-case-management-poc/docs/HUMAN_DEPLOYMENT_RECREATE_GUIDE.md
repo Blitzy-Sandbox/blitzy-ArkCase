@@ -477,11 +477,19 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 >
 > **Updated 2026-09-02: on the elected package, steps 4, 5 and 6 ARE needed — run all seven.** The result in
 > which steps 1-3 alone produced the physical schema and all 27 role links, with step 5's second commit never
-> performed, was measured on the **retained rebuilt** package
-> (`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`), which carries the 27
-> `sys_security_acl_role` records; the elected package carries **0** of them, so steps 4-6 are the procedure for
-> the artifact that ships, not history. Step 7 and the outstanding choice rows apply to both —
-> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) records which result belongs to which file.
+> performed, was measured on **export 3's byte sequence — 988 blocks, 4,062,436 bytes, SHA-256
+> `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — which is **no file on disk** and
+> survives only in git history. The **retained rebuilt** package
+> (`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, SHA-256
+> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`) holds those same 988 records — including
+> the 27 `sys_security_acl_role` records — re-sequenced into AAP §0.5.2 dependency order, but it was **never
+> uploaded, previewed or committed**, so on that file the one-commit outcome is an expectation backed by static
+> checks and **remains unverified until its own S1–S6 gate run**. The elected package carries **0** of the 27
+> role-link records, so steps 4-6 are the procedure for the artifact that ships, not history — that conclusion is
+> unchanged whichever of the two 988-record sequences the reader has in mind. Step 7 and the outstanding choice
+> rows apply to all of them —
+> [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) records which result belongs to which byte
+> sequence.
 >
 > ### The destructive route is a FALLBACK — preconditions and stop conditions
 >
@@ -949,9 +957,17 @@ it is the fastest way to know the install is sound.
   the suite and select it under "Pick a Browser". Three of the tests drive a real form.
 - **Run steps 4-7 of the primary procedure first.** Without physical tables and the 27 ACL role links, the suite
   fails wholesale and tells you nothing about the application.
-- **Expected result: 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180 step results Success**, in
-  roughly 4 minutes, leaving no test records behind. That rollup was reproduced twice independently
-  (`TES0001016` and `TES0001017`). **Record your own rollup rather than looking for a particular `TES…` row:**
+- **Expected result once steps 4-7 have been run: 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180
+  step results Success**, in roughly 4 minutes, leaving no test records behind. That rollup was reproduced twice
+  independently (`TES0001016` and `TES0001017`, 2026-08-10) — on an instance where the remediation had already
+  created the 24 `sys_choice` rows, which is what makes it the *post-remediation* expectation rather than a
+  package-alone one. **Run the suite before those steps and 14 / 6 is the measured outcome, not a defect in the
+  install:** on 2026-09-02 a bare commit with no remediation scored `TES0001002` = 20 tests, **14 Success /
+  6 Failure / 0 Error / 0 Skipped**, 180 of 180 steps executed, the six failures being `ATF 01`, `ATF 10`,
+  `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18`, every one of them caused by the missing `sys_choice` rows for the
+  three scoped tables ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) §(e)). Those six are the
+  tests to re-check first after remediation. **Record your own rollup rather than looking for a particular
+  `TES…` row:**
   `sys_atf_test_suite_result` is not durable on this shared instance, and the `TES0001015` row this line used to
   cite no longer resolves ([`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §8.3](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). An
   earlier run scored 16 / 4; those four failures were the child-table ACL condition and the three form-level

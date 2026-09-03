@@ -47,7 +47,13 @@ number anywhere else in this document.
 
 **Read every measurement here as of its stated date.** The instance this section was measured on has been
 hibernating since 2026-08-11 and serves no application surface, so nothing here was re-measured on it — §0.11
-states what that leaves unproven. **A newly provisioned validation PDI was used on 2026-09-02**, where the
+states what that leaves unproven. **The existing `dev306625` PDI, after the authorized targeted clean-state
+operation, was used on 2026-09-02** — it was **not** newly provisioned: it already held this application
+installed, committed, converged and seeded, and the clean target was obtained by deleting only the 3
+`sys_db_object`, 25 `sys_dictionary` and 3 `sys_user_has_role` rows (31 records), leaving the scope record, the
+application record, the three roles, the seven flows and the `apps.current_app` preference in place; clean
+state was confirmed at `2026-09-02T19:22:09Z` with all three tables answering `HTTP 400 Invalid table`,
+`sys_dictionary` 0, `sys_security_acl_role` 0, `sys_user_has_role` 0 and `sys_number` 0. There the
 **rebuilt** package's preview, commit, post-commit census and ATF suite were re-measured — that package is
 retained rather than shipped (§0.1), so every "from the package alone" result taken on it belongs to it and not
 to the elected deliverable:
@@ -743,10 +749,20 @@ render fully — title, column set, empty state. With the agent persona imperson
 `CASE0000981` / `CASE0000982` / `CASE0000986` (§0.5). An empty list under `admin` is the reports working, not
 failing.
 
-### 0.11 The verification instance is hibernating, so nothing in this register has been re-measured since 2026-08-11
+### 0.11 `dev379024` hibernated on 2026-08-11 — historical outage context, superseded as current state by the 2026-09-02 run on `dev306625`
 
-**Every measurement in this document was taken before this outage, on the dates each section states. None of them
-has been re-taken since, and no reader should treat any of them as re-confirmed today.**
+**Read this section as history, not as current state.** It records why the original verification host
+`dev379024` stopped answering on 2026-08-11 and what that left unproven **at the time**. It is no longer true
+that nothing has been re-measured: on **2026-09-02** the run recorded in [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)
+re-measured a substantial part of this register on the **existing `dev306625` PDI, after the authorized
+targeted clean-state operation** (§0 preamble). What that run re-measured, and what it did not, is stated
+under *What is re-measured, and what is still open* below. Every measurement whose section still names
+`dev379024` and a pre-2026-08-11 date remains a measurement of that date on that host — dated evidence, not a
+claim about today.
+
+**Every measurement dated before 2026-08-11 was taken on `dev379024` and none of them was re-taken on that
+host.** Where the 2026-09-02 run re-measured the same thing on `dev306625`, the later figure is the current one
+and the section carrying it says so.
 
 **What happened.** On 2026-08-11 a form-driven `In Progress → Resolved` save on a case with one open child task
 returned **HTTP 502** from the `snow_adc` edge — a 555-byte error page, no application banner painted, so whether
@@ -770,10 +786,34 @@ HTTP 401 `User is not authenticated` with or without them, while the portal pres
 wake affordance at all. `dev364430` — the hostname the AAP and the setup instructions name — is reachable but
 rejects these credentials, which is §10.4 item 11.
 
-**What the outage leaves unproven.** The clean-slate preview of the shipping bytes (§10.0 item 1a), an ATF suite
-run against re-loaded artifacts (§10.0 item 2), a fresh run of the 13-assertion transition harness (§9.7), and a
-re-observation of the eight form assertions (§3.4) are all blocked until someone wakes the instance. §10.0 item 0
-is the precondition for every one of them.
+**What the outage left unproven at the time.** As written on 2026-08-11, four things were blocked behind waking
+`dev379024`: the clean-slate preview of the shipping bytes (§10.0 item 1a), an ATF suite run against re-loaded
+artifacts (§10.0 item 2), a fresh run of the 13-assertion transition harness (§9.7), and a re-observation of the
+eight form assertions (§3.4).
+
+**What is re-measured, and what is still open — updated 2026-09-02 on `dev306625`.** Two of those four were
+taken, and the wake of `dev379024` is no longer the precondition for any of them:
+
+- **The 13-assertion transition harness (§9.7): RE-RUN and green.** `scripts/transition_logic_regression_assertions.js`
+  ran in the `x_casemgmt` scope at `2026-09-02T22:05:09Z` — `TOTAL=13 PASSED=13 FAILED=0`, matching the
+  pre-outage baseline assertion for assertion.
+- **The ATF suite (§10.0 item 2's *live-asset* half): RE-RUN, and it does not pass on the package alone.**
+  `TES0001002`, 2026-09-02 — 20 tests, **14 Success / 6 Failure**, the six being `ATF 01`, `ATF 10`, `ATF 15`,
+  `ATF 16`, `ATF 17` and `ATF 18` on the absent `sys_choice` rows (§8.3 (1)). The *serialized re-load* half of
+  item 2 is still open, and it is open on its own merits, not on this outage.
+- **The clean-slate preview of the shipping bytes (§10.0 item 1a): STILL OPEN, for a different reason.** It is
+  no longer blocked by hibernation: `dev306625` answered throughout the 2026-09-02 run. It is open because the
+  bytes that ship — the elected `7292a6fe…` fallback — have never been previewed anywhere, and after the run
+  that instance is no longer a clean target (the three tables are live with 10 / 10 / 8 rows). The gate needs a
+  genuinely clean, dedicated instance; see §10.0 item 1a, which carries that wording.
+- **The eight form assertions (§3.4): STILL OPEN, for a different reason.** `ATF 15`, `ATF 16` and `ATF 17`
+  reached their form step on 2026-09-02 and failed at *Set Field Values* because `status` had no selectable
+  choice, so the on-form blocking-message observation was not re-taken and remains a manual check — blocked by
+  the choice-row defect, not by any outage.
+
+**Two questions remain specific to `dev379024`, and they matter only if anyone returns to that host:** whether
+the 502 save's write committed, and the ten `QA-FINAL` fixture rows left behind (below). Neither gates anything
+in this register.
 
 **The one code-side suspect, and why it has not been changed on suspicion.** The request that returned 502 was a
 save that reaches the order-250 guard, and §3.4 measures those at **8–10 seconds**, because
@@ -1995,17 +2035,41 @@ subflow or the Business Rule path of §3 — and `ATF 11`'s own step log records
 **To run the suite:** commit the Update Set → set `sn_atf.runner.enabled = true` → open the client test runner
 tab → open the suite record → **Run Test Suite** → pick the runner session. Roughly 8 minutes.
 
-### 8.3 Evidence that the tests pass
+### 8.3 What the suite scores — the current verdict, the historical rollups, and what the tests assert
 
 **Three different claims are separated here, because they are not interchangeable and earlier revisions of this
 document ran them together:**
 
-1. **the current live suite result** — what the suite scores on the instance today;
+1. **the current live suite result** — what the suite scores today, which since 2026-09-02 is **14 of 20**, not a
+   pass;
 2. **the last serialized-import proof** — the most recent run performed *after* re-loading every ATF record from
    the shipped `../atf/*.xml` artifacts, which is what proves the *package* rather than the UI-authored copies;
 3. **what the tests actually assert** — see §8.6 and the note under the table in §8.4.
 
-#### (1) Current live result — `TES0001015`
+#### (1) Current live result — `TES0001002`, 2026-09-02, measured on the package alone
+
+| | |
+|---|---|
+| Result | **`TES0001002`** (`sys_atf_test_suite_result` `0b7d459a93cf435009aa70d19dba10be`), suite `x_casemgmt Case Management POC` (`8e8c6de584ba8f081439ad5ee09ad1a1`) |
+| Window | `2026-09-02T21:45:31Z` → `21:47:35Z` — `run_time 00:02:04`, `UI Batches Executed` 0 → 3 |
+| Rollup | **success 14 · failure 6 · error 0 · skip 0** across 20 child `sys_atf_test_result` rows |
+| Steps | **180 of 180 executed**; 0 tests unable to execute |
+| Status | **`Failure`** — "Suite failed" |
+| Failures, by name | **`ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17`, `ATF 18`** — all classification (c), 0 fix attempts |
+| Shared root cause | `sys_choice` rows **absent** for the three scoped tables (0 rows; the package's own choice `sys_id` `3e7609e334c65bf732756bc25d9f21c2` answers HTTP 404) while the dictionary keeps the four `case` fields choice-typed, so `status` / `type` / `priority` / `pending_reason` offer no selectable option |
+| Residue | none — ATF rollback clean (recovered delete 2, modified 3, inserted 37, exceptions 0); post-run census 10 cases / 10 tasks / 8 parties, 27 scoped `sys_security_acl_role` links |
+
+**This is the verdict that stands, and the six failures are named rather than averaged.** Each one's failing
+step, verbatim assertion text, classification and fix-attempt record is in
+[`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) §(e); the run itself was taken on the state a bare
+commit produces, with `../scripts/post_import_remediation.js` **not** run, which is why the choice rows were
+missing. The failure set is Defect C's choice half surfacing in the suite, not 6 independent defects.
+
+#### (1a) Historical post-remediation rollups — `TES0001015`, `TES0001016`, `TES0001017`
+
+**These were the "current" rows before 2026-09-02 and they remain valid measurements of a *remediated* instance —
+one on which the 24 `sys_choice` rows already existed. They do not describe the package alone and they no longer
+displace (1).**
 
 | | |
 |---|---|
@@ -2022,16 +2086,20 @@ document ran them together:**
 > (`sys_auto_flush`, 30 days) does not explain a ~1.5-day-old disappearance and `sys_audit_delete` holds nothing for
 > those tables, so treat suite-result rows on this shared instance as transient by default.
 >
-> **What has been re-measured since, and is the current evidence:** two independent runs of the same 20 tests, each
+> **What was re-measured on 2026-08-10, on the same remediated instance:** two independent runs of the same 20
+> tests, each
 > **20 Success / 0 Failure / 0 Error / 0 Skipped with 180 of 180 step results Success** —
 > `TES0001016` (`5ff9036a…6b8`, 2026-08-10 04:56:34) and `TES0001017` (`b5ff076a…6a5`, 2026-08-10 05:22:41,
 > `run_time 00:03:28`, dispatched through the product UI with a browser runner attached, `UI Batches Executed` 0 → 3,
 > `user_agents` populated on exactly `ATF 15`/`16`/`17`). That pass also recomputed the rollup from the children
 > rather than trusting `rolled_up_*`, and proved the suite can fail by inverting one expectation per area and
-> observing three genuine `Failure` verdicts before restoring them. **The claim in this section therefore stands and
-> has been reproduced twice — but quote the seven post-import checks in §8.5, not a `TES…` number.**
+> observing three genuine `Failure` verdicts before restoring them. **That 20 / 20 rollup was reproduced twice and
+> is retained as post-remediation history; it is superseded as the current verdict by `TES0001002` in (1) above,
+> and it is not the outcome of a bare commit.** Quote the seven post-import checks in §8.5, not a `TES…` number.
 
-Per-test verdicts and run times, read from the 20 child rows: `ATF 01` Success 3 s · `02` Success 8 s ·
+Per-test verdicts and run times **from the August post-remediation rollups above**, read from their 20 child
+rows — retained as history; the current per-test verdicts are the 14 / 6 split of (1), whose six named failures
+are `ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18`: `ATF 01` Success 3 s · `02` Success 8 s ·
 `03` Success 6 s · `04` Success 3 s · `05` Success 7 s · `06` Success 12 s · `07` Success 6 s ·
 `08` Success 10 s · `09` Success 13 s · `10` Success 3 s · `11` Success 5 s · `12` Success 9 s ·
 `13` Success 4 s · `14` Success 7 s · `15` Success 41 s · `16` Success 47 s · `17` Success 40 s ·
@@ -2051,7 +2119,9 @@ tests genuinely ran through a real browser — the client runner's **UI Batches 
 exactly one batch per `ATF 15/16/17`.
 
 > **The gap, stated plainly.** `TES0001014` proves the *serialized* assets of the package revision current at
-> that moment — a **pre-security** revision. `TES0001015` proves the *live* assets as they stand now. The suite
+> that moment — a **pre-security** revision. `TES0001015` proves the *live* assets **as they stood on a
+> remediated instance in August**; the live-asset verdict that stands today is `TES0001002` at 14 of 20
+> (§8.3 (1)). The suite
 > has **not** been re-run against a fresh re-load of the shipped artifacts since the security and
 > documentation-truthfulness passes changed the package. **The security pass did touch ATF records:** it rewrote
 > `ATF 18`'s anonymous leg (to a non-mutating one, §9.6a P6) and `ATF 19`'s setup, which changed **10 packaged
@@ -2134,10 +2204,14 @@ execution has ever occurred (see §8.2). Of the earlier series `TES0001001` … 
 authoring tooling that was found and fixed before any evidence was relied upon. **There is no authoritative
 `TES…` row, and this document does not nominate one.** Suite-result rows are not durable on this shared instance —
 `TES0001015` and `TES0001014`, which an earlier revision of this paragraph named as the authoritative and the
-serialized-import verdicts, no longer resolve (§8.3). What is authoritative is the **rollup and the method**:
-20 tests Success / 180 of 180 step results Success / 0 failure / 0 error / 0 skip, reproduced independently by
-`TES0001016` and `TES0001017` (§8.3), verified against the seven post-import checks of §8.5 rather than against a
-row identifier. `TES0001014` remains the historical marker for the last verdict taken against a fresh re-load of
+serialized-import verdicts, no longer resolve (§8.3). What is authoritative is the **rollup and the method**,
+read per instance state and per date. **Current, on the package alone: 20 tests / 14 Success / 6 Failure /
+0 Error / 0 Skipped with 180 of 180 steps executed — `TES0001002`, 2026-09-02, the six failures named in
+§8.3 (1).** **Historical, on a remediated instance: 20 tests Success / 180 of 180 step results Success /
+0 failure / 0 error / 0 skip**, reproduced independently by
+`TES0001016` and `TES0001017` (§8.3 (1a)), verified against the seven post-import checks of §8.5 rather than
+against a row identifier. Neither rollup is quotable without the instance state it was taken on.
+`TES0001014` remains the historical marker for the last verdict taken against a fresh re-load of
 the shipped artifacts (§8.3 (2)), and repeating that on the shipping bytes is §10.0 item 2.
 
 Depth of assertion, from the step summaries of the `TES0001014` run: `ATF 01` verified the case schema with
@@ -2237,10 +2311,17 @@ deliverable is built the way that survives.**
 5. **A step with zero input rows is the failure signature.** If one appears, the input records did not load,
    or loaded ahead of their parent step. Equally, **no step should have more than its expected number of input
    rows** — a duplicate means the package was imported over a natively authored suite (see above).
-6. Set `sn_atf.runner.enabled=true`, attach a client runner, run the suite → expect **20 success / 0 failure /
-   0 error / 0 skipped**. That is the measured expectation, not a projection: `TES0001015` and `TES0001014`
-   (§8.3) each achieved it with 180 of 180 steps Success after the §9.6 **E-ATF**, **E9** / **E-ATF15** and
-   `ATF 03` step-8 fixes. Also expect the shipping range to be **761 records / 540 input rows** (§0.1).
+6. Set `sn_atf.runner.enabled=true`, attach a client runner, run the suite. **Two different expectations apply,
+   and which one holds depends on whether the remediation has been run.** *Straight after the commit, before
+   `../scripts/post_import_remediation.js`:* expect **14 success / 6 failure / 0 error / 0 skipped** with 180 of
+   180 steps executed — that is the measured 2026-09-02 outcome (`TES0001002`, §8.3 (1)), and the six failures
+   are `ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18`, every one of them caused by the absent
+   `sys_choice` rows rather than by the tests. *After the remediation has created the 24 `sys_choice` rows:*
+   expect **20 success / 0 failure / 0 error / 0 skipped** — the post-remediation rollup measured by
+   `TES0001015`, `TES0001016`, `TES0001017` and `TES0001014` (§8.3 (1a), (2)), each with 180 of 180 steps
+   Success after the §9.6 **E-ATF**, **E9** / **E-ATF15** and `ATF 03` step-8 fixes. A 14 / 6 verdict on a
+   remediated instance, or any failure outside those six names, is a genuine signal.
+   Also expect the shipping range to be **761 records / 540 input rows** (§0.1).
 7. No post-run sweep is needed. `ATF 18` creates nothing outside ATF's rollback context and asserts that no
    `ATF-PORTAL-18` row survives it (see §8.6, M4). Confirm with a list on `x_casemgmt_case` where `subject`
    starts with `ATF-PORTAL` — expect zero rows.
@@ -2249,8 +2330,9 @@ deliverable is built the way that survives.**
 
 **A real defect, surfaced by `ATF 07` and left visible rather than hidden — and since FIXED.** *This subsection
 is the historical diagnosis. The defect it describes is closed: the four conditions now use
-`current.getElement('case')`, and `ATF 07` is green in both `TES0001014` and the current `TES0001015`
-(§8.3). It is kept because the diagnosis explains why the ACLs are written the way they are.* At the time,
+`current.getElement('case')`, and `ATF 07` is green in `TES0001014`, in the August runs of §8.3 (1a) and in the
+current `TES0001002` run of §8.3 (1). It is kept because the diagnosis explains why the ACLs are written the way
+they are.* At the time,
 four scoped condition scripts on the child-table ACLs dereferenced `current.case`. Because `case` is a JavaScript reserved word, those scripts
 **fail to compile** — the platform log reads
 `Script compilation error: Script Identifier: sys_security_acl.1ea69bf11f64a85ddf0c7e970779fefe, Error Description: missing name after . operator (…; line 2)`
@@ -2275,7 +2357,7 @@ changed.
 | M2 | Opening a client test runner tab for `ATF 15`–`ATF 17` | Form-level steps need a browser; `sn_atf.headless.enabled` was left `false` | ~2 min per run |
 | ~~M3~~ | ~~The genuinely anonymous REST leg~~ — **automated** | The `Send REST Request - Inbound` step type supports only `basic`/`mutual` auth, but with no profile configured it sends **no credentials at all** and the platform serves it as `guest` — measured: `X-Is-Logged-In: false` on the response, and the row it creates is owned by `guest`. `ATF 18`'s steps 2–8 therefore assert the 201 contract for a genuinely unauthenticated caller, and each of `ATF 18`–`ATF 20` additionally carries a scoped `Run Server Side Script` companion using `sn_ws.RESTMessageV2` with no credentials (201 / 200 / 404 as specified, while `/api/now/table/x_casemgmt_case` correctly returns 401 to an anonymous caller). `ATF 18`'s companion is deliberately **non-mutating** (M4). A credential-free `curl` transcript is recorded in `ATF_MANUAL_TEST_PLAN.md` §5 C4 for anyone wanting to re-confirm it outside ATF. | — |
 | ~~M4~~ | ~~Deleting the one `ATF-PORTAL-18` case after each `ATF 18` run~~ — **no longer needed** | ATF rolls back records created by its own steps, by its scripts and by the ATF-instrumented `Send REST Request - Inbound` step — but **not** a row a *script* creates by calling into the instance over HTTP with `sn_ws.RESTMessageV2`: that arrives as `guest`, in its own transaction, and the rollback additionally reverses the test's own cleanup delete of it. `ATF 18`'s anonymous leg used to submit a real case that way, so each run left exactly one synthetic `Draft` case. That leg is now **non-mutating** — it POSTs a payload the handler must reject (`400`, `Invalid payload.`) and performs a read-only credential-free lookup, then proves by census that neither call persisted a row — so the only row the test creates comes from the instrumented step, inside the rollback context, which the platform removes even when the cleanup step is skipped. Measured over two consecutive runs on 2026-08-08 (`12a928de93628b10830ef82bdd03d686`, `805bac9293a28b10830ef82bdd03d630`): both Success, step 10 reporting `residue rows=0`, `subject STARTSWITH ATF-PORTAL` → **0 rows**, and the second run's step 1 reporting `pre-existing submissions removed=0`. A row left by a run of the earlier design must still be swept once by hand. | spent |
-| ~~M5~~ | ~~Fixing the four `current.case` ACL scripts so `ATF 07` goes green~~ — **done** | The conditions now use `current.getElement('case')`; `ATF 07` is green in `TES0001015` | — |
+| ~~M5~~ | ~~Fixing the four `current.case` ACL scripts so `ATF 07` goes green~~ — **done** | The conditions now use `current.getElement('case')`; `ATF 07` is green in `TES0001015` and remains green in the current `TES0001002` run (§8.3 (1)) | — |
 
 **Fixtures and data safety.** Every test creates its own synthetic fixtures, prefixed `ATF-`, with
 `@example.invalid` addresses, and deletes them again; ATF's rollback covers the rest. No test mutates the demo
@@ -2287,11 +2369,17 @@ portable to a freshly imported instance whose counter restarts at `CASE0000001`;
 own could still carry that number, its setup step **verifies** uniqueness read-only and **refuses to run**,
 changing nothing, rather than deleting the foreign carrier.
 
-**Not overstated.** **All 20 tests pass** in the current run `TES0001015` (§8.3) — the earlier `19 / 1` and
-`16 / 4` verdicts are historical and are labelled as such wherever they appear. Two caveats that the pass rate
-does **not** cover, stated so the suite is not read as proving more than it does: (a) the suite has not been
+**Not overstated.** **The current run does not pass: `TES0001002` (2026-09-02, package alone) scored 14 of 20,
+with `ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18` failing on the absent `sys_choice` rows
+(§8.3 (1)).** All 20 tests passed in the post-remediation runs `TES0001015`, `TES0001016` and `TES0001017`
+(§8.3 (1a)), and the earlier `19 / 1` and
+`16 / 4` verdicts are historical and are labelled as such wherever they appear. Three caveats that no pass rate
+covers, stated so the suite is not read as proving more than it does: (a) the suite has not been
 re-run against a fresh re-load of the shipped artifacts since the last two package-changing passes (§8.3, gap
-note); and (b) `ATF 15`, `ATF 16` and `ATF 17` assert that the offending save is **refused**, that the record is
+note); (b) six of the twenty tests currently fail, and four of them (`ATF 01`, `ATF 15`, `ATF 16`, `ATF 17`)
+**skipped** their later steps as a consequence, so the assertions in those steps are **unverified rather than
+passing** — [`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md) §(e) itemizes which; and (c) `ATF 15`,
+`ATF 16` and `ATF 17` assert that the offending save is **refused**, that the record is
 **not** written, and that the exact server-side message string is produced — they do **not** read the rendered
 text out of the form's DOM, so "the message is visible on the form" remains a **manual** observation (the eight
 live form observations in §3.4). Three areas are covered automatically; of M1–M5, **M3, M4 and M5 are now
@@ -2322,7 +2410,7 @@ identity resolves it at run time — `userId('x_casemgmt_demo_manager')` against
 the package is held to and the more portable arrangement: the tests keep working even where the demo
 identities exist under different `sys_id`s. After that change all 20 tests were re-verified — the 17
 server-side tests re-run individually (16 success, `ATF 07` failing as documented **at that time** — it has since
-been fixed and is green in `TES0001015`) and the three form-level tests re-run through the client runner (all
+been fixed and is green in `TES0001015`, and in the current `TES0001002` run) and the three form-level tests re-run through the client runner (all
 three Success, each blocking message additionally observed on the rendered form by hand — the tests themselves
 assert the refusal, the non-write and the exact server-side string, not the rendered DOM text — and
 `UI Batches Executed` 0 → 3).
@@ -2340,12 +2428,19 @@ assert the refusal, the non-write and the exact server-side string, not the rend
 > - `ATF 07` was defeated by four child-table ACL conditions that could not compile (`current.case`; `case` is a
 >   JavaScript reserved word). See §9.6 **E-ATF**.
 >
-> **The current, measured expectation for a clean install is 20 ran / 20 Success / 0 Failure / 0 Error / 0 Skipped**,
-> evidenced by the current run **`TES0001015`** in §8.3 with 180 of 180 steps Success (and by `TES0001014`, the
-> last run made against a fresh re-load of the shipped artifacts). Every earlier "expect 19 success / 1 failure"
+> **The expectation for a clean install, stated per install state — and the two are not interchangeable.**
+> *Once the install is complete, i.e. after `../scripts/post_import_remediation.js` has created the 24
+> `sys_choice` rows:* **20 ran / 20 Success / 0 Failure / 0 Error / 0 Skipped**, evidenced by the
+> post-remediation runs **`TES0001015`**, `TES0001016` and `TES0001017` in §8.3 (1a) with 180 of 180 steps
+> Success (and by `TES0001014`, the last run made against a fresh re-load of the shipped artifacts). *From the
+> package alone, straight after a commit:* the **measured** outcome — not an expectation — is **20 ran /
+> 14 Success / 6 Failure / 0 Error / 0 Skipped** with 180 of 180 steps executed, taken on 2026-09-02 as
+> `TES0001002` (§8.3 (1)), the six failures being `ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18`
+> on the absent choice rows. Every earlier "expect 19 success / 1 failure"
 > and "expect 16 / 4" statement in this register and in
-> [`ATF_MANUAL_TEST_PLAN.md`](./ATF_MANUAL_TEST_PLAN.md) is superseded by that figure; both documents have been
-> brought into line with it rather than left to contradict each other.
+> [`ATF_MANUAL_TEST_PLAN.md`](./ATF_MANUAL_TEST_PLAN.md) is superseded by these two figures; both documents were
+> brought into line with the 20 / 20 post-remediation figure rather than left to contradict each other, and the
+> package-alone figure above is the later measurement that neither document had when it was written.
 
 ---
 
@@ -2910,7 +3005,8 @@ recording.
 > paragraph certified that "no number here is stale"; two later package-changing passes have since landed, so the
 > certification has been withdrawn and the rows that were superseded are marked inline. Where this table and §0
 > disagree, **§0 is correct.** Specifically superseded here: the ATF row's `16 Success / 4 Failure` verdict and
-> its `542` step-parameter count (current: **20 / 0 / 0 / 0** and **540** — §0.1, §8.3), and the demo-data row's
+> its `542` step-parameter count (post-remediation: **20 / 0 / 0 / 0**; current, from the package alone:
+> **14 / 6 / 0 / 0** — and **540** — §0.1, §8.3), and the demo-data row's
 > 20/21-case census (current: **10 cases / 10 tasks / 8 parties** — §9.8a).
 
 | Gate | Re-measured result |
@@ -2922,7 +3018,7 @@ recording.
 | Roles and scope | One `sys_user_role` row each for `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`; exactly one `sys_scope` row, `scope=x_casemgmt`, version 1.0.0. |
 | Demo data ⚠️ **census SUPERSEDED — currently 10 cases / 10 tasks / 8 parties (§9.8a)** | *At the time of this snapshot:* 20 cases at the census (21 once the last anonymous-submit regression probe, `CASE0000553`, was added), **none with an empty `number`**, spanning **all six** statuses and **both** case types; 10 tasks (3 Open, 1 In Progress, 6 Closed) with **zero** dangling parent references; 8 parties (5 Person, 3 Organization) with zero dangling parent or organization references; 3 users, 1 group with a correctly-referenced membership, 3 role grants, 2 synthetic companies. Every case `requester_email` is on `@example.invalid` — 20 of 20 at the census, and the later probe likewise. The rows above the AAP threshold of 10 are the disclosed validation probes and the `ATF 18` residue of §9.8; the regression harness left nothing behind (`U1BASE-` rows remaining: 0). |
 | Workflow, on the form | `Resolve` clicked on `CASE0000454` while `TASK0000091` was still `Open`: **blocked**, with exactly one visible message, `All tasks must be closed before resolving this case.` — 52 characters, no leading or trailing whitespace, terminating U+002E, strict equality against the required literal true. **No write occurred**: after a cache-bypassing reload the status is still `In Progress`, `closed_date` still empty, `sys_mod_count` still **0**, and the complete before and after record XML snapshots are **byte-identical**. |
-| ATF ⚠️ **SUPERSEDED — see §8.3** | `sn_atf.runner.enabled=true`, `sn_atf.headless.enabled=false` (instance settings; the package contains **zero** `sys_properties` records). *At the time of this snapshot:* three suite runs, byte-identical verdicts each time, **20 ran, 16 Success, 4 Failure, 0 Error, 0 Skipped** — failures `ATF 07` (§9.6 E-ATF) and `ATF 15`/`16`/`17` (§9.6 E-ATF15), both root causes since fixed. **Current result: `TES0001015` = 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps Success** (§8.3). Survivability of the re-imported records at the time: `sys_atf_test` 20, `sys_atf_step` 180, step-parameter rows **542** — matching the `Value` blocks the package then shipped; the shipping range is now **761 blocks with 540 inputs** (§0.1) — one suite, 20 suite members, **zero tests with no steps**, **zero steps with no parameters**, suite `sys_mod_count` 0. The ATF records did **not** degrade the way the flows did in Defect F. |
+| ATF ⚠️ **SUPERSEDED — see §8.3** | `sn_atf.runner.enabled=true`, `sn_atf.headless.enabled=false` (instance settings; the package contains **zero** `sys_properties` records). *At the time of this snapshot:* three suite runs, byte-identical verdicts each time, **20 ran, 16 Success, 4 Failure, 0 Error, 0 Skipped** — failures `ATF 07` (§9.6 E-ATF) and `ATF 15`/`16`/`17` (§9.6 E-ATF15), both root causes since fixed. **Post-remediation result, retained as history: `TES0001015` = 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps Success** (§8.3 (1a)). **Current result: `TES0001002`, 2026-09-02, measured on the package alone = 20 tests / 14 Success / 6 Failure / 0 Error / 0 Skipped, 180 of 180 steps executed** — failures `ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17`, `ATF 18`, one shared root cause, the absent `sys_choice` rows (§8.3 (1)). Survivability of the re-imported records at the time: `sys_atf_test` 20, `sys_atf_step` 180, step-parameter rows **542** — matching the `Value` blocks the package then shipped; the shipping range is now **761 blocks with 540 inputs** (§0.1) — one suite, 20 suite members, **zero tests with no steps**, **zero steps with no parameters**, suite `sys_mod_count` 0. The ATF records did **not** degrade the way the flows did in Defect F. |
 | Regression | The baseline harness re-run verbatim: **13 / 13 before, 13 / 13 after** (§9.7). |
 
 ---
@@ -3080,13 +3176,15 @@ Item 1 — the clean-slate round trip — was done, and is recorded in §0.3 and
 the bytes that ship* was outstanding again and was re-listed below as item 1a. It was satisfied on export 3's
 `eee9fabd…` sequence, left unmet by the §0.5.2 re-sequencing that produced the retained `90ee0249…` file, and
 **is open against the elected 926-block `7292a6fe…` deliverable**, which is the form the
-table below carries. Three items remain here; **item 0's precondition — an instance that answers at all — is
-met on `dev306625`, but item 1a additionally needs a target that is genuinely clean**, which no instance
-available to this run is (§0.11).
+table below carries. **Item 0 is superseded rather than open** — the re-measurement it existed to unblock was
+performed on `dev306625` on 2026-09-02 (§0.11), so what remains genuinely open here is **items 1a and 2**:
+item 1a needs a target that is genuinely clean, which no instance available to this run is, and item 2's
+serialized re-load half was not re-taken. Item 0's row records the two `dev379024`-only questions that survive
+and gate nothing.
 
 | # | Work | Why | Estimate |
 |---|---|---|---|
-| 0 | **Wake the verification PDI `dev379024` from the ServiceNow Developer Program account that owns it, then re-measure the final gate.** In order: read the case and task the 502 save touched to establish whether that write committed; delete the ten `QA-FINAL` fixture rows; re-run the §3.4 form observations, the §9.7 assertion harness and the ATF suite; then proceed to 1a and 2 | Since 2026-08-11 every route on the instance returns ServiceNow's hibernation placeholder (§0.11), so items 1a and 2 cannot begin and **nothing in this register can be re-measured**. Waking requires developer-portal credentials that a build environment does not hold — instance `admin` credentials cannot authenticate to the Developer Program portal | 15 min to wake · ~2 h to re-measure |
+| 0 | ~~**Wake the verification PDI `dev379024` … then re-measure the final gate**~~ — **SUPERSEDED 2026-09-02: no longer a precondition for anything here.** The re-measurement this item existed to unblock was performed on the existing `dev306625` PDI after the authorized targeted clean-state operation: the §9.7 assertion harness re-ran green (`13 / 13`, `2026-09-02T22:05:09Z`) and the ATF suite re-ran on the live assets (`TES0001002` — 20 tests, 14 Success / 6 Failure, §8.3 (1)). Items 1a and 2 are open on their own merits, stated in their own rows. **Two `dev379024`-only questions survive, and they gate nothing:** whether the 2026-08-11 502 save's write committed, and the ten `QA-FINAL` fixture rows that host may still hold — both need a woken `dev379024`, which needs developer-portal credentials a build environment does not hold. The §3.4 on-form observation is still owed, but for the choice-row defect rather than for any outage (§0.11) | Whoever returns to `dev379024`: 15 min to wake · ~15 min for the two residual reads. Nothing in this register waits on it |
 | 1a | **OPEN against the ELECTED deliverable — run the full S1–S6 gate on the exact elected byte sequence `7292a6fe…`** (926 blocks / 3,781,097 bytes) on a genuinely clean, dedicated instance, and record the problem count by type. Exactly what remains, in the Phase 2 step names: **S1** confirm the instance is clean, **S2** compute the checksum of the file under test, **S3a** upload it as a retrieved update set and assert **926** children, **S3b** preview to zero `type=error` (and record `type=warning`), **S4** commit through the native "Commit Update Set" UI action, **S5** confirm physical storage on all three tables and — because the elected package carries **0** `sys_security_acl_role` rows — run `../scripts/post_import_remediation.js` in Global and confirm all **27** ACL role links afterwards, **S6** record `7292a6fe…` as the verified checksum with that run's own timestamp. **The same gate run on the retained rebuilt bytes closes it for that artifact instead:** `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, `90ee0249…`, asserting **988** children, with all 27 role links arriving in the package rather than from remediation — after which it may be promoted back to the deliverable path (the Path A / Path B block below). Procedure to follow verbatim: [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) | **No preview of any kind has ever been run on the elected bytes**, so AAP §0.7.1 is unsatisfied for the artifact that ships (§0.3c). Stated per sequence, because no result here may be borrowed by another file: preview to 0 `type=error` / 0 `type=warning` and the "Succeeded 100%" commit were measured on export 3's sequence `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` at `2026-09-02T20:53:14Z`, which is no file on disk and whose block order the CR1 §0.5.2 finding rejected; the post-review re-sequencing produced the retained `90ee0249…`, **never previewed on its own bytes**; and the elected `7292a6fe…` deliverable has never been previewed at all. Under the run's frozen rule a package whose bytes changed after verification has a stale recorded checksum and re-runs the whole gate before it is ship-ready ([`refine-run/PHASE2.md` §7.1](./refine-run/PHASE2.md)). What bounds the risk on the retained file, as corroboration and not as the gate: `xmllint --noout` clean, 988 blocks, a per-block digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST showing the instance's captured set still holding 988 set-identical children — the difference is block sequence alone. What bounds the risk on the elected file: its 13-payload + 1-block delta from the `e49a7654…` revision is characterised record-by-record in §0.3c, and every changed payload was read back from the live instance field-for-field identical to its artifact. **Why it could not be closed here:** the one provisioned PDI already holds this application installed, committed, converged and seeded — `x_casemgmt_case` **10** rows, `x_casemgmt_case_task` **10**, `x_casemgmt_case_party` **8**, all three tables live — so **step S1 fails on it**, and making it clean means deleting the scoped application, which the environment directive for this repository names as destroying a verified environment; the review boundary this work ran under allowed read-only REST only; AAP §0.7.1 wants a *fresh* PDI and provisioning or re-requesting an instance is prohibited, so a preview there returns `Found a local update that is newer than this one` collisions instead of the clean-slate zero-problem result; and each file's `<sys_remote_update_set>` descriptor makes the loader **reuse** the matching retrieved set and **append** its children — the elected file's descriptor is `9929f50df18ccec91ea13b2a3bccfc90` (the retrieved set recorded `state=committed` on this instance, so an upload appends its 926 children to it) and the retained rebuilt file's is `0b3b7452934f435009aa70d19dba100d`, which `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns with **`state=committed`**, so an upload would append its 988 children to the record the live evidence rests on (`../scripts/round_trip_verify.md`, Phase 1 warning). The earlier lineage is unchanged history: the absolute zero-problems result on `7272edfc…` (§0.3) and the populated-instance preview of `e49a7654…` with the reference class at zero and commit withheld (§0.3b) | 1–2 h on a dedicated, genuinely clean PDI, per artifact verified |
 | 2 | **Re-load every `atf/*.xml` artifact into the instance and re-run the suite**, recording the verdict against the re-loaded bytes | Still open, but **much narrower than earlier revisions of this row implied**, and the residual risk is now quantified rather than assumed. What has been measured (§8.3): a full re-diff of the packaged `sys_variable_value` blocks against the live rows returns **539 of 540 byte-identical, 1 differing, 0 only-in-package, 0 only-in-live**; the one difference is `ATF 18` step 9 and is **17 `//` comment lines with 0 non-comment lines changed** (comment-stripped md5 `91822682b141` on both sides), so the **executable code of all 540 inputs is identical to the package**. Provenance is measured too: all 20 tests, all 180 steps and the suite carry `sys_mod_count = 0` with the package's `2025-01-01 00:00:00` stamps, and **180 / 180 `step_config` plus 540 / 540 input `variable` references resolve** to live rows with **0** zero-input steps and **0** duplicate `(document_key, variable)` pairs — i.e. the green verdicts already recorded were taken on the as-installed package records, not on hand-edited copies. What remains unmeasured is narrow and specific: a re-load performed *on the current bytes*, followed by a suite run, which would close both the one comment-only delta and the last of the "expectation is not measurement" gap in one operation. Note also that the delta cannot be closed by patching the row — `PATCH sys_variable_value/7b1f7b99…` answers `403 ACL Exception Update Failed due to security constraints` — and should not be, since a hand-write would destroy the `sys_mod_count = 0` provenance above | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) |
 
@@ -3167,7 +3265,12 @@ available to this run is (§0.11).
 
 ### 10.3 Test suite
 
-The suite is complete and green; the only outstanding test-suite work is the serialized re-load re-run, which is
+The suite is complete, and it is **not** currently green: the 2026-09-02 run on the package alone scored
+**14 of 20** (`TES0001002`, §8.3 (1)), with `ATF 01`, `ATF 10`, `ATF 15`, `ATF 16`, `ATF 17` and `ATF 18`
+failing on the absent `sys_choice` rows — one root cause, classification (c), no fix attempted, and the same
+outstanding Defect C choice half recorded in §0. It scored 20 of 20 on a remediated instance (§8.3 (1a)), so
+no suite work is implied by those six failures; what closes them is the choice-row decision, and the only
+outstanding test-suite work remains the serialized re-load re-run, which is
 item 2 in §10.0 because it is part of closing the packaging proof.
 
 ### 10.4 Deployment ergonomics
@@ -3193,7 +3296,7 @@ open work.
 | 9 | ~~**Resolve roles from `sys_user_has_role`** in `CaseTransitionValidator.canTransitionToClosed()` instead of `gs.getUser(userName)`~~ — ✅ **DONE** | Closes a latent authorisation hole on branch (b): any future caller that passes a foreign `userId` is answered against the *caller’s* roles. The shipped runtime never takes that branch and all 13 regression assertions pass, so this is hardening rather than a fix for a live failure (§9.6 E-GU, §9.7) | 30 min |
 | 10 | ~~**Reconcile the duplicate `sys_ws_operation` identity** for the submit endpoint~~ — ✅ **DONE** | The artifact and the package carried different `sys_id`s for the same logical endpoint. Settled against the instance: the artifact's `e1b7bfa9…` returns **HTTP 404** while the package's `886ad712…` is the single live record, so `886ad712…` is now the sole identity in both (§9.3, §9.3a item 4) | — |
 | 12 | ~~**Make `ATF 15/16/17` create their fixture inside the client step's transaction** (or use ATF's `{{step[…]}}` substitution)~~ — ✅ **DONE, BUT NOT THIS WAY: THE PREMISE WAS WRONG** | This item assumed a fixture-to-form handoff problem and residue dependence. Measurement disproved both: the fixture is created and visible, and the failure came from the platform resolving that step's record in **Global** scope while the table's cross-scope access columns were false (§9.6 **E-ATF15** / **E9**). Fixing those five booleans fixed all three tests without touching how the fixtures are made. Step 1 of each test additionally gained a handoff guard — it re-reads every fixture by `sys_id` with a plain GlideRecord and asserts it resolves — so a genuine handoff problem would now fail precisely and upstream instead of surfacing as "does not have a record with id". All three pass 7/7 in the client runner, individually and inside `TES0001014` | 2–3 h estimated; the actual fix was five boolean values |
-| 13 | ~~**Re-run the full suite after items 2 and 12** and expect 20/20~~ — ✅ **DONE** | First achieved as `TES0001014`, and re-confirmed by the current run `TES0001015` (§8.3): **20 success / 0 failure / 0 error / 0 skipped**, 180 of 180 steps Success, `UI Batches Executed` 0 → 3, and again as the current `TES0001015` with the same rollup. The expectation was met exactly. What is **not** covered, and is now §10.0 item 2, is a re-run after re-loading the shipped artifacts on the current package revision | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) — spent |
+| 13 | ~~**Re-run the full suite after items 2 and 12** and expect 20/20~~ — ✅ **DONE, on a remediated instance** | First achieved as `TES0001014`, and re-confirmed by `TES0001015`, `TES0001016` and `TES0001017` (§8.3 (1a)): **20 success / 0 failure / 0 error / 0 skipped**, 180 of 180 steps Success, `UI Batches Executed` 0 → 3. The expectation was met exactly **on an instance whose 24 `sys_choice` rows the remediation had already created**. The later 2026-09-02 run on the package alone scored **14 / 6** (`TES0001002`, §8.3 (1)) for that missing-choice-row reason, so 20/20 is not the verdict of a bare commit. What is **not** covered, and is now §10.0 item 2, is a re-run after re-loading the shipped artifacts on the current package revision | 30 min per run (client runner; `sn_atf.headless.enabled` cannot be enabled here) — spent |
 
 Also completed in the documentation-truthfulness pass: every reference to the deleted standalone scope artifact
 and to the deleted bootstrap artifact was repaired across the deliverable (171 broken relative references → 0).

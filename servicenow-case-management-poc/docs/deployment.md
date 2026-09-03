@@ -67,9 +67,28 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, and NO preview was ever run on them, so
 > the Update Set gate is NOT MET for the deliverable and this walkthrough must not be read as already executed
 > on it.**
-> Be precise about which measurement belongs to which artifact, because five digests appear in this deliverable's
-> history (`32a064d6…`, `7272edfc…`, `89638c17…`, `e49a7654…` and today's `7292a6fe…`) and only two of them carry a
-> preview result. What changed from `e49a7654…` is small and fully enumerated: **13 payloads** re-synced
+> Be precise about which measurement belongs to which artifact. **Ten distinct package byte sequences exist
+> across this deliverable's history; seven of them carry a preview result and three carry none** — the table
+> below is the whole lineage, one row per sequence, so no result can be borrowed by a file it was not measured
+> on. Count the Preview column rather than trusting this sentence:
+>
+> | Digest (SHA-256) | Blocks | Bytes | Preview | Commit | Artifact / path | Class |
+> |---|---:|---:|---|---|---|---|
+> | `32a064d6…` | 916 | 3,448,009 | 0 problems of any type | committed | no file on disk — git history only | historical |
+> | `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e` | 913 | 3,618,378 | 0 problems of any type (41 → 298 → 0) | `state=committed` | no file on disk — git history only | historical |
+> | `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e` | 913 | 3,643,389 | **120 `type=error`** (40 distinct, 21 package-intrinsic) | not committed | no file on disk — git history only | historical |
+> | `e49a7654…` | 925 | 3,698,577 | 31 problems, all `Found a local update that is newer than this one`; **0** `Could not find a record` | commit withheld (shared instance) | no file on disk — git history only | historical |
+> | `f482214ae73a6402b54b6ebce8feac229f5849ddb23473a2b…` | 926 | 3,781,093 | none | none | no file on disk — superseded intermediate, 4 bytes from the elected file (`pie` → `donut`, twice) | historical |
+> | `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` | 926 | 3,781,097 | **none ever** | none | `update-set/x_casemgmt_case_management_update_set.xml` + `…FALLBACK.xml` | **CURRENT deliverable — gate NOT MET, static-only evidence** |
+> | `df110c9526bdc81d62b06b0f6a58b5573a83b9d3153fcd7c623ef9704668a000` | 988 | 4,062,298 | **63 `type=error`** | not committed | no file on disk — export attempt 1 (snapshot `7af37c12930f435009aa70d19dba105a`) | historical |
+> | `7c382fab41954ebea107c610a0c496343e29e3393bd5788c441080e58c2163db` | 988 | 4,062,436 | **60 `type=error`** | not committed | no file on disk — export attempt 2 (snapshot `23467496930f435009aa70d19dba1013`) | historical |
+> | `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` | 988 | 4,062,436 | **0 `type=error` / 0 `type=warning`** | committed `2026-09-02T20:53:14Z` | no file on disk — export 3 (snapshot `0b3b7452934f435009aa70d19dba100d`) | historical — **the only complete round trip this run** |
+> | `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` | 988 | 4,062,436 | none | none | `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` | retained, not shipped — **static-only** |
+>
+> Read the table as the rule INTERP-9 states: a runtime measurement belongs to the byte sequence it was taken on.
+> Only two on-disk artifacts exist — the elected `7292a6fe…` deliverable and the retained `90ee0249…` rebuild —
+> and **neither of them carries a preview or a commit result of its own**. What changed from `e49a7654…` to the
+> elected bytes is small and fully enumerated: **13 payloads** re-synced
 > (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and **1 block added** (the case form's Related Lists
 > definition), all of it presentation-layer work resolving a QA report. What *has* been measured on the shipping
 > bytes: every one of those 14 records deployed to a live PDI and read back field-for-field identical to its

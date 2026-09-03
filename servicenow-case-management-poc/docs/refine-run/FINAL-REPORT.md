@@ -245,9 +245,24 @@ attribute-identical to the pre-refine live dictionary, and the deliverable and f
 byte-unchanged by that step. An earlier draft of this paragraph said no files were added; the
 inventory above is the measured one (corrected in the post-review CR1 remediation, below).
 
-**Fallback invoked in Phase 1: NO.**
+**Fallback invoked in Phase 1: NO** — no phase of the run invoked it. The election came later, and it
+traces back to the unmet half of this phase's hard gate, stated next.
 
-**Phase 1 exit condition: MET at `2026-09-02T19:22:09Z`.**
+**Phase 1 exit condition: PARTIALLY MET at `2026-09-02T19:22:09Z` — the hard gate is NOT MET.** The
+table/dictionary half is met (3 `sys_db_object` + 27 `sys_dictionary` Table-API creations, all HTTP
+201, platform-written and platform-captured); the **role-link and grant half is NOT MET**, because
+the 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct
+server-side insert** instead of the platform's **native role-assignment action** that D2 lines 5–10,
+D21 lines 124–128 and INTERP-1 require. That is the settled verdict; `met` was the value recorded at
+the time and the value Phase 2 read at `19:47:16Z`, and the CR2 remediation pass qualified it — in
+`run-state.json`, `phase1.exit_condition` = `partially_met` and
+`phase1.hard_gate_native_creation.role_link_and_grant_half` = NOT MET. **This phase is therefore the
+run's stopping point on the hard-gate path**: its exit condition is not reached in full, and on that
+path OVERRIDE-2 / directive **D3** authorizes the untouched fallback by name — which is what the
+delivery election in part (d) does. The same election is reached independently for the deliverable
+bytes through D36's unavailable exact-byte re-run; both routes end at the fallback, and neither makes
+this half of the gate met. What would clear it, and why it could not be cleared on the one
+provisioned instance, is in [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.4 and §4.
 
 ---
 
@@ -531,10 +546,87 @@ exceptions 0) and left no fixtures behind.
 | 19 | ATF 19 — Portal contract: lookup of a valid number returns only status, subject, opened_date | PASS | — | — |
 | 20 | ATF 20 — Portal contract: lookup of an unknown number returns 404 with the verbatim message | PASS | — | — |
 
+Every **FAIL** row's failing step, assertion text and skipped steps follow by name, immediately below
+the screenshot; nothing in this section stands on the aggregate alone.
+
 **SCREENSHOT — ATF suite results screen showing the final pass/fail summary** (directive line 243)
 `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-atf-suite-results.png`
 Caption: *Phase 3 — ATF suite results screen showing the final pass/fail summary (`TES0001002`,
 Failure, 14 success / 6 failure of 20, 180 steps).*
+
+### The six failures — failing step and assertion text, by name
+
+One entry per failed test, so no failure is represented only by an aggregate. Each quotes the step
+that failed by its **order and step type**, the platform's own observed-versus-expected text, and the
+steps ATF **skipped** afterwards — a skipped step's assertion is **unverified, not passing**. Every
+quotation is the value the result record carried, held verbatim in
+[`run-state.json`](./run-state.json) → `phase3.suite.tests[].failing_step` and `[].notes`. All six
+are classification **(c)**, with **0 fix attempts** each and one shared root cause, stated in the
+next section.
+
+**ATF 01 — Data model: case, task and party schema per AAP 0.5.7.** Failed at **order 3, Run Server
+Side Script**:
+
+```
+x_casemgmt_case schema (AAP 0.5.7): checks=81 failures=5 :: case.type choices expected[General Inquiry,Complaint] actual[] | case.status choices expected[Draft,Open,In Progress,Pending,Resolved,Closed] actual[] | case.priority choices expected[Low,Medium,High,Critical] actual[] | case.pending_reason choices expected[Awaiting Info,Awaiting Third Party,Other] actual[] | Draft is the first selectable status choice expected[Draft] actual[undefined]
+```
+
+81 of the step's checks ran and 5 failed — all five are choice-set reads returning an empty list.
+**Steps 4–5 were skipped**, so this test's `x_casemgmt_case_task` and `x_casemgmt_case_party` schema
+assertions are **unverified rather than passing**.
+
+**ATF 10 — In Progress to Pending sets `pending_reason`, Pending to In Progress clears it.** Failed
+at **order 7, Run Server Side Script**:
+
+```
+pending_reason choice set: checks=2 failures=1 :: pending_reason choices expected[Awaiting Info,Awaiting Third Party,Other] actual[]
+```
+
+**Steps 1–6 succeeded**, including "Impersonate" as the demo manager and both status updates with
+their validations — so the Pending ↔ In Progress transitions themselves are positively proven; only
+the choice-set read failed. **Step 8 was skipped.**
+
+**ATF 15 — Form: resolving a case with an open task is blocked on the form.** Failed at **order 4,
+Set Field Values**:
+
+```
+FAILURE: Unable to set field 'status' to value 'Resolved'. Value 'Resolved' is not currently a valid choice
+```
+
+**Steps 1–3 succeeded** (fixture created, impersonated as the demo manager, form opened). **Steps 5–7
+were skipped**, so the on-form blocking-message assertion — the point of the test — is **unverified
+rather than passing**.
+
+**ATF 16 — Form: returning a case to Draft is blocked on the form.** Failed at **order 4, Set Field
+Values**:
+
+```
+FAILURE: Unable to set field 'status' to value 'Draft'. Value 'Draft' is not currently a valid choice
+```
+
+**Steps 1–3 succeeded; steps 5–7 were skipped**, leaving the on-form assertion **unverified**.
+
+**ATF 17 — Form: a Closed case cannot be moved out of the terminal state on the form.** Failed at
+**order 4, Set Field Values**:
+
+```
+FAILURE: Unable to set field 'status' to value 'In Progress'. Value 'In Progress' is not currently a valid choice
+```
+
+**Steps 1–3 succeeded; steps 5–7 were skipped**, leaving the on-form assertion **unverified**.
+
+**ATF 18 — Portal contract: anonymous submit returns 201 with the new case number.** Failed at
+**order 3, Assert Status Code**:
+
+```
+The response status code doesn't match the specified operation for expected status code: '201', actual status code: '400'
+```
+
+The preceding step (order 2, the `POST` to `/api/x_casemgmt/case_submit`) recorded the response as
+**`400 Bad Request`**: `CasePortalService._resolveCaseTypeChoice()` refuses an otherwise valid type
+when `_caseTypeChoices()` reads an empty `sys_choice` list — the Script Include's own comment calls
+this its deliberate fail-closed answer. **Steps 4–10 were skipped**, so the returned-case-number
+assertions are **unverified rather than passing**.
 
 ### All 13 harness assertions, by name
 
@@ -542,6 +634,16 @@ Failure, 14 success / 6 failure of 20, 180 steps).*
 from the background-script runner at `2026-09-02T22:05:09Z` (platform response: "Script completed in
 scope x_casemgmt"), result read from the single `syslog` line prefixed `U1ASSERT|`:
 **`TOTAL=13 PASSED=13 FAILED=0`**.
+
+That single line, **reproduced in full and without ellipsis**, exactly as INTERP-8's own query
+returned it
+(`GET /api/now/table/syslog?sysparm_query=messageSTARTSWITHU1ASSERT^ORDERBYDESCsys_created_on&sysparm_limit=1`).
+It is 2,684 characters and is held byte-for-byte in [`run-state.json`](./run-state.json) →
+`phase3.harness.raw_syslog_line`, from which this block was copied:
+
+```text
+U1ASSERT|TOTAL=13 PASSED=13 FAILED=0 |CLEANUP tasks=4 cases=7 remainingCases=10 |PASS A1 canTransitionToOpen blocks empty assigned_group (verbatim) | expected="{\"ok\":false,\"error\":\"Required field assigned_group is empty.\"}" actual="{\"ok\":false,\"error\":\"Required field assigned_group is empty.\"}" ||| PASS A2 canTransitionToOpen allows populated assigned_group | expected="{\"ok\":true}" actual="{\"ok\":true}" ||| PASS A3 canTransitionToInProgress blocks empty assigned_agent (verbatim) | expected="{\"ok\":false,\"error\":\"Assigned agent must be set and must be a member of the assigned group.\"}" actual="{\"ok\":false,\"error\":\"Assigned agent must be set and must be a member of the assigned group.\"}" ||| PASS A4 canTransitionToInProgress blocks agent not in assigned_group (verbatim) | expected="{\"ok\":false,\"error\":\"Assigned agent must be set and must be a member of the assigned group.\"}" actual="{\"ok\":false,\"error\":\"Assigned agent must be set and must be a member of the assigned group.\"}" ||| PASS A5 canTransitionToInProgress allows agent who is a member of assigned_group | expected="{\"ok\":true}" actual="{\"ok\":true}" ||| PASS A6 canTransitionToResolved blocks while 1 child task is Open (verbatim) | expected="{\"ok\":false,\"error\":\"All tasks must be closed before resolving this case.\"}" actual="{\"ok\":false,\"error\":\"All tasks must be closed before resolving this case.\"}" ||| PASS A7 canTransitionToResolved allows once every child task is Closed | expected="{\"ok\":true}" actual="{\"ok\":true}" ||| PASS A8 canTransitionToClosed allows a caller holding x_casemgmt_case_manager | expected="{\"ok\":true}|callerHasManagerRole=true" actual="{\"ok\":true}|callerHasManagerRole=true" ||| PASS A9 canTransitionToClosed blocks a caller without the manager role (verbatim) | expected="{\"ok\":false,\"error\":\"Only case managers can close cases.\"}|idUnknown=true" actual="{\"ok\":false,\"error\":\"Only case managers can close cases.\"}|idUnknown=true" ||| PASS A10 validateNoBacktransition blocks any -> Draft (verbatim) | expected="{\"ok\":false,\"error\":\"Cases cannot be returned to Draft.\"}" actual="{\"ok\":false,\"error\":\"Cases cannot be returned to Draft.\"}" ||| PASS A11 validateNoBacktransition blocks Closed -> * (verbatim) | expected="{\"ok\":false,\"error\":\"Closed cases are terminal and cannot be modified.\"}" actual="{\"ok\":false,\"error\":\"Closed cases are terminal and cannot be modified.\"}" ||| PASS A12 isAgentInGroup true for a member, false for a non-member | expected="true/false" actual="true/false" ||| PASS A13 getOpenTaskCountForCase counts every non-Closed child task | expected="2" actual="2"
+```
 
 | # | Assertion | Result |
 | --- | --- | --- |
@@ -618,7 +720,7 @@ harness is 13/13.
 | Seed child rows carry no parent-case linkage (`case` empty on 10/10 tasks and 8/8 parties; `organization` empty on the 3 Organization parties) | not asserted by the suite; identical in `…FALLBACK.xml`; the pre-refine linkage came from `seed_demo_data.js` after the commit | (c) — see human decision items |
 | Case form renders the raw column name `duration_to_close` as its label | **incidentally repaired** by the rebuild: the platform writes a `sys_documentation` label row for every column it creates | fixed as a side effect |
 | "Case Count by Status" donut renders no legend or data labels | cosmetic, asserted by no test — no failure | (c) cosmetic |
-| Package docs cite the retired host `dev379024`; README's file count is stale | documentation only, asserted by no test | (b) — deliberately out of this pass, see below |
+| Package docs cite the retired host `dev379024` — **26 occurrences** across the six documents this review covers, and **33** across every tracked file under `servicenow-case-management-poc/` outside this run's own reports, unchanged from the pre-refine baseline; commands, scopes and dates in human decision item 4. README's file count is **not** among these defects: its 234-file census is correct | documentation only, asserted by no test | (b) — deliberately out of this pass, see below |
 
 **Phase 3 exit condition: MET at `2026-09-02T22:10:59Z`** — full suite executed, every result
 captured by name and classified. A 100% pass rate was not required and was not achieved; the package
@@ -632,8 +734,8 @@ The standing policies in the PR's header were adjudicated for the whole run, not
 
 | Policy | Verdict | Evidence |
 | --- | --- | --- |
-| **Sequence gating** — each phase a prerequisite for the next, entered only after the prior exit condition is explicitly confirmed | **SATISFIED** | The timestamped table at the top of this report. Each successor read the predecessor's `exit_condition` from `run-state.json` before acting: Phase 2 at `19:47:16Z`, Phase 3 on `phase2.exit_condition = met`. No phase was entered out of order |
-| **Hard gate + fallback** — rebuilt package ships only if Phases 1 and 2 both complete cleanly; otherwise the fallback ships, labeled | **BOTH GATES MET IN THE RUN; THE FALLBACK IS ELECTED AND SHIPS, LABELED** | Both exit conditions MET (`19:22:09Z`, `20:53:14Z`), each cleanly or via the permitted fix-and-re-verify. The staleness arose afterwards, from the post-review re-sequencing, and D36's exact-byte re-run could not be performed on the one provisioned instance — so Phase 2's exit condition is not reached for the artifact on the deliverable path, and on that path OVERRIDE-2 / directive D3 authorizes the untouched fallback by name. It is elected, it ships from the deliverable path, and it is labeled as not carrying this round's fix (`post_import_remediation.js` required) — part (d). The fallback file itself is byte-unmodified; the re-sequenced rebuilt package is retained at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` |
+| **Sequence gating** — each phase a prerequisite for the next, entered only after the prior exit condition is explicitly confirmed | **EXECUTED IN ORDER, AGAINST THE VALUES RECORDED AT THE TIME — historical execution, not settled compliance** | The timestamped table at the top of this report. Each successor read the predecessor's `exit_condition` from `run-state.json` before acting and no phase was entered out of order: Phase 2 read `phase1.exit_condition = met` at `19:47:16Z` — the value recorded at that moment — and Phase 3 read `phase2.exit_condition = met` (`20:53:14Z`). The CR2 pass later qualified Phase 1 to `partially_met` with the hard gate NOT MET, so what this row certifies is the ordering as executed against the then-recorded value; it does **not** certify that every predecessor condition is met on the settled verdicts. Nothing was re-entered or re-run after the qualification |
+| **Hard gate + fallback** — rebuilt package ships only if Phases 1 and 2 both complete cleanly; otherwise the fallback ships, labeled | **PHASE 1 PARTIALLY MET — HARD GATE NOT MET; PHASE 2 MET ON EXPORT 3'S BYTES; THE FALLBACK IS ELECTED ON THAT PATH AND SHIPS, LABELED** | Phase 1's exit condition is **not** reached in full: the role-link and grant half was created by direct server-side insert rather than the native role-assignment action (D2 lines 5–10, D21 lines 124–128, INTERP-1), so the hard gate is NOT MET at `19:22:09Z` — part (b). Phase 2's gate is MET at `20:53:14Z` on export 3's byte sequence `eee9fabd…`, cleanly or via the permitted fix-and-re-verify. Two independent routes therefore lead to the same place: Phase 1's unmet half, and — after the post-review re-sequencing made the checksum stale, with D36's exact-byte re-run unavailable on the one provisioned instance — Phase 2's gate not being reached for the artifact on the deliverable path. On both, OVERRIDE-2 / directive D3 authorizes the untouched fallback by name. It is elected, it ships from the deliverable path, and it is labeled as not carrying this round's fix (`post_import_remediation.js` required) — part (d). The fallback file itself is byte-unmodified; the re-sequenced rebuilt package is retained at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` |
 | **No rollback** — Rollback / `deleteApplication` never invoked; the PR's instruction overrides the Environment Setup rollback rows | **SATISFIED** | No `deleteApplication` call, no scope deletion, no back-out anywhere in the run. Verified live: `sys_scope` and `sys_app` `82b99028…` v1.0.0 both resolve, the three roles resolve, the three tables answer HTTP 200 with 27 role links, and zero retrieved sets on the instance are in `commit_failed`/`error` |
 | **Partial writes** — a partial commit or write must be reported as such, never described as "untouched" | **NO PARTIAL APPLY** | Commit "Succeeded 100%", 613 inserted / 375 updated / 0 collisions / 988 total, progress worker Complete/Success, 0 commit-log rows, 0 children with a disposition. The instance is described as **fully applied** — and explicitly not as "untouched", since the PR itself required the tables and links to be deleted and the package re-committed |
 | **Failure classification** — (a) regression / (b) unambiguous pre-existing / (c) judgment call | **APPLIED** | Zero class (a). Four class (c) items (choice rows, seed linkage, `opened_date`, donut cosmetics) shipped and flagged. One class (b) set (documentation defects) reported rather than fixed, because this unit's documentation mandate is limited to statements this run falsified |
@@ -669,10 +771,10 @@ resolve.
 | # | Item | Class | Why it is a human call | Options |
 | --- | --- | --- | --- | --- |
 | **0** | **Promote the retained rebuilt package — optional.** The election itself is settled: the frozen directive elected the fallback (OVERRIDE-2 / D3) and it ships from the deliverable path at `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, labeled. What remains is whether to run the full S1–S6 gate on the retained rebuilt bytes (`90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`) and promote them back to the deliverable path | (c) | Running the gate needs a genuinely clean, dedicated PDI that this checkpoint cannot write to or provision: the one provisioned instance holds the committed application (`x_casemgmt_case` 10 rows, `x_casemgmt_case_task` 10, `x_casemgmt_case_party` 8, all three tables live) and the rebuilt file's own `sys_remote_update_set` descriptor `0b3b7452934f435009aa70d19dba100d` is `state=committed`, so an upload there would append its 988 children to Phase 2's own evidence record | **Promote)** Run the full gate on the exact `90ee0249…` bytes on a genuinely clean, dedicated PDI — S1 clean target, S2 checksum, S3a upload + 988 children, S3b zero `type=error`, S4 native "Commit Update Set", S5 storage + all 27 ACL-role links, S6 record the digest — then promote those bytes to the deliverable path. **Cost: one clean instance and one operator pass.** It restores the D2/D21 native swap and the 27 role links and is the only route that satisfies both AAP §0.5.2 and AAP §0.7.1. **Ship as elected)** Keep the elected fallback and run `scripts/post_import_remediation.js` after the commit to create the physical schema and the 27 role links, exactly as the pre-refine deployment did ([`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5) |
-| 1 | `sys_choice` rows absent for the three scoped tables (0 rows), while four `case` fields stay choice-typed — the root cause of ATF 01, 10, 15, 16, 17, 18 | (c) | The fix lives in the shipping update-set XML. Changing it makes the Phase-2 verified checksum stale, so nothing could ship until Phase 2 was re-run in full | **1)** Amend the package's choice payloads, then re-run Phase 2 (clean instance → checksum → preview → zero errors → UI commit → storage/link confirmation) for a **new** verified checksum. **2)** Accept the verified package as it stands and keep the documented post-commit remediation step for choices. **3)** Hand-create the 24 choice rows on the instance — **not recommended**: it masks the package-alone defect and would make the next measurement dishonest. Then re-run the six tests |
-| 2 | `opened_date` empty on 8 of 10 seeded cases | (c) | The defect is unambiguous, but its only fix vehicle is the seed XML / `seed_demo_data.js` inside the same checksum-frozen package, so the choice between amending and re-verifying versus shipping and remediating is the same trade-off as item 1 | **1)** Amend the seed payloads and re-run Phase 2 for a new checksum. **2)** Ship as verified and keep the documented post-commit `seed_demo_data.js` step, which fills the field |
-| 3 | Seed child rows carry no parent-case linkage (`case` empty on 10/10 tasks and 8/8 parties; `organization` empty on the 3 Organization parties) | (c) | Same vehicle and the same checksum consequence; identical in the fallback package, so it is not a regression of this round | **1)** Amend the seed payloads and re-run Phase 2. **2)** Ship as verified and keep the post-commit `seed_demo_data.js` step, which creates the linkage |
-| 4 | Pre-existing documentation defects left in place: the retired host `dev379024` (16 occurrences) and README's stale file count | (b) | Unambiguous, but outside this pass: the documentation mandate for this step is limited to statements **this run** falsified, so sweeping them up here would exceed it | Schedule a separate documentation pass to replace `dev379024` with `dev306625`, drop the hardcoded scope `sys_id` in favour of a query, and re-count the files |
+| 1 | `sys_choice` rows absent for the three scoped tables (0 rows), while four `case` fields stay choice-typed — the root cause of ATF 01, 10, 15, 16, 17, 18 | (c) | The fix lives in the shipping update-set XML. Changing it makes the Phase-2 verified checksum stale, so nothing could ship until Phase 2 was re-run in full | **No option here is "accept the verified package": no artifact on disk has a completed exact-byte Phase-2 gate.** **1)** Amend the choice payloads of whichever artifact is to ship, then run the full Phase 2 gate on the amended bytes (clean instance → checksum → upload → preview → zero errors → UI commit → storage/link confirmation) for a **new** verified checksum on **those** bytes. **2)** Ship the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` (`update-set/x_casemgmt_case_management_update_set.xml`) as it stands — **never previewed or committed on any instance**, so it is unverified, not verified — and keep the documented post-commit remediation, `scripts/post_import_remediation.js`, which creates the 24 choice rows along with the physical schema and the 27 role links. **2a)** Or promote the **retained rebuild** `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` first (item 0), which owes a full Phase-2 S1–S6 run on its own exact bytes before promotion and carries the same choice payloads, so it does not close this gap either. The only byte sequence that ever previewed 0 error / 0 warning and committed is **export 3's** `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, which exists in git history and as no file on disk. **3)** Hand-create the 24 choice rows on the instance — **not recommended**: it masks the package-alone defect and would make the next measurement dishonest. Then re-run the six tests |
+| 2 | `opened_date` empty on 8 of 10 seeded cases | (c) | The defect is unambiguous, but its only fix vehicle is the seed XML / `seed_demo_data.js` inside the same checksum-frozen package, so the choice between amending and re-verifying versus shipping and remediating is the same trade-off as item 1 | **1)** Amend the seed payloads of whichever artifact is to ship and run the full Phase 2 gate on the amended bytes for a new verified checksum on those bytes. **2)** Ship the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — unverified, never previewed or committed on any instance — and keep the documented post-commit `seed_demo_data.js` step, which fills the field. Promoting the **retained rebuild** `90ee0249…` instead does not avoid this: it carries the same seed payloads and still owes its own Phase-2 S1–S6 run |
+| 3 | Seed child rows carry no parent-case linkage (`case` empty on 10/10 tasks and 8/8 parties; `organization` empty on the 3 Organization parties) | (c) | Same vehicle and the same checksum consequence; identical in the fallback package, so it is not a regression of this round | **1)** Amend the seed payloads of whichever artifact is to ship and run the full Phase 2 gate on the amended bytes. **2)** Ship the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — unverified, never previewed or committed on any instance — and keep the post-commit `seed_demo_data.js` step, which creates the linkage. The **retained rebuild** `90ee0249…` carries the same seed payloads and still owes its own Phase-2 S1–S6 run, so it is not a verified alternative |
+| 4 | Pre-existing documentation defect left in place: the retired host `dev379024`, **measured, not estimated**. **26** occurrences across the six documents this review covers — `cat README.md docs/deployment.md docs/validation-gates.md scripts/round_trip_verify.md docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md \| grep -o dev379024 \| wc -l`, run from `servicenow-case-management-poc/`. **33** across every tracked file under `servicenow-case-management-poc/` **excluding this run's own reports in `docs/refine-run/`**, and **33** in that same scope at the pre-refine baseline `c1b8d239` — so the operator-facing documentation has gained no new citation. **44** across every tracked file **including** `docs/refine-run/` (`git ls-files servicenow-case-management-poc -z \| xargs -0 grep -o dev379024 \| wc -l`) as measured at commit `7d144e9f5d`, before this remediation pass; that scope is self-referential — it rises whenever these reports quote the host name — so it is dated rather than treated as standing. **31** across the environment handover's own six-document set. An earlier draft said "16 occurrences": **not reproducible under any of these scopes, and withdrawn.** It also listed a stale README file count, **also withdrawn** — README line 69's 234-file census is correct | (b) | Unambiguous, but outside this pass: the documentation mandate for this step is limited to statements **this run** falsified, so sweeping them up here would exceed it | Schedule a separate documentation pass to replace `dev379024` with `dev306625` and drop the hardcoded scope `sys_id` in favour of a query, then re-measure in the scope each command above names. **No file re-count is needed** — both `git ls-files servicenow-case-management-poc \| wc -l` and `find servicenow-case-management-poc -type f \| wc -l` return **234**, exactly the census README line 69 states |
 | 5 | "Case Count by Status" donut renders no legend or data labels | (c) cosmetic | Pre-existing, asserted by no test, and a presentation judgment rather than a defect with one correct answer | Leave as is, or add data labels/legend in a later cosmetic pass |
 
 ## Documentation-accuracy pass
@@ -704,7 +806,14 @@ statement families were false and are now corrected:
 4. **That "no preview has been run on the shipping bytes", that Gate 7 is therefore a conditional
    pass, and that nothing has been re-measured because the verification instance is hibernating** —
    the package's **988 payload records** were previewed to zero problems of any type and committed on
-   a live, newly provisioned PDI on 2026-09-02, in export 3's byte sequence (`eee9fabd…`). Those
+   2026-09-02, in export 3's byte sequence (`eee9fabd…`), on the **existing `dev306625` PDI after the
+   targeted clean-state operation** — not on a newly provisioned instance. That PDI already held this
+   application installed, committed and seeded (INTERP-2); the clean target came from the authorized targeted
+   deletion of the 3 `sys_db_object`, 25 `sys_dictionary` and 3 `sys_user_has_role` rows (31 records), with the
+   scope, application record, three roles and seven flows preserved, and clean state confirmed at
+   `2026-09-02T19:22:09Z`: three tables at `HTTP 400 Invalid table`, `sys_dictionary` 0,
+   `sys_security_acl_role` 0, `sys_user_has_role` 0, `sys_number` 0 (part (b) above; `run-state.json`
+   `phase1.instance_clean_state`). Those
    corrections were written while the deliverable *was* that byte sequence. The block order was
    re-sequenced afterwards by the post-review CR1 pass, so those bytes (`90ee0249…`, now retained)
    have themselves not been previewed or committed anywhere; and the fallback then elected onto the
@@ -718,13 +827,19 @@ statement families were false and are now corrected:
 | `docs/deployment.md` | The "bytes that ship … NO preview has been run" callout; Step 3's "a commit alone does not reach it / the two shortfalls need the manual remediation" note |
 | `docs/validation-gates.md` | The shipping-bytes "no preview" bullet; the **Data model**, **ACLs** and **Update Set** gate verdicts; the 4-pass/3-qualified net count; the round-trip status bullet ("not even steps 1-4 have been run"); the hibernation "nothing re-measured" note |
 | `docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` | The header summary ("upload → preview → commit does not give you a working application", Defects C and 9 "require manual steps every time", "a second commit is required"); the deliverable size/block figures; §5's "REQUIRED, not optional" preamble; the "steps 4 and 6 are the same command run twice" note |
-| `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` | §0.1 package identity (with the clean-slate preview/commit row it closes); the two runtime-status rows for the schema and the ACL matrix; the **Defect 9** section verdict; §9.5's residual-manual-footprint preamble; the package-alone census row; §10.0's "item 1a is outstanding"; the §0 hibernation "nothing re-measured" note |
+| `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` | §0.1 package identity (with the clean-slate preview/commit row it closes); the two runtime-status rows for the schema and the ACL matrix; the **Defect 9** section verdict; §9.5's residual-manual-footprint preamble; the package-alone census row; §10.0's "item 1a is outstanding"; the **§0 preamble's** hibernation "nothing re-measured" note. **Correction scope, stated precisely (2026-09-03):** that last entry covered the **§0 preamble only**. **§0.11** — the section headed by the hibernation claim itself — and **§10.0's active item 0** still said that nothing in the register had been re-measured since 2026-08-11 and that every revalidation waited on waking `dev379024`, which the 2026-09-02 run on `dev306625` had already falsified. Both were reconciled in the CR3 resolution pass: §0.11 is now dated historical outage context that states what the September run re-measured (the §9.7 harness at 13 / 13; the ATF suite as `TES0001002`, 14 / 6) and what is still open on its own merits (§10.0 item 1a's clean-target requirement; item 2's serialized re-load; §3.4's on-form observation, blocked by the choice rows rather than by any outage), and item 0 is marked superseded, retaining only the two `dev379024`-only questions that gate nothing |
 | `scripts/round_trip_verify.md` | Phase 4's "mandatory" framing in the phase list **and** at the section heading; the "assert the child count is exactly 926" instruction; the standing-result paragraph; criterion 4's "after two remediation runs separated by a second commit"; the hibernation "cannot be executed at all" warning |
 
-Everything else was left alone deliberately — including the retired-host `dev379024` references and
-README's stale file count (reported above as human decision item 4), and every statement that remains
-true: `sys_choice` 0 for the three tables, the post-commit `seed_demo_data.js` step for the seed
-linkage, and `opened_date` on 8 of 10 cases. One example named in the refinement brief — the claim
+Everything else was left alone deliberately — including the retired-host `dev379024` references
+(**26** occurrences across the six documents this review covers, and **33** across every tracked file
+under `servicenow-case-management-poc/` outside this run's own reports — the same 33 as at the
+pre-refine baseline, so nothing was added; commands, scopes and dates in human decision item 4), and
+every statement that remains true: `sys_choice` 0 for the three tables, the post-commit
+`seed_demo_data.js` step for the seed linkage, and `opened_date` on 8 of 10 cases. **README's file
+count is not on this list, because it is not a defect:** both
+`git ls-files servicenow-case-management-poc | wc -l` and
+`find servicenow-case-management-poc -type f | wc -l` return **234**, exactly the census README line
+69 states, so the earlier "stale file count" item is withdrawn rather than deferred. One example named in the refinement brief — the claim
 that a from-scratch first commit "legitimately ends Failed at 100% with 22 errors" — appears in the
 run's environment handover but **nowhere in the repository documentation**, so it had nothing to
 correct here; the related "second commit" claim, which is in the documentation, was corrected as item
