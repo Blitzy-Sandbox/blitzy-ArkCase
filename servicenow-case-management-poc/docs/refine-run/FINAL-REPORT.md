@@ -25,14 +25,32 @@ hashes recomputed on disk, instance state re-queried by REST, screenshot paths r
 
 | Phase | Exit condition | Verdict | Confirmed (UTC) | Entered only after the prior confirmation? |
 | --- | --- | --- | --- | --- |
-| **0** — establish a live instance | Live, authenticated, non-hibernating session confirmed by content, with heartbeat running | **MET** | `2026-09-02T17:52:29Z` | first phase |
-| **1** — native creation for tables and role links **[HARD GATE]** | Import (S0), scratch validation (S1–S2), native rebuild (S3–S4), count check (S4a) confirmed; master set Complete with the full package and the swap applied; instance clean | **MET** | `2026-09-02T19:22:09Z` | yes — Phase 1's first write (the S0 upload) was `17:55:18Z`, after Phase 0's `17:52:29Z` |
+| **0** — establish a live instance | Live, authenticated, non-hibernating session confirmed by content, with heartbeat running | **MET — with a recorded mechanism deviation, not full directive compliance** | `2026-09-02T17:52:29Z` | first phase |
+| **1** — native creation for tables and role links **[HARD GATE]** | Import (S0), scratch validation (S1–S2), native rebuild (S3–S4), count check (S4a) confirmed; master set Complete with the full package and the swap applied; instance clean; **and every one of those created by the mandated native mechanism** | **PARTIALLY MET — NOT MET for the role-link and grant half** | `2026-09-02T19:22:09Z` (the value Phase 2 read; qualified by the CR2 pass) | yes — Phase 1's first write (the S0 upload) was `17:55:18Z`, after Phase 0's `17:52:29Z` |
 | **2** — verify the final package **[HARD GATE]** | Preview and commit both clean on this checksum, against a genuinely clean instance, storage and role links confirmed after | **MET** | `2026-09-02T20:53:14Z` | yes — Phase 2 read `phase1.exit_condition = met` at `19:47:16Z` and took its first action at `19:53:13Z` |
 | **3** — ATF suite **[NON-BLOCKING]** | Full suite executed with every result captured and classified; 100% pass **not** required | **MET** | `2026-09-02T22:10:59Z` | yes — Phase 3 read `phase2.exit_condition = met` (`20:53:14Z`) and ran its single test at `21:20:29Z` |
 
-No phase's exit condition was unmet, so the run did not stop early and nothing blocked it. Both hard
-gates were cleared on the route the PR explicitly permits — "first attempt, or fixed-and-re-verified"
-— with the fix attempts itemized in part (c) and counted against the two-attempt cap.
+**Two exit conditions are qualified, and this table states them as qualified rather than clear.**
+Nothing blocked the run at the time and it did not stop early — every requirement each phase measured
+was measured and reported — but two mechanism-selection deviations mean two of these verdicts are not
+full directive compliance, and the CR2 remediation pass corrected the record accordingly:
+
+- **Phase 1's hard gate is PARTIALLY MET.** Its native-creation requirement is met for the
+  table/dictionary half (3 `sys_db_object` + 27 `sys_dictionary` Table-API creations, all HTTP 201,
+  platform-written and platform-captured) and **NOT MET for the role-link and grant half**: the 27
+  `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by direct
+  server-side insert instead of the platform's native role-assignment action (D2 lines 5–10, D21
+  lines 124–128, INTERP-1). [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.4 and §4 carry what would
+  clear it and why it could not be cleared here — the clean dedicated PDI it needs would have to be
+  provisioned, and provisioning or re-requesting an instance is prohibited.
+- **Phase 0's exit condition is met with a recorded deviation.** A heartbeat *was* running, which is
+  what the condition literally required, but on the API variant where directive lines 76–84 required
+  the browser/UI variant outside the commit-page exception — so it is not full compliance. Observed
+  impact: none (0 hibernation events, 0 recovery cycles, both variants read-only).
+
+Phase 2's and Phase 3's exit conditions are unqualified. Both hard gates were attempted on the route
+the PR explicitly permits — "first attempt, or fixed-and-re-verified" — with the fix attempts
+itemized in part (c) and counted against the two-attempt cap.
 
 **One obligation is outstanding, it arose after the run, and the frozen directive settled what ships
 in spite of it.** Phase 2 cleared its gate on export 3's byte sequence,
@@ -296,7 +314,11 @@ exist; only the third is the deliverable.
   residue of this run's own authorized deletions, not the package payloads.
 
 **S4 — commit, by UI action only.** The commit was performed by clicking **"Commit Update Set"** in
-a rendered browser session, never by PATCHing state or calling the commit AJAX processor. The resume
+a rendered browser session, never by PATCHing state and never by an operator-issued call to the commit
+AJAX processor out of band. (The button's own client script calls
+`com.glide.update.UpdateSetCommitAjaxProcessor` from the record form — the platform's internal
+implementation of the action, evidenced by the page-origin `x_referer` on the three captured requests
+under "Who drove it" — which is the required path, not the prohibited one.) The resume
 check ran first (state `previewed`, no commit worker for this set, tables still HTTP 400, no prior
 commit of this set), so it was clicked **exactly once**. No confirmation dialog appeared. Result
 text: **"Update Set Commit / Succeeded 100% / Update set committed — Succeeded in 50 Seconds"**,
@@ -305,11 +327,25 @@ text: **"Update Set Commit / Succeeded 100% / Update set committed — Succeeded
 children with a disposition; zero console errors and zero non-2xx network requests on the record
 page.
 
-**Who drove it.** The rendered session was driven by a `run_chrome_task` browser task whose
-**orchestrator-side task/session identifier was not captured at execution time and is not
-recoverable** — `syslog_transaction.session_id` is empty on Zurich Patch 10, `blitzy/screenshots/` is
-flat with no per-run identifier, and subagent reports are not persisted. No identifier is invented in
-its place. The recoverable, non-secret platform-side chain is: interactive UI **login** form
+**Who drove it.** The rendered session was driven by a `run_chrome_task` browser task whose non-secret
+orchestrator-side run/session identifier is **`chrome-9deceaadbd00`** — the task's own per-run
+artifact directory, `/tmp/blitzy/chrome/artifacts/chrome-9deceaadbd00`. It was **not** captured at
+execution time; the CR2 remediation pass recovered it, and the attribution is by artifact **content**:
+of the 41 per-run directories there, that one alone holds artifacts naming this retrieved update set —
+three captured requests (`sn_commit_uiaction_req392/393/394.network-request`) all carrying
+`sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d`, running the platform's own
+`validateCommitRemoteUpdateSet` then `commitRemoteUpdateSet` with `sysparm_skip_app_installs=` empty,
+and every one of them stamped
+`x_referer=sys_remote_update_set.do%3Fsys_id%3D0b3b7452934f435009aa70d19dba100d`. That referrer is the
+point: the requests came **from the rendered record page**, which is precisely what the native "Commit
+Update Set" action does on your behalf — the prohibition is on an operator building that processor call
+out of band, and no such call was made here. `sn_commit_result_snapshot.txt` (`20:38:13Z`) is the
+accessibility snapshot of the same rendered record page, seconds before the post-commit reload below.
+**Standing requirement:** nothing ties a browser task to its identifier in-session —
+`syslog_transaction.session_id` is empty on Zurich Patch 10, `blitzy/screenshots/` is flat, and
+subagent reports are not persisted — so a future run must capture the identifier **at execution time**
+rather than leaving it to be reconstructed. No identifier was ever invented in its place.
+The platform-side chain is: interactive UI **login** form
 transaction `a8cc785a930f435009aa70d19dba1004` @ `20:32:27Z` → rendered **record-page** form
 transaction `f20df49e930f435009aa70d19dba100a` @ `20:33:44Z` for
 `/sys_remote_update_set.do?sys_id=0b3b7452934f435009aa70d19dba100d` → **commit progress worker**

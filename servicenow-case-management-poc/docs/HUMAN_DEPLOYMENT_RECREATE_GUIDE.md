@@ -335,7 +335,10 @@ AJAX processor this procedure authorizes — with a `POST /xmlhttp.do` carrying
 **Commit must be performed through the native "Commit Update Set" UI action in a rendered browser session
 (Section 4.1 step 4), exactly once, after the pre-click checks recorded there.** Do **not** call
 `UpdateSetCommitAjax` / `com.glide.update.UpdateSetCommitAjaxProcessor`, do not `PATCH` `state`, and do not
-launch a commit from a background script. An earlier revision of this section offered the background-AJAX
+launch a commit from a background script. What is prohibited is **you** issuing that call out of band;
+the UI action's own client script calls the same processor from the record form (every request stamped with an
+`x_referer` of `sys_remote_update_set.do?sys_id=…`), which is how the platform implements the button, so seeing
+it in the network log while clicking is expected and is not a violation. An earlier revision of this section offered the background-AJAX
 commit as an equal alternative; that path was rejected and never used, and it is **superseded** by the UI-only
 action. The successful 2026-09-02 commit was performed by the UI action and encountered no confirmation
 dialog; if one appears for you, stop and escalate rather than clicking through it.

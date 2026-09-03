@@ -179,7 +179,24 @@ soon as the page is no longer needed, recording both transitions.
 
 > Live, authenticated, non-hibernating session confirmed by content, with heartbeat running.
 
-**MET at 2026-09-02T17:52:29Z (UTC).**
+**MET at 2026-09-02T17:52:29Z (UTC) — with the mechanism deviation of §2.4 recorded against it,
+so this is not full directive compliance.** The condition as written was satisfied literally: the
+session was live, authenticated and non-hibernating, confirmed by content, and a heartbeat *was*
+running. But it ran on the **API variant** where directive lines 76–84 required the **browser/UI**
+variant outside the Retrieved-Update-Set / commit-page exception, so the phase is recorded as met
+**with a deviation**, never as compliant. Observed impact: none — 0 hibernation events and 0
+recovery cycles for the whole run, and both variants are read-only.
+
+**This deviation is not resolved for the original run, and cannot be.** Closing it in the sense the
+directive means would require re-executing Phases 0–3 on a permissible target with browser `home.do`
+beats outside Commit, the read-only `GET sys_user` beat only while the Retrieved Update Set record or
+commit-result page had to stay open, and both transitions recorded around the Commit interval. That
+re-execution is barred: the single provisioned instance is protected by the environment directive and
+already holds the committed application, and provisioning or re-requesting a clean one is prohibited
+("never release/re-request a new instance"). The browser-context heartbeat executed in the CR2
+remediation pass (§2.4(e)) demonstrates the mandated mechanism and corrects the selection going
+forward; it performed no commit, so it records no browser→API→browser transition pair and it does
+**not** retroactively replace the mechanism used through Phases 0–3.
 
 ---
 

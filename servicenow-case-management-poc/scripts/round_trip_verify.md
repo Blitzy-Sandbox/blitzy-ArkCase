@@ -184,6 +184,15 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 > silently reverted), and the browser UI action is the path the successful 2026-09-02 commit used. Because a
 > commit cannot be repeated safely, run the three pre-click checks below
 > **before** you click, and click **once**.
+>
+> **What the prohibition means, exactly.** It forbids **you** issuing that call — a hand-built
+> `/xmlhttp.do` POST from a shell or a background script, with no rendered session, no pre-click
+> checks and nothing watching for a dialog. The button's own client script calls
+> `com.glide.update.UpdateSetCommitAjaxProcessor` from the record form, which is simply how the
+> platform implements the action: if you watch the network log while clicking it you will see
+> `validateCommitRemoteUpdateSet` then `commitRemoteUpdateSet`, each stamped with an `x_referer` of
+> `sys_remote_update_set.do?sys_id=…`. That page-origin referrer is the difference between the
+> required path and the prohibited one, and seeing those requests is not a violation.
 
 - [ ] **Pre-click check 1 — the set is previewed and clean.** On the Retrieved Update Set record confirm
       `state = previewed` and that Phase 2's `type=error` count is still zero. Anything else (`loaded`,
@@ -479,7 +488,9 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 - **Commit must be performed through the native "Commit Update Set" UI action in a rendered browser session**,
   exactly once, after Phase 3's pre-click checks. The same `PATCH`-is-reverted fact applies to commit, but the
   remedy is **not** a script: do not call `com.glide.update.UpdateSetCommitAjaxProcessor` (or any other commit
-  processor) over `/xmlhttp.do`. An earlier revision of this list said the AJAX processor worked and that "no
+  processor) over `/xmlhttp.do`. That bars an **operator-issued** call: the UI action's own client
+  script calls that same processor from the record form (page-origin `x_referer`), which is how the platform
+  implements the button and is the required path. An earlier revision of this list said the AJAX processor worked and that "no
   browser is required for either" — that path was rejected and never used, and it is **superseded** by the
   UI-only procedure in Phase 3. The successful 2026-09-02 commit was performed by the browser UI action; an
   earlier pass did drive a commit through the AJAX contract, and that is history rather than an authorized

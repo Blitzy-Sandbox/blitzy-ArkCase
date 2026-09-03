@@ -10,7 +10,10 @@
   "source_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7"
  },
  "phase0": {
-  "exit_condition": "met",
+  "exit_condition": "met_with_recorded_deviation",
+  "exit_condition_qualification": "the condition as written was satisfied literally - live, authenticated, non-hibernating session confirmed by content, with A heartbeat running - but it ran on the API variant where directive lines 76-84 required the browser/UI variant outside the Retrieved-Update-Set / commit-page exception. Recorded as met WITH a deviation, never as full directive compliance. See phase0.heartbeat.deviation and PHASE0-1.md section 2.5.",
+  "exit_condition_deviation_resolved": false,
+  "exit_condition_deviation_why_unresolvable": "closing it would require re-executing phases 0-3 on a permissible target with browser home.do beats outside Commit, the read-only GET sys_user beat only while the Retrieved Update Set record or commit-result page had to stay open, and both transitions recorded around the Commit interval. That re-execution is barred: the single provisioned instance is protected by the environment directive and already holds the committed application, and provisioning or re-requesting a clean one is prohibited. The CR2 browser-context heartbeat demonstrates the mandated mechanism and corrects the selection going forward; it performed no commit, records no browser-to-API-to-browser transition pair, and does not retroactively replace the mechanism used through phases 0-3.",
   "exit_timestamp_utc": "2026-09-02T17:52:29Z",
   "hibernating_at_start": false,
   "wake_performed": false,
@@ -429,8 +432,17 @@
     "child_count": 988
    }
   },
-  "exit_condition": "met",
+  "exit_condition": "partially_met",
+  "exit_condition_recorded_at_the_time": "met - the value phase 2 read at 2026-09-02T19:47:16Z when it took its entry gate; the qualification below is the CR2 correction, not a re-narration of what phase 2 saw",
   "exit_condition_timestamp_utc": "2026-09-02T19:22:09Z",
+  "hard_gate_native_creation": {
+   "tables_and_dictionary_half": "MET - 3 POST /api/now/table/sys_db_object and 27 POST /api/now/table/sys_dictionary, all HTTP 201, every row platform-written and platform-captured",
+   "role_link_and_grant_half": "NOT MET - the 27 sys_security_acl_role links and the 3 sys_user_has_role grants were created by direct server-side insert, not by the platform native role-assignment action required by D2 lines 5-10, D21 lines 124-128 and INTERP-1. See phase1.native_role_assignment_action_deviation and PHASE1-REBUILD.md sections 2.4, 4 and 5 item 9.",
+   "gate_verdict": "PARTIALLY MET - this record does not claim the phase 1 hard gate was cleared in full",
+   "what_would_clear_it": "create all 27 links and all 3 grants through the actual native role-assignment action on a genuinely clean dedicated PDI with the master Local Update Set current, reconcile the 27/3 counts and the manager 14 / agent 10 / viewer 3 split, then re-run phase 2 S1-S6 on the resulting exact bytes",
+   "why_it_was_not_cleared_in_the_cr2_remediation_pass": "a clean dedicated target would have to be PROVISIONED, and provisioning or re-requesting an instance is prohibited by the environment directive, which also protects the single instance that exists; the five further instance-specific reasons are in phase1.native_role_assignment_action_deviation.not_performed_in_the_cr2_remediation_pass_because",
+   "elected_fallback_note": "the elected fallback remains authorized under OVERRIDE-2 and is not a defect; electing it does not make this gate met"
+  },
   "mechanism_notes": [
    "INTERP-3: the master set was realized as the Local Update Set 1109981a930b435009aa70d19dba1098. A background script re-pointed all 926 sys_update_xml children from remote_update_set=b4861cf7... onto update_set=1109981a... and cleared remote_update_set (moved=926 failed=0); record identity preserved, setWorkflow(false)+autoSysFields(false); the sys_remote_update_set record itself was never modified and stays state=loaded.",
    "Every destructive step ran with the ABSORBER set current and every creative step with the shipping set current, switched by the platform GlideUpdateSet().set() inside the same script. Reason: an update-set capture is keyed by update name, so a captured DELETE would overwrite the same-named INSERT_OR_UPDATE payload row inside the shipping set.",
@@ -548,7 +560,7 @@
  "phase2": {
   "unit": "U3",
   "entry_gate": {
-   "phase1_exit_condition": "met",
+   "phase1_exit_condition": "met - as recorded at the time phase 2 read it (2026-09-02T19:47:16Z); phase1.exit_condition is now recorded as partially_met because the phase 1 hard gate stands NOT MET for the native role-assignment half (phase1.hard_gate_native_creation)",
    "checked_at_utc": "2026-09-02T19:47:16Z"
   },
   "clean_confirmed": {
@@ -700,13 +712,19 @@
    "mechanism": "ui_action",
    "driver": {
     "kind": "run_chrome_task rendered browser session",
-    "task_id": null,
-    "task_id_status": "not captured at execution time and NOT RECOVERABLE - no identifier is asserted in its place",
-    "task_id_unrecoverable_because": [
-     "syslog_transaction.session_id is empty on this release (Zurich Patch 10)",
-     "blitzy/screenshots/ is a flat directory with no per-run identifier",
-     "subagent reports are not persisted to disk"
+    "task_id": "chrome-9deceaadbd00",
+    "task_id_source": "/tmp/blitzy/chrome/artifacts/chrome-9deceaadbd00 - the browser task own per-run artifact directory; the directory name is the non-secret run/session identifier",
+    "task_id_status": "NOT captured at execution time; RECOVERED afterwards in the CR2 remediation pass. No identifier was ever invented in its place.",
+    "task_id_attribution_basis": "artifact CONTENT, not timestamp guesswork: of the 41 per-run directories under /tmp/blitzy/chrome/artifacts, chrome-9deceaadbd00 is the only one whose contents name retrieved update set 0b3b7452934f435009aa70d19dba100d, and the only one created inside the commit window",
+    "task_id_corroborating_artifacts": [
+     "chrome-9deceaadbd00/sn_commit_uiaction_req392.network-request - sysparm_type=validateCommitRemoteUpdateSet, sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d",
+     "chrome-9deceaadbd00/sn_commit_uiaction_req393.network-request - same processor and same set",
+     "chrome-9deceaadbd00/sn_commit_uiaction_req394.network-request - sysparm_type=commitRemoteUpdateSet, same set, sysparm_skip_app_installs= EMPTY (nothing skipped)",
+     "/tmp/blitzy/chrome/artifacts/sn_commit_result_snapshot.txt written 2026-09-02T20:38:13Z - accessibility snapshot of the rendered page sys_remote_update_set.do?sys_id=0b3b7452934f435009aa70d19dba100d titled 'x_casemgmt_case_management v1.0.0 (native rebuild) | Retrieved Update Set | ServiceNow'"
     ],
+    "how_to_read_those_artifacts": "they CONFIRM the native UI action rather than contradicting the ui_action mechanism recorded above. All three captured requests carry x_referer=sys_remote_update_set.do%3Fsys_id%3D0b3b7452934f435009aa70d19dba100d, i.e. they were issued BY the rendered Retrieved Update Set record page - which is what the platform native Commit Update Set action does: its client script calls com.glide.update.UpdateSetCommitAjaxProcessor from the form. What is prohibited, and what did not happen here, is an OPERATOR building that processor call out of band (a hand-made /xmlhttp.do POST with no rendered session, no pre-click checks and no dialog handling).",
+    "in_session_identifier_capture": "not available on this platform: syslog_transaction.session_id is empty on this release (Zurich Patch 10), blitzy/screenshots/ is a flat directory with no per-run identifier, and subagent reports are not persisted to disk - which is why the identifier had to be reconstructed from artifacts",
+    "identifier_capture_requirement_for_future_runs": "a future run MUST record the run_chrome_task run/session identifier at execution time, alongside the screenshots it produces, rather than leaving it to be reconstructed",
     "platform_side_identity_chain": [
      {
       "step": 1,
@@ -1521,7 +1539,7 @@
     "timestamp_utc": "2026-09-02T20:53:14Z",
     "condition": "preview and commit both clean on this checksum against a genuinely clean instance, with storage and role links confirmed after",
     "entered_after_prior_confirmation": true,
-    "evidence": "phase1.exit_condition read as met at 2026-09-02T19:47:16Z; first action (clean re-confirm) 19:53:13Z"
+    "evidence": "phase1.exit_condition read as met at 2026-09-02T19:47:16Z (the value recorded at that time); first action (clean re-confirm) 19:53:13Z. That value is now qualified to partially_met - see phase1.hard_gate_native_creation - which does not change what phase 2 read or when"
    },
    "phase3": {
     "verdict": "met",

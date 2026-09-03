@@ -714,9 +714,29 @@ the serializer asserts element-by-element that no text or CDATA content changed.
 | Master set is Complete and contains the full package with the swap applied | **met** | `state=complete`, 988 children, all 39 baseline classes outside the five swap classes at their baseline counts (41 of the 44 classes numerically unchanged, §2.7) |
 | Instance is clean | **met** | §2.9: HTTP 400 "Invalid table" ×3, zero dictionary rows, zero links, zero grants |
 | Single-test result reported before the full-package result | **met** | §1 precedes §2 |
+| **Native creation by the mandated mechanism — tables and dictionary half** | **met** | §2.5–§2.6: 3 × `POST /api/now/table/sys_db_object` and 27 × `POST /api/now/table/sys_dictionary`, all HTTP 201, every row platform-written and platform-captured |
+| **Native creation by the mandated mechanism — role-link and grant half (D2 lines 5–10, D21 lines 124–128, INTERP-1)** | **NOT MET** | §2.4 deviation block and §5 item 9: the 27 `sys_security_acl_role` links and the 3 `sys_user_has_role` grants were created by **direct server-side insert**, not by the platform's native role-assignment action. The records are correct and in scope, but their provenance is not platform-attested |
 
-**VERDICT: EXIT CONDITION MET — 2026-09-02T19:22:09Z (UTC).** Phase 2 (U3) may proceed;
-the fallback package was not invoked.
+**VERDICT: EXIT CONDITION PARTIALLY MET — 2026-09-02T19:22:09Z (UTC).** Every requirement
+above is met **except the role-link and grant half of the native-creation requirement, which
+is NOT MET**. Phase 1 is a **HARD GATE**, and this record does not claim it was cleared in
+full: it was cleared for the table/dictionary half and for every other requirement, and it
+stands **unmet for the mechanism D2/D21/INTERP-1 named for the 30 security-assignment
+records**. Phase 2 (U3) proceeded on the exit condition **as it was recorded at the time**,
+which read `met`; the qualification here is the correction, not a re-narration of what Phase 2
+saw. The fallback package was not invoked at this point (it was elected later — see §7).
+
+**What would clear it, and why it was not cleared here.** The gate closes only when all 27
+links and all 3 grants are created through the actual native role-assignment action, on a
+**genuinely clean, dedicated PDI**, with the master Local Update Set current, the 27/3 counts
+and the manager 14 / agent 10 / viewer 3 split reconciled, and Phase 2 S1–S6 re-run on the
+resulting exact bytes. That could not be performed in this run or in the CR2 remediation pass
+that added this qualification: a clean dedicated target would have to be **provisioned**, and
+provisioning or re-requesting an instance is prohibited by the environment directive, which
+also protects the one instance that exists (the wake procedure's "never release/re-request a
+new instance"). The five further reasons specific to the current instance are enumerated in
+§2.4. The elected fallback remains authorized under OVERRIDE-2 and is not a defect; electing
+it does not make this gate met.
 
 ---
 

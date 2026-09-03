@@ -2420,8 +2420,12 @@ Before committing, the platform's own predicate was checked: `state=previewed`, 
 > retrieved-set record in a rendered browser session, exactly once, after confirming `state=previewed`, that
 > the set is not already committed, and that no commit progress worker is already running for it — with any
 > unexpected confirmation dialog treated as a hard stop for human review rather than clicked through. The
-> direct commit processor is **not** an authorized path: the 2026-09-02 commit did not use it, and the earlier
-> pass in §9.10 that did drive a commit through that contract is history rather than procedure. §0.3b item 2
+> direct commit processor is **not** an authorized path **for an operator to invoke**: the 2026-09-02 commit
+> issued no such out-of-band call, and the earlier pass in §9.10 that did drive a commit through that contract is
+> history rather than procedure. The action's own client script does call that processor from the record form —
+> the 2026-09-02 browser task's captured requests show `validateCommitRemoteUpdateSet` then
+> `commitRemoteUpdateSet`, each with an `x_referer` of `sys_remote_update_set.do?sys_id=…` — which is how the
+> platform implements the button, and is the required path rather than the prohibited one. §0.3b item 2
 > is the current authoritative statement (*"commit must be launched from the browser UI action"*), and the
 > operator procedures are [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md) Phase 3 and
 > [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §4.1 step 4.

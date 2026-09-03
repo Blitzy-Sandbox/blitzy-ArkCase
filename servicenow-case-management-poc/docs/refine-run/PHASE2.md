@@ -13,8 +13,15 @@ query at the time it was used (`sys_scope?scope=x_casemgmt`, `sys_update_set?nam
 as inputs. No credential, cookie or `sysparm_ck` value appears in this file or in any committed
 artifact.
 
-**Entry gate (D1).** `run-state.json` `phase1.exit_condition = "met"` (2026-09-02T19:22:09Z), so
-Phase 2 was entered. Instance liveness was confirmed **by content** (a JSON body, not the
+**Entry gate (D1).** `run-state.json` `phase1.exit_condition` read **`"met"`** when Phase 2 took its
+entry gate at `19:47:16Z` (the value recorded at `2026-09-02T19:22:09Z`), so Phase 2 was entered.
+That value is now recorded as **`"partially_met"`**: the CR2 remediation pass qualified Phase 1's
+hard gate as **NOT MET for the native role-assignment half** — the 27 `sys_security_acl_role` links
+and the 3 `sys_user_has_role` grants came from a direct server-side insert rather than the platform's
+native assignment action (`PHASE1-REBUILD.md` §2.4 and §4, `phase1.hard_gate_native_creation`). The
+qualification is a correction to the record, not a re-narration of what Phase 2 read or when: Phase 2
+entered on the value as it then stood, and nothing about Phase 2's own measurements changes.
+Instance liveness was confirmed **by content** (a JSON body, not the
 hibernation HTML splash) and a read-only API heartbeat (`GET /api/now/table/sys_user?sysparm_limit=1`,
 10-minute interval) ran for the whole phase. **Hibernation events: 0; recovery cycles used: 0 of 3.**
 
@@ -258,8 +265,11 @@ problems of any type.
 `9929f50df18ccec91ea13b2a3bccfc90`; and the three target tables still answered HTTP 400. The commit
 had therefore not run, and it was performed **exactly once**. `committed_twice = false`.
 
-**Mechanism: the native "Commit Update Set" UI action in a rendered browser session** — no API, no
-AJAX processor call, no `PATCH` of `state` by this unit. In that session: login through
+**Mechanism: the native "Commit Update Set" UI action in a rendered browser session** — no API call,
+no out-of-band AJAX processor call and no `PATCH` of `state` **by this unit**. (The action's own client
+script does call `com.glide.update.UpdateSetCommitAjaxProcessor` from the record form — that is the
+platform's internal implementation of the button, evidenced below by the page-origin `x_referer` on
+the three captured requests, and it is not the operator-issued call the directive prohibits.) In that session: login through
 `/login.do` with credentials read from the environment at run time (never a literal, password field
 masked throughout), user menu confirmed **"System Administrator"**, then
 `/sys_remote_update_set.do?sys_id=0b3b7452934f435009aa70d19dba100d`, where Name read
@@ -274,13 +284,49 @@ its `validateCommitRemoteUpdateSet` call raised no unresolved-problem confirmati
 kicked off by the page's own client script (`commitRemoteUpdateSet`, `sysparm_skip_app_installs`
 empty → app installs not skipped).
 
-**Driver identity — what is recoverable and what is not.** The rendered session was driven by a
-`run_chrome_task` browser task. **Its orchestrator-side task/session identifier was not captured at
-execution time and is not recoverable**, for three reasons established while attempting to recover
-it: `syslog_transaction.session_id` is empty on this release (Zurich Patch 10), `blitzy/screenshots/`
-is a flat directory carrying no per-run identifier, and subagent reports are not persisted to disk.
-No identifier is asserted here in its place. What **is** recoverable is the platform-side identity
-chain the driver left behind — non-secret, read from `syslog_transaction` and `sys_progress_worker`:
+**Driver identity — the browser task that drove the commit.** The rendered session was driven by a
+`run_chrome_task` browser task whose non-secret orchestrator-side run/session identifier is
+
+> **`chrome-9deceaadbd00`**
+
+— the task's own per-run artifact directory, `/tmp/blitzy/chrome/artifacts/chrome-9deceaadbd00`. It
+was **not** recorded at execution time; it was recovered afterwards, in the CR2 remediation pass, and
+the attribution is by **artifact content, not by timestamp guesswork**: of the 41 per-run directories
+under `/tmp/blitzy/chrome/artifacts`, `chrome-9deceaadbd00` is the only one whose contents name this
+retrieved update set, and it is also the only one created inside the commit window. It holds exactly
+three captured network-request artifacts, all three carrying
+`sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d`:
+
+| Artifact | `sysparm_type` | What it shows |
+| --- | --- | --- |
+| `sn_commit_uiaction_req392.network-request` | `validateCommitRemoteUpdateSet` | the platform's own pre-commit validation, run before the commit itself |
+| `sn_commit_uiaction_req393.network-request` | (same processor, same set) | the second of the three requests the action issued |
+| `sn_commit_uiaction_req394.network-request` | `commitRemoteUpdateSet` | the commit itself, with `sysparm_skip_app_installs=` **empty** — nothing was skipped |
+
+**Read these artifacts correctly — they confirm the UI action rather than contradicting it.** All
+three carry `x_referer=sys_remote_update_set.do%3Fsys_id%3D0b3b7452934f435009aa70d19dba100d`, i.e.
+they were issued **by the rendered Retrieved Update Set record page**. That is what the platform's
+native "Commit Update Set" action *is*: its client script calls
+`com.glide.update.UpdateSetCommitAjaxProcessor` for you, from the form. The prohibition this record
+asserts is on the **operator** driving that processor out of band — a hand-built `/xmlhttp.do` POST
+with no rendered session, no pre-click checks and no dialog handling — and that did not happen: no
+such call was made by this unit, and the page-origin referrer on all three requests is the evidence.
+A fourth artifact corroborates the same session from the other side:
+`/tmp/blitzy/chrome/artifacts/sn_commit_result_snapshot.txt`, written `2026-09-02T20:38:13Z`, is the
+accessibility snapshot of the rendered page at
+`https://dev306625.service-now.com/sys_remote_update_set.do?sys_id=0b3b7452934f435009aa70d19dba100d`,
+titled "x_casemgmt_case_management v1.0.0 (native rebuild) | Retrieved Update Set | ServiceNow" —
+seconds before the post-commit reload transaction at `20:38:32Z` in the chain below.
+
+**What is still not recoverable, and the standing requirement.** No in-session record ties a browser
+task to its identifier at the moment it runs: `syslog_transaction.session_id` is empty on this release
+(Zurich Patch 10), `blitzy/screenshots/` is a flat directory with no per-run identifier, and subagent
+reports are not persisted to disk — so the identifier above was reconstructed from artifacts rather
+than read from the run. **Any future run must capture the `run_chrome_task` run/session identifier at
+execution time**, alongside the screenshots it produces, instead of leaving it to be reconstructed.
+
+Alongside it, the platform-side identity chain the driver left behind — non-secret, read from
+`syslog_transaction` and `sys_progress_worker`:
 
 | # | Platform record | sys_id | UTC | What it shows |
 | --- | --- | --- | --- | --- |
