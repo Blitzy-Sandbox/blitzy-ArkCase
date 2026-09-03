@@ -799,7 +799,29 @@
    "recovery_cycles": 0,
    "recovery_cycle_durations": [],
    "hibernation_events": 0
-  }
+  },
+  "gate_state_by_byte_sequence": {
+   "gate": "Phase 2 S1-S6 (S1 clean confirm, S2 checksum, S3a upload and preview, S3b zero type=error, S4 native Commit Update Set UI action, S5 physical storage and all 27 sys_security_acl_role links, S6 recorded checksum), and AAP 0.7.1 with it",
+   "binary": true,
+   "no_middle_verdict": "a byte sequence has either been through S1-S6 or it has not. There is no partial, conditional or qualified result for this gate, and none is claimed anywhere in this run. The verdict below is stated once per byte sequence, shipping sequence first.",
+   "by_sequence": [
+    {
+     "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+     "role": "the byte sequence that ships (final.deliverable_sha256)",
+     "state": "NOT MET",
+     "why": "these bytes have never been uploaded, previewed or committed on any instance"
+    },
+    {
+     "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+     "role": "export 3's byte sequence (phase2.verified_checksum)",
+     "state": "MET",
+     "why": "uploaded onto a genuinely clean instance, previewed to zero sys_update_preview_problem rows of any type, committed once through the native Commit Update Set UI action, with physical storage for the three scoped tables and all 27 sys_security_acl_role links confirmed afterwards; S6 sum recorded 2026-09-02T20:53:14Z"
+    }
+   ],
+   "deliverable_shipping_status": "BLOCKED - see final.delivery_position"
+  },
+  "shippable_forward_looking": "no. phase2.shippable is scoped by shippable_scope to export 3's byte sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae at the time this phase ran, and carries no claim about the sequence that ships. Forward-looking, the deliverable's shipping status is BLOCKED (final.shipping_status) because the gate is NOT MET for 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7.",
+  "fallback_invoked_note": "false, and it stays false: Phase 2 did not invoke the fallback, and this record does not elect it either. The choice between verifying the shipping bytes (final.delivery_position.path_a) and invoking the fallback (final.delivery_position.path_b) is a HUMAN election, it is UNMADE, and this pass deliberately did not make it - final.delivery_position.election_made is false and the reasoning is at final.delivery_position.why_the_fallback_was_not_elected_unilaterally."
  },
  "fix_attempts": [
   {
@@ -867,7 +889,7 @@
    "phase2_exit_condition": "met",
    "phase2_exit_timestamp_utc": "2026-09-02T20:53:14Z",
    "entered": true,
-   "note": "Phase 3 is NON-BLOCKING per D4/OVERRIDE-4; the package already shipped on Phase 2 result"
+   "note": "Phase 3 is NON-BLOCKING per D4/OVERRIDE-4; Phase 2 had already returned its verdict on export 3's byte sequence before this phase began. Phase 3 neither gates nor settles delivery - the delivery position is final.delivery_position"
   },
   "non_blocking": true,
   "headless_atf_possible": false,
@@ -1228,8 +1250,8 @@
    "D48"
   ],
   "report": "servicenow-case-management-poc/docs/refine-run/FINAL-REPORT.md",
-  "shipping_package": "rebuilt",
-  "shipping_package_label": "the Phase-1-rebuilt package - it DOES include this round’s fix. Phase 2 verified export 3's byte sequence; the file that ships carries those 988 payload records re-sequenced into AAP 0.5.2 order, so its own S1-S6 verification is owed (final.owed_verification)",
+  "shipping_package": "unelected. The delivery election is a HUMAN decision and it is UNMADE - see final.delivery_position for both directive-compliant paths and their measured costs. The deliverable path holds the Phase-1-rebuilt package re-sequenced into AAP 0.5.2 order, and its shipping status is BLOCKED (final.shipping_status). Phase 2's rebuilt-ships verdict was recorded against export 3's byte sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae and nothing else.",
+  "shipping_package_label": "the deliverable path holds the Phase-1-rebuilt package - it DOES carry this round's fix, and no claim of ship-readiness attaches to it. The S1-S6 gate is NOT MET for its byte sequence 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 and MET for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only, so its shipping status is BLOCKED pending the owed run (final.owed_verification, final.delivery_position).",
   "deliverable_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
   "deliverable_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
   "matched_against": "phase2.verified_checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, recorded 2026-09-02T20:53:14Z on the bytes that were previewed with zero problems and committed",
@@ -1277,7 +1299,7 @@
    },
    "corroborating_evidence_is_not_the_gate": "the static checks bound the risk to block sequence alone and are recorded as corroborating evidence. They are not the platform test D36 requires and do not discharge it: no upload, preview or commit of the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes has taken place anywhere",
    "human_next_step": "on a genuinely clean PDI, run docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 against the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 file - upload it, assert 988 children, preview to zero type=error, commit through the native Commit Update Set UI action, confirm physical storage and all 27 role links - then record 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 as verified with that run's own timestamp",
-   "shipping_decision": "unchanged: the rebuilt package ships and the fallback (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7) remains uninvoked and unmodified. Reverting the re-sequencing is not an option - it would re-open a HIGH AAP 0.5.2 violation - and invoking the fallback is worse, since the fallback was never previewed at all and carries the hand-authored records directives D2/D21 ordered replaced"
+   "shipping_decision": "not a decision this record makes. The delivery election is a HUMAN decision and it is UNMADE: final.delivery_position records both directive-compliant paths with their measured costs. The deliverable path holds the reordered rebuilt package and its shipping status is BLOCKED; the fallback (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7) remains uninvoked and unmodified, and electing it is path_b - a priced option, not a default. Reverting the re-sequencing is not one of the paths: it would re-open the HIGH AAP 0.5.2 violation."
   },
   "deliverable_bytes": 4062436,
   "deliverable_payload_count": 988,
@@ -1439,6 +1461,16 @@
   },
   "human_decision_items": [
    {
+    "ref": "I0",
+    "item": "the delivery election: the S1-S6 gate is NOT MET for the byte sequence that ships (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7), so the deliverable's shipping status is BLOCKED and what to deliver is unmade",
+    "gates_delivery": true,
+    "options": [
+     "1) Path A - run the full S1-S6 gate on the exact 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes on a genuinely clean, dedicated PDI (cost: one clean instance and one operator pass). Only path that satisfies both AAP 0.5.2 and AAP 0.7.1; closes every open item here",
+     "2) Path B - invoke the fallback 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 (926 blocks, 3,781,097 bytes), measured cost: drops all 27 sys_security_acl_role links and all 30 field/table label rows, reverts the D2/D21 native table/dictionary swap, re-introduces the random-32-hex hand-authored schema record names, and its own bytes were never previewed at all"
+    ],
+    "detail": "final.delivery_position"
+   },
+   {
     "ref": "I1",
     "item": "sys_choice rows absent for the three scoped tables - root cause of ATF 01, 10, 15, 16, 17, 18",
     "options": [
@@ -1578,7 +1610,7 @@
   },
   "doc_updates": {
    "performed": true,
-   "reason": "the rebuilt package ships, so the conditional documentation-accuracy pass applies; edits are confined to statements this run falsified and cross-reference docs/refine-run/FINAL-REPORT.md for the evidence",
+   "reason": "the rebuilt package's 988 payload records are what the run measured, so the conditional documentation-accuracy pass applies; edits are confined to statements this run falsified and cross-reference docs/refine-run/FINAL-REPORT.md for the evidence. None of them asserts that the deliverable is ship-ready: the gate is NOT MET for the shipping byte sequence and the delivery election is unmade (final.delivery_position).",
    "files": [
     {
      "file": "servicenow-case-management-poc/README.md",
@@ -1658,7 +1690,15 @@
    "no_png_or_video_binaries_staged": true,
    "no_credential_token_cookie_or_sysparm_ck_in_new_or_edited_files": true
   },
-  "blockers": [],
+  "blockers": [
+   {
+    "ref": "B1",
+    "what": "delivery is blocked: the Phase 2 S1-S6 gate is NOT MET for the byte sequence that ships (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7)",
+    "arose": "after the run, when the post-review CR1 pass re-sequenced the deliverable to resolve the HIGH AAP 0.5.2 ordering finding",
+    "blocks": "the delivery election, which is a human decision and is UNMADE",
+    "detail": "final.delivery_position and final.owed_verification"
+   }
+  ],
   "final_step_completed_at_utc": "2026-09-02T22:44:11Z",
   "post_review_cr1_remediation": {
    "what_it_is": "the code-review resolution pass for delta code review CR1 (package integrity lens), dated 2026-09-02. Not a new unit in the run's U1-U5 sequence: it changed no instance state and ran no phase. It did, however, change the package after Phase 2's checksum, which re-opens the D36 verification obligation recorded at final.owed_verification.",
@@ -1697,12 +1737,115 @@
    "phase2_rerun_owed_detail": "see final.owed_verification for the gate, its blockers and the human next step",
    "fallback_package_touched": false,
    "fallback_package_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
-   "shipping_package": "rebuilt - unchanged as a decision. The deliverable is export 3's 988 payload records in dependency-safe order; reverting would re-open the HIGH AAP 0.5.2 violation and the fallback, never previewed at all, is worse",
+   "shipping_package": "not re-elected by that pass, and not elected by any pass since. It changed the deliverable's byte sequence, which makes the S1-S6 gate NOT MET for the bytes now on disk (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7) while it remains MET for export 3's sequence (eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae). The deliverable's shipping status is therefore BLOCKED and the delivery election between verifying those bytes (path_a) and invoking the fallback (path_b) is a human decision that is UNMADE - final.delivery_position.",
    "unchanged_figures": {
     "deliverable_bytes": 4062436,
     "deliverable_payload_count": 988,
     "baseline_payload_count": 926,
     "delta_formula": "926 - 31 + 93 = 988"
+   }
+  },
+  "shipping_status": "BLOCKED",
+  "shipping_status_detail": "the deliverable at final.deliverable_path holds the reordered rebuilt package and is blocked pending the owed S1-S6 run on the exact 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes. No field in this file designates it shippable or ship-ready. phase2.shippable remains true only under phase2.shippable_scope, which binds it to export 3's byte sequence at the time Phase 2 ran.",
+  "election_made": false,
+  "election_owner": "human",
+  "delivery_position": {
+   "summary": "the Update Set gate is binary and, for the byte sequence that ships, it is NOT MET. The deliverable path holds the reordered rebuilt package with shipping status BLOCKED, and the delivery election between verifying those bytes and invoking the fallback is a HUMAN decision that this pass deliberately did not make.",
+   "gate": "Phase 2 S1-S6, and AAP 0.7.1 with it",
+   "gate_is_binary": true,
+   "no_middle_verdict": "there is no partial, conditional or qualified result for this gate. See phase2.gate_state_by_byte_sequence.",
+   "gate_state": [
+    {
+     "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+     "role": "the byte sequence that ships",
+     "state": "NOT MET"
+    },
+    {
+     "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+     "role": "export 3's byte sequence",
+     "state": "MET",
+     "met_at_utc": "2026-09-02T20:53:14Z"
+    }
+   ],
+   "deliverable_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
+   "deliverable_path_holds": "the reordered rebuilt package, 988 payload records, 4,062,436 bytes, sha256 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+   "deliverable_shipping_status": "BLOCKED",
+   "deliverable_shipping_status_detail": "blocked pending the owed S1-S6 run on the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes (final.owed_verification). No claim of ship-readiness attaches to the deliverable anywhere in this record.",
+   "election_made": false,
+   "election_owner": "human",
+   "election_note": "this pass deliberately did not make the election. Both directive-compliant paths are recorded below with measured costs so that a person can choose on facts rather than on an estimate.",
+   "path_a": {
+    "name": "verify the rebuilt package - the path that closes everything",
+    "target": "a genuinely clean, dedicated PDI",
+    "applies_to_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+    "steps": [
+     "S1 - confirm a genuinely clean target",
+     "S2 - checksum the exact bytes about to be uploaded",
+     "S3a - upload and assert 988 children",
+     "S3b - preview with zero sys_update_preview_problem rows of type=error",
+     "S4 - commit through the native Commit Update Set UI action",
+     "S5 - confirm physical storage for all three scoped tables and all 27 sys_security_acl_role links",
+     "S6 - record 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 as verified with that run's own timestamp and evidence"
+    ],
+    "procedure": "servicenow-case-management-poc/docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5",
+    "cost": "one clean instance and one operator pass",
+    "outcome": "the gate is MET on the byte sequence that ships, and every item left open here closes",
+    "satisfies": [
+     "AAP 0.5.2",
+     "AAP 0.7.1"
+    ]
+   },
+   "path_b": {
+    "name": "invoke the fallback",
+    "artifact": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml",
+    "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+    "payload_blocks": 926,
+    "bytes": 3781097,
+    "measured_composition": {
+     "sys_documentation": 0,
+     "sys_security_acl_role": 0,
+     "sys_dictionary": 25,
+     "sys_dictionary_note": "hand-authored rows carrying random-32-hex record names"
+    },
+    "cost_measured_not_estimated": [
+     "drops all 27 sys_security_acl_role links",
+     "drops all 30 field/table label rows (sys_documentation)",
+     "reverts the native table/dictionary swap that directives D2 and D21 ordered",
+     "re-introduces the random-32-hex hand-authored schema record names the refine PR existed to replace"
+    ],
+    "own_bytes_ever_previewed": false,
+    "aap_0_7_1": "not satisfied either: the fallback's own bytes were never previewed at all, on any instance",
+    "satisfies": []
+   },
+   "which_path_satisfies_the_directives": "Path A is the only path that satisfies both AAP 0.5.2 and AAP 0.7.1. Path B trades an unverified byte SEQUENCE whose records are each individually verified for an unverified PACKAGE whose records were never previewed.",
+   "why_the_gate_was_not_run_in_this_pass": [
+    {
+     "kind": "measurement",
+     "reason": "the instance is not a clean target, so S1 fails at its first step",
+     "evidence": "x_casemgmt_case holds 10 rows, x_casemgmt_case_task 10 and x_casemgmt_case_party 8, and all three tables are live. S1's first assertion is that the three tables do not exist. Making the target clean means deleting the scoped application, which the environment directive names as destroying a verified environment"
+    },
+    {
+     "kind": "measurement",
+     "reason": "an upload would append to the committed retrieved-set record that carries Phase 2's own evidence",
+     "evidence": "GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d returns that row with state=committed, and that sys_id is the <sys_remote_update_set> descriptor inside the shipping file itself, so the loader matches it and APPENDS 988 children rather than creating a fresh retrieved set"
+    },
+    {
+     "kind": "boundary",
+     "reason": "this checkpoint permits read-only REST and no PDI write of any kind"
+    },
+    {
+     "kind": "boundary",
+     "reason": "AAP 0.7.1 wants a FRESH PDI, and provisioning or re-requesting an instance is prohibited"
+    }
+   ],
+   "why_the_fallback_was_not_elected_unilaterally": "directive D3 designates the fallback for the case where Phase 1 or Phase 2 did not reach its exit condition. Both phases DID reach their exit conditions during the run - Phase 1 at 2026-09-02T19:22:09Z and Phase 2 at 2026-09-02T20:53:14Z - and the staleness arises from a post-review remediation, a condition D3 does not name. Electing the fallback here would therefore itself be an unauthorized reinterpretation of D3, and it would additionally revert a HIGH review finding's fix (AAP 0.5.2 dependency ordering) and two directives (D2, D21). That is why the election is escalated rather than made.",
+   "third_artifact_for_completeness": {
+    "what": "export 3's byte sequence, recoverable from git",
+    "command": "git show 7d36aec06e:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
+    "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+    "bytes": 4062436,
+    "status": "the only bytes in the repository whose exact sequence passed the gate, and precisely the sequence the review's HIGH AAP 0.5.2 ordering finding rejected",
+    "conclusion": "no artifact in the repository satisfies both AAP 0.5.2 and AAP 0.7.1 at once; only path_a creates one"
    }
   }
  }

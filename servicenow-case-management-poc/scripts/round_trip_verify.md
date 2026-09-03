@@ -76,8 +76,16 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
   the file rather than trusting this line: `grep -c '<sys_update_xml ' <the XML>`.
 
 > ⚠️ **Uploading this file onto an instance that already holds it REUSES the same Retrieved Update Set row and
-> APPENDS its children — it does not replace them.** Measured directly: the `<sys_remote_update_set>` descriptor
-> in this file hard-codes `sys_id` `9929f50df18ccec91ea13b2a3bccfc90`, so the loader matches on it. Two
+> APPENDS its children — it does not replace them. Use a clean, dedicated instance for this procedure.**
+> Measured directly: the `<sys_remote_update_set>` descriptor
+> in this file hard-codes a `sys_id`, so the loader matches on it — `9929f50df18ccec91ea13b2a3bccfc90` on the
+> 913-block revision this behaviour was measured on, and
+> **`0b3b7452934f435009aa70d19dba100d` in the shipping 988-block file**. That shipping descriptor is not a
+> hypothetical collision: `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns
+> that row with **`state=committed`** on the provisioned instance — it is the retrieved set that carries the
+> 2026-09-02 preview and commit evidence — so an upload there would append this file's 988 children to it and
+> mutate that record. This is why the outstanding run recorded under *Pass / Fail Decision* below requires a
+> clean, dedicated PDI rather than the instance the application is already installed on. Two
 > successive uploads onto a row that already carried one committed batch took the child count
 > **913 → 1,826 → 2,739** (observed on the 913-block revision; the multiples track whatever the current
 > block count is — 988 today, so expect 988 → 1,976 → 2,964), and the second upload silently reset the row's state from `previewed` back to
@@ -475,7 +483,10 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > **Standing result — and which bytes it applies to.** Criteria 1, 2 and 3 hold for the **913-block,
 > 3,618,378-byte, SHA-256 `7272edfc…`** revision, which is three revisions behind the one that ships today.
 > **Updated 2026-09-02: today's package is the native-rebuild one — 988 blocks, 4,062,436 bytes, SHA-256
-> `90ee0249…` — and criteria 1, 2 and 3 do NOT yet hold on the bytes in your hands.** They hold on the
+> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` — and criteria 1, 2 and 3 do NOT yet
+> hold on the bytes in your hands. This gate is binary: until this procedure is run on those exact bytes the
+> AAP §0.7.1 Update Set gate is NOT MET on them — not partially met, not conditionally met — and the artifact
+> is not cleared for hand-over.** They hold on the
 > pre-reorder, previewed-and-committed byte sequence — the same 988 records at the same 4,062,436 bytes, SHA-256
 > `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, measured `2026-09-02T20:53:14Z`: State =
 > Loaded, 0 `type=error` and 0 `type=warning` preview problems from a genuinely clean slate, then a UI-action
@@ -490,11 +501,20 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > digest multiset identical to the previewed bytes, identical header (1,370 bytes), tail, byte count and
 > 44-payload-class census, every §0.5.2 dependency assertion passing, and read-only REST confirming the
 > instance's captured set still holds 988 children whose update names are set-identical to the file's — which
-> bounds the difference to block sequence alone. **The re-run needs a clean target, for three measured reasons:**
-> Phase 0's teardown cannot be performed on the single provisioned PDI, which already holds this application
-> installed, committed, converged and seeded; the warning in Phase 1 above applies literally — this file's
-> `<sys_remote_update_set>` descriptor makes the loader REUSE the existing retrieved set and APPEND its
-> children, so an upload here would mutate the very committed record the live evidence rests on; and a preview
+> bounds the difference to block sequence alone. **The re-run needs a clean, dedicated target, for three
+> measured reasons.** *(1)* The single provisioned PDI is not a clean target: it holds this application
+> installed, committed, converged and seeded — `x_casemgmt_case` **10** rows, `x_casemgmt_case_task` **10**,
+> `x_casemgmt_case_party` **8**, all three tables live
+> ([`../docs/refine-run/PHASE2.md`](../docs/refine-run/PHASE2.md)) — so step one of the gate fails on it, and
+> making it clean means deleting the scoped application, which this repository's environment directive names
+> as destroying a verified environment. *(2)* **The Phase 1 warning above is not hypothetical here — this is
+> its concrete instance.** The shipping file's `<sys_remote_update_set>` descriptor carries
+> `sys_id` `0b3b7452934f435009aa70d19dba100d`, and
+> `GET /api/now/table/sys_remote_update_set/0b3b7452934f435009aa70d19dba100d` returns that row with
+> **`state=committed`** — the retrieved-set record that carries the original preview and commit evidence. An
+> upload of this file onto that instance would match the descriptor, REUSE that row and **APPEND** its 988
+> children to it, mutating the very record the live evidence rests on. Use a clean, dedicated instance for
+> this procedure, for that reason. *(3)* A preview
 > against a populated instance returns `Found a local update that is newer than this one` collisions instead of
 > the clean-slate zero-problem result criterion 2 requires. Discharge it by running
 > [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) against the

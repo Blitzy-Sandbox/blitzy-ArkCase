@@ -23,7 +23,8 @@
 > commit of those 988 records — measured on the **pre-reorder, previewed-and-committed byte sequence,
 > 988 blocks / 4,062,436 bytes / SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`**,
 > `2026-09-02T20:53:14Z`; the file that ships hashes to `90ee0249…` after the §0.5.2 re-sequencing and its own
-> round trip is owed and unperformed (§5) — on a clean instance produces:
+> round trip is owed and unperformed, so the binary AAP §0.7.1 gate is **NOT MET** on the shipping bytes and
+> the package is **BLOCKED** from hand-over until §5 is run against them (§5) — on a clean instance produces:
 > three tables with physical storage (21 / 14 / 13 columns, REST HTTP 200) and **all 27 ACL role
 > links** (manager 14 / agent 10 / viewer 3) — with `post_import_remediation.js` **never run** and **no second
 > commit**, from a preview carrying 0 `type=error` and 0 `type=warning` problems. Defects C-storage and 9 are
@@ -132,7 +133,7 @@ After completing this guide, on `https://dev379024.service-now.com` you will hav
 | Target instance | **Verified on `https://dev379024.service-now.com`, release Australia Patch 3.** That is the only instance and the only release this procedure has been executed against. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | **Updated 2026-09-02:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is now the native-rebuild package — UTF-8, no BOM, **4,062,436 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. **That digest is the one to check before you upload.** The file's 988 records are the records that were previewed and committed on 2026-09-02 — but that was measured on the **pre-reorder, previewed-and-committed byte sequence, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** (the same 988 records at the same byte count), because the file was afterwards re-sequenced into AAP §0.5.2 dependency order. The reordered file was verified statically (`xmllint --noout` clean, 988 blocks, block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class census, every §0.5.2 dependency assertion passing) rather than by a further upload or preview, so **the upload → preview → commit trip on the `90ee0249…` bytes is owed and has not been run — §5 is the procedure that closes it.** The figures that follow describe the retained original, `…FALLBACK.xml`: UTF-8, no BOM, **3,781,097 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. **Verify the digest before uploading** — this row has named three different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The immediately previous revision was 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition). Note that **no update-set preview has been run on these bytes** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
+| Deliverable | **Updated 2026-09-02:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is now the native-rebuild package — UTF-8, no BOM, **4,062,436 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. **That digest is the one to check before you upload.** **And read its status before you plan around it: the AAP §0.7.1 Update Set gate is binary and it is NOT MET on these bytes, so the artifact is not verified and not cleared for hand-over until §5 is run against them — running §5 is what makes this deliverable deliverable (§10.0 of [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) carries that path and the fallback alternative, with the measured cost of each).** The file's 988 records are the records that were previewed and committed on 2026-09-02 — but that was measured on the **pre-reorder, previewed-and-committed byte sequence, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** (the same 988 records at the same byte count), because the file was afterwards re-sequenced into AAP §0.5.2 dependency order. The reordered file was verified statically (`xmllint --noout` clean, 988 blocks, block multiset identical to the previewed bytes, unchanged header, tail, byte count and 44-class census, every §0.5.2 dependency assertion passing) rather than by a further upload or preview, so **the upload → preview → commit trip on the `90ee0249…` bytes is owed and has not been run — §5 is the procedure that closes it.** The figures that follow describe the retained original, `…FALLBACK.xml`: UTF-8, no BOM, **3,781,097 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. **Verify the digest before uploading** — this row has named three different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The immediately previous revision was 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition). Note that **no update-set preview has been run on these bytes** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -303,16 +304,21 @@ curl -s -K /tmp/sn_curl.cfg -H "Accept: application/json" \
 > links by itself, with the remediation never run and no second commit
 > ([`refine-run/FINAL-REPORT.md`](./refine-run/FINAL-REPORT.md)).
 >
-> **This section is also the procedure that closes the one gate still owed.** The file that ships is the
+> **This section is also the procedure that closes the one gate still owed — and running it is what makes the
+> deliverable deliverable.** The file that ships is the
 > §0.5.2-reordered byte sequence, 988 blocks / 4,062,436 bytes / SHA-256
 > `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and the upload → preview → commit trip on
 > **those exact bytes has not been run** — which is why Gate 7 in
-> [`validation-gates.md`](./validation-gates.md) stands as a qualified pass and §10.0 item 1a of
-> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) is re-opened. Running the
+> [`validation-gates.md`](./validation-gates.md) is recorded as **NOT MET / BLOCKED** for that sequence, the
+> gate being binary rather than gradable, and why §10.0 item 1a of
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) is re-opened. Until it is run,
+> the artifact is not verified, not cleared for hand-over, and must not be presented as either. Running the
 > steps of §4 and this section against the `90ee0249…` file on a **genuinely clean** PDI — verify the digest,
 > upload, assert **988** children, preview to zero `type=error`, commit through the native "Commit Update Set"
-> UI action, then confirm physical storage and all 27 role links — is what turns that qualified pass into an
-> unqualified one; record `90ee0249…` as verified with that run's timestamp when it completes. A clean target is
+> UI action, then confirm physical storage and all 27 role links — is what turns that NOT MET into a MET and
+> makes this package handable over; record `90ee0249…` as verified with that run's timestamp when it
+> completes. The alternative — electing the retained fallback instead — is a human decision with its own
+> measured cost, set out beside this one in §10.0. A clean target is
 > required: this file's `<sys_remote_update_set>` descriptor makes the loader reuse an existing retrieved set
 > and append its children (`../scripts/round_trip_verify.md`, Phase 1 warning), and a populated instance
 > returns `Found a local update that is newer than this one` collisions instead of the zero-problem result.

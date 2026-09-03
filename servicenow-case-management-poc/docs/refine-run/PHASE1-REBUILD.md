@@ -732,8 +732,17 @@ before its table, no choice before its dictionary row, every role before every A
 ACL-role link before its prerequisites, every report before both dashboards, and all 38 seed
 rows last — the 28 rows on the three scoped tables plus the 10 demo
 user/group/membership/grant/company rows, at payload indices 950–987). That bounds the change
-to block sequence alone; it does not discharge the re-run. The full account — the owed gate,
-its blockers and the human next step — is in [`FINAL-REPORT.md`](./FINAL-REPORT.md) under
-"Post-review remediation — code review CR1" and in [`PHASE2.md`](./PHASE2.md) §7.1, and the
-machine-readable one under `final.owed_verification` and
-`final.post_review_cr1_remediation` in [`run-state.json`](./run-state.json).
+to block sequence alone; it does not discharge the re-run.
+
+**The delivery position that follows, stated the same way here as everywhere else.** The gate is
+binary: **NOT MET** for `90ee0249…`, the byte sequence that ships, and **MET** for `eee9fabd…`,
+export 3's sequence. The deliverable path therefore **holds** the reordered rebuilt package with
+**shipping status BLOCKED**, no claim of ship-readiness attaches to it, and the election between
+verifying those bytes (one clean instance and one operator pass, the only path satisfying both
+AAP §0.5.2 and AAP §0.7.1) and invoking the never-previewed fallback is a **human decision that is
+unmade**. The full account — both paths with their measured costs, the measured reasons the gate has
+not been run, and why directive D3 does not designate the fallback here — is in
+[`FINAL-REPORT.md`](./FINAL-REPORT.md) under "Post-review remediation — code review CR1" and part
+(d), and in [`PHASE2.md`](./PHASE2.md) §7.1; the machine-readable one is under
+`final.delivery_position`, `final.owed_verification` and `final.post_review_cr1_remediation` in
+[`run-state.json`](./run-state.json).

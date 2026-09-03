@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure.
+This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed on the byte sequence that ships (SHA-256 `90ee0249…`); the note below states exactly which sequence carries the preview and commit result, and the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it.**
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -24,7 +24,9 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > history and cannot occur on a fresh PDI. **Commit was withheld on those bytes** — the verification instance
 > is shared — so "0 of any type" remains proven only on `7272edfc…`.
 >
-> **Superseded on 2026-09-02, and it splits in two.** *(1) What was verified live:* the full trip was measured
+> **Superseded on 2026-09-02, and it splits in two — and the gate it reports is binary, so read both halves in
+> order: MET on the sequence that was previewed, NOT MET on the sequence that ships.** *(1) Where the gate is
+> MET:* the full trip was measured
 > on the **pre-reorder, previewed-and-committed byte sequence — 988 blocks, 4,062,436 bytes, SHA-256
 > `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, `2026-09-02T20:53:14Z`**: 0 `type=error`
 > and 0 `type=warning` preview problems on a genuinely clean instance, then a single UI-action commit that
@@ -33,8 +35,14 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > so the deliverable is **988 blocks, 4,062,436 bytes, SHA-256
 > `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** — the same 988 records byte-for-byte at
 > the same byte count, differing from the previewed bytes **only in the order of the `<sys_update_xml>`
-> blocks**. **The round trip on those exact bytes is outstanding: it has not been run, so nobody may read this
-> walkthrough as already executed on the file they hold.** Under this run's frozen rule the recorded checksum is
+> blocks**. That digest is the value to verify a copy of the file against; it is not a round-tripped digest.
+> **The round trip on those exact bytes is outstanding: it has not been run, so the Update Set gate is NOT MET
+> for the file you hold, this artifact is not cleared for delivery, and nobody may read this walkthrough as
+> already executed on it.** Which package is finally handed over — running the owed gate on `90ee0249…`
+> (Path A) or invoking the retained fallback (Path B) — is a human decision this run does not make; both are
+> costed in §10.0 of
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). Under this run's frozen
+> rule the recorded checksum is
 > stale once the package changes after verification, which makes the zero-preview-error requirement stated at
 > the top of this document satisfied for the previewed sequence and **owed for the sequence that ships**; §5 of
 > [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), run against the `90ee0249…` file
@@ -266,6 +274,15 @@ Per AAP Section 0.7.2: "Provide the exported Update Set XML file path and the po
    - **Sample case number:** at least one case number from the seed data (e.g., the case generated in [Step 3](#step-3-confirm-deployed-state) sub-step 6, or a known seed case from [`../seed-data/cases/`](../seed-data/cases/)).
 
 This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifacts beyond what is enumerated in AAP Section 0.3.1 are produced; per AAP Section 0.7.2 (Minimal-Change Clause), no additional capabilities are added.
+
+> **Sub-step 3's "confirmation that all 7 validation gates passed" cannot be given for the artifact as it
+> stands.** The Update Set gate is binary and it is **NOT MET** on the shipping byte sequence
+> `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, because the upload → preview → commit
+> trip on those exact bytes has not been run (the note under *Purpose* above, and §10.0 of
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Until that run is performed
+> — or a human elects the retained fallback instead, with the cost §10.0 records — **this artifact is not
+> cleared for delivery and this step cannot be completed.** Running Step 2 against the `90ee0249…` file on a
+> genuinely clean, dedicated PDI is what makes the deliverable deliverable.
 
 ## Rollback Procedure
 
