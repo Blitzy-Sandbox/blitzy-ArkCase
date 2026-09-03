@@ -294,18 +294,21 @@ was **not** recorded at execution time; it was recovered afterwards, in the CR2 
 the attribution is by **artifact content, not by timestamp guesswork**: of the 41 per-run directories
 under `/tmp/blitzy/chrome/artifacts`, `chrome-9deceaadbd00` is the only one whose contents name this
 retrieved update set, and it is also the only one created inside the commit window. It holds exactly
-three captured network-request artifacts, all three carrying
-`sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d`:
+three captured network-request artifacts. All three name **this** update set and all three carry the
+same record-page `x_referer`, but they are **not** three copies of one call — they are the three
+distinct requests the button issues, and they use two different processor entry points and two
+different parameter names for the set:
 
-| Artifact | `sysparm_type` | What it shows |
-| --- | --- | --- |
-| `sn_commit_uiaction_req392.network-request` | `validateCommitRemoteUpdateSet` | the platform's own pre-commit validation, run before the commit itself |
-| `sn_commit_uiaction_req393.network-request` | (same processor, same set) | the second of the three requests the action issued |
-| `sn_commit_uiaction_req394.network-request` | `commitRemoteUpdateSet` | the commit itself, with `sysparm_skip_app_installs=` **empty** — nothing was skipped |
+| Artifact | Processor · `sysparm_type` | Set named by | What it shows |
+| --- | --- | --- | --- |
+| `sn_commit_uiaction_req392.network-request` | `com.glide.update.UpdateSetCommitAjaxProcessor` · `validateCommitRemoteUpdateSet` | `sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d` | the platform's own pre-commit validation, run before the commit itself |
+| `sn_commit_uiaction_req393.network-request` | `UpdateSetCommitAjax` · `shouldShowConfirmAppInstall` | `sysparm_rus_sys_id=0b3b7452934f435009aa70d19dba100d` (also `sysparm_in_hierarchy=` empty, `sysparm_synch=true`) | the button's **own check for whether an app-install confirmation dialog must be shown** — the platform asking itself that question is why `confirmation_dialog_shown = false` below is a measured outcome and not merely an absence of observation |
+| `sn_commit_uiaction_req394.network-request` | `com.glide.update.UpdateSetCommitAjaxProcessor` · `commitRemoteUpdateSet` | `sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d` | the commit itself, with `sysparm_skip_app_installs=` **empty** — nothing was skipped |
 
 **Read these artifacts correctly — they confirm the UI action rather than contradicting it.** All
 three carry `x_referer=sys_remote_update_set.do%3Fsys_id%3D0b3b7452934f435009aa70d19dba100d`, i.e.
-they were issued **by the rendered Retrieved Update Set record page**. That is what the platform's
+they were issued **by the rendered Retrieved Update Set record page**, and the middle one is a
+question only the rendered button asks. That is what the platform's
 native "Commit Update Set" action *is*: its client script calls
 `com.glide.update.UpdateSetCommitAjaxProcessor` for you, from the form. The prohibition this record
 asserts is on the **operator** driving that processor out of band — a hand-built `/xmlhttp.do` POST

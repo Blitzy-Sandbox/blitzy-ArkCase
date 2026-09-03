@@ -332,11 +332,15 @@ orchestrator-side run/session identifier is **`chrome-9deceaadbd00`** — the ta
 artifact directory, `/tmp/blitzy/chrome/artifacts/chrome-9deceaadbd00`. It was **not** captured at
 execution time; the CR2 remediation pass recovered it, and the attribution is by artifact **content**:
 of the 41 per-run directories there, that one alone holds artifacts naming this retrieved update set —
-three captured requests (`sn_commit_uiaction_req392/393/394.network-request`) all carrying
-`sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d`, running the platform's own
-`validateCommitRemoteUpdateSet` then `commitRemoteUpdateSet` with `sysparm_skip_app_installs=` empty,
-and every one of them stamped
-`x_referer=sys_remote_update_set.do%3Fsys_id%3D0b3b7452934f435009aa70d19dba100d`. That referrer is the
+three captured requests, which are the three distinct calls the button issues rather than three copies
+of one. `sn_commit_uiaction_req392.network-request` and `…req394.network-request` go to
+`com.glide.update.UpdateSetCommitAjaxProcessor` with `sysparm_remote_updateset_sys_id=0b3b7452934f435009aa70d19dba100d`,
+running `validateCommitRemoteUpdateSet` and then `commitRemoteUpdateSet` with
+`sysparm_skip_app_installs=` empty. `…req393.network-request` is a different entry point —
+`sysparm_processor=UpdateSetCommitAjax`, `sysparm_type=shouldShowConfirmAppInstall`, naming the same
+set as `sysparm_rus_sys_id` — the button's own check for whether an app-install confirmation dialog
+must be shown, which is what makes "no confirmation dialog appeared" a measured outcome. All three are
+stamped `x_referer=sys_remote_update_set.do%3Fsys_id%3D0b3b7452934f435009aa70d19dba100d`. That referrer is the
 point: the requests came **from the rendered record page**, which is precisely what the native "Commit
 Update Set" action does on your behalf — the prohibition is on an operator building that processor call
 out of band, and no such call was made here. `sn_commit_result_snapshot.txt` (`20:38:13Z`) is the
