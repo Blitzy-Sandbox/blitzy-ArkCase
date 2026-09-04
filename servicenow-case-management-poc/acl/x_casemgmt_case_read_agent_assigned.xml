@@ -5,10 +5,15 @@
     `x_casemgmt_case` records inside the scoped application `x_casemgmt`. The
     condition restricts read to records where the calling user is the
     currently-assigned agent OR is a member of the currently-assigned group
-    ("Assigned only" per AAP Section 0.5.6). This is the READ counterpart to
-    the sibling WRITE ACL at ../acl/x_casemgmt_case_write_agent_assigned.xml;
-    the advanced ACL script body is byte-identical between the two records
-    by design, since the same predicate gates both read and write access.
+    ("Assigned only" per AAP Section 0.5.6), plus the two limbs that make
+    Section 0.5.6's "case_agent Create" grant usable end to end (QA finding
+    F4): current.isNewRecord(), so the New form renders its fields at all,
+    and current.sys_created_by == gs.getUserName(), so the saved record is
+    readable by its author. This is the READ counterpart to the sibling
+    WRITE ACL at ../acl/x_casemgmt_case_write_agent_assigned.xml; the shared
+    "Assigned only" predicate is identical between the two records, and both
+    admit the insert path (current.isNewRecord()) while only this one admits
+    the record's own creator afterwards.
 
     AAP cross-references:
       - Section 0.5.6 (ACL Matrix) - case_agent row:
@@ -77,8 +82,18 @@
         - <operation>      "read" (this file)             vs "write"
         - <sys_id>         MD5("x_casemgmt_case.read...")  vs MD5("x_casemgmt_case.write...")
         - <sys_update_name> *_read_agent_assigned         vs *_write_agent_assigned
-      The CDATA script body is byte-identical between the two records by
-      design; both encode the same predicate per AAP Section 0.5.6.
+        - the create-path limbs each record carries so that the Create
+          grant in AAP Section 0.5.6 works end to end: both records admit
+          the INSERT path (current.isNewRecord()), and THIS record
+          additionally admits the record's own creator
+          (current.sys_created_by == gs.getUserName()) once the row exists.
+          They are documented together in ../docs/acl-matrix.md under
+          "Assigned only - the create-path limbs (QA finding F4)".
+      An earlier revision of this header stated the CDATA script body was
+      byte-identical between the two records. That is withdrawn: the shared
+      "Assigned only" predicate is still identical and still governs every
+      case the agent did not author, but each record now adds the one limb
+      its own operation needs on the insert path.
 
     How this ACL composes with field-level ACLs (defense in depth):
       This record grants TABLE-LEVEL read to case_agent for assigned cases.
@@ -287,12 +302,46 @@
         <admin_overrides>true</admin_overrides>
         <advanced>true</advanced>
         <condition/>
-        <description>Table-level ACL: x_casemgmt_case_agent can read x_casemgmt_case records ONLY when assigned_agent = current user OR assigned_group contains current user (per AAP Section 0.5.6 'Assigned only'). Affects list views, form load, related lists, report rows, and dashboard aggregates - any unauthorized case row is filtered out of every read surface.</description>
+        <description>Table-level ACL: x_casemgmt_case_agent can read x_casemgmt_case records when assigned_agent = current user OR assigned_group contains current user (per AAP Section 0.5.6 'Assigned only'), plus the not-yet-inserted record on the New form (current.isNewRecord(), without which the platform renders the agent a case form with zero fields) and the records the agent created itself (sys_created_by = current user, without which the 'case_agent Create' grant in the same matrix row would produce records invisible to their own author). Affects list views, form load, related lists, report rows, and dashboard aggregates - any other case row is filtered out of every read surface.</description>
         <name>x_casemgmt_case</name>
         <operation>read</operation>
         <roles>x_casemgmt_case_agent</roles>
         <script><![CDATA[(function() {
     var currentUserId = gs.getUserID();
+
+    // INSERT PATH - the read side of QA finding F4's create path.
+    //
+    // ServiceNow evaluates the READ ACL per column when it renders a form,
+    // including the NEW-record form, where the row has not been inserted
+    // yet. On that skeleton every limb below is false - assigned_agent and
+    // assigned_group are empty (and assigned_group is manager-only), and
+    // sys_created_by is not stamped until the insert - so the platform
+    // judged every column unreadable and rendered the agent a case form
+    // with ZERO fields: no Subject, no Description, no Requester Name, no
+    // Type, and g_form.getEditableFields() empty. Measured on the rendered
+    // form; the application's own client script reported it verbatim as
+    // "x_casemgmt_case_flush_stale_messages: bound 0 of 4 mandatory field
+    // control(s); not on form or not readable: subject, status,
+    // description, requester_name". The agent could only obtain a usable
+    // form by submitting the blank one, absorbing "Subject is mandatory and
+    // cannot be empty." + "Invalid insert" and working on the redisplay -
+    // which also consumed a case number. AAP Section 0.7.4 requires cases
+    // to be creatable "via both internal UI and external portal", so the
+    // create grant in Section 0.5.6 has to include being able to see the
+    // form one is filling in.
+    //
+    // This limb exposes no stored data: isNewRecord() is true only for a
+    // row that does not exist yet, whose column values are exactly the
+    // defaults and the caller's own keystrokes. It mirrors the identical
+    // limb on the WRITE sibling
+    // (../acl/x_casemgmt_case_write_agent_assigned.xml), and every
+    // already-inserted record continues to be judged by the three limbs
+    // below.
+    if (current.isNewRecord()) {
+        return true;
+    }
+
+    // AAP Section 0.5.6 "Assigned only", verbatim predicate.
     if (current.assigned_agent == currentUserId) {
         return true;
     }
@@ -302,6 +351,40 @@
             return true;
         }
     }
+
+    // CREATOR LIMB - closes the second half of QA finding F4 (HIGH).
+    //
+    // AAP Section 0.5.6 grants case_agent "Create: yes" on this table, but
+    // a case an agent creates is born UNASSIGNED: assigned_group is
+    // manager-only per ../acl/x_casemgmt_case_assigned_group_field_acl.xml
+    // and nothing assigns assigned_agent on insert. The two limbs above
+    // therefore both evaluate false for the row the agent just authored,
+    // and the platform hid it from its own creator: after saving the form
+    // the agent was shown "Security constraints prevent access to
+    // requested page", and the row was absent from the agent's case list.
+    // A Create grant that yields a record its author cannot read is not a
+    // working grant, so this limb is the minimum needed to make the matrix
+    // cell operative.
+    //
+    // Scope of the extension, precisely: sys_created_by is written once by
+    // the platform during the insert and is read-only thereafter (no ACL
+    // in this application grants write on it, and it is not on any form
+    // layout), so this limb can only ever expose a record the SAME user
+    // created. It cannot reach a case created by anyone else - every
+    // seeded and portal-created case carries sys_created_by 'admin' or
+    // 'guest' - so AAP Section 0.7.3 Gate 3 ("case_agent cannot access
+    // unassigned cases") continues to hold for every case the agent did
+    // not author. It is a deliberate, documented extension of Section
+    // 0.5.6's "Assigned only" definition and is written up in
+    // ../docs/acl-matrix.md under "Assigned only - the two create-path
+    // limbs (QA finding F4)".
+    //
+    // gs.getUserName() (not gs.getUserID()) is correct here:
+    // sys_created_by stores the user_name string, not the sys_id.
+    if (current.sys_created_by == gs.getUserName()) {
+        return true;
+    }
+
     return false;
 })();]]></script>
         <sys_class_name>sys_security_acl</sys_class_name>

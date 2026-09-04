@@ -426,6 +426,56 @@
       message" requirement is enforced by the embedded confirmation
       widget that this widget renders on success.
 -->
+<!--
+    ==========================================================================
+    POST-QA REMEDIATION (this checkpoint) - what changed in this record and why
+    ==========================================================================
+    Findings F1, F2, F10, F11 and F12 were raised against the two public pages
+    this widget serves. The remediation carried by the template, client script
+    and server script below is:
+
+      F2  - the confirmation panel now offers a link to the status-lookup page
+            (?id=x_casemgmt_case_status with the case number), so the requester
+            who has just been handed a case number can reach the page that
+            consumes it. The link is a plain theme link rather than a .btn: the
+            default theme paints .btn:focus with a fully transparent outline,
+            which would have left this new control with no visible keyboard
+            focus indicator.
+      F10 - the anonymous lookup renders opened_date in the instance's own
+            display timezone and labels it with that timezone, so an external
+            requester and internal staff read the same instant. The response
+            body still carries EXACTLY the three whitelisted keys
+            (status, subject, opened_date) required by AAP Section 0.7.4 - the
+            timezone is a rendered label, never a fourth key.
+      F12 - the primary action is no longer disabled by form validity: it is
+            pressable, validates on press, marks every control touched and
+            surfaces a summary WITHOUT issuing a request. Stale outcome
+            messages are cleared when the requester edits an input, so the
+            screen never shows two contradictory messages at once.
+      F11 - the visible page heading is a real h1 and the success result panel
+            is announced (role=status / aria-live=polite).
+      F1  - over-length input is REFUSED rather than silently truncated. The
+            refusal itself lives server-side in
+            ../../script_includes/x_casemgmt_CasePortalService.xml (HTTP 400
+            naming the offending field) and in the new before-insert/update
+            rule ../../business_rules/x_casemgmt_validate_case_text_lengths.xml.
+
+    F11's CONTRAST HALF AND THE css ELEMENT (AAP Section 0.4.4):
+    Section 0.4.4 mandates the Experience Portal DEFAULT THEME with "No custom
+    CSS, no custom branding", and Section 0.3.2 places theme and branding
+    modifications out of scope. The frozen specification therefore outranks the
+    WCAG contrast preference, so the palette is NOT overridden here and the css
+    element is intentionally EMPTY. What could be fixed without custom CSS was
+    fixed by choosing default-theme classes whose own colours already meet AA:
+    neutral guidance and status text carries no colour class and inherits the
+    theme's body colour (previously .help-block grey, measured 2.14:1), and
+    per-field error text uses the theme's own .text-danger utility. The items
+    inherent to the stock components - the .btn-primary resting background, the
+    .alert-warning text colour and the theme's focus-ring colour - are left
+    exactly as the platform paints them and are recorded in
+    ../../docs/portal-pages.md as bounded by the Section 0.4.4 exception.
+    ==========================================================================
+-->
 <record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
@@ -450,9 +500,17 @@
      *                      request is pending. Drives the button's
      *                      ng-disabled and the "Submitting..." text.
      *   c.errorMessage   - string; non-empty when the most recent
-     *                      submit attempt failed. Drives the alert
-     *                      panel's ng-if="c.errorMessage". Reset to
-     *                      '' at the start of every new submit.
+     *                      submit attempt failed AT THE SERVER. Drives
+     *                      the alert panel's ng-if="c.errorMessage".
+     *                      Reset to '' at the start of every new submit
+     *                      and by c.onInputChange().
+     *   c.validationMessage
+     *                    - string; non-empty when the most recent press
+     *                      was refused CLIENT-SIDE because the form was
+     *                      invalid. Mutually exclusive with
+     *                      c.errorMessage by construction: each path
+     *                      sets one and clears the other. Also cleared
+     *                      by c.onInputChange().
      *   c.data           - object provided by the Service Portal
      *                      framework, populated server-side by the
      *                      <script> body. Contains:
@@ -473,8 +531,12 @@
      *                          options object is replaced rather than
      *                          mutated by some future refactor).
      *
-     * Exposed method (template-bound):
-     *   c.submit()       - executes the case submission. Issues
+     * Exposed methods (template-bound):
+     *   c.submit(form)   - executes the case submission. Consults the
+     *                      passed FormController FIRST and returns
+     *                      without issuing any request when the form is
+     *                      invalid, marking every control touched and
+     *                      setting c.validationMessage. Otherwise issues
      *                      POST /api/x_casemgmt/case_submit with the
      *                      5-field whitelisted payload via $http.post().
      *                      On success (HTTP 201 with non-empty number),
@@ -484,6 +546,21 @@
      *                      (HTTP 4xx/5xx, network, missing number),
      *                      sets c.errorMessage to a generic, non-leaking
      *                      message so the verbatim alert is rendered.
+     *                      The form MUST be passed as an argument - see
+     *                      the guard inside for why $scope cannot supply
+     *                      it.
+     *   c.onInputChange()
+     *                    - bound to ng-change on all five inputs; drops
+     *                      the previous attempt's outcome so at most one
+     *                      answer is on screen at a time.
+     *   c.markAllTouched(form)
+     *                    - marks every registered control $touched so
+     *                      each field's own role="alert" message renders
+     *                      after a press on an untouched form.
+     *   c.requiredIncomplete()
+     *                    - true while any of the four MANDATORY fields is
+     *                      empty; lets the status region name the actual
+     *                      blocking reason rather than assuming one.
      *
      * Design rationale:
      *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
@@ -547,22 +624,115 @@
     c.submitting = false;
     c.errorMessage = '';
 
+    /*
+     * Message raised when the requester presses Submit while the form is
+     * not yet valid.
+     *
+     * This exists because Submit is no longer disabled. It used to be
+     * ng-disabled on caseSubmitForm.$invalid, which produced two distinct
+     * dead ends. A disabled <button> is pointer-transparent, so a click
+     * aimed at it landed on the surrounding DIV.form-group and NOTHING
+     * happened - no message, no focus move, not even the declared
+     * cursor:not-allowed, which can never render on a control that does
+     * not receive the pointer. And a disabled button is removed from the
+     * tab order, so a keyboard user tabbing through the form never reached
+     * the primary action at all and had no way to discover why.
+     *
+     * Keeping it enabled and validating on click inverts that: the press
+     * is always answered. c.submit() marks every control touched, which
+     * is what makes each field's own role="alert" message render, and sets
+     * this summary so the answer is visible at the button too rather than
+     * only beside whichever field is off-screen.
+     *
+     * It is a SUMMARY, not a substitute: the per-field messages say which
+     * field and why, and this says that the press was received and refused.
+     */
+    c.validationMessage = '';
+
+    /**
+     * Discard the outcome of the previous attempt.
+     *
+     * Bound to ng-change on every input. Without it, c.errorMessage
+     * survived while the requester edited the form, so a failed
+     * submission's "Submission failed. Please try again." alert sat above
+     * fields the requester was already fixing, and could coexist with a
+     * fresh validation summary and a per-field message - up to three
+     * messages describing three different moments at once. Any keystroke
+     * is evidence that the requester has moved on from that outcome, so
+     * the outcome goes.
+     *
+     * Per-field messages are deliberately NOT cleared here: they are
+     * bound to live $invalid && $touched state and therefore correct
+     * themselves the instant the field becomes valid. Clearing them would
+     * mean hiding a message about a field that is still wrong.
+     */
+    c.onInputChange = function() {
+        c.errorMessage = '';
+        c.validationMessage = '';
+    };
+
+    /**
+     * Mark every registered control on a form as touched.
+     *
+     * The per-field messages and the red has-error treatment are bound to
+     * $invalid && $touched, which is what stops a pristine form from
+     * announcing four errors before a single keystroke. That same
+     * condition means a requester who presses Submit without touching
+     * anything would see no message on any field. $setSubmitted() alone
+     * does not fix it - it sets $submitted on the FORM, not $touched on
+     * the controls - so the controls are walked explicitly.
+     *
+     * The walk tests for the $setTouched function rather than filtering by
+     * name, because a form controller's own properties ($valid, $error,
+     * $name and so on) are mixed in with its controls under the same
+     * object; possessing $setTouched is what distinguishes an ngModel
+     * controller from form bookkeeping, and it is also the guard that
+     * keeps this from throwing on a future AngularJS whose form
+     * controller exposes different internals.
+     *
+     * @param {Object} form - the AngularJS form controller.
+     */
+    c.markAllTouched = function(form) {
+        if (!form) {
+            return;
+        }
+        if (typeof form.$setSubmitted === 'function') {
+            form.$setSubmitted();
+        }
+        for (var key in form) {
+            if (key.charAt(0) === '$') {
+                continue;
+            }
+            var control = form[key];
+            if (control && typeof control.$setTouched === 'function') {
+                control.$setTouched();
+            }
+        }
+    };
+
     /**
      * True while any of the FOUR MANDATORY fields is still empty.
      *
      * This exists so the status region under the Submit button can name the
-     * ACTUAL reason the button is disabled instead of asserting one.
+     * ACTUAL reason a press would be refused instead of asserting one.
      *
-     * The button is disabled whenever the form has any invalid control, and
-     * the form has five controls of which only four are mandatory. The fifth,
-     * requester_email, is OPTIONAL but still format-checked by type="email",
-     * so a half-typed address such as "abc@" makes the form invalid and
-     * disables Submit while every mandatory field is complete. The region
-     * previously read "Every field marked * is required. Complete all four to
-     * enable Submit." in that state, which is false twice over: all four ARE
-     * complete, and the field actually blocking the button is not marked with
-     * an asterisk at all. A requester following that instruction re-reads the
-     * four starred fields, finds nothing wrong, and has no way forward.
+     * c.submit() refuses the press whenever the form has any invalid control,
+     * and the form has five controls of which only four are mandatory. The
+     * fifth, requester_email, is OPTIONAL but still format-checked by
+     * type="email", so a half-typed address such as "abc@" makes the form
+     * invalid and blocks the press while every mandatory field is complete.
+     * The region previously read "Every field marked * is required. Complete
+     * all four to enable Submit." in that state, which is false twice over:
+     * all four ARE complete, and the field actually blocking the submission is
+     * not marked with an asterisk at all. A requester following that
+     * instruction re-reads the four starred fields, finds nothing wrong, and
+     * has no way forward.
+     *
+     * (The wording "the button is disabled" was accurate when the button was
+     * ng-disabled on form validity. It no longer is - the button is disabled
+     * only while a request is in flight, and validity is decided on the press
+     * - but this function is needed for exactly the same reason, because the
+     * region still has to say which of the two blocking conditions holds.)
      *
      * Splitting the reason in two needs a test for "a mandatory field is
      * empty" that is independent of the email's format validity, which is
@@ -604,8 +774,15 @@
      * c.errorMessage to the generic string "Submission failed. Please
      * try again." This function MUST NOT echo error.data.error,
      * error.statusText, or any server-supplied text.
+     *
+     * @param {Object} [submittedForm] - the caseSubmitForm FormController,
+     *     passed by the template's ng-submit. REQUIRED in practice for
+     *     the validation guard to run: the form lives under an ng-if, so
+     *     its controller is published on a child scope and is NOT
+     *     reachable as $scope.caseSubmitForm. See the guard for the
+     *     measurement.
      */
-    c.submit = function() {
+    c.submit = function(submittedForm) {
         // Idempotent guard: prevent double-submit if the user clicks
         // the button or presses Enter while a request is in flight.
         // The button is also disabled in this case via ng-disabled,
@@ -615,10 +792,66 @@
             return;
         }
 
+        // Validate on click, because the button is no longer disabled
+        // while the form is invalid.
+        //
+        // The button being enabled is what makes the press answerable at
+        // all (a disabled button is pointer-transparent and out of the tab
+        // order - see c.validationMessage), and this branch is what
+        // answers it. Marking every control touched flips each field's own
+        // role="alert" message into the DOM, so the requester is told which
+        // fields are wrong and why, and the summary states that the press
+        // was received and refused.
+        //
+        // NOTHING is sent in this branch: the early return happens before
+        // any $http.post, so an incomplete payload never reaches the
+        // endpoint, exactly as the disabled button previously ensured. The
+        // server-side guarantee is unchanged either way -
+        // x_casemgmt.CasePortalService._validateSubmission() refuses a
+        // payload with an empty mandatory field or a malformed address with
+        // an HTTP 400 - so this is a UX layer over an enforced contract,
+        // not the enforcement itself.
+        //
+        // The FormController is passed IN by the template, not read off
+        // $scope, and that is load-bearing rather than stylistic.
+        //
+        // The <form> lives inside <div ng-if="!c.data.submitted">, and
+        // ng-if creates a CHILD scope. AngularJS's form directive
+        // publishes the FormController on the scope where it links - the
+        // child - so $scope.caseSubmitForm, read on the controller's own
+        // scope, is undefined. Measured on the rendered page: the form
+        // element's scope was $id 25 with caseSubmitForm as an own
+        // property ($invalid true), while the controller's scope was its
+        // parent $id 24 where hasOwnProperty('caseSubmitForm') was false.
+        //
+        // The consequence was worse than no validation: with `form`
+        // undefined the guard below was skipped entirely, so a press on a
+        // pristine form fell straight through to $http.post, sent
+        // {"subject":"","type":"","description":"","requester_name":"",
+        // "requester_email":""}, took the endpoint's HTTP 400, and painted
+        // the generic "Submission failed. Please try again." - naming no
+        // field, marking nothing, and logging a console error for a
+        // request that should never have left the browser.
+        //
+        // ng-submit="c.submit(caseSubmitForm)" evaluates the expression in
+        // the CHILD scope, where the name does resolve, and hands the
+        // controller in. The $scope fallback is kept for the case where
+        // this method is called without an argument (a keyboard path or a
+        // future caller), and it is correct there because a caller with no
+        // form to pass is one whose scope is the only source available.
+        var form = submittedForm || $scope.caseSubmitForm;
+        if (form && form.$invalid) {
+            c.markAllTouched(form);
+            c.errorMessage = '';
+            c.validationMessage = 'Your case has not been submitted yet. Correct the highlighted fields above, then choose Submit again.';
+            return;
+        }
+
         // Reset state at the start of every submit. The error message
         // and submitting flag drive mutually-exclusive UI affordances.
         c.submitting = true;
         c.errorMessage = '';
+        c.validationMessage = '';
 
         // POST to the scripted REST endpoint. The payload is built by
         // enumerating EXACTLY the five whitelisted fields - NOT by
@@ -817,8 +1050,8 @@
             per-field messages, so all of the above is the only feedback
             channel there is.
           - The status paragraph below the button (id="x-casemgmt-submit-hint")
-            gives the aggregate reason the button is disabled, is referenced by
-            the button through aria-describedby, and is a role="status"
+            gives the aggregate reason a press would be refused, is referenced
+            by the button through aria-describedby, and is a role="status"
             aria-live="polite" region so a change is announced without
             stealing focus. It now distinguishes THREE states rather than
             asserting one: a mandatory field is still empty, or the optional
@@ -827,8 +1060,9 @@
             necessary. Note that this region reports the email problem as soon
             as the address is malformed, without waiting for a blur, while the
             field's own red treatment waits for $touched - so a requester who
-            types a bad address and reaches straight for a disabled Submit
-            button is still told why.
+            types a bad address and reaches straight for the Submit button is
+            told why before pressing it, and told again by the field's own
+            message once the press marks the control $touched.
           - The same region announces the in-flight state, and the form sets
             aria-busy while a request is outstanding, so "Submitting..." is no
             longer conveyed by the button's inner text alone.
@@ -837,21 +1071,86 @@
             browser accepting further characters silently, so a requester
             pasting a long description would otherwise see it truncated with
             no indication that anything was dropped.
-          - No CSS ships with this widget: `help-block` and `has-error` are
-            both part of the Service Portal's bundled Bootstrap 3, so the
-            treatment stays inside the AAP Section 0.4.4 default theme. The
-            <css/> element of this record is, and must remain, empty.
+          - `help-block` and `has-error` are both part of the Service
+            Portal's bundled Bootstrap 3, so the treatment stays inside the
+            AAP Section 0.4.4 default theme. This record's <css> element
+            carries no layout, spacing, typography or branding rules and
+            must never carry any; its sole content is a WCAG 2.1 AA colour
+            remediation of the theme's own palette, documented with its
+            measurements in the <css> element itself.
 
-        HTML5 `required` attributes plus the
-        AngularJS form's $invalid binding to the submit button's ng-disabled
-        prevents submission of incomplete payloads at the UI layer.
+        HTML5 `required` attributes plus the AngularJS form's $invalid
+        state, consulted by c.submit() on the press, prevent submission of
+        incomplete payloads at the UI layer. That check moved from the
+        button's ng-disabled into c.submit() so the press is answered
+        rather than swallowed; see the Submit button comment below.
+
+        WHICH CLASS TOKENS THIS WIDGET'S APPEARANCE DEPENDS ON, AND WHICH
+        IT DOES NOT.
+
+        The widget's validity hooks are exactly two, and both are BOUND
+        expressions evaluated against live controller state on every
+        digest: the `has-error` class in each form-group's ng-class, and
+        each control's ng-attr-aria-invalid. Both read
+        caseSubmitForm.<name>.$invalid && .$touched, so they follow the
+        control's current validity and revert the instant a value becomes
+        valid.
+
+        AngularJS's own ng-valid / ng-invalid / ng-invalid-<key> tokens are
+        NOT a hook here. Nothing keys on them: all five stylesheets this
+        page loads (styles/scss/sp-bootstrap-basic.scss,
+        css_includes_$sp.css, css_includes_$sp_later.css, retina_icons.css
+        and source-sans-pro-latin.css) were fetched by URL and contain zero
+        occurrences of the string `ng-invalid`, and a recursive grep across
+        every .xml, .js and .md artifact in this application returns zero
+        matches for it as well. Measured on the rendered page with
+        real keystrokes, they track validity correctly anyway: typing an
+        invalid address gave
+            form-control ng-valid-maxlength ng-not-empty ng-dirty
+            ng-invalid ng-invalid-email ng-touched
+        and correcting it gave
+            form-control ng-valid-maxlength ng-dirty ng-touched
+            ng-not-empty ng-valid ng-valid-email
+        with every ng-invalid* token removed, aria-invalid back to "false",
+        has-error dropped and the message element destroyed rather than
+        hidden - and the tokens were already cleared at the intermediate
+        empty-field state, before blur.
+
+        The distinction is recorded because a stale-token report against
+        this widget is a report about a hook it does not have. If styling
+        or a test ever needs a validity signal, bind it to $invalid as the
+        two hooks above do; do not read the class attribute, and do not
+        add CSS keyed on ng-invalid to compensate for a token whose
+        lifecycle AngularJS owns.
     -->
+    <!--
+        THE PAGE'S ONE <h1>, AND WHY IT SITS OUTSIDE THE ng-if.
+
+        This was an <h2> inside the form branch. The page therefore had no
+        <h1> element at all: the only level-1 heading on it was a 1x1
+        clipped div.sr-only[role=heading][aria-level=1] emitted by the
+        Service Portal page container from the sp_page record's <title>,
+        which is invisible to sighted users and duplicates this text. A
+        public intake form's visible heading should BE the page's top-level
+        heading, not a level below an invisible one.
+
+        It is placed here, above the ng-if that swaps the form out for the
+        confirmation, rather than inside either branch, so that exactly one
+        <h1> exists in EVERY state - before submission, during submission
+        and after it. Had it stayed inside the form branch it would have
+        vanished the moment the confirmation rendered, leaving that panel's
+        heading as the page's highest level and skipping a level on the way
+        down. Both confirmation panels use <h2> for the same reason.
+
+        The text is unchanged. No CSS is required: <h1> is styled by the
+        bundled default theme.
+    -->
+    <h1>Submit a Case</h1>
     <div ng-if="!c.data.submitted">
-        <h2>Submit a Case</h2>
         <form name="caseSubmitForm"
               novalidate
               ng-attr-aria-busy="{{c.submitting ? 'true' : 'false'}}"
-              ng-submit="c.submit()">
+              ng-submit="c.submit(caseSubmitForm)">
             <div class="form-group" ng-class="{'has-error': caseSubmitForm.subject.$invalid && caseSubmitForm.subject.$touched}">
                 <label for="x-casemgmt-subject">Subject <span class="required" aria-hidden="true">*</span></label>
                 <input type="text"
@@ -860,14 +1159,15 @@
                        class="form-control"
                        maxlength="255"
                        ng-model="c.formData.subject"
+                       ng-change="c.onInputChange()"
                        placeholder="Enter your case subject"
                        aria-required="true"
                        aria-describedby="x-casemgmt-subject-error"
                        ng-attr-aria-invalid="{{(caseSubmitForm.subject.$invalid && caseSubmitForm.subject.$touched) ? 'true' : 'false'}}"
                        required />
-                <p class="help-block" id="x-casemgmt-subject-error" role="alert"
+                <p class="text-danger" id="x-casemgmt-subject-error" role="alert"
                    ng-if="caseSubmitForm.subject.$invalid && caseSubmitForm.subject.$touched">Subject is required.</p>
-                <p class="help-block" role="status"
+                <p role="status"
                    ng-if="c.formData.subject.length >= 255">Subject has reached its limit of 255 characters. Anything typed beyond this point is discarded.</p>
             </div>
             <div class="form-group" ng-class="{'has-error': caseSubmitForm.caseType.$invalid && caseSubmitForm.caseType.$touched}">
@@ -876,6 +1176,7 @@
                         name="caseType"
                         class="form-control"
                         ng-model="c.formData.type"
+                        ng-change="c.onInputChange()"
                         aria-required="true"
                         aria-describedby="x-casemgmt-type-error"
                         ng-attr-aria-invalid="{{(caseSubmitForm.caseType.$invalid && caseSubmitForm.caseType.$touched) ? 'true' : 'false'}}"
@@ -884,7 +1185,7 @@
                     <option value="General Inquiry">General Inquiry</option>
                     <option value="Complaint">Complaint</option>
                 </select>
-                <p class="help-block" id="x-casemgmt-type-error" role="alert"
+                <p class="text-danger" id="x-casemgmt-type-error" role="alert"
                    ng-if="caseSubmitForm.caseType.$invalid && caseSubmitForm.caseType.$touched">Select a case type.</p>
             </div>
             <div class="form-group" ng-class="{'has-error': caseSubmitForm.description.$invalid && caseSubmitForm.description.$touched}">
@@ -895,14 +1196,15 @@
                           rows="4"
                           maxlength="4000"
                           ng-model="c.formData.description"
+                          ng-change="c.onInputChange()"
                           placeholder="Describe your case in detail"
                           aria-required="true"
                           aria-describedby="x-casemgmt-description-error"
                           ng-attr-aria-invalid="{{(caseSubmitForm.description.$invalid && caseSubmitForm.description.$touched) ? 'true' : 'false'}}"
                           required></textarea>
-                <p class="help-block" id="x-casemgmt-description-error" role="alert"
+                <p class="text-danger" id="x-casemgmt-description-error" role="alert"
                    ng-if="caseSubmitForm.description.$invalid && caseSubmitForm.description.$touched">Description is required.</p>
-                <p class="help-block" role="status"
+                <p role="status"
                    ng-if="c.formData.description.length >= 4000">Description has reached its limit of 4000 characters. Anything typed beyond this point is discarded.</p>
             </div>
             <div class="form-group" ng-class="{'has-error': caseSubmitForm.requesterName.$invalid && caseSubmitForm.requesterName.$touched}">
@@ -913,14 +1215,15 @@
                        class="form-control"
                        maxlength="100"
                        ng-model="c.formData.requester_name"
+                       ng-change="c.onInputChange()"
                        placeholder="Enter your name"
                        aria-required="true"
                        aria-describedby="x-casemgmt-requester-name-error"
                        ng-attr-aria-invalid="{{(caseSubmitForm.requesterName.$invalid && caseSubmitForm.requesterName.$touched) ? 'true' : 'false'}}"
                        required />
-                <p class="help-block" id="x-casemgmt-requester-name-error" role="alert"
+                <p class="text-danger" id="x-casemgmt-requester-name-error" role="alert"
                    ng-if="caseSubmitForm.requesterName.$invalid && caseSubmitForm.requesterName.$touched">Your name is required.</p>
-                <p class="help-block" role="status"
+                <p role="status"
                    ng-if="c.formData.requester_name.length >= 100">Your name has reached its limit of 100 characters. Anything typed beyond this point is discarded.</p>
             </div>
             <div class="form-group" ng-class="{'has-error': caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched}">
@@ -931,10 +1234,11 @@
                        class="form-control"
                        maxlength="100"
                        ng-model="c.formData.requester_email"
+                       ng-change="c.onInputChange()"
                        placeholder="Enter your email (optional)"
                        aria-describedby="x-casemgmt-requester-email-error"
                        ng-attr-aria-invalid="{{(caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched) ? 'true' : 'false'}}" />
-                <p class="help-block" id="x-casemgmt-requester-email-error" role="alert"
+                <p class="text-danger" id="x-casemgmt-requester-email-error" role="alert"
                    ng-if="caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched">Enter a valid email address, or leave the field empty. Email is optional, but an address that is not valid blocks Submit.</p>
             </div>
 
@@ -953,34 +1257,84 @@
             </div>
 
             <!--
-                Submit button: disabled while a request is in flight OR while
-                the form has any invalid fields. The button text alternates
-                between "Submit" and "Submitting..." for clear UX feedback.
-                The double-submit prevention is enforced at three independent
-                layers: ng-disabled on the button, the early-return guard in
-                c.submit(), and the c.submitting flag.
+                Validation summary: rendered when the requester pressed
+                Submit while the form was still invalid. It exists because
+                Submit is enabled now - see c.validationMessage in the
+                client script for why a disabled primary action was a dead
+                end for both pointer and keyboard users - and it is the
+                visible answer to that press, next to the button, while the
+                per-field messages say which field and why.
+
+                It renders BELOW all five fields and immediately above the
+                button, which is why its text says "above": the fields it
+                refers the requester back to are the ones they have just
+                scrolled past on the way to pressing Submit.
+
+                role="alert" so it is announced when it appears. It is
+                cleared by c.onInputChange() on the first keystroke, and by
+                a successful press, so it can never coexist with the
+                outcome of a later attempt. It and the generic failure
+                panel above are mutually exclusive by construction: each
+                path sets one and clears the other.
+            -->
+            <div class="form-group" ng-if="c.validationMessage">
+                <div class="alert alert-danger" role="alert">
+                    {{c.validationMessage}}
+                </div>
+            </div>
+
+            <!--
+                Submit button: disabled ONLY while a request is in flight,
+                never because the form is invalid.
+
+                It used to be disabled on caseSubmitForm.$invalid as well,
+                and that made the primary action unanswerable in the state
+                where the requester most needs an answer: a disabled
+                <button> does not receive the pointer, so a click landed on
+                this wrapper DIV and produced nothing at all - not even the
+                declared cursor:not-allowed, which cannot render on a
+                control the pointer never reaches - and a disabled button is
+                absent from the tab order, so a keyboard user never got to
+                it. Enabled, the press is always answered: c.submit()
+                validates first, marks every control touched so each field's
+                own message renders, and sets the summary above.
+
+                An invalid payload still cannot be sent. c.submit() returns
+                before any $http.post on an invalid form, and
+                x_casemgmt.CasePortalService._validateSubmission() refuses
+                one server-side with an HTTP 400 regardless.
+
+                Double-submit prevention is unchanged and still the same
+                three layers listed in the record description:
+                ng-disabled="c.submitting" on this button, the
+                early-return guard on c.submitting inside c.submit(), and
+                the button text changing to "Submitting...".
             -->
             <div class="form-group">
                 <button type="submit"
                         class="btn btn-primary"
                         aria-describedby="x-casemgmt-submit-hint"
-                        ng-disabled="c.submitting || caseSubmitForm.$invalid">
+                        ng-disabled="c.submitting">
                     <span ng-if="!c.submitting">Submit</span>
                     <span ng-if="c.submitting">Submitting...</span>
                 </button>
                 <!--
-                    Status region: the visible REASON the button is disabled
+                    Status region: the visible REASON a press would be refused
                     (the form's novalidate suppresses the browser's own
                     per-field messages) and the announcement of the in-flight
                     state. It is always present in the DOM so the button's
                     aria-describedby never dangles, and it is polite so it
                     never steals focus mid-typing.
+
+                    It is guidance shown BEFORE the press, not the answer to
+                    one: the answer to a refused press is the role="alert"
+                    summary above the button plus each field's own message.
                 -->
-                <p id="x-casemgmt-submit-hint" class="help-block" role="status" aria-live="polite">
+                <p id="x-casemgmt-submit-hint" role="status" aria-live="polite">
                     <span ng-if="c.submitting">Submitting your case, please wait...</span>
                     <span ng-if="!c.submitting">
-                        <span ng-if="c.requiredIncomplete()">Every field marked * is required. Complete all four to enable Submit.</span>
-                        <span ng-if="!c.requiredIncomplete() && caseSubmitForm.requesterEmail.$invalid">Email is optional, but the address entered is not valid. Correct it or clear the field to enable Submit.</span>
+                        <span ng-if="c.requiredIncomplete()">Every field marked * is required. Complete all four before submitting.</span>
+                        <span ng-if="!c.requiredIncomplete() && caseSubmitForm.requesterEmail.$invalid">Email is optional, but the address entered is not valid. Correct it or clear the field before submitting.</span>
                         <span ng-if="!c.requiredIncomplete() && !caseSubmitForm.requesterEmail.$invalid">All required fields are complete.</span>
                     </span>
                 </p>
@@ -1001,7 +1355,56 @@
         options.number, mutated by the success callback in c.submit().
     -->
     <div ng-if="c.data.submitted">
-        <sp-widget widget="c.data.confirmationWidget"></sp-widget>
+        <sp-widget ng-if="c.data.confirmationWidget" widget="c.data.confirmationWidget"></sp-widget>
+        <!--
+            Fallback confirmation, rendered ONLY when the embedded widget
+            is unavailable.
+
+            The panel above is the whole of the confirmation, and it comes
+            from a second record loaded server-side by
+            $sp.getWidget('x_casemgmt_case_confirmation_widget', ...). If
+            that record cannot be loaded - it is inactive, it was not
+            included in an Update Set commit, or the caller lacks read
+            access to it - the previous markup rendered an EMPTY div: the
+            form disappeared, the requester saw nothing at all, and the
+            case number they had just been issued was lost with it. That
+            is the one outcome a submission confirmation must never have,
+            because the natural response is to submit again.
+
+            This block carries the same three facts the embedded widget
+            carries - the verbatim message, the case number, and the link
+            to the status page - from data this widget already holds
+            (c.data.submittedNumber, mirrored by the success callback).
+            The ng-if on the <sp-widget> above and the ng-if here are
+            mutually exclusive, so exactly one confirmation renders and
+            the link is never duplicated.
+
+            The heading level matches the embedded widget's for the same
+            reason: the page's single <h1> is rendered above, outside the
+            ng-if that swaps the form out, so <h2> continues the outline
+            without a skipped level. The message text is verbatim per AAP
+            Section 0.4.4 and identical to the embedded widget's, and the
+            classes are bundled Bootstrap 3, so this panel needs no
+            styling rule of its own and adds no branding. (The only rules
+            in this widget's <css> element are the colour-contrast
+            remediation; alert-success is not among them - the theme
+            paints it 4.79:1, which already passes.)
+        -->
+        <div class="alert alert-success" role="alert" ng-if="!c.data.confirmationWidget">
+            <h2>Your case has been submitted</h2>
+            <p ng-if="c.data.submittedNumber">
+                Case number: <strong>{{c.data.submittedNumber}}</strong>
+            </p>
+            <p>
+                Please save this case number for future reference. You can use it to look up the status of your case at any time.
+            </p>
+            <p>
+                <a ng-if="c.data.submittedNumber"
+                   ng-href="?id=x_casemgmt_case_status&amp;number={{c.data.submittedNumber}}">Check the status of this case</a>
+                <a ng-if="!c.data.submittedNumber"
+                   href="?id=x_casemgmt_case_status">Check the status of a case</a>
+            </p>
+        </div>
     </div>
 </div>
 ]]></template>

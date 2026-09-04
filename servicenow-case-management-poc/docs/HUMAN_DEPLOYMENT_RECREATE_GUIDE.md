@@ -3,7 +3,37 @@
 > **Audience:** a human ServiceNow administrator who needs to reproduce, from scratch, the working
 > deployment of the `x_casemgmt` Case Management scoped application onto a ServiceNow Personal
 > Developer Instance (PDI).
+
+> **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
+> The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> What to verify before an upload, and what to assert after it:
 >
+> | | Value |
+> | --- | --- |
+> | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
+> | Bytes | **3,944,374** (was 3,780,373) |
+> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | `…FALLBACK.xml` | byte-identical to the above, as always |
+> | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
+>
+> Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
+> Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
+> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
+> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> remediation creates (was 27), **11** Business Rules (was 7).
+>
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
+> superseded revision and is left as written** — those passages state what was measured at a point in time, and
+> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
+> digest, it has been updated to the values above.
+>
+> **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
+> deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988
+> children against the one sequence that ever previewed to zero problems, and rewriting records inside a file
+> that is retained rather than shipped would destroy that for nothing. The consequence is that promoting it as
+> it stands would undo all 18 QA fixes. A promotion must first carry the 9 inserted and 14 re-synced records
+> named in the elected package's header comment.
+
 > **Why this guide exists:** the deliverable Update Set XML
 > (`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`) does **not**
 > deploy to a fully-functional state by upload-preview-commit alone. The ServiceNow platform and several
@@ -38,7 +68,7 @@
 > **What ships is the untouched original package**, elected under checkpoint OVERRIDE-2 because the exact-byte
 > gate could not be completed on any instance available to that run. **So Defects C-storage and 9 are manual
 > steps again:** the elected file carries **0 `sys_security_acl_role` rows** and the 25 hand-authored
-> `sys_dictionary` rows, so §5 below — including its two remediation passes that create the 27 role links — is
+> `sys_dictionary` rows, so §5 below — including its two remediation passes that create the 36 role links — is
 > **required as written**, and the child count to assert on upload is **926**, not 988. **The choice rows are no
 > longer a post-commit step on either package.** Both carry seven platform-native choice composites — a
 > canonical `sys_choice_<table>_<field>` block per field holding one `x_casemgmt`-owned `sys_choice_set` with the
@@ -74,7 +104,7 @@
 >   Script* executes that record in the **application** scope and fails identically. The only route measured to
 >   work is *System Definition → **Scripts - Background*** with **"In scope" = Global**.
 > - **A second commit is required.** Forcing the table rebuild means deleting three `sys_db_object` rows, which
->   cascades away all 26 ACLs, the seed rows, the demo users and the role grants; a second commit restores them.
+>   cascades away all 29 ACLs, the seed rows, the demo users and the role grants; a second commit restores them.
 >   The remediation then has to be run **again** to create the 27 ACL role links.
 > - **The demo data needs one script run, but no longer needs preparation.** An earlier revision of this bullet
 >   said the packaged seed rows had to be **deleted** first; that is no longer true. Every seed row now carries a
@@ -117,6 +147,7 @@
 > on nearly every column, which made every reference to a case render blank until reduced by hand. The package
 > now ships exactly one display field per table and the remediation verifies it.*
 
+
 ---
 
 ## 0. Outcome you should expect
@@ -127,10 +158,10 @@ After completing this guide, on the instance you targeted — the current valida
 - Scoped application **`x_casemgmt` ("Case Management")** with a single scope/`sys_app` record (`sys_id 82b99028936f74320d74d6f88357a5af` on the current validation instance — that is a **measured value, not an input**: on any instance, yours included, resolve it with `GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id` rather than reusing the literal).
 - **3 physical tables**: `x_casemgmt_case` (with auto-number `CASE0000001`), `x_casemgmt_case_task`, `x_casemgmt_case_party`, each with all dictionary fields and choice lists.
 - **3 roles**: `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`.
-- **26 ACLs + 27 role-link records** enforcing the role × CRUD matrix (manager full / agent assigned-only / viewer read-only).
-- **7 business rules** — in execution order: `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)** — the one that runs the transition subflow and raises the blocking form error — `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), and `set_closed_date` (500), the only writer of `closed_date`.
+- **29 ACLs + 36 role-link records** enforcing the role × CRUD matrix (manager full / agent assigned-only / viewer read-only). 26 of the ACLs are AAP §0.5.6's table-level and field-level set; the other 3 are field-level `query_range` grants on `case.opened_date`, `case.closed_date` and `case_task.due_date`, granted to all three roles so a date RANGE filter may participate in the query — which rows come back is still decided by each role's read ACL. The remediation script resolves those three ACLs' `operation` reference by name, since §0.7.2 forbids shipping the operation's sys_id.
+- **11 business rules** — in execution order on `x_casemgmt_case`: **`validate_case_mandatory_fields` (50, before-insert + update)** — refuses an empty `subject`, `description` or `requester_name` and names the offending field, which is what stops the Table API from creating a blank shell — **`validate_case_text_lengths` (70)**, `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)** — the one that runs the transition subflow and raises the blocking form error — `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), and `set_closed_date` (500), the only writer of `closed_date`. Plus one on each child table at order 100: **`validate_case_task_integrity`** (task must carry its parent case, subject, assigned_to and due_date) and **`validate_case_party_integrity`** (exactly one of `person`/`organization`, matching `party_type`, per AAP §0.5.7's Conditional rows). The four order-50/70/100-on-children rules exist because a UI Policy cannot reach a REST caller: they enforce the data contract on every write path.
 - **7 Flow Designer flows** — 2 parent flows (`general_inquiry_state_machine`, `complaint_state_machine`) and 5 subflows (`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`) — plus **1 Custom Action** (`x_casemgmt_transition_guard_action`) and **1 shared flow logic block**.
-- **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards** (Agent Workspace with 3 widgets, Manager View with 5 — both rendering), **1 Experience/Service Portal** with 2 pages and 3 widgets, **2 UI policies** with their 2 policy actions, **6 UI Actions**, **1 List Layout** and **1 Related Lists definition** on the case table's Default view, and **number counters**.
+- **2 Script Includes** (`CaseTransitionValidator`, `CasePortalService`), **2 scripted REST services** (anonymous case submit + status lookup), **8 reports**, **2 dashboards** (Agent Workspace with 3 widgets, Manager View with 5 — both rendering), **1 Experience/Service Portal** with 2 pages and 3 widgets, **2 UI policies** with their 2 policy actions, **6 UI Actions**, **1 List Layout**, **1 Related Lists definition** and **1 Form Layout section** (single-column, in AAP §0.4.4's field order — which is also what makes the keyboard tab order follow the visual order) on the case table's Default view, **1 Client Script** (`x_casemgmt_case_flush_stale_messages`, onLoad — clears a stale mandatory-field banner once the named field is filled), and **number counters**.
 - **1 Fix Script** (`x_casemgmt Post-Import Remediation`) carrying the post-import remediation body. It does not run by itself.
 - **10 demo cases** covering all six statuses and both case types, demo tasks, demo parties, and 3 demo users (one per role). **The packaged rows now carry pinned, deterministic numbers** — `CASE9000001`-`CASE9000010`, `TASK9000001`-`TASK9000010`, `PARTY9000001`-`PARTY9000008` — chosen in the 9,000,000 band so they cannot collide with counter-issued numbers, and `scripts/seed_demo_data.js` adopts those rows rather than inserting duplicates, so a committed install is number-identical to any other. **Numbers differ from the pinned set only if you seed WITHOUT committing the package** (the script then inserts fresh rows and the instance counter allocates the numbers) or if you delete the packaged rows before seeding — which you should not do. The numbers `CASE0000013`-`CASE0000022` quoted in older revisions of this guide were simply what one counter-allocated run produced.
 
@@ -484,8 +515,8 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > settled which package ships; it did not pass that gate, and the artifact must not be presented as verified by
 > round trip. Running the
 > steps of §4 and this section against the elected file on a **genuinely clean** PDI — verify the digest,
-> upload, assert **926** children, preview to zero `type=error`, commit through the native "Commit Update Set"
-> UI action, then run the two remediation passes and confirm physical storage and all 27 role links — is what
+> upload, assert **935** children, preview to zero `type=error`, commit through the native "Commit Update Set"
+> UI action, then run the two remediation passes and confirm physical storage and all 36 role links — is what
 > turns that NOT MET into a MET for the deliverable; record `a9204411…` as verified with that run's timestamp
 > when it completes.
 >
@@ -575,8 +606,8 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > | 2 | **Preview** | Run Preview to completion. On a genuinely clean instance the expected result is **0 errors and 0 warnings**. Resolve any error; do **not** ignore a collision | §4 |
 > | 3 | **Commit** | Click the native **Commit Update Set** UI action in a rendered browser session, **exactly once**, after the pre-click checks in §4.1 step 4 (`state=previewed`, not already committed, no commit progress worker running). Any confirmation dialog is a **hard stop** — screenshot it and escalate, do not click through. Do not script this step. Result: `state=committed` | §4.1 step 4 |
 > | 4 | **Run the remediation in scope `Global`** — *first pass* | *System Definition → **Scripts - Background***, set **"In scope" = Global**, paste `scripts/post_import_remediation.js`, run. This pass builds the three tables' physical storage and their fields; it also writes their choice rows, which since 2026-09-03 the package already carries natively, so that part is redundant and idempotent rather than required. It does the `sys_db_object` work itself; **you do not delete anything and you do not touch the application picker** | §5a |
-> | 5 | **Commit the same Update Set a second time** | The rebuild in step 4 **cascades away all 26 ACLs**, the seed rows, the demo users and the role grants; a second commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports ~25 `sys_dictionary` collisions from the rows step 4 wrote moments earlier; accepting the remote is correct **for `sys_dictionary` only**, because the package now carries the corrected `display` and `defaultsort` values itself. **Never ignore a collision on any other table** | §4 again |
-> | 6 | **Run the remediation in scope `Global`** — *second pass* | Same invocation as step 4. This is the pass that creates the **27** `sys_security_acl_role` links and flushes the security cache. Without it you have 26 ACLs with **0** role links, and on a high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
+> | 5 | **Commit the same Update Set a second time** | The rebuild in step 4 **cascades away all 29 ACLs**, the seed rows, the demo users and the role grants; a second commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports ~25 `sys_dictionary` collisions from the rows step 4 wrote moments earlier; accepting the remote is correct **for `sys_dictionary` only**, because the package now carries the corrected `display` and `defaultsort` values itself. **Never ignore a collision on any other table** | §4 again |
+> | 6 | **Run the remediation in scope `Global`** — *second pass* | Same invocation as step 4. This is the pass that creates the **36** `sys_security_acl_role` links and flushes the security cache. Without it you have 29 ACLs with **0** role links, and on a high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
 > | 7 | **Seed the demo data** | Run `scripts/seed_demo_data.js` **in scope** (not Global). Do **not** delete the packaged rows — they carry pinned numbers now and the script adopts them. Clear the dangling `sys_user_grmember` row if one is present | §5g |
 >
 > Run the remediation like this — **in `global`, never in scope**:
@@ -666,9 +697,9 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 >   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
 > ```
 >
-> On a genuinely clean instance the summary reads `tables_built=3` and `acl_links_created=27`; on a repeat it
+> On a genuinely clean instance the summary reads `tables_built=3` and `acl_links_created=36`; on a repeat it
 > reads `tables_already=3` and `acl_links_already=27`. Either way the proof of convergence is
-> `verified=true|…|errors=0` **together with** `acl_links_total=27|acl_links_expected=27`. The count must be
+> `verified=true|…|errors=0` **together with** `acl_links_total=36|acl_links_expected=36`. The count must be
 > **exactly** 27, distributed manager 14 / agent 10 / viewer 3 — the script rejects a surplus as well as a
 > shortfall, and removes unexpected links, so a number other than 27 means it has not converged.
 >
@@ -703,7 +734,7 @@ then `built|signals=GlideTableDescriptor.isValid=yes,GlideRecord.isValid=yes,Tab
 `tables_built=3, fields_created=25, choices_created=24, counters_written=3`.
 
 > **Then go straight to step 5 — commit the Update Set a second time.** Rebuilding the tables **cascades away all
-> 26 ACLs**, the seed rows, the demo users and the role grants, so this run necessarily ends
+> 29 ACLs**, the seed rows, the demo users and the role grants, so this run necessarily ends
 > `verified=false … errors=6`, every error being the ACL check (`found 0 x_casemgmt ACLs, expected 26`, and one per
 > role). **That is the expected outcome of step 1, not a failure** — the script is fail-closed and refuses to
 > report success with zero role links. `verified=true` arrives at step 6.
@@ -850,11 +881,11 @@ scope **Global** *after* the second commit:
 
 The security-cache flush (`GlideSecurityManager.get().reset()`) happens inside that same run, so there is no
 separate step for it — but it is also the reason the run cannot happen in scope, and therefore cannot happen
-automatically on commit. **Skipping this step leaves 26 ACLs with 0 role links, and on this high-security
+automatically on commit. **Skipping this step leaves 29 ACLs with 0 role links, and on this high-security
 instance an ACL with no role, no condition and no script evaluates to `deny` — no non-admin can use the
 application at all.**
 
-Expect on the `SUMMARY` line: `verified=true`, `acl_links_total=27`, `acl_links_expected=27`,
+Expect on the `SUMMARY` line: `verified=true`, `acl_links_total=36`, `acl_links_expected=36`,
 `security_cache_flushed=true`, `errors=0`. The total must be **exactly** 27, distributed manager 14 / agent 10 /
 viewer 3; the script rejects a surplus as well as a shortfall and deletes unexpected links, so any other number
 means it has not converged.
@@ -895,7 +926,7 @@ Without the links, a high-security PDI evaluates an ACL with no role, no conditi
 
 The remediation derives each ACL's role from the package's own `<roles>` element — role **names**, never
 sys_ids — read back out of the ACL's committed `sys_update_version` payload, falling back to the
-`.assigned_agent`/`.assigned_group` naming convention and then to the ACL's description. 26 ACLs yield 27 links
+`.assigned_agent`/`.assigned_group` naming convention and then to the ACL's description. 29 ACLs yield 36 links
 because the `assigned_agent` field ACL needs both manager and agent, and the script treats 27 as an invariant:
 a shortfall reports `verified=false` rather than silently leaving an ACL that denies everyone.
 
@@ -1001,7 +1032,7 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
 
-# Corroborating counts: 26 ACLs, 7 case Business Rules, and 7 flows all active AND published.
+# Corroborating counts: 29 ACLs, 9 case Business Rules, and 7 flows all active AND published.
 curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_security_acl?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=name,operation&sysparm_limit=50"
 curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \

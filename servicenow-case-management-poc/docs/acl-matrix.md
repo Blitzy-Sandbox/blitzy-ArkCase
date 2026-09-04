@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document captures the role × table × CRUD authorization matrix for the ServiceNow scoped application POC. Three named scoped roles (`x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`) replace ArkCase's `ApplicationRolesToPrivilegesConfig`-based privilege resolution. Authorization is enforced through table-level ACLs (read, write, create, delete) and field-level ACLs on the sensitive fields `assigned_group` and `assigned_agent`. All ACLs live in the `x_casemgmt` scope; no global ACLs are modified.
+This document captures the role × table × CRUD authorization matrix for the ServiceNow scoped application POC. Three named scoped roles (`x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`) replace ArkCase's `ApplicationRolesToPrivilegesConfig`-based privilege resolution. Authorization is enforced through table-level ACLs (read, write, create, delete) and field-level ACLs on the sensitive fields `assigned_group` and `assigned_agent`, plus three field-level `query_range` grants on the date columns the dashboards filter by (see [Field-level `query_range` grants](#field-level-query_range-grants-on-the-three-date-columns-qa-finding-f17)). All 29 ACLs live in the `x_casemgmt` scope; no global ACLs are modified.
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -50,6 +50,33 @@ The canonical implementation pattern below appears in every "Assigned only" ACL 
 
 This script uses NO hard-coded `sys_id`s — both lookups resolve through `gs.getUserID()` and the foreign-key value on `current.assigned_group` (which itself was resolved by `name` lookup at seed time per AAP Section 0.5.2 reference resolution rules).
 
+### "Assigned only" — the create-path limbs (QA finding F4)
+
+AAP Section 0.5.6 grants `x_casemgmt_case_agent` **Create ✅** on the same matrix row that restricts its Read and Write to "Assigned only". Those two statements collide on the insert path, because a case an agent creates is necessarily **unassigned at the moment it is created**:
+
+- `assigned_group` is manager-only (field-level ACL [`../acl/x_casemgmt_case_assigned_group_field_acl.xml`](../acl/)), so an agent cannot self-assign a group on insert; and
+- nothing populates `assigned_agent` during an insert the agent drives.
+
+Evaluated literally against that half-built row, the "Assigned only" predicate returns false, which produced the two halves of QA finding F4:
+
+1. the table-level **write** ACL is evaluated once per column during an insert, so every field value the agent supplied was discarded and the row landed as a blank shell while the create ACL still admitted it (measured: an agent-created case with `subject`, `description`, `requester_name` and `type` all empty); and
+2. the table-level **read** ACL then hid the row from the agent who had just created it (form load answered "Security constraints prevent access to requested page"; the row was absent from the agent's list).
+
+Both defects were reproduced and re-verified on the rendered form. A third symptom of the same root cause surfaced during that re-verification: because the read ACL is evaluated per column when the platform renders a form, and a **New** form's row has not been inserted yet, the agent was rendered a case form with **zero fields** and could reach a usable form only by submitting the blank one and working on the redisplay. The two ACLs therefore carry three limbs between them, and only three:
+
+| ACL record | Limb added | Why it is the minimum |
+| --- | --- | --- |
+| [`x_casemgmt_case_write_agent_assigned`](../acl/x_casemgmt_case_write_agent_assigned.xml) | `current.isNewRecord()` | True only while the row is being inserted. "Assigned only" is a statement about which **existing** records an agent may reach, and is logically inapplicable to a record that does not exist yet — the same reasoning the create ACL already records for running unconditionally. Field values supplied by the agent now persist. |
+| [`x_casemgmt_case_read_agent_assigned`](../acl/x_casemgmt_case_read_agent_assigned.xml) | `current.isNewRecord()` | The read ACL is evaluated per column when the platform renders a form, including the **New** form. Without this limb the agent was rendered a case form with **zero fields** (measured on the rendered form; `g_form.getEditableFields()` was empty and the app's own client script logged "bound 0 of 4 mandatory field control(s); not on form or not readable: subject, status, description, requester_name"), and could only reach a usable form by submitting the blank one and working on the redisplay — which consumed a case number. AAP Section 0.7.4 requires cases to be creatable "via both internal UI and external portal", so seeing the form one is filling in is part of the Create grant. The limb exposes no stored data: a not-yet-inserted row holds only the defaults and the caller's own keystrokes. |
+| [`x_casemgmt_case_read_agent_assigned`](../acl/x_casemgmt_case_read_agent_assigned.xml) | `current.sys_created_by == gs.getUserName()` | A Create grant that yields a record its author cannot read is not a working grant. `sys_created_by` is written once by the platform during the insert and is read-only afterwards (no ACL in this application grants write on it and it appears on no form layout), so this limb can only ever expose a record **the same user created**. |
+
+**Exactly what the extension does and does not widen.** It is an extension of Section 0.5.6's verbatim "Assigned only" definition and is recorded here as such:
+
+- Every already-inserted case the agent did **not** author is still governed solely by the two verbatim limbs. All package-seeded cases carry `sys_created_by = admin` and every anonymous portal case carries `sys_created_by = guest`, so the creator limb reaches none of them. AAP Section 0.7.3 Gate 3 ("case_agent cannot access unassigned cases") continues to hold: measured after the change, the agent's readable set was exactly its 11 assigned cases, and the two unassigned seeded Draft cases answered HTTP 404 "Record doesn't exist or ACL restricts the record retrieval" over the Table API.
+- `isNewRecord()` grants nothing on the update path, and the two field-level ACLs still evaluate on the insert, so an agent inserting a case still cannot set `assigned_group`.
+- Content of a created row is not an ACL concern and is enforced independently by [`../business_rules/x_casemgmt_validate_case_mandatory_fields.xml`](../business_rules/) (order 50), which refuses an insert with an empty `subject`, `description` or `requester_name` and names the offending field.
+- **Write on the agent's own creation is deliberately NOT granted.** After the insert completes, a case the agent created but that no manager has assigned yet is readable to its author and not writable by it (measured: `PATCH` → HTTP 403 `ACL Exception Update Failed due to security constraints`). Section 0.5.6's Write cell says "Assigned only" without a creator exemption, and an agent can supply every field it needs in the insert itself, so no creator limb is added to the write ACL beyond the insert path. Once a manager sets `assigned_group` or `assigned_agent`, the ordinary "Assigned only" grant applies and the agent can edit the case.
+
 ## Per-Role Narrative
 
 ### x_casemgmt_case_manager
@@ -78,8 +105,8 @@ Operational authority scoped to the agent's own assignments. Can create cases (t
 **Granted privileges:**
 
 - **Create:** `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`
-- **Read:** scoped by "Assigned only" condition
-- **Write:** scoped by "Assigned only" condition; field-level ACL prevents writing `assigned_group`
+- **Read:** scoped by "Assigned only" condition, plus the records the agent created itself (see "Assigned only — the create-path limbs" above)
+- **Write:** scoped by "Assigned only" condition, plus the insert path itself (`current.isNewRecord()`), so field values supplied on create persist; field-level ACL prevents writing `assigned_group`
 - **Delete:** none
 - **Resolved → Closed:** NOT authorized (validate_closed_transition rejects)
 
@@ -125,13 +152,35 @@ Per AAP Section 0.5.6, field-level ACLs MUST be authored on the sensitive fields
 | Field | Read | Write Restricted To | ACL Record File |
 | --- | --- | --- | --- |
 | `x_casemgmt_case.assigned_group` | All authenticated roles | `x_casemgmt_case_manager` only | [`../acl/x_casemgmt_case_assigned_group_field_acl.xml`](../acl/) |
-| `x_casemgmt_case.assigned_agent` | All authenticated roles | `x_casemgmt_case_manager` AND assigned `x_casemgmt_case_agent` | [`../acl/x_casemgmt_case_assigned_agent_field_acl.xml`](../acl/) |
+| `x_casemgmt_case.assigned_agent` | All authenticated roles | `x_casemgmt_case_manager` AND any `x_casemgmt_case_agent` who is on the case per "Assigned only" (the stored `assigned_agent` is the caller **or** the stored `assigned_group` contains the caller) | [`../acl/x_casemgmt_case_assigned_agent_field_acl.xml`](../acl/) |
 
 **Related rules:**
 
 - Field-level ACLs run in addition to (NOT instead of) table-level ACLs.
-- The `assigned_group` field-level ACL prevents an agent from reassigning their own case to a different group.
-- The `assigned_agent` field-level ACL allows the assigned agent to update the field if needed (e.g., reassign to peer in same group), but the manager can override.
+- The `assigned_group` field-level ACL prevents an agent from reassigning their own case to a different group. It stays manager-only: AAP Section 0.5.1 states "write restricted to manager" for this column, and the agent can neither set nor clear it, so it carries no one-way door.
+- The `assigned_agent` field-level ACL allows any agent the stored row places on the case — the stored `assigned_agent` is the caller, **or** the stored `assigned_group` contains the caller — to update the field (reassign to a peer in the same group, hand off, or take an unassigned case out of their own group's queue), and the manager can always override.
+
+**Why the `assigned_agent` grant reads both "Assigned only" limbs (QA finding F6).** Both limbs are evaluated against the **stored** row. An earlier revision granted only on the `assigned_agent == caller` limb, which produced a one-way door: an assigned agent could **clear** `assigned_agent` (the stored value was still theirs when the ACL ran) but could never **re-populate** it (the stored value was now empty), so an agent could permanently orphan a case from their own queue and only a manager could recover it. Measured on CASE9000003: clear → HTTP 200 and the value gone; re-populate → HTTP 200 with the value silently discarded; after the group limb was added, re-populate → HTTP 200 with the value stored.
+
+**Why no business rule reports a denied field write.** A field-level denial is a silent drop by platform design: the request still returns HTTP 200 (or a normal form save) with that one column discarded. A temporary before-update probe on `x_casemgmt_case` measured that the ACL engine strips the value **before** business rules run — on one request the denied column reported `changes() === false` while an allowed column on the same request reported `changes() === true`, and when *every* submitted column was denied the update was abandoned outright and no before-rule ran at all. A guard rule that aborts with "you may not write this field" therefore cannot exist: there is nothing for it to observe. The restriction is instead communicated **before** the write on the surface AAP Section 0.7.1 cares about — the form renders `assigned_group` (and `assigned_agent`, where not granted) read-only and greyed for the agent, and the platform refuses inline list edits with "Security prevents writing to this field". Callers using the Table API directly receive the platform-standard silent drop, and the two limbs above ensure the drop no longer costs an agent access to their own case.
+
+### Field-level `query_range` grants on the three date columns (QA finding F17)
+
+Three further field-level ACLs exist that are not part of AAP Section 0.5.6's read/write/create/delete matrix, because they govern a different operation. The platform has a distinct ACL operation named **`query_range`** which decides whether a **range** predicate on a column — `BETWEEN`, `>`, `<`, `>=`, `<=`, and the relative-date operators the list filter builds — may participate in the query's `WHERE` clause. It does not decide which rows come back: that remains entirely the business of each role's `read` ACL, so an agent filtering by date still sees only the cases "Assigned only" grants them.
+
+| ACL | Operation | Granted to | Record file |
+| --- | --- | --- | --- |
+| `x_casemgmt_case.opened_date` | `query_range` | all three scoped roles | [`../acl/x_casemgmt_case_query_range_opened_date.xml`](../acl/x_casemgmt_case_query_range_opened_date.xml) |
+| `x_casemgmt_case.closed_date` | `query_range` | all three scoped roles | [`../acl/x_casemgmt_case_query_range_closed_date.xml`](../acl/x_casemgmt_case_query_range_closed_date.xml) |
+| `x_casemgmt_case_task.due_date` | `query_range` | all three scoped roles | [`../acl/x_casemgmt_case_task_query_range_due_date.xml`](../acl/x_casemgmt_case_task_query_range_due_date.xml) |
+
+These three take the scope from **26 ACLs to 29**, and from **27 `sys_security_acl_role` link rows to 36** (three roles on each new ACL). Both figures are what `scripts/post_import_remediation.js` now asserts.
+
+**The operation is stored as a reference, and this package ships the name rather than the sys_id.** `read`, `write`, `create` and `delete` each have a `sys_security_operation` row whose `sys_id` equals its `name`, so an ACL payload carrying the literal string imports correctly. `query_range` does not — its row is a random sys_id — so a payload carrying the literal `query_range` imports as an **unresolvable reference**, and an ACL whose operation does not resolve grants nothing. AAP Section 0.7.2 forbids shipping the sys_id, so the artifacts keep the readable name and `post_import_remediation.js` resolves it after import by querying `sys_security_operation` by name, before the security-cache flush. Its verification step re-reads the three rows from the database and fails the run if any is still unresolved.
+
+**What re-verification established, and what it did not.** The reported symptom — an "Operator not available for security reasons" banner when a date range was applied to a scoped list — is gone: eight list renders across all three personas, with and without range filters, produced no banner of any kind, and range queries returned correct results for every persona. But the causal link to these ACLs was tested and **not** established. A differential probe compared range predicates on a column that has a `query_range` ACL against range predicates on a column that has none (`sys_created_on`) inside the same impersonated session: both behaved identically for both the manager and the agent, and the predicates were genuinely evaluated rather than dropped (a `number > CASE9000005` filter returned exactly the five matching rows; a `subject > M` filter returned exactly the three subjects that sort after "M"). So these three ACLs are retained as an **explicit scoped grant** for the columns the AAP's own dashboards filter by date, not as a proven repair. The most probable original cause is an ACL/dictionary cache inconsistency left by the native table and role-link rebuild that this checkpoint was exercising — any ACL write flushes that cache, which is consistent with the symptom clearing.
+
+**An earlier claim in these records was wrong and is corrected here.** The three ACL artifacts originally stated that zero `query_range` ACLs existed instance-wide. That was an artifact of querying `sys_security_acl` by `name`; querying by the resolved operation reference finds **seven** out-of-box ones — `sys_one_extend_eval_applicability.*`, `on_call_escalation_con_attempt.*`, `ast_contract.starts`, `*.*`, `sn_actsub_activitytype_template_field.*`, `sys_portal_preferences.*` and `asmt_assessment_instance_question.*` — including four `*.*` rows that deny or conditionally allow `query_range` platform-wide. The artifacts' own headers now carry the correction in full.
 
 ## UI Action Visibility Tied to ACL Matrix
 
@@ -156,6 +205,24 @@ The choice to restrict the **Open** UI Action to `x_casemgmt_case_manager` (inst
 4. **No drift from AAP.** AAP Section 0.5.5 row 1 specifies the precondition (`assigned_group populated`) and the failure-handling behavior (`Surface form-level error`) but does NOT specify which role(s) may invoke the transition. The role-restriction is therefore a design choice within the AAP envelope, and the chosen restriction (`case_manager` only) is consistent with the field-level ACL.
 
 The departure from a hypothetical "all transitions visible to both manager and agent" model is documented here and in `state-machine.md`; the rule lives canonically in the `<roles>` and `<condition>` fields of `x_casemgmt_case_open.xml` and can be relaxed in a future iteration without touching any other artifact.
+
+### The stock list "Delete" affordance is offered to every role (QA finding F7)
+
+QA finding F7 (LOW, non-blocking) records that **Delete is offered in the list menu to the `x_casemgmt_case_agent` and `x_casemgmt_case_viewer` personas** even though the server refuses the operation. Both halves were re-measured under impersonation:
+
+**Enforcement holds.** There is exactly one `delete`-operation ACL per table (`x_casemgmt_case` `704775b2c264cae37cdc984ee173d307`, `x_casemgmt_case_task` `6c1bd40bcab435a7951bfeb732cd90e0`, `x_casemgmt_case_party` `1f8bdcb79b5060d68ca63d034186c83a`), each `type=record`, `active=true`, `admin_overrides=true`, **empty condition and empty script**, and each linked to exactly one role: `x_casemgmt_case_manager`. Under ServiceNow's grant model with `glide.sm.default_mode = deny`, that denies delete to every other role. Measured: `DELETE /api/now/table/<table>/<sys_id>` returns `HTTP 403 {"error":{"message":"Operation Failed","detail":"ACL Exception Delete Failed due to security constraints"}}` for the agent on all three tables and for the viewer on all three tables, while the manager gets `HTTP 204` on all three. A UI delete attempt on a real row destroyed nothing (the row survived a cache-ignoring reload).
+
+**Where the affordance comes from.** It is *not* in the per-row context menu — for both personas and all three tables that menu contains only `Show Matching`, `Filter Out`, `Copy URL to Clipboard`, `Assign Tag ▸`. It appears in the **"Actions on selected rows"** dropdown, and its markup identifies it unambiguously as the stock **global** record:
+
+```html
+<option value="75a1fcce0a0a0b3400d6ed99cf8a87e0" action_name="delete_checked"
+        gsft_check_condition="true" gsft_base_label="Delete" table="global"
+        href="confirmAndDeleteFromList()">Delete</option>
+```
+
+`sys_ui_action 75a1fcce0a0a0b3400d6ed99cf8a87e0` ("Delete", `action_name=delete_checked`, `table=global`, `list_choice=true`, `sys_scope=global`, condition `current.canDelete() && current.getTableName() != "cmdb_retirement_custom_definitions"`). Because the option carries `gsft_check_condition="true"`, the platform renders it unconditionally and defers the authorization check to selection time: choosing it fires `POST /xmlhttp.do sysparm_processor=AJAXActionSecurity`, which correctly answers `can_execute="false"` for these personas — and the stock list client then aborts **silently**: no confirmation dialog, no banner, nothing in `#output_messages`, `.outputmsg`, `.outputmsg_error`, `[role=alert]`, `.notification` or `.alert`; the dropdown simply resets to its placeholder. (By contrast the same list refuses inline editing *visibly*, with `Security prevents writing to this field`.)
+
+**Why no fix ships here.** Both the option and the silent abort live in global platform artifacts, and AAP Section 0.3.2 verbatim prohibits **"Global scope changes of any kind"** while Section 0.7.2 requires **"zero global-scope writes"**. No scoped remedy exists on this release either: `sys_ui_list_control` has no delete-omitting attribute (its only omit-flags are `omit_new_button`, `omit_edit_button`, `omit_links`, `omit_filters`, `omit_count`, `omit_drilldown_link`, `omit_if_empty`) and holds **no rows** for the three scoped tables; the scoped app's own six `sys_ui_action` rows are all `form_button` transitions with `list_choice=false`. A hypothetical scoped `list_choice` action named `Delete` on each table would also (a) depend on unverified table-vs-global action precedence, (b) risk suppressing the affordance for `x_casemgmt_case_manager`, whose Delete grant Section 0.5.6 requires, and (c) exceed AAP Section 0.3.1, which admits `ui_action/` artifacts "only those needed for state transitions". The finding is therefore **bounded by the AAP Section 0.3.2 exception**: reported, with enforcement re-verified, and not worked around. The remediation a platform owner would apply is to make the stock list client surface the `can_execute="false"` answer as a visible message (or to gate the global option on `canDelete()` at render time) — a global change outside this application's scope.
 
 ## Mirror Patterns: case_task and case_party
 

@@ -444,6 +444,120 @@
         agent prompt; no new dimensions or aggregations beyond
         group-by-status COUNT.
 
+    ACCESSIBLE VALUES FOR THE BAR SERIES (QA FINDING F8)
+    ====================================================
+    QA finding F8 (LOW, accessibility) measured on the rendered Manager
+    View dashboard that EVERY bar of this chart announces "100.0%" to
+    assistive technology while its hover tooltip carries the true share.
+    Measured verbatim on All Cases by Status BEFORE this change:
+
+        bar 1 announces "1. Draft, 7, 100.0%"        tooltip "Draft = 7 (43.75%)"
+        bar 2 announces "2. Closed, 2, 100.0%"       tooltip "Closed = 2 (12.5%)"
+        bar 3 announces "3. In Progress, 2, 100.0%"  tooltip "In Progress = 2 (12.5%)"
+        bar 4 announces "4. Open, 2, 100.0%"         tooltip "Open = 2 (12.5%)"
+        bar 5 announces "5. Resolved, 2, 100.0%"     tooltip "Resolved = 2 (12.5%)"
+        bar 6 announces "6. Pending, 1, 100.0%"      tooltip "Pending = 1 (6.25%)"
+
+    ROOT CAUSE, MEASURED IN THE RUNNING PAGE (not inferred)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    The platform builds every chart with
+        accessibility.point.valueDescriptionFormat =
+            "{index}. {point.name}, {point.y}, {point.percentage:.1f}%"
+    Highcharts computes `point.percentage` per STACK. A non-stacked
+    column series puts each point in its own stack, so
+    `point.total === point.y` and `point.percentage === 100` for every
+    bar. Measured per point on this chart:
+        Draft       y=7 percentage=100 total=7
+        Closed      y=2 percentage=100 total=2
+        In Progress y=2 percentage=100 total=2
+        Open        y=2 percentage=100 total=2
+        Resolved    y=2 percentage=100 total=2
+        Pending     y=1 percentage=100 total=1
+    ServiceNow's own tooltip formatter divides by the report total
+    instead, which is why the tooltip is right and the announcement is
+    wrong. The COUNTS are never wrong, and the donut of the same data
+    announces correctly because a pie series shares one stack.
+
+    WHY THE CHART TYPE IS NOT CHANGED
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    The QA report's suggested fix ("render these as donuts") is NOT
+    available here: AAP Section 0.4.4 verbatim mandates
+        "bar chart for 'All cases by status'"
+    and AAP Section 0.5.1 verbatim mandates "Bar grouped by status" for this file.
+    Changing <type> would break a normative requirement in order to fix
+    a LOW accessibility defect, so <type>bar</type> is preserved exactly.
+
+    THE IN-SCOPE REMEDY APPLIED: <display_grid>true</display_grid>
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    `display_grid` is a stock, additive `sys_report` column (boolean,
+    column label "Display grid") that renders the report's aggregate as
+    an HTML data table beneath the chart WITHOUT altering the chart
+    type. It has out-of-the-box precedent on this instance (4 of the 182
+    `type=bar` reports ship with it enabled), so enabling it is a
+    supported report option and not a platform modification, which keeps
+    the remedy inside AAP Section 0.3.2's prohibition on global-scope
+    changes.
+
+    MEASURED EFFECT, after enabling it and reloading the dashboard with
+    the browser cache bypassed:
+      - the chart is still a column/bar series (Highcharts
+        `series[0].type === "column"`, widget bootstrap
+        `repParams.chart_type === "bar"`), so the AAP mandate holds;
+      - each bar widget now also renders
+        `table.chart_legend.display-grid-table` with a real <thead>,
+        `th scope="col"` column headers, `th scope="row"` row headers
+        and a bold total row;
+      - that table is NOT inside any `aria-hidden="true"` ancestor and
+        computes to `display:table; visibility:visible` with non-zero
+        offsets, so it IS in the accessibility tree and readable by
+        assistive technology;
+      - its "Percentage of Count" column carries the CORRECT shares.
+        Measured on All Cases by Status:
+        Status      | Case Count | Percentage of Count
+        Draft       |      7     |  43.75%
+        Closed      |      2     |  12.5%
+        In Progress |      2     |  12.5%
+        Open        |      2     |  12.5%
+        Resolved    |      2     |  12.5%
+        Pending     |      1     |   6.25%
+        Total       |     16     | 100%
+        (16 cases were present at measurement time: the 13 package rows
+        plus three transient QA fixtures that were deleted afterwards.)
+
+    RESIDUE, DISCLOSED AND BOUNDED BY AAP SECTION 0.3.2
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Enabling `display_grid` gives assistive technology a correct route to
+    the values; it does NOT rewrite the per-point description. After the
+    change the bars still announce the same "100.0%" strings
+    (re-measured on the rendered page: unchanged, byte for byte), and the
+    screen-reader information region is unchanged ("Bar chart with
+    6 bars." / "The chart has 1 Y axis displaying Case Count.
+    Range: 0 to 8." / "End of interactive chart."). Two further measured
+    caveats: the grid declares no `role` and no caption, so it is
+    announced as an unlabeled table adjacent to the chart; and it sits
+    below the chart inside the widget's `overflow:auto` body (client
+    height 305px vs scroll height 538px), so a sighted user must scroll
+    within the widget to see it and no chart-vs-grid toggle exists.
+
+    Correcting the announcement itself requires changing
+    `accessibility.point.valueDescriptionFormat` for column series, which
+    lives in the platform's own charting bundle
+    (GlideV2ChartingIncludes.jsx / chart_includes.cssx): a GLOBAL
+    artifact. AAP Section 0.3.2 verbatim prohibits
+        "Global scope changes of any kind"
+    and AAP Section 0.7.2 verbatim requires
+        "Scope-namespace exclusivity ... zero global-scope writes are
+         permitted."
+    No scoped `sys_report` column overrides the point-description
+    template on this release: `custom_config` (max_length 5000) is used
+    only for chart `transforms` in every out-of-the-box row,
+    `style_config` is empty on every report on the instance,
+    `show_chart_total` is enabled by zero of the 182 bar reports, and the
+    widget's Highcharts context menu offers only "Save as PNG" and "Save
+    as JPEG" (no "View data table" item). The remaining defect is
+    therefore bounded by the AAP Section 0.3.2 exception: it is reported,
+    not worked around.
+
     VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
     ====================================================
     [x] File path: servicenow-case-management-poc/reports/x_casemgmt_all_cases_by_status.xml
@@ -461,6 +575,8 @@
     [x] aggregation_source empty
     [x] field_list empty
     [x] chart_size = medium
+    [x] display_grid = true (QA finding F8: additive accessible data
+        grid; chart type deliberately left as bar per AAP Section 0.4.4)
     [x] is_real_time = false
     [x] sys_class_name = sys_report
     [x] sys_scope and sys_package reference scoped app by name/source
@@ -479,6 +595,7 @@
         <aggregation_source/>
         <chart_size>medium</chart_size>
         <description>Manager View dashboard bar widget data source. Aggregates ALL records in x_casemgmt_case grouped by the status Choice field with COUNT(*) per bucket. Six bars expected (Draft, Open, In Progress, Pending, Resolved, Closed) when seed data spans all statuses. UNFILTERED by design - shows the entire team backlog distribution across the case lifecycle including terminal Closed cases, enabling managers to assess case throughput and lifecycle-stage saturation. Replaces ArkCase's CaseByStatusDto + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report. Same aggregation as x_casemgmt_case_count_by_status (Agent Workspace donut/pie chart); different chart type and dashboard audience per AAP Section 0.4.4. Different aggregation than x_casemgmt_all_cases_by_type (group by type) and x_casemgmt_all_cases_by_priority (group by priority); same Manager View dashboard.</description>
+        <display_grid>true</display_grid>
         <field>status</field>
         <field_list/>
         <filter/>

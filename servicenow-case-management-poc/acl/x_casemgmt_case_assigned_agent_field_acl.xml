@@ -10,11 +10,21 @@
            (unconditional - the manager is the case-management tier's
            delegation authority and may freely re-assign any case).
         2. Any user holding the scoped role `x_casemgmt_case_agent` ONLY when
-           `current.assigned_agent` already equals the current user's sys_id
-           (i.e., the agent is the CURRENTLY-assigned agent on this case
-           record). This narrowly scoped grant lets an assigned agent hand
-           off, decline, or reassign their own work without granting them
-           the ability to "grab" cases assigned to other agents.
+           the STORED row places them on the case under AAP Section 0.5.6's
+           own definition of "Assigned only" - `current.assigned_agent`
+           equals the current user's sys_id, OR `current.assigned_group`
+           is a group the current user belongs to. This narrowly scoped
+           grant lets an assigned agent hand off, decline, reassign or
+           re-take their own work without granting them the ability to
+           "grab" a case assigned to another group or to nobody.
+
+           The group limb was added to close QA finding F6: with only the
+           agent-equality limb, an agent could CLEAR assigned_agent but
+           never RE-POPULATE it, because the cleared (stored) value no
+           longer matched. That one-way door let an agent permanently
+           orphan a case from their own queue. See the script body below
+           for the measurement, and ../docs/acl-matrix.md for the
+           role-by-role statement.
 
     The two populations together implement the user-prompt mandate that an
     agent be operationally productive on their own caseload (including the
@@ -460,7 +470,7 @@
         <admin_overrides>true</admin_overrides>
         <advanced>true</advanced>
         <condition/>
-        <description>Field-level ACL: x_casemgmt_case_manager can always write assigned_agent; x_casemgmt_case_agent can write assigned_agent only if they are the currently-assigned agent on the case. Allows agent self-reassignment without permitting case-grabbing.</description>
+        <description>Field-level ACL: x_casemgmt_case_manager can always write assigned_agent; x_casemgmt_case_agent can write assigned_agent when the case is theirs under AAP Section 0.5.6's own "Assigned only" definition - the stored assigned_agent is the caller OR the stored assigned_group contains the caller. Allows agent self-reassignment and re-population after a clear (QA finding F6's one-way door) without permitting an agent to grab a case outside their own assignment, which the table-level write ACL refuses with HTTP 403.</description>
         <name>x_casemgmt_case.assigned_agent</name>
         <operation>write</operation>
         <roles>x_casemgmt_case_manager,x_casemgmt_case_agent</roles>
@@ -469,7 +479,8 @@
     // manager and agent-assigned". Per AAP Section 0.5.6 Matrix and
     // Section 0.7.3 Gate 3 ("case_agent cannot access unassigned
     // cases"), this script must DENY by default and grant only to
-    // (a) any case_manager, and (b) the currently-assigned case_agent.
+    // (a) any case_manager, and (b) a case_agent who is on the case
+    // under Section 0.5.6's own definition of "Assigned only".
 
     // Branch 1: case_manager - unconditional grant.
     // The manager is the case-management tier's delegation authority;
@@ -479,25 +490,57 @@
         return true;
     }
 
-    // Branch 2: currently-assigned case_agent - conditional grant.
-    // The agent may modify assigned_agent (handoff, decline, reassign
-    // to peer) ONLY when they are the currently-assigned agent on the
-    // case at write time. The strict equality check against
-    // gs.getUserID() prevents:
-    //   - non-assigned agents from self-grabbing unassigned cases
-    //     (current.assigned_agent is null - comparison yields false)
-    //   - non-assigned agents from poaching other agents' cases
-    //     (current.assigned_agent is a peer's sys_id - comparison
-    //      yields false)
-    //   - non-agent role holders from being granted via this branch
-    //     (the hasRole() guard filters them out before the comparison)
+    // Branch 2: a case_agent who is on the case per "Assigned only".
+    //
+    // AAP Section 0.5.6 defines that phrase verbatim as "cases where
+    // assigned_agent = current user OR assigned_group contains current
+    // user", and BOTH limbs are evaluated here against the STORED row.
+    //
+    // The second limb closes QA finding F6. An earlier revision granted
+    // only on `current.assigned_agent == gs.getUserID()`, which is
+    // evaluated against the stored value, so an assigned agent could
+    // CLEAR assigned_agent (the stored value was still theirs at
+    // evaluation time) but could never RE-POPULATE it (the stored value
+    // was now empty, so the single limb evaluated false). Measured on
+    // CASE9000003: the clear returned HTTP 200 and landed; the
+    // re-populate returned HTTP 200 with the value silently discarded
+    // and sys_mod_count unchanged for that column - a one-way door that
+    // let an agent permanently orphan a case from their own queue,
+    // recoverable only by a manager. Because the field-ACL engine strips
+    // a denied value BEFORE business rules run (measured with a
+    // temporary before-update probe: the denied column reported
+    // changes() === false while an allowed column on the same request
+    // reported changes() === true), no server-side rule can detect or
+    // report that drop, so the only correct remedy is to grant the
+    // legitimate write here.
+    //
+    // What this does NOT allow. Both limbs read the STORED row, so an
+    // agent can populate assigned_agent only on a case that is already
+    // theirs or already assigned to a group they belong to - exactly
+    // the set Section 0.5.6 already grants them table-level read and
+    // write on. A case assigned to another group, or to no group and no
+    // agent, satisfies neither limb; the caller is additionally refused
+    // by the table-level write ACL
+    // (../acl/x_casemgmt_case_write_agent_assigned.xml), which returns
+    // HTTP 403 rather than dropping the column. Grabbing a case outside
+    // the agent's own assignment is therefore refused twice over.
+    //
     // The comparison `current.assigned_agent == gs.getUserID()` works
     // in ServiceNow because GlideRecord reference fields auto-resolve
     // to their sys_id when compared as strings; this is the standard
-    // pattern used throughout the platform's ACL conditions.
+    // pattern used throughout the platform's ACL conditions. The group
+    // limb uses gs.getUser().isMemberOf(), the same call the two
+    // table-level "Assigned only" ACLs use, so the three records agree
+    // on one definition of membership.
     if (gs.getUser().hasRole('x_casemgmt_case_agent')) {
         if (current.assigned_agent == gs.getUserID()) {
             return true;
+        }
+        if (current.assigned_group && !current.assigned_group.nil()) {
+            var groupId = current.assigned_group.toString();
+            if (groupId && gs.getUser().isMemberOf(groupId)) {
+                return true;
+            }
         }
     }
 

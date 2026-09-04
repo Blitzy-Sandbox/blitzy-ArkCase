@@ -4,6 +4,36 @@
 
 This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed end-to-end on the elected deliverable's current byte sequence (926 blocks, 3,780,373 bytes, SHA-256 `a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274`) — no preview of the complete file has been run on it, so the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it. What those bytes do carry, added 2026-09-03, is seven platform-native choice composites with their own runtime proof: that exact seven-child delta was uploaded, previewed to 0 problems of any type and committed by the native commit action (commit worker `state=complete`, message "Update set committed"), taking `sys_choice` for the three tables from 0 to 24 rows with every option label rendering on the real forms. Choice creation is therefore no longer a post-import step. The delivery election has been made and the elected package ships; the note below states which sequence carries which result and which artifact is retained as the upgrade path.**
 
+> **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
+> The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> What to verify before an upload, and what to assert after it:
+>
+> | | Value |
+> | --- | --- |
+> | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
+> | Bytes | **3,944,374** (was 3,780,373) |
+> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | `…FALLBACK.xml` | byte-identical to the above, as always |
+> | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
+>
+> Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
+> Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
+> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
+> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> remediation creates (was 27), **11** Business Rules (was 7).
+>
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
+> superseded revision and is left as written** — those passages state what was measured at a point in time, and
+> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
+> digest, it has been updated to the values above.
+>
+> **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
+> deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988
+> children against the one sequence that ever previewed to zero problems, and rewriting records inside a file
+> that is retained rather than shipped would destroy that for nothing. The consequence is that promoting it as
+> it stands would undo all 18 QA fixes. A promotion must first carry the 9 inserted and 14 re-synced records
+> named in the elected package's header comment.
+
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
 > **Status of the zero-preview-error requirement stated above — two results, not one.** Zero problems of
@@ -46,7 +76,7 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > `sys_security_acl_role` links, which makes it **the available upgrade path**: run the full gate on those exact
 > bytes on a genuinely clean, dedicated PDI — confirm a clean target, checksum the bytes, upload asserting
 > **988** children, preview to zero `type=error`, commit through the native "Commit Update Set" UI action,
-> confirm physical storage for all three tables and all 27 role links, record the digest as verified with that
+> confirm physical storage for all three tables and all 36 role links, record the digest as verified with that
 > run's timestamp — and it can then be promoted back to the deliverable path (§10.0 of
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). It was checked statically —
 > `xmllint --noout` clean, 988 blocks, every §0.5.2 dependency assertion passing, and 981 of its 988 children
@@ -69,7 +99,7 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > the election, leaving 919 of its 926 children byte-identical — so **choice creation is no longer among the
 > post-commit steps**, while the physical-schema and ACL-role-link remediation and the seed pass still are.
 > §5 of that guide, run against the elected file on a
-> genuinely clean PDI and asserting **926** children, is what discharges the zero-preview-error requirement
+> genuinely clean PDI and asserting **935** children, is what discharges the zero-preview-error requirement
 > stated at the top of this document for the artifact a reader holds:
 >
 > **The elected bytes are 926 blocks, 3,780,373 bytes, SHA-256
@@ -167,7 +197,7 @@ Per AAP Section 0.7.2: "Navigate to System Update Sets → Local Update Sets. Lo
    - **7 sys_hub_flow records** — the 2 parent flows `general_inquiry_state_machine` and `complaint_state_machine`, plus the 5 subflows `validate_open_transition`, `validate_inprogress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition` under `flows/sub_flows/`. (Note: the fourth subflow's **instance** internal name is `validate_in_progress_transition`, with underscores, while the repository file is `validate_inprogress_transition.xml`.)
    - **1 Custom Action + 1 shared flow logic block** — `flows/custom_actions/x_casemgmt_transition_guard_action.xml` (`sys_hub_action_type_base`), which returns the transition verdict to a flow, and `flows/sub_flows/shared_flow_logic_block.xml` (`sys_hub_flow_block`), the shared logic block the five subflows reuse.
    - **2 Script Includes** — `x_casemgmt_CaseTransitionValidator` and `x_casemgmt_CasePortalService`.
-   - **7 Business Rules**, in execution order — `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)**, `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), `set_closed_date` (500). The order-250 rule is the one that invokes the transition subflow and turns its verdict into a blocking form error; the order-500 rule is the only writer of `closed_date`. Earlier revisions of this inventory listed six and omitted `enforce_forward_transitions`.
+   - **11 Business Rules** — nine on `x_casemgmt_case`, in execution order: **`validate_case_mandatory_fields` (50, before-insert + update)**, **`validate_case_text_lengths` (70)**, `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)**, `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), `set_closed_date` (500) — plus one on each child table at order 100: **`validate_case_task_integrity`** and **`validate_case_party_integrity`**. The order-250 rule is the one that invokes the transition subflow and turns its verdict into a blocking form error; the order-500 rule is the only writer of `closed_date`. The four order-50/70/child rules enforce the AAP §0.5.7 data contract server side — mandatory `subject`/`description`/`requester_name`, the string lengths, the task's own mandatory columns, and the party's exactly-one-of `person`/`organization` matching `party_type` — because a UI Policy cannot reach a Table API caller, which is how a blank or malformed row used to be creatable. Earlier revisions of this inventory listed seven, and before that six omitting `enforce_forward_transitions`.
    - **6 UI Actions** — the state-transition buttons under `ui_action/`.
    - **1 Fix Script** — `x_casemgmt Post-Import Remediation`, carrying the post-import remediation body verbatim. It is authored **global** by design (see the note in Step 2) and **does not execute by itself**.
    - **761 ATF records** — 20 test definitions, 180 test steps, 540 step inputs (539 `sys_variable_value` + 1 variable value), 1 test suite and 20 suite-member links. This is by far the largest part of the package: 761 of its 926 blocks.
@@ -351,7 +381,7 @@ This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifact
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). The delivery election is
 > settled — the elected package is what ships — but electing it passed no gate, so **this step cannot be
 > completed as written and the confirmation must not be given.** Running Step 2 against the elected file on a
-> genuinely clean, dedicated PDI, asserting **926** children, is what makes the deliverable deliverable; running
+> genuinely clean, dedicated PDI, asserting **935** children, is what makes the deliverable deliverable; running
 > it against the retained `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`,
 > asserting **988**, is the upgrade path that would additionally restore the 27 packaged role links. What can be
 > reported honestly today is the measured rollup in [`validation-gates.md`](./validation-gates.md): **4 gates

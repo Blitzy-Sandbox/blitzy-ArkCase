@@ -13,7 +13,8 @@ The following conventions apply to every widget and every dashboard delivered by
 - All widgets target the scoped tables `x_casemgmt_case` and `x_casemgmt_case_task`. No widget queries any global ServiceNow table directly.
 - All Report records live in [`../reports/x_casemgmt_*.xml`](../reports/) and are uniquely identified by the report `name` (not by `sys_id`).
 - All Dashboard records live in [`../dashboards/pa_dashboards_x_casemgmt_*.xml`](../dashboards/) and reference their constituent reports by Report record `name` (not by `sys_id`), per AAP Section 0.5.2 reference resolution rules.
-- Filter conditions reference the current user via `javascript:gs.getUserID()` — no hard-coded user `sys_id`s. This is the platform-standard self-personalization pattern.
+- Filter conditions reference the current user via `javascript:gs.getUserID()`, their groups via `javascript:gs.getUser().getMyGroups()` and their login via `javascript:gs.getUserName()` — no hard-coded user `sys_id`s. This is the platform-standard self-personalization pattern. Each such value must be a single expression; a multi-statement `javascript:` body evaluates to empty on this release.
+- **Report execution does not apply row-level read ACLs.** Any widget whose audience is confined to a subset of the rows must carry that confinement in its own filter. Measured for QA finding F5 on the Agent Workspace donut; see Widget 3 below.
 - Date filters use `javascript:gs.daysAgoStart(N)` for relative-date filtering — no hard-coded dates. This guarantees the dashboards remain accurate without manual reconfiguration.
 - Group-by uses the choice-field display label (e.g., status display label "In Progress" — not the internal value "in_progress"). This keeps chart legends human-readable.
 - All widgets render with synthetic seed data committed via [`../scripts/seed_demo_data.js`](../scripts/seed_demo_data.js). No PII appears in any rendered chart or list.
@@ -24,7 +25,7 @@ The following conventions apply to every widget and every dashboard delivered by
 
 ### Overview
 
-The Agent Workspace Dashboard provides a personal operational view for individual case agents. It surfaces only the cases and tasks that are assigned to the current user, plus a portfolio-level breakdown of cases by status that gives at-a-glance situational awareness.
+The Agent Workspace Dashboard provides a personal operational view for individual case agents. Every one of its three widgets is scoped to the viewing user: the cases and tasks assigned to them, plus a status breakdown of their own case portfolio that gives at-a-glance situational awareness.
 
 ### Access
 
@@ -43,7 +44,7 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 | --- | --- | --- | --- | --- | --- |
 | 1 | My Open Cases | List | `x_casemgmt_my_open_cases.xml` | (none) | `assigned_agent = javascript:gs.getUserID() AND status NOT IN (Resolved, Closed)` |
 | 2 | My Overdue Tasks | List | `x_casemgmt_my_overdue_tasks.xml` | (none) | `assigned_to = javascript:gs.getUserID() AND due_date < javascript:gs.daysAgoStart(0) AND status != Closed` |
-| 3 | Case Count by Status | Donut | `x_casemgmt_case_count_by_status.xml` | `status` | (none — agent's full visible portfolio per ACL) |
+| 3 | Case Count by Status | Donut | `x_casemgmt_case_count_by_status.xml` | `status` | `assigned_agent = javascript:gs.getUserID() OR assigned_group IN javascript:gs.getUser().getMyGroups() OR sys_created_by = javascript:gs.getUserName()` — the viewing user's own portfolio (see Widget 3) |
 
 #### Widget 1: My Open Cases
 
@@ -72,9 +73,20 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 - **Underlying Table:** `x_casemgmt_case`
 - **Group-By:** `status`
 - **Aggregate:** `COUNT(sys_id)`
-- **Filter Condition:** none (subject to ACL — agent sees only assigned cases by virtue of the table-level ACL described in [`acl-matrix.md`](./acl-matrix.md))
+- **Filter Condition:** `assigned_agent=javascript:gs.getUserID()^ORassigned_groupINjavascript:gs.getUser().getMyGroups()^ORsys_created_by=javascript:gs.getUserName()`
 - **Slice Labels:** Draft, Open, In Progress, Pending, Resolved, Closed
 - **User Action:** clicking a slice opens a filtered case list
+
+**Why this widget is filtered (QA finding F5).** An earlier revision shipped this report with an empty filter and described it as "unfiltered by design — the whole team's backlog", on the assumption that the table-level read ACL would narrow the aggregate for an agent. **That assumption is measured false: report execution does not apply row-level read ACLs.** Under the `x_casemgmt_demo_agent` persona the donut aggregated every case on the instance and disclosed the status distribution of records the same persona is refused on every other surface (the form answers "Security constraints prevent access to requested page"; the Table API answers HTTP 404). Only counts leaked — no subject, number or other record content — but the number of cases sitting in each lifecycle stage is exactly what an "Assigned only" grant withholds.
+
+The filter now mirrors the three limbs of the agent read ACL ([`../acl/x_casemgmt_case_read_agent_assigned.xml`](../acl/)), so the donut totals precisely what the viewer can open. Two implementation notes worth keeping:
+
+- Each limb must be a **single expression**. Measured on this instance, a `javascript:` filter value written as an IIFE or as a multi-statement body evaluates to empty, and an empty value on the `=` operator silently degrades to "field is empty" — a filter written that way would quietly answer the wrong question. `gs.getUserID()`, `gs.getUser().getMyGroups()` and `gs.getUserName()` are all single expressions and were each verified to evaluate under impersonation.
+- No hard-coded `sys_id` is introduced: the user, their group memberships and their user_name are resolved at execution time, per AAP Section 0.7.2.
+
+**Where the AAP tension lands.** Section 0.5.1's transformation table describes this row only as a "Donut grouped by status" and mentions no filter, which is how the empty filter was first justified. Section 0.5.6 confines `case_agent` to "Read ✅ Assigned only" and Section 0.7.3 Gate 3 states it verbatim ("case_agent cannot access unassigned cases"), and Section 0.4.4 puts this widget on the **Agent Workspace** beside two per-viewer "My …" lists. A descriptive sentence in the transformation table cannot widen an access-control mandate, so the per-viewer reading is the one that satisfies the normative requirements. The portfolio-wide aggregate the AAP does call for is untouched: the Manager View keeps the deliberately unfiltered "All Cases by Status" bar chart, on a dashboard shared only with `x_casemgmt_case_manager`. The widget's title remains "Case Count by Status" exactly as Section 0.4.4 names it.
+
+**Consequence for the manager, stated plainly.** The Agent Workspace is shared with `x_casemgmt_case_manager` too, so a manager holding no assignments now sees an empty donut *on this dashboard* — the same outcome its two sibling "My …" widgets already produce for that persona, and the reason Section 0.4.4 gives the manager a separate Manager View.
 
 ## Manager View Dashboard
 
@@ -91,9 +103,9 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 
 | # | Widget Name | Type | Source Report | Group-By / Aggregate | Filter |
 | --- | --- | --- | --- | --- | --- |
-| 1 | All Cases by Status | Bar | `x_casemgmt_all_cases_by_status.xml` | `status` | (none) |
+| 1 | All Cases by Status | Bar (+ accessible data grid) | `x_casemgmt_all_cases_by_status.xml` | `status` | (none) |
 | 2 | All Cases by Type | Donut | `x_casemgmt_all_cases_by_type.xml` | `type` | (none) |
-| 3 | All Cases by Priority | Bar | `x_casemgmt_all_cases_by_priority.xml` | `priority` | (none) |
+| 3 | All Cases by Priority | Bar (+ accessible data grid) | `x_casemgmt_all_cases_by_priority.xml` | `priority` | (none) |
 | 4 | Average Time to Close | Single Score | `x_casemgmt_avg_time_to_close.xml` | `AVG(duration_to_close)` (Function Field; see Widget 4 details) | `status = Closed` |
 | 5 | Cases Opened (Last 30 Days) | Single Score | `x_casemgmt_cases_opened_30d.xml` | `COUNT(sys_id)` | `opened_date >= javascript:gs.daysAgoStart(30)` |
 
@@ -106,6 +118,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Aggregate:** `COUNT(sys_id)`
 - **Bar Order:** Draft, Open, In Progress, Pending, Resolved, Closed (status display order from [`data-model.md`](./data-model.md))
 - **User Action:** clicking a bar opens a filtered case list
+- **`display_grid = true`** — the report also renders an accessible HTML data table under the chart. See [Accessible values for the two bar widgets (QA finding F8)](#accessible-values-for-the-two-bar-widgets-qa-finding-f8).
 
 #### Widget 2: All Cases by Type
 
@@ -126,6 +139,40 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Aggregate:** `COUNT(sys_id)`
 - **Bar Order:** Low, Medium, High, Critical
 - **User Action:** clicking a bar opens a filtered case list
+- **`display_grid = true`** — the report also renders an accessible HTML data table under the chart. See [Accessible values for the two bar widgets (QA finding F8)](#accessible-values-for-the-two-bar-widgets-qa-finding-f8).
+
+#### Accessible values for the two bar widgets (QA finding F8)
+
+Both bar widgets ship `display_grid = true` on their source report. This is an **accessibility remedy, not a cosmetic choice**, and it is the only in-scope one available.
+
+**The defect.** Measured on the rendered Manager View, every bar of both charts announces `100.0%` to assistive technology while its hover tooltip carries the true share:
+
+| Chart | Announced to AT (verbatim) | Announced in the tooltip (verbatim) |
+| --- | --- | --- |
+| All Cases by Status | `1. Draft, 7, 100.0%` · `2. Closed, 2, 100.0%` · `3. In Progress, 2, 100.0%` · `4. Open, 2, 100.0%` · `5. Resolved, 2, 100.0%` · `6. Pending, 1, 100.0%` | `Draft = 7 (43.75%)` · `Closed = 2 (12.5%)` · `In Progress = 2 (12.5%)` · `Open = 2 (12.5%)` · `Resolved = 2 (12.5%)` · `Pending = 1 (6.25%)` |
+| All Cases by Priority | `1. Medium, 7, 100.0%` · `2. High, 4, 100.0%` · `3. Low, 3, 100.0%` · `4. Critical, 2, 100.0%` | `Medium = 7 (43.75%)` · `High = 4 (25%)` · `Low = 3 (18.75%)` · `Critical = 2 (12.5%)` |
+
+The counts are never wrong. The cause is that the platform sets `accessibility.point.valueDescriptionFormat = "{index}. {point.name}, {point.y}, {point.percentage:.1f}%"` for every chart, and Highcharts computes `point.percentage` **per stack** — on a non-stacked column series each point is its own stack, so `point.percentage === 100` for every bar (measured: `y=7 percentage=100 total=7`, `y=2 percentage=100 total=2`, …). ServiceNow's tooltip formatter divides by the report total instead, hence the discrepancy. The "All Cases by Type" donut of the same data announces correctly (`1. General Inquiry, 10, 62.5%`) because a pie series shares one stack.
+
+**What is NOT done.** The QA report's suggested fix — render the two charts as donuts — is unavailable: AAP Section 0.4.4 and Section 0.5.1 both mandate a **bar chart** for "All cases by status" and "All cases by priority". The chart type stays `bar` (verified after the change: Highcharts `series[0].type === "column"`, widget bootstrap `repParams.chart_type === "bar"`).
+
+**What IS done.** `display_grid` is a stock, additive `sys_report` boolean ("Display grid") with out-of-the-box precedent on this instance (4 of the 182 `type=bar` reports enable it). With it enabled each bar widget renders `table.chart_legend.display-grid-table` — a real `<thead>`, `th scope="col"` headers, `th scope="row"` row headers, a bold total row — which is **not** inside any `aria-hidden="true"` ancestor and computes to `display:table; visibility:visible` with non-zero offsets, so assistive technology can read it. Its "Percentage of Count" column carries the correct shares:
+
+| Status | Case Count | Percentage of Count |     | Priority | Case Count | Percentage of Count |
+| --- | --- | --- | --- | --- | --- | --- |
+| Draft | 7 | 43.75% |  | Medium | 7 | 43.75% |
+| Closed | 2 | 12.5% |  | High | 4 | 25% |
+| In Progress | 2 | 12.5% |  | Low | 3 | 18.75% |
+| Open | 2 | 12.5% |  | Critical | 2 | 12.5% |
+| Resolved | 2 | 12.5% |  | **Total** | **16** | **100%** |
+| Pending | 1 | 6.25% |  |  |  |  |
+| **Total** | **16** | **100%** |  |  |  |  |
+
+(16 cases were present at measurement time: the 13 package rows plus three transient QA fixtures, since deleted.)
+
+**Re-measured at the package baseline** once those fixtures were removed, which is what a fresh install shows: the Status grid reads Draft 4 / 30.77%, Closed 2 / 15.38%, In Progress 2 / 15.38%, Open 2 / 15.38%, Resolved 2 / 15.38%, Pending 1 / 7.69%, **Total 13 / 100%**, and the Priority grid reads Medium 5 / 38.46%, High 4 / 30.77%, Critical 2 / 15.38%, Low 2 / 15.38%, **Total 13 / 100%** — both matching a direct `GlideAggregate`-equivalent count of the three tables. The two grid elements measure 353 × 228 px and 353 × 173 px, their element ids embed their source report's sys_id, and the per-bar announcements are unchanged (`1. Draft, 4, 100.0%` … `4. Low, 2, 100.0%`) while the donut of the same data still announces correctly (`61.5%` / `38.5%`), which is the residue below.
+
+**Residue, bounded by AAP Section 0.3.2.** The grid gives assistive technology a correct route to the values; it does not rewrite the point description. Re-measured after the change, the bars still announce the same `100.0%` strings and the screen-reader information region is unchanged (`Bar chart with 6 bars.` / `The chart has 1 Y axis displaying Case Count. Range: 0 to 8.` / `End of interactive chart.`). Correcting the announcement means editing `accessibility.point.valueDescriptionFormat` for column series inside the platform's own charting bundle (`GlideV2ChartingIncludes.jsx` / `chart_includes.cssx`) — a **global** artifact, and AAP Section 0.3.2 prohibits "Global scope changes of any kind" while Section 0.7.2 requires "zero global-scope writes". No scoped `sys_report` column overrides that template on this release: `custom_config` carries only chart `transforms` in every out-of-box row, `style_config` is empty on every report on the instance, `show_chart_total` is enabled by none of the 182 bar reports, and the widget's Highcharts context menu offers only "Save as PNG" / "Save as JPEG" (no "View data table" item). Two measured caveats on the grid itself: it declares no `role` and no caption, so it is announced as an unlabeled table next to the chart; and it sits below the chart inside the widget's `overflow:auto` body (client height 305px vs scroll height 538px), so a sighted user must scroll within the widget to reach it and there is no chart-vs-grid toggle.
 
 #### Widget 4: Average Time to Close
 
@@ -188,7 +235,7 @@ were read from each chart's per-point accessibility labels rather than estimated
 | Persona | Dashboard | Result |
 | --- | --- | --- |
 | `x_casemgmt_demo_manager` | Manager View | **5 of 5 widgets.** Status bar Draft 1, Open 2, In Progress 2, Pending 1, Resolved 2, Closed 2 · Type donut General Inquiry 6 (60%), Complaint 4 (40%) · Priority bar High 3, Medium 3, Critical 2, Low 2 · Average Time to Close **16 Days 0 Hours 0 Minutes** (the mean of an 18-day and a 14-day closed case) · Cases Opened in Last 30 Days **10** |
-| `x_casemgmt_demo_manager` | Agent Workspace | **3 of 3 widgets.** The two "My …" lists render real list frames with their column headers and "No records to display", which is the correct outcome for a manager holding no assignments; Case Count by Status draws the six-slice pie |
+| `x_casemgmt_demo_manager` | Agent Workspace | **3 of 3 widgets.** The two "My …" lists render real list frames with their column headers and "No records to display", which is the correct outcome for a manager holding no assignments. Case Count by Status drew the six-slice donut when the report was unfiltered; since the QA-F5 re-scoping it renders the manager's own portfolio, which for a manager holding no assignments is empty — consistent with the other two widgets on this dashboard |
 | `x_casemgmt_demo_agent` | Agent Workspace | **3 of 3 widgets.** *My Open Cases* lists exactly the three cases this agent is assigned and that are not Resolved or Closed; a DOM-wide scan for case numbers returns only those three, so the row-level "Assigned only" ACL is visibly in force. *My Overdue Tasks* renders an empty list frame, correct because every open seed task is due in the future |
 | `x_casemgmt_demo_agent` | Manager View | **Correctly refused** — "has not been shared with you". The agent holds no `pa_dashboards_permissions` row on this dashboard |
 | `x_casemgmt_demo_viewer` | either | **Correctly refused.** This is the documented design recorded under Access above, not a defect |

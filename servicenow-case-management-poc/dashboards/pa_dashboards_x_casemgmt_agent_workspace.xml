@@ -269,7 +269,7 @@
     -->
     <pa_dashboards action="INSERT_OR_UPDATE">
         <active>true</active>
-        <description>Personal work queue dashboard for case agents - shows your assigned open cases, your overdue tasks, and the team-wide case status distribution.</description>
+        <description>Personal work queue dashboard for case agents - shows your assigned open cases, your overdue tasks, and the status distribution of your own case portfolio. All three widgets are scoped to the viewing user: the Case Count by Status donut was re-scoped for QA finding F5, because report execution does not apply row-level read ACLs and an unfiltered aggregate disclosed the status distribution of cases the agent cannot open. The portfolio-wide aggregates stay on the Manager View per AAP Section 0.4.4.</description>
         <name>x_casemgmt_agent_workspace</name>
         <order>100</order>
         <restrict_to_roles>x_casemgmt_case_agent,x_casemgmt_case_manager</restrict_to_roles>

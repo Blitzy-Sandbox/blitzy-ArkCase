@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that enforces AAP Section 0.5.7's MANDATORY and REFERENTIAL contracts on
+    every write to `x_casemgmt_case_task`, inside the scoped application
+    `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.7 verbatim, x_casemgmt_case_task schema):
+        "case         |  Reference -> x_casemgmt_case  |  Mandatory"
+        "subject      |  String(255)                   |  Mandatory"
+        "assigned_to  |  Reference -> sys_user         |  Mandatory"
+        "due_date     |  Date                          |  Mandatory"
+    (`type` and `status` are Choice columns and are NOT marked Mandatory;
+     `status` carries default_value='Open' so it can never be empty.)
+
+    And AAP Section 0.5.2 verbatim, on reference resolution:
+        "Case references (e.g. on case_task.case, case_party.case, demo
+         task/party seed) -> look up x_[scope]_case by number"
+    A reference the application resolves BY KEY is only meaningful if the row
+    it names exists; a stored sys_id that resolves to nothing breaks that
+    contract silently.
+
+    WHY THIS RULE EXISTS (QA finding F15):
+        Before this rule, `x_casemgmt_case_task` carried NO Business Rule at
+        all. Every one of this application's seven shipped before-rules is
+        attached to `x_casemgmt_case`, so the child table's mandatory and
+        referential constraints lived exclusively at the form layer.
+
+        MEASURED against this instance before this rule existed, both as
+        admin:
+            POST /api/now/table/x_casemgmt_case_task
+                 {"case":"deadbeefdeadbeefdeadbeefdeadbeef", ...}  -> HTTP 201
+            POST /api/now/table/x_casemgmt_case_task
+                 {"case":"", ...}                                  -> HTTP 201
+        The first stored a task pointing at a case that has never existed -
+        a DANGLING MANDATORY REFERENCE, the same broken shape QA finding F18
+        produced from the other direction. The second stored a task with no
+        parent at all, which cannot appear in any case's related list and
+        cannot be reached from the case form, yet still counts in every
+        task-table aggregate.
+
+        A dangling or absent parent is not a cosmetic defect. The
+        "In Progress -> Resolved" gate in
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml counts
+        child tasks by querying x_casemgmt_case_task on `case`; the Agent
+        Workspace "My overdue tasks" report and the case form's Tasks
+        related list both dot-walk through the same column. A row whose
+        parent does not resolve distorts every one of those surfaces and can
+        never be saved from its own form, because a mandatory reference
+        cannot be re-filled from a value that displays as blank.
+
+    BEHAVIOR:
+        - Trigger          : BEFORE INSERT and BEFORE UPDATE on
+                             `x_casemgmt_case_task`
+        - Conditions, in order:
+              1. `case` empty                     -> refuse
+              2. `case` set but unresolvable       -> refuse
+              3. `subject` empty/whitespace-only   -> refuse
+              4. `assigned_to` empty               -> refuse
+              5. `due_date` empty                  -> refuse
+        - Action           : gs.addErrorMessage(...) naming the offending
+                             field, then current.setAbortAction(true)
+        - Other timing     : does NOT fire on delete or query. Delete is
+                             intentionally out of scope so the cascade
+                             configured on ../dictionary/x_casemgmt_case_task_case.xml
+                             (reference_cascade_rule=cascade) can remove
+                             child tasks when their parent case is deleted,
+                             and so AAP Section 0.5.6's unqualified manager
+                             Delete grant is not narrowed.
+
+    WHY THE PARENT IS RESOLVED WITH GlideRecord AND NOT GlideRecordSecure:
+        The question this rule asks is "does the parent row EXIST", never
+        "may the caller read it". Access control on this table is owned
+        entirely by the scoped ACLs enumerated in AAP Section 0.5.6 and
+        authored under ../acl/; a read-ACL-aware lookup here would conflate
+        the two and produce a misleading refusal.
+
+        Concretely: AAP Section 0.5.6 gives x_casemgmt_case_agent
+        "Assigned only" read on the case table. If this rule used
+        GlideRecordSecure, an agent legitimately creating a task against a
+        case outside their assignment would be told the CASE DOES NOT EXIST
+        instead of being refused by the ACL that actually governs the
+        operation - and the ACL, not this rule, is what AAP Section 0.7.3
+        Gate 3 is measured against. Plain GlideRecord performs the existence
+        test only and leaves the authorization decision where it belongs.
+
+    WHY THE CHECK IS UNCONDITIONAL ON UPDATE (and why that is safe here):
+        Every check reads the value the row WOULD CARRY AFTER the write
+        (current.getValue), not the value the write supplied. A PATCH that
+        touches only `status` on a conformant task reads the stored,
+        resolvable parent and the stored subject, and passes untouched.
+
+        The checks are not narrowed to "only when the field changed",
+        because `mandatory` means the STORED ROW may never be empty and a
+        reference may never dangle - which is what the task form already
+        enforces on every save. The risk of unconditional enforcement is
+        making an already non-conformant row unwritable, and that risk was
+        MEASURED away before this rule was activated: all 13 rows on
+        x_casemgmt_case_task carry a non-empty `case` that resolves to a
+        live x_casemgmt_case row, plus a non-empty subject, assigned_to and
+        due_date. Zero rows violate the constraint. An orphan sweep over the
+        whole table returned zero dangling parents.
+
+    COST OF THE PARENT LOOKUP:
+        One GlideRecord.get() by primary key per write, and only after the
+        cheap emptiness test has passed. It is the same order of cost as the
+        sys_user_grmember lookup x_casemgmt_validate_assigned_agent_membership
+        already performs per case write, and it is unavoidable: the platform
+        provides no declarative "reference must resolve" dictionary
+        attribute. reference_cascade_rule governs what happens when the
+        parent is DELETED through the platform; it cannot reject a write
+        that names a parent which never existed.
+
+    ORDERING (order = 100):
+        This is the FIRST and, at authoring time, only Business Rule on
+        `x_casemgmt_case_task`. 100 matches the base order the shipped rules
+        on x_casemgmt_case use for their first entries, leaving room below
+        for a future guard that must precede structural validation and room
+        above for any rule that may assume a structurally valid row.
+
+        The script returns early on current.isActionAborted() for the same
+        reason every rule in this application does: setAbortAction(true)
+        cancels the WRITE, not the remaining before rules, so a save some
+        future lower-ordered rule has already refused must not collect a
+        second, unrelated message.
+
+    NO INLINE DUPLICATION OF ANOTHER RULE'S MESSAGE (AAP Section 0.7.4):
+        Section 0.7.4 fixes exactly four verbatim strings:
+            "All tasks must be closed before resolving this case."
+            "Cases cannot be returned to Draft."
+            "Closed cases are terminal and cannot be modified."
+            "No case found with that number."
+        None of them belongs to this rule and none of them is reproduced
+        here - in particular the task-closure message is owned by
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml and
+        surfaced through the validate_resolved_transition subflow, and
+        "No case found with that number." is the ANONYMOUS PORTAL LOOKUP's
+        message owned by ../script_includes/x_casemgmt_CasePortalService.xml,
+        which is why this rule's unresolvable-parent message is worded
+        differently and deliberately so.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        Zero gs.eventQueue() calls, zero gs.email() calls, zero
+        gs.notificationEngine() calls.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case_task</collection>  scoped table
+        - <sys_scope>                                    the x_casemgmt scope record
+        - <sys_package>x_casemgmt</sys_package>          scoped application
+        - <access>package_private</access>               not callable cross-scope
+        The single GlideRecord in the script body targets `x_casemgmt_case`,
+        which is in the same scope. Zero global-scope writes; the rule
+        performs no write of any kind, only a read and an abort.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the task table BY NAME
+        - <sys_package> resolves the application record BY NAME
+        - the GlideRecord.get() argument is the sys_id the CALLER supplied on
+          the row being written, read at run time from current.getValue('case').
+          It is not a literal in this file and not a value composed here.
+        - the <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_case_task_integrity")
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml        (the parent this rule resolves)
+            - ../tables/x_casemgmt_case_task.xml   (the table this rule attaches to)
+            - ../dictionary/x_casemgmt_case_task_case.xml
+            - ../dictionary/x_casemgmt_case_task_subject.xml
+            - ../dictionary/x_casemgmt_case_task_assigned_to.xml
+            - ../dictionary/x_casemgmt_case_task_due_date.xml
+            - ../app/sys_app/x_casemgmt_case_management.xml
+        And BEFORE:
+            - ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml, which must
+              therefore be loaded AFTER ../seed-data/cases/*.xml so every
+              demo task's parent already exists when this rule resolves it.
+              That ordering is already required by AAP Section 0.5.2 ("Seed
+              data is loaded last") and by the reference-by-number
+              resolution the seed script performs.
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_case_task_integrity")
+               = c86e828a90f6e393a8d0032cb568115f
+        32-character lowercase hex, so a re-import matches the existing row
+        on that id and updates it in place rather than inserting a
+        duplicate.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 1 (Data model): "Zero missing mandatory fields" - made true of
+          ROWS on the task table, not only of dictionary metadata.
+        - Gate 2 (Workflow): "task-closure check blocks Resolved transition".
+          That check counts child tasks by `case`; a task whose parent does
+          not resolve is invisible to it, so the gate itself depends on this
+          rule holding.
+        - Gate 6 (Dashboards): "All widgets display data; no broken report
+          references". The Agent Workspace "My overdue tasks" list dot-walks
+          through `case`.
+        - Gate 7 (Update Set): deterministic sys_id and reference-by-name
+          collection, so the rule re-imports with zero preview errors.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case_task</collection>
+        <condition/>
+        <description>Before-insert and before-update on x_casemgmt_case_task: refuses any write that would store an empty mandatory case/subject/assigned_to/due_date, or a `case` reference that does not resolve to a live x_casemgmt_case row. Closes QA finding F15 for the task table, which carried NO business rule at all - all seven shipped rules are on x_casemgmt_case - so its mandatory and referential constraints existed only at the form layer. Measured before this rule: POST with case=deadbeefdeadbeefdeadbeefdeadbeef returned 201 (dangling mandatory reference) and POST with an empty case returned 201 (parentless task). Enforces AAP Section 0.5.7 (case/subject/assigned_to/due_date Mandatory) and Section 0.5.2 (case references resolve by key). The parent is resolved with plain GlideRecord, not GlideRecordSecure, so the rule tests EXISTENCE only and leaves authorization to the scoped ACLs of Section 0.5.6. Order=100; returns early on current.isActionAborted(); reproduces none of the four verbatim messages Section 0.7.4 fixes. Does not fire on delete, so the cascade rule on the case reference and the manager Delete grant are both untouched. Contains zero gs.eventQueue() calls per the email-disabled constraint.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_validate_case_task_integrity</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Server-side backstop for AAP Section 0.5.7's MANDATORY contract and
+    // AAP Section 0.5.2's resolvable-parent contract on
+    // x_casemgmt_case_task.
+    //
+    // Before this rule the table carried NO business rule at all, so both
+    // contracts lived only at the form layer. Measured as admin:
+    //     POST {"case":"deadbeefdeadbeefdeadbeefdeadbeef", ...} -> HTTP 201
+    //     POST {"case":"", ...}                                 -> HTTP 201
+    // The first stored a dangling mandatory reference, the second a task
+    // with no parent. Both are invisible to the "all tasks closed" gate in
+    // x_casemgmt.CaseTransitionValidator (which counts children by `case`)
+    // and to the case form's Tasks related list, while still counting in
+    // every task-table aggregate.
+
+    // Stop if an earlier rule in the chain has already rejected this save.
+    // setAbortAction(true) cancels the WRITE, not the remaining before
+    // rules; the platform keeps running them and reports the pending abort
+    // through current.isActionAborted(). This is the only rule on this table
+    // at authoring time, so the flag is normally false here; the guard is
+    // the discipline every rule in this application follows and it keeps a
+    // save refused by any future lower-ordered rule from collecting a
+    // second, unrelated message.
+    if (current.isActionAborted()) {
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 1 + 2. THE MANDATORY PARENT REFERENCE.
+    //
+    // Checked first because it is the constraint whose violation does the
+    // most damage: the "In Progress -> Resolved" task-closure gate, the
+    // Agent Workspace "My overdue tasks" report and the case form's Tasks
+    // related list all reach this row THROUGH this column, so a row that
+    // fails here is simultaneously invalid and unreachable from the
+    // surfaces meant to police it.
+    // ------------------------------------------------------------------
+    var parentId = current.getValue('case');
+
+    // getValue() returns the underlying sys_id String, or null when the
+    // reference was never set. It is used in preference to property access
+    // for two reasons: it has one documented return contract across
+    // releases, and `case` is a reserved word in JavaScript, so
+    // current.getValue('case') avoids relying on the ES5 allowance for
+    // reserved words as property names.
+    if (parentId === null || parentId === undefined || String(parentId).trim() === '') {
+        // Target-side authored wording. AAP Section 0.7.4 fixes four
+        // verbatim strings and none of them is a mandatory-field message,
+        // so no other artifact's message is reproduced here. The field is
+        // named by its dictionary column_label ('Case') so the refusal is
+        // actionable for a caller who cannot see the form.
+        gs.addErrorMessage('Case is mandatory: a task must reference the case it belongs to.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // EXISTENCE, NOT ACCESS. Plain GlideRecord is used deliberately in
+    // place of GlideRecordSecure: the question is whether the parent row
+    // exists, never whether the caller may read it. Access control on this
+    // table is owned by the scoped ACLs of AAP Section 0.5.6 under ../acl/,
+    // and AAP Section 0.7.3 Gate 3 is measured against those ACLs. A
+    // read-ACL-aware lookup here would tell an x_casemgmt_case_agent
+    // creating a task against a case outside their "Assigned only" read
+    // scope that the CASE DOES NOT EXIST, masking the ACL that actually
+    // governs the operation.
+    //
+    // The argument is the sys_id the CALLER supplied on the row being
+    // written, read at run time - not a literal, so the AAP Section 0.7.2
+    // no-hardcoded-sys_id constraint holds.
+    var parentGr = new GlideRecord('x_casemgmt_case');
+    if (!parentGr.get(parentId)) {
+        // A stored reference that resolves to nothing is the defect QA
+        // finding F18 produced from the parent side and finding F15 from
+        // this side. Such a row can never be saved from its own form,
+        // because a mandatory reference cannot be re-filled from a value
+        // that displays as blank.
+        //
+        // The wording deliberately differs from the anonymous portal
+        // lookup's "No case found with that number." (owned by
+        // x_casemgmt.CasePortalService, fixed verbatim by AAP Section
+        // 0.7.4): that message answers an external requester searching by
+        // case NUMBER, this one answers an internal caller who supplied an
+        // unresolvable sys_id. Reusing it here would put a portal-facing
+        // string on an internal write path and duplicate another
+        // artifact's message.
+        gs.addErrorMessage('The case this task references does not exist.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 3 + 4 + 5. THE REMAINING MANDATORY COLUMNS from AAP Section 0.5.7.
+    //
+    // `label` is the column_label the dictionary carries
+    // (../dictionary/x_casemgmt_case_task_subject.xml, _assigned_to.xml,
+    // _due_date.xml), so the message names the field exactly as the caller
+    // sees it on the form and in the list header.
+    //
+    // Deliberately NOT included: `type` and `status`. Section 0.5.7 marks
+    // neither Mandatory, and `status` carries default_value='Open'
+    // (../dictionary/x_casemgmt_case_task_status.xml) so it can never be
+    // empty on insert. `number` is issued by the platform's Number
+    // Maintenance subsystem during the insert pipeline and is read-only
+    // thereafter.
+    // ------------------------------------------------------------------
+    var MANDATORY_FIELDS = [
+        { element: 'subject', label: 'Subject' },
+        { element: 'assigned_to', label: 'Assigned To' },
+        { element: 'due_date', label: 'Due Date' }
+    ];
+
+    for (var i = 0; i < MANDATORY_FIELDS.length; i++) {
+        // The value read is the value the row WOULD CARRY AFTER this write,
+        // so a PATCH that touches only `status` on a conformant task reads
+        // the stored subject, assigned_to and due_date and passes
+        // untouched. Whitespace counts as empty for the same reason it does
+        // on the case table: "Mandatory" is a statement about content, and
+        // a space-only subject renders as a blank cell in the task list and
+        // in the case form's Tasks related list.
+        var value = current.getValue(MANDATORY_FIELDS[i].element);
+        if (value === null || value === undefined || String(value).trim() === '') {
+            gs.addErrorMessage(MANDATORY_FIELDS[i].label +
+                ' is mandatory and cannot be empty.');
+            current.setAbortAction(true);
+
+            // Return on the FIRST violation: one actionable message is what
+            // the form banner and the Table API response can each carry
+            // legibly, and the caller re-submits after fixing it.
+            return;
+        }
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>c86e828a90f6e393a8d0032cb568115f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_case_task_integrity</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_validate_case_task_integrity</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>

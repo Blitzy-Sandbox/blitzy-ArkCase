@@ -2,6 +2,36 @@
 
 Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7.3, Gate 7)
 
+> **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
+> The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> What to verify before an upload, and what to assert after it:
+>
+> | | Value |
+> | --- | --- |
+> | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
+> | Bytes | **3,944,374** (was 3,780,373) |
+> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | `…FALLBACK.xml` | byte-identical to the above, as always |
+> | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
+>
+> Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
+> Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
+> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
+> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> remediation creates (was 27), **11** Business Rules (was 7).
+>
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
+> superseded revision and is left as written** — those passages state what was measured at a point in time, and
+> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
+> digest, it has been updated to the values above.
+>
+> **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
+> deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988
+> children against the one sequence that ever previewed to zero problems, and rewriting records inside a file
+> that is retained rather than shipped would destroy that for nothing. The consequence is that promoting it as
+> it stands would undo all 18 QA fixes. A promotion must first carry the 9 inserted and 14 re-synced records
+> named in the elected package's header comment.
+
 ## Purpose
 
 This document captures the manual procedure an operator follows on a **fresh ServiceNow PDI** to verify that the exported scoped-application Update Set XML re-imports without preview errors. Per AAP Section 0.7.1, **zero preview errors** are required before the Update Set may be committed. This is the final integration gate (Gate 7) and blocks delivery if it fails. The operator should expect this procedure to take 20–45 minutes end-to-end (preview alone can take 1–5 minutes; commit another 1–3 minutes; post-commit re-verification of Gates 1–6 takes the remainder).
@@ -242,7 +272,7 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 > (`../update-set/x_casemgmt_case_management_update_set.xml`, 926 blocks, 3,780,373 bytes, SHA-256
 > `a9204411…`), so **this phase
 > is mandatory** — it carries 0 `sys_security_acl_role` rows and the hand-authored schema records, so a commit
-> alone leaves the tables without physical storage and the 26 ACLs without their 27 role links. On the retained
+> alone leaves the tables without physical storage and the 29 ACLs without their 36 role links. On the retained
 > native-rebuild package
 > (`../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, 988 blocks,
 > 4,062,067 bytes, `e109e1d1…`) this phase
@@ -279,7 +309,7 @@ the checklist a round-trip verifier needs.
       about 25 `sys_dictionary` collisions from the rows the remediation just wrote; accepting the remote is
       correct **for `sys_dictionary` only**. Never ignore a collision on any other table.
 - [ ] Run the remediation in **Global** again. This is the pass that must report `verified=true`, `errors=0`,
-      `acl_links_created=27`, `acl_links_total=27`, `acl_links_expected=27`, `security_cache_flushed=true`.
+      `acl_links_created=36`, `acl_links_total=36`, `acl_links_expected=36`, `security_cache_flushed=true`.
 - [ ] Confirm independently of the log that **exactly 27** `sys_security_acl_role` rows exist in the scope,
       distributed manager 14 / agent 10 / viewer 3. A number other than 27 means it has not converged; the script
       removes surplus links as well as creating missing ones.
@@ -423,7 +453,7 @@ onto unrelated deployments.
 > tables from **0 to 24** rows with all seven fields rendering their exact option labels
 > ([`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3d](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) is the full
 > record) — so a commit of the
-> current bytes yields the 24 rows without remediation. Physical storage, auto-numbering and the 27 role links
+> current bytes yields the 24 rows without remediation. Physical storage, auto-numbering and the 36 role links
 > are unchanged by that fix and still require the §9.5 remediation.
 
 - [ ] After the §9.5 remediation, re-run all four. **Result: tables 3/3 physical with 24 choice rows and all 7
@@ -615,7 +645,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > carries those records in dependency order; and the elected 926-block deliverable has never been previewed as
 > a complete file. **Running this procedure is what closes the gate for whichever artifact it is run on** — on
 > the elected
-> deliverable, asserting **926** children and recording `a9204411…` as verified with that run's timestamp; or on
+> deliverable, asserting **935** children and recording `4e28acae…` as verified with that run's timestamp; or on
 > the retained rebuilt file, asserting **988** children and recording `e109e1d1…`, after which that file may be
 > promoted back to the deliverable path. Under this run's frozen rule the recorded checksum is stale once a
 > package changes after verification, so nothing below may be read as a result on either file. What is
@@ -647,7 +677,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) against the
 > file under test on a genuinely clean PDI — upload, assert its child count (926 elected / 988 retained
 > rebuilt), preview to zero `type=error`, commit
-> through the native "Commit Update Set" UI action, confirm physical storage and all 27 role links (which on the
+> through the native "Commit Update Set" UI action, confirm physical storage and all 36 role links (which on the
 > elected package means running `scripts/post_import_remediation.js`, since it carries none) — and then
 > record that file's digest as verified with that run's timestamp. For what *was* measured on the elected
 > bytes instead, see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c — the 13-payload + 1-block
@@ -756,7 +786,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 3. Any error in Phase 3 commit.
 4. ANY of Gates 1–6 fails to re-verify on the verification PDI **for a reason other than the two remaining
    disclosed install steps** — (a) the manual Defect C / Defect 9 remediation, without which the three tables have
-   no physical storage and all 26 ACLs have zero role links, and (b) the related-list cache, which only bites on an
+   no physical storage and all 29 ACLs have zero role links, and (b) the related-list cache, which only bites on an
    instance that had already rendered the case form before the definition arrived and is cleared by opening a case,
    *Configure ▸ Related Lists*, **Save**. Both are recorded with root causes in
    [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.5](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) (item 7 covers

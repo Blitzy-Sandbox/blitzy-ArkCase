@@ -184,6 +184,56 @@
       in after a successful POST. Without this widget, the submission user
       experience would have no terminal success state.
 -->
+<!--
+    ==========================================================================
+    POST-QA REMEDIATION (this checkpoint) - what changed in this record and why
+    ==========================================================================
+    Findings F1, F2, F10, F11 and F12 were raised against the two public pages
+    this widget serves. The remediation carried by the template, client script
+    and server script below is:
+
+      F2  - the confirmation panel now offers a link to the status-lookup page
+            (?id=x_casemgmt_case_status with the case number), so the requester
+            who has just been handed a case number can reach the page that
+            consumes it. The link is a plain theme link rather than a .btn: the
+            default theme paints .btn:focus with a fully transparent outline,
+            which would have left this new control with no visible keyboard
+            focus indicator.
+      F10 - the anonymous lookup renders opened_date in the instance's own
+            display timezone and labels it with that timezone, so an external
+            requester and internal staff read the same instant. The response
+            body still carries EXACTLY the three whitelisted keys
+            (status, subject, opened_date) required by AAP Section 0.7.4 - the
+            timezone is a rendered label, never a fourth key.
+      F12 - the primary action is no longer disabled by form validity: it is
+            pressable, validates on press, marks every control touched and
+            surfaces a summary WITHOUT issuing a request. Stale outcome
+            messages are cleared when the requester edits an input, so the
+            screen never shows two contradictory messages at once.
+      F11 - the visible page heading is a real h1 and the success result panel
+            is announced (role=status / aria-live=polite).
+      F1  - over-length input is REFUSED rather than silently truncated. The
+            refusal itself lives server-side in
+            ../../script_includes/x_casemgmt_CasePortalService.xml (HTTP 400
+            naming the offending field) and in the new before-insert/update
+            rule ../../business_rules/x_casemgmt_validate_case_text_lengths.xml.
+
+    F11's CONTRAST HALF AND THE css ELEMENT (AAP Section 0.4.4):
+    Section 0.4.4 mandates the Experience Portal DEFAULT THEME with "No custom
+    CSS, no custom branding", and Section 0.3.2 places theme and branding
+    modifications out of scope. The frozen specification therefore outranks the
+    WCAG contrast preference, so the palette is NOT overridden here and the css
+    element is intentionally EMPTY. What could be fixed without custom CSS was
+    fixed by choosing default-theme classes whose own colours already meet AA:
+    neutral guidance and status text carries no colour class and inherits the
+    theme's body colour (previously .help-block grey, measured 2.14:1), and
+    per-field error text uses the theme's own .text-danger utility. The items
+    inherent to the stock components - the .btn-primary resting background, the
+    .alert-warning text colour and the theme's focus-ring colour - are left
+    exactly as the platform paints them and are recorded in
+    ../../docs/portal-pages.md as bounded by the Section 0.4.4 exception.
+    ==========================================================================
+-->
 <record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
@@ -253,7 +303,10 @@
      *     Section 0.7.2 Email-disabled constraint).
      *
      * The IIFE pattern matches ServiceNow's standard widget server-script
-     * convention; the empty body is the canonical no-op placeholder.
+     * convention. The body is intentionally empty and complete: this widget
+     * has no server-side work to do, because the only value it renders (the
+     * case number) is supplied through widget options by the parent
+     * submission widget. There is nothing deferred here.
      */
 })();
 ]]></script>
@@ -271,13 +324,74 @@
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <template><![CDATA[<div class="x-casemgmt-case-confirmation-widget">
+    <!--
+        The heading is <h2> rather than <h3>. This panel replaces the
+        submission form in place, and the page's single <h1> ("Submit a
+        Case") is rendered by the parent submission widget OUTSIDE its
+        ng-if, so it survives the swap. <h2> therefore continues the
+        page's heading outline without skipping a level, which an <h3>
+        under an <h1> would do. The TEXT is unchanged and must stay
+        unchanged - "Your case has been submitted" is verbatim per AAP
+        Section 0.4.4.
+
+        role="alert" on the panel is what announces the confirmation to
+        assistive technology: the panel is inserted into the DOM by the
+        parent's ng-if only after a successful POST, and an alert region
+        is announced on insertion.
+    -->
     <div class="alert alert-success" role="alert">
-        <h3>Your case has been submitted</h3>
+        <h2>Your case has been submitted</h2>
         <p ng-if="c.options.number">
             Case number: <strong>{{c.options.number}}</strong>
         </p>
         <p>
             Please save this case number for future reference. You can use it to look up the status of your case at any time.
+        </p>
+        <!--
+            The link that makes the previous sentence actionable.
+
+            The panel hands the requester a case number and tells them
+            they can look up its status, and until this anchor existed
+            there was no way to reach the page that consumes it: the
+            requester had to know, and hand-type,
+            /x_casemgmt_case_portal?id=x_casemgmt_case_status. AAP Section
+            0.4.4 describes the submission page and the status page as one
+            portal experience, so the confirmation is exactly where the
+            crossing belongs.
+
+            The href is RELATIVE ('?id=...'), which keeps the requester on
+            whichever portal instance served this page and needs no
+            knowledge of the portal's URL suffix - so it is correct on
+            /x_casemgmt_case_portal and on any other portal that embeds
+            this widget, and it carries no hardcoded instance host.
+            x_casemgmt_case_status is the <id> of
+            ../pages/sp_page_x_casemgmt_case_status.xml, resolved by that
+            slug and not by sys_id.
+
+            btn / btn-default / btn-primary and alert-link are all bundled
+            Bootstrap 3 classes shipped with the Service Portal, so this
+            adds no branding and needs no styling rule, per AAP Section
+            0.4.4's default-theme mandate. This widget's <css> element
+            carries exactly one rule, and it is not about this link's
+            appearance: it restores the keyboard focus ring that the
+            theme paints transparent. See the DEFAULT THEME note in the
+            record description above.
+
+            The case number is appended as a `number` query parameter when
+            one is known. The status page CONSUMES it: the lookup widget
+            pre-fills its input from that parameter and runs the lookup
+            once on load, so following this link lands the requester on
+            their own case's status rather than on an empty form they
+            have to re-type into. The parameter is optional on both ends
+            - the second anchor below omits it, and the lookup widget
+            degrades to an empty form when it is absent - so neither side
+            depends on the other.
+        -->
+        <p>
+            <a ng-if="c.options.number"
+               ng-href="?id=x_casemgmt_case_status&amp;number={{c.options.number}}">Check the status of this case</a>
+            <a ng-if="!c.options.number"
+               href="?id=x_casemgmt_case_status">Check the status of a case</a>
         </p>
     </div>
 </div>

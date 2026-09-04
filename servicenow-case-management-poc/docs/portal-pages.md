@@ -11,7 +11,7 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 - Both pages live under a single Service Portal record [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml).
 - Portal URL: `[instance URL]/x_casemgmt_case_portal`. The portal slug `x_casemgmt_case_portal` is the actual `<url_suffix>` declared in [`../portal/sp_portal_x_casemgmt_case_portal.xml`](../portal/sp_portal_x_casemgmt_case_portal.xml). AAP Section 0.7.2 verbatim wording uses `[instance URL]/x_casemgmt_portal` as a generic placeholder ("or the equivalent portal URL chosen at portal-record creation time"); this document uses the actual implementation slug to keep the per-page URL examples below accurate.
 - Both pages are anonymous (no login required).
-- Both pages use the platform default theme — no custom CSS, no custom branding (per AAP Section 0.4.4).
+- Both pages use the platform default theme, add no branding and add **no custom CSS** — every widget's `css` element is empty, per AAP Section 0.4.4. The WCAG AA contrast items raised against these pages are addressed only as far as that mandate allows, by class choice rather than by overriding the palette; see *Colour contrast* under [Accessibility of the two form widgets](#accessibility-of-the-two-form-widgets) for the measurements and for the residual items the mandate leaves in place.
 - Both pages call scripted REST endpoints under `/api/x_casemgmt/...`.
 - The scripted REST endpoints execute with platform-default elevated privilege but the request/response shapes whitelist exactly the fields specified by AAP Section 0.7.4.
 - No PII in any example record; all examples reference synthetic data consistent with [`../seed-data/`](../seed-data/).
@@ -25,14 +25,20 @@ and why, so that a later edit does not remove it by accident:
 | --- | --- | --- |
 | Accessible name for every control | A bound `<label for>` on every input, select and textarea | both widgets |
 | Required-ness | `required` **and** `aria-required="true"` on the four mandatory controls. The `*` in the label is decoration, so it carries `aria-hidden="true"` and is never the only carrier of the information | submission widget |
-| Reason a disabled button is disabled | The form sets `novalidate`, so the browser contributes no per-field message. A `help-block` paragraph under the button states the reason in visible text and is referenced by the button through `aria-describedby`. It is always present in the DOM, so the reference never dangles | both widgets |
+| Primary action is never disabled | Both buttons are `ng-disabled` on the in-flight flag **only**, so they stay pointer-addressable and stay in the tab order, and the press is validated on click. A button disabled on form validity was the previous design and it answered nothing: a disabled `<button>` does not receive the pointer (the click lands on the wrapping `div.form-group`, and the declared `cursor:not-allowed` can never render), and it is removed from the tab order. The form sets `novalidate`, so the browser contributes no per-field message either — the widget's own messages are the whole of the feedback | both widgets |
+| Guidance under the button | A paragraph under the button (carrying no colour class, so it inherits the theme's body colour rather than `.help-block` grey) states what is still needed, in visible text, referenced by the button through `aria-describedby`. It is always present in the DOM, so that reference never dangles. On the lookup page its empty-state line is suppressed while the field's own message is showing, because both said the same sentence and two copies of one instruction read as two problems | both widgets |
+| Stale-message hygiene | Every input carries `ng-change="c.onInputChange()"`, which drops the previous attempt's outcome — the submission error and validation summary, and on the lookup page the result panel, the not-found alert and the service-failure alert together. A keystroke is evidence the user has moved on from that answer, and clearing the lookup's four pieces of state together is what stops a panel describing a superseded case number from coexisting with the new one. Per-field messages are deliberately NOT cleared here: they are bound to live `$invalid && $touched` and correct themselves | both widgets |
+| Heading structure | One real `<h1>` per page — "Submit a Case" / "Case Status Lookup" — and on the submission page it is mounted **outside** the `ng-if` that swaps the form for the confirmation, so exactly one `h1` exists in every state. Both confirmation panels and the lookup result panel use `<h2>`, so no level is skipped. Note that the Service Portal page container additionally emits its own 1x1 clipped `div.sr-only[role="heading"][aria-level="1"]` from `sp_page.title`, with text identical to the widget's `h1`; that element is platform-generated and cannot be removed from the widget layer, so each page exposes two level-1 headings to assistive technology | both widgets |
+| Successful result announcement | The lookup result panel sits inside an **always-mounted** `<div role="status" aria-live="polite">`. The region is the mounted wrapper rather than the `ng-if`'d panel because a live region must exist in the DOM before its content changes to be announced reliably. Before this, both failure paths announced (`role="alert"`) and success announced nothing, so a screen-reader user heard the outcome only when it went wrong | lookup widget |
 | In-flight state | The same paragraph is a `role="status" aria-live="polite"` region that announces "Submitting your case, please wait..." / "Looking up your case, please wait...", and the form sets `aria-busy` while the request is outstanding. The button's changing inner text is no longer the only signal | both widgets |
 | Result and error announcements | `role="alert"` on the submission error panel, the lookup result's not-found panel, the lookup's service-failure panel, and the confirmation panel; the lookup result itself is a `<dl>`/`<dt>`/`<dd>` definition list | both widgets |
 | Programmatic invalid state | Every control has a `name` and binds **`aria-invalid`** to `$invalid && $touched`, so assistive technology is told *which* control is wrong rather than only that the form is. The `$touched` half is deliberate: a field the user has never visited is not announced as an error on first paint | both widgets |
 | Visible invalid state | The control's `.form-group` takes Bootstrap 3's **`has-error`** class under the same condition, which is what makes the failing field visually distinguishable without any custom CSS | both widgets |
-| Per-field error message | Each control has its own `help-block` paragraph carrying **`role="alert"`**, referenced by the control through `aria-describedby`, rendered only while that control is invalid and touched. The exact strings are in the table below | both widgets |
+| Per-field error message | Each control has its own paragraph carrying the theme's **`text-danger`** class and **`role="alert"`**, referenced by the control through `aria-describedby`, rendered only while that control is invalid and touched. The exact strings are in the table below | both widgets |
 | Maximum-length notice | Each length-capped field carries a **`role="status"`** notice that appears only once `maxlength` has been reached, because `maxlength` silently discards further keystrokes and a silent discard is the defect. Wording: *"&lt;Field&gt; has reached its limit of &lt;n&gt; characters. Anything typed beyond this point is discarded."* for Subject (255), Description (4000) and Your name (100) | submission widget |
-| Colour contrast | **Inherited in full from the platform default theme and not measurable project-side.** All three widgets ship an empty `css` element and an empty `link` element, define no colour, and reference no branding asset; `sp_portal.theme` / `theme_dv` are empty. AAP Section 0.4.4 mandates that default treatment ("ServiceNow Experience Portal default theme. No custom CSS, no custom branding"), so there is nothing project-side to change — authoring CSS to alter contrast would violate that requirement. If the platform theme's contrast is ever judged insufficient, that is a theme decision to raise against the AAP, not a defect in these widgets | portal surface |
+| Colour contrast | Inherited from the platform default theme, with **no custom CSS anywhere** — AAP Section 0.4.4 mandates the default theme with *"No custom CSS, no custom branding"* and Section 0.3.2 places theme and branding modifications out of scope, so the frozen specification outranks the WCAG contrast preference and the palette is not overridden. What could be fixed WITHOUT custom CSS was fixed by class choice: the neutral guidance and status paragraphs no longer carry `.help-block` (theme grey `#b1b1b1`, measured **2.14:1** — the single audit Lighthouse used to fail) and instead inherit the theme's body colour `#717171`, measured **4.88:1 — passes AA**. The remaining items are the stock components' own colour values and are left exactly as the platform paints them: resting `.btn-primary` white on `#428bca` = **3.63:1**, per-field `.text-danger` `#d9534f` = **3.96:1**, `.alert-warning` `#c77c11` on the theme's white alert background = **3.32:1**, and the focus indicator `#66afe9` = **2.37:1** against white (the theme's own 4px outline is painted `rgba(0,0,0,0)`, so the 1.5px glow is the whole indicator). `.alert-danger` already passes at `#a02622` on `#fdf7f7` = **7.09:1**. Measured after the change: Lighthouse Accessibility **96/100 on both pages**, its one failing audit being the theme's `.btn-primary` label. Those four residuals are bounded by the Section 0.4.4 exception and are recorded here rather than silently accepted — closing them requires an explicit exception to the no-custom-CSS mandate, which is a specification decision and not one this package may take for itself | portal surface |
+| Target size | Interactive controls are 34px tall and **deliberately left that way**. 34x34 clears WCAG 2.1 AA SC 2.5.8's 24x24 minimum; the 44x44 figure is SC 2.5.5, which is AAA, and reaching it would mean changing the theme's control metrics — a visual redesign of exactly the kind AAP Section 0.4.4 exists to prevent | portal surface |
+| Known residual | Each control's `aria-describedby` names its error paragraph unconditionally while that paragraph is `ng-if`'d, so the reference is unresolved whenever the field is valid or untouched. WAI-ARIA requires an unresolvable IDREF to be ignored, and each message also carries `role="alert"` so it is announced on appearance regardless; the alternative — mounting an empty `help-block` per field — would add Bootstrap's help-block margins to the form in its normal, valid state. Recorded as a deliberate trade-off rather than an oversight. One further residual is platform-owned and outside these widgets: the Service Portal skip link measures 3.63:1 (white on `#428bca`) once focused. The confirmation link is deliberately a plain theme link rather than a `.btn`, because the theme paints `.btn:focus` with a fully transparent outline and that would have left the link with no keyboard focus indicator of its own | both widgets |
 
 ## Page 1: Case Submission
 
@@ -101,24 +107,50 @@ Both are fixed. Every control now carries its own message, and the aggregate hin
 | Your Email | `Enter a valid email address, or leave the field empty. Email is optional, but an address that is not valid blocks Submit.` |
 | Case Number *(lookup page)* | `Enter a case number to look up.` |
 
+A press on an invalid form additionally raises a `role="alert"` summary next to the button, because the per-field
+messages sit beside fields the requester has already scrolled past:
+
+| Widget | Summary text |
+| --- | --- |
+| submission | `Your case has not been submitted yet. Correct the highlighted fields above, then choose Submit again.` |
+| lookup | `Enter a case number, then choose Look Up Status.` |
+
+Neither summary is a substitute for the per-field messages: those say which field and why, the summary says the
+press was received and refused. Both are cleared by the next keystroke.
+
 The hint beneath the Submit button is a `role="status" aria-live="polite"` region and has **three** states, so it
 can never contradict the field-level messages:
 
 | Condition | Hint text |
 | --- | --- |
-| any of the four required fields still incomplete | `Every field marked * is required. Complete all four to enable Submit.` |
-| all four complete, but the optional email is malformed | `Email is optional, but the address entered is not valid. Correct it or clear the field to enable Submit.` |
+| any of the four required fields still incomplete | `Every field marked * is required. Complete all four before submitting.` |
+| all four complete, but the optional email is malformed | `Email is optional, but the address entered is not valid. Correct it or clear the field before submitting.` |
 | nothing blocking | `All required fields are complete.` |
 
 The distinction is computed by `c.requiredIncomplete()` in the widget's client script, which inspects only the four
 mandatory controls — that is what lets the second state exist at all. The hint paragraph is always present in the
 DOM, so the button's `aria-describedby` reference never dangles, and it doubles as the in-flight announcement.
 
-No CSS was added for any of this: `has-error`, `help-block`, `alert-warning` and `alert-danger` are Bootstrap 3
-classes the platform's default Service Portal theme already provides, which is what keeps the widgets inside AAP
-§0.4.4's *"No custom CSS, no custom branding"*. The `css` field on all three widgets is empty. The contrast and
-control-size consequences of that constraint are recorded as a disclosed limitation in
-[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.9](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) (INFO-3), not fixed here.
+No CSS was added at all. `has-error`, `text-danger`, `alert-warning` and `alert-danger` are Bootstrap 3 classes the
+platform's default Service Portal theme already provides, and the roles, `aria-live` regions, `aria-invalid`
+bindings and heading levels are all markup. Every widget's `css` element is empty, which is what AAP §0.4.4's
+*"No custom CSS, no custom branding"* requires; §0.3.2 places theme and branding modifications out of scope as
+well. Where a colour measured below AA, the remedy taken was to stop applying the offending default-theme class
+(the guidance paragraphs' `.help-block` grey, 2.14:1, replaced by the inherited body colour at 4.88:1) rather
+than to restyle the theme.
+
+Three consequences are worth stating plainly. First, the four contrast items that are inherent to the stock
+components — `.btn-primary` at rest (3.63:1), per-field `.text-danger` (3.96:1), `.alert-warning` text (3.32:1)
+and the focus indicator (2.37:1) — remain **disclosed rather than fixed**, bounded by the §0.4.4 exception;
+Lighthouse Accessibility reads 96/100 on both pages with the `.btn-primary` label as its only failing audit.
+Closing them needs an explicit specification exception permitting widget-scoped colour CSS. Second, the
+**control-size** gap is deliberately not fixed either — 34 px clears WCAG 2.1 AA SC 2.5.8's 24×24 minimum, and
+the 44×44 figure is SC 2.5.5 (AAA), which would require changing the theme's control metrics. Third, everything
+that could be fixed in **markup** was: a real `<h1>` per page, the success panel inside an always-mounted
+`role="status" aria-live="polite"` region, a keyboard-reachable primary action that validates on press, stale
+messages cleared on edit, and the status-page link on the confirmation panel.
+[`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) INFO-3 describes both gaps as
+disclosed-and-unfixed with the `css` field empty, which is exactly the shipped state.
 
 ### Input Fields
 
@@ -132,13 +164,14 @@ control-size consequences of that constraint are recorded as a disclosed limitat
 
 ### Submit Behavior
 
-1. Form-level client-side validation runs first (mandatory fields, max-length).
+1. Form-level client-side validation runs first. The Submit button is **always enabled** — it is `ng-disabled` on the in-flight flag only — and `c.submit(caseSubmitForm)` consults the form's validity on the press. On an invalid form it marks every control `$touched` (which renders each field's own `role="alert"` message), shows a `role="alert"` summary, and **returns without issuing any request**. A disabled button was the previous gate and it was a dead end: a disabled `<button>` is pointer-transparent, so a click landed on the wrapping `div.form-group` and produced no feedback at all, and it is absent from the tab order, so a keyboard user never reached the primary action. The FormController is passed **as an argument** rather than read from `$scope`, because the form sits inside `ng-if="!c.data.submitted"` and therefore links on a child scope where `$scope.caseSubmitForm` is undefined.
 2. On client validation pass, the widget calls scripted REST endpoint POST `/api/x_casemgmt/case_submit`.
 3. The scripted REST handler validates the payload server-side, creates a new `x_casemgmt_case` record with `status = Draft` (the default), populates `subject`, `type`, `description`, `requester_name`, `requester_email` from the payload, and DOES NOT populate `assigned_group`, `assigned_agent`, or `closed_date`.
 4. Auto-numbering populates `number` in `CASE0000001` format.
 5. Business rule `set_opened_date` populates `opened_date = gs.nowDateTime()` on insert.
 6. The endpoint returns a JSON payload `{ "number": "<auto-generated case number>" }`.
-7. The submission widget hides the form and shows the confirmation widget displaying the returned case number plus the acknowledgement "Your case has been submitted" (no trailing period — matches the wireframe and the confirmation widget schema).
+7. The submission widget hides the form and shows the confirmation widget displaying the returned case number plus the acknowledgement "Your case has been submitted" (no trailing period — matches the wireframe and the confirmation widget schema), and a link on to the status page (see below).
+8. Editing any input clears the previous attempt's messages (`ng-change="c.onInputChange()"`), so a failed submission's alert cannot sit above fields the requester is already correcting.
 
 ### Confirmation Widget
 
@@ -152,7 +185,7 @@ control-size consequences of that constraint are recorded as a disclosed limitat
 |                                                          |
 |              Save this number to look up status later.   |
 |                                                          |
-|              [ Submit Another Case ]                     |
+|              [ Check the status of this case ]           |
 |                                                          |
 |  [Portal Default Footer]                                 |
 +----------------------------------------------------------+
@@ -185,7 +218,7 @@ All other fields on the case table are NOT accepted by the submission endpoint a
 > | `{}` — every field absent | **400**, field-level `{error, fields}` body, and **no row created** |
 > | no body at all | **400** |
 > | `subject` / `description` / `requester_name` blank or whitespace-only | **400** (values are trimmed first) |
-> | `description` of 6,006 characters | **201** — an over-length value is **truncated to the column bound, not rejected**: measured `description` stored at exactly 4,000 characters, and a 300-character `subject` stored at exactly 255. `requester_name` and `requester_email` cap at 100 the same way. The cap is applied deliberately rather than left to the platform, because a column longer than 255 is TEXT and would otherwise store the whole oversized value |
+> | `description` of 4,001 characters (or `subject` 256, `requester_name` 101, `requester_email` 101) | **400**, field-level `{error, fields}` body naming the offending field and quoting both the limit and the length received, and **no row created**. An over-length value is **REFUSED, never truncated** — the earlier behaviour answered 201 and stored a silently shortened value, which on an anonymous intake path meant the material end of a long description was dropped while the requester was told the case had been submitted. Measured: 4,001-char `description` → `400 {"description":"Description must be 4000 characters or fewer (received 4001)."}`; all three over-length fields at once → one 400 naming all three; exactly-at-limit 255/4000/100/99 → **201** and stored in full. The check must live in script because a column longer than 255 is TEXT and does not truncate at storage |
 > | `type` = `NOT_A_REAL_TYPE` | **400** — the value is checked against the **live** `sys_choice` list for `x_casemgmt_case.type`, so the AAP's "extensible" choice contract keeps working, and an unreadable list fails closed. Matching is exact first, then case-insensitive |
 > | `type` omitted entirely | **201**, and the column is stored **empty** — `type` carries no mandatory constraint in AAP §0.5.7, and no default is invented. The submission **page** always sends one, because its Type control is `required` |
 > | `requester_email` present but malformed | **400** |
@@ -264,10 +297,11 @@ Allows an unauthenticated external requester to look up the current status of a 
 
 ### Lookup Behavior
 
-1. Client-side validates the case number format (regex `^CASE\d{7}$`) and shows hint if malformed.
-2. On valid format, the widget calls scripted REST endpoint GET `/api/x_casemgmt/case_status_lookup?number=<value>`.
+0. **Arriving from a submission confirmation.** The confirmation panel links here as `?id=x_casemgmt_case_status&number=CASE0000001`. The widget's server script reads that parameter with `$sp.getParameter('number')` into `data.prefilledNumber` (trimmed, capped at the 20 characters the input's own `maxlength` allows), and the client controller pre-fills the field and runs the lookup once. Without it the requester followed a link labelled "Check the status of this case", landed on an empty form, and had to re-type the number the link already carried. This is the only circumstance in which the widget issues a request without a button press, and it is the requester driving it — they clicked a link that says exactly this. With no parameter, `prefilledNumber` is `''` and the page behaves as it always did: empty field, no request. The parameter is treated as untrusted address-bar input: it is never used to build a query directly (the lookup still goes through the same `encodeURIComponent`'d GET, and the endpoint answers 404 for anything it does not recognise) and it reaches the template through `ng-model`, which renders it as a value and never as markup.
+1. Client-side validates that the case number is non-empty and shows the field's own message plus a summary if it is not. The Look Up Status button is **always enabled** — `ng-disabled` on the in-flight flag only — and `c.lookup(caseLookupForm)` decides on the press, returning without issuing a request when the field is empty. A button disabled on an empty field was the previous gate and it answered nothing, for the same two reasons as on the submission page: a disabled `<button>` is pointer-transparent and is absent from the tab order.
+2. On a non-empty value, the widget calls scripted REST endpoint GET `/api/x_casemgmt/case_status_lookup?number=<value>`.
 3. The endpoint queries `x_casemgmt_case` by `number = <value>` using a `GlideRecord` lookup.
-4. **If found:** returns 200 OK with body `{ "status": "...", "subject": "...", "opened_date": "..." }` — only those three fields, NOTHING else.
+4. **If found:** returns 200 OK with body `{ "status": "...", "subject": "...", "opened_date": "..." }` — only those three fields, NOTHING else. `opened_date` is the **display** value (session timezone and date format), not the raw stored UTC value: the endpoint previously emitted the raw column, so the same record read `2026-09-03 17:39:40` externally and `2026-09-03 10:39:40` on the internal form — a seven-hour discrepancy that put an external requester's submission time in the future relative to what staff could see. The timezone that qualifies the instant is rendered as part of the **Opened Date label** on the lookup panel (e.g. `Opened Date (America/Los_Angeles)`), resolved by the widget from its own session; it is deliberately **not** a fourth response key, because AAP Section 0.7.4 fixes this payload at exactly three.
 5. **If not found:** returns 404 Not Found carrying the verbatim literal `No case found with that number.` Measured body on this release: **`{"result":{"error":"No case found with that number."}}`** — the Scripted REST framework nests a handler's body under `result`, so the `error` key sits one level down. The message string is byte-identical either way and the widget reads it defensively, but the envelope is recorded here because earlier revisions of this document wrote it as `{"error":"…"}` and a consumer coding against that shape would miss it.
 6. The widget renders the result panel with the three returned fields, OR the verbatim "not found" message.
 

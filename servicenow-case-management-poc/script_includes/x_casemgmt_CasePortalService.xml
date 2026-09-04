@@ -88,11 +88,17 @@
           method is the only place the constraint can hold for the
           anonymous write path.
         - subject / description / requester_name / requester_email are
-          capped at their declared 255 / 4000 / 100 / 100 lengths. The
-          description cap must be applied in script: the platform stores
-          string columns longer than 255 in a TEXT column that does not
-          truncate, so a 6006-character description was previously stored
-          in full against a declared 4000.
+          held to their declared 255 / 4000 / 100 / 100 lengths, and an
+          over-length value is REFUSED with a named field error rather
+          than shortened to fit. The check must be applied in script: the
+          platform stores string columns longer than 255 in a TEXT column
+          that does not truncate, so a 6006-character description was
+          previously stored in full against a declared 4000, and the
+          earlier substring() cap answered HTTP 201 for a 4001-character
+          description while silently dropping its last character. The
+          same constraint is enforced on every OTHER write path - the
+          internal form included - by the before-insert/update rule
+          ../business_rules/x_casemgmt_validate_case_text_lengths.xml.
         - requester_email stays OPTIONAL per AAP Section 0.5.7, but a
           supplied value must look like an address.
         - type stays OPTIONAL at the dictionary level (choice=3), but a
@@ -260,7 +266,7 @@
         <api_name>x_casemgmt.CasePortalService</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and capped at 255/4000/100, requester_email must look like an address when supplied, type must be a live choice of x_casemgmt_case.type - and a coarse flood guard bounds the unauthenticated write path; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - and a coarse flood guard bounds the unauthenticated write path; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
         <name>CasePortalService</name>
         <script><![CDATA[var CasePortalService = Class.create();
 CasePortalService.prototype = {
@@ -370,7 +376,7 @@ CasePortalService.prototype = {
         // even acknowledge unrecognized keys via an error response, so a
         // probing client cannot enumerate internal field names.
         //
-        // The values written are the VALIDATED, trimmed and length-capped
+        // The values written are the VALIDATED, trimmed, length-checked
         // values produced by _validateSubmission(), never the raw payload.
         var WHITELIST = ['subject', 'type', 'description', 'requester_name', 'requester_email'];
         for (var i = 0; i < WHITELIST.length; i++) {
@@ -442,7 +448,11 @@ CasePortalService.prototype = {
      * Whitelist-only field return per AAP Section 0.7.4:
      *   - Looks up by case number (CASE0000001 style; the public-facing
      *     identifier returned by submitCase).
-     *   - Returns ONLY: status, subject, opened_date.
+     *   - Returns ONLY: status, subject, opened_date. opened_date is the
+     *     DISPLAY value (session timezone and date format), so the instant
+     *     an external requester reads matches the instant internal staff
+     *     read on the case form; see the block comment at the return
+     *     statement for the measurement that made this necessary.
      *   - NEVER returns: assigned_group, assigned_agent, description,
      *     closed_date, requester_name, requester_email, priority, type,
      *     pending_reason, sys_id, sys_created_by, sys_created_on,
@@ -541,10 +551,69 @@ CasePortalService.prototype = {
         // initialized seed-data row); empty strings are safer than null
         // in JSON responses to widget code that may not handle null
         // gracefully.
+        //
+        // ------------------------------------------------------------------
+        // opened_date IS EMITTED AS THE DISPLAY VALUE, NOT THE RAW COLUMN
+        // VALUE.
+        //
+        // A GlideDateTime column is stored in UTC and getValue() returns
+        // exactly those stored characters. getDisplayValue() renders the
+        // same instant in the session's timezone and date format - which is
+        // what every internal surface (the case form, the case list, the
+        // reports) shows. Reading the column with getValue() therefore made
+        // this endpoint the ONLY surface in the application quoting UTC:
+        // measured on CASE9000003, /api/now/table/x_casemgmt_case with
+        // sysparm_display_value=false returned '2026-09-03 17:39:40', with
+        // sysparm_display_value=true returned '2026-09-03 10:39:40', and
+        // this endpoint returned the 17:39:40 form while the internal form
+        // showed 10:39:40 - a seven-hour discrepancy on one record, because
+        // the instance default timezone resolves to US/Pacific and neither
+        // the admin nor the guest user carries a personal timezone.
+        //
+        // An external requester reading 17:39:40 concludes their case was
+        // opened seven hours in the future relative to what the staff
+        // handling it can see, and there is no way for them to reconcile the
+        // two. AAP Section 0.7.3 Gate 5 requires the CORRECT opened_date be
+        // returned for a valid case number, so the display value is the
+        // correct emission and the raw value is not.
+        //
+        // The RESPONSE SHAPE IS UNCHANGED: exactly three keys - status,
+        // subject, opened_date - per AAP Section 0.7.4's whitelist. The
+        // timezone that qualifies the instant is surfaced as a LABEL on the
+        // lookup panel by
+        //   ../portal/widgets/sp_widget_x_casemgmt_case_lookup_widget.xml
+        // (which reads it from its own widget data, not from this response),
+        // deliberately NOT as a fourth key here: adding one would widen a
+        // whitelist the AAP fixes at three fields.
+        //
+        // getDisplayValue() is called on the GlideElement (caseGr.opened_date)
+        // rather than on the GlideRecord, because the no-argument
+        // GlideRecord.getDisplayValue() returns the record's DISPLAY FIELD
+        // (the case number), not this column.
+        //
+        // The fallback below covers only the abnormal case where the element
+        // is unavailable or renders empty while the column holds data - a
+        // partially-initialized row or a platform-level formatting failure.
+        // It cannot reintroduce the UTC value for a normal populated row,
+        // because getDisplayValue() on a populated GlideDateTime always
+        // renders; and when opened_date is genuinely empty both calls yield
+        // '' so the emitted value is '' either way (the empty opened_date
+        // seen on some seeded rows is a separate, upstream seed-data
+        // concern, not a formatting one).
+        // ------------------------------------------------------------------
+        var openedDateDisplay = '';
+        var openedDateElement = caseGr.opened_date;
+        if (openedDateElement) {
+            openedDateDisplay = String(openedDateElement.getDisplayValue() || '');
+        }
+        if (openedDateDisplay === '') {
+            openedDateDisplay = String(caseGr.getValue('opened_date') || '');
+        }
+
         return {
             status:      String(caseGr.getValue('status') || ''),
             subject:     String(caseGr.getValue('subject') || ''),
-            opened_date: String(caseGr.getValue('opened_date') || '')
+            opened_date: openedDateDisplay
         };
     },
 
@@ -555,21 +624,25 @@ CasePortalService.prototype = {
      *
      * Contract per field:
      *   subject         MANDATORY. Rejected when absent, null or
-     *                   whitespace-only. Trimmed, then capped at 255
-     *                   characters (the declared String(255) length).
+     *                   whitespace-only. Trimmed, then REJECTED when it
+     *                   exceeds 255 characters (the declared String(255)
+     *                   length) - never truncated to fit.
      *   description     MANDATORY. Rejected when absent, null or
-     *                   whitespace-only. Trimmed, then capped at 4000
-     *                   characters. The cap MUST be applied here: the
-     *                   platform stores >255-character string columns in a
-     *                   TEXT column that does not truncate, so the database
-     *                   alone does not enforce the declared limit.
+     *                   whitespace-only. Trimmed, then REJECTED when it
+     *                   exceeds 4000 characters. The check MUST live here:
+     *                   the platform stores >255-character string columns
+     *                   in a TEXT column that does not truncate, so the
+     *                   database alone does not enforce the declared limit.
      *   requester_name  MANDATORY. Rejected when absent, null or
-     *                   whitespace-only. Trimmed, then capped at 100.
+     *                   whitespace-only. Trimmed, then REJECTED above 100
+     *                   characters.
      *   requester_email OPTIONAL (AAP Section 0.5.7 marks it optional).
      *                   When supplied non-empty it must look like an
      *                   address - one '@', no whitespace, a dot-bearing
-     *                   domain - and is capped at 100. An empty or absent
-     *                   value is accepted and stored as an empty string.
+     *                   domain - and is REJECTED above 100 characters. An
+     *                   empty or absent value is accepted and stored as an
+     *                   empty string.
+     *
      *   type            OPTIONAL at the dictionary level (choice=3, the
      *                   platform's "Dropdown with -- None --"), so an
      *                   absent value is legal and stored empty. A SUPPLIED
@@ -577,6 +650,12 @@ CasePortalService.prototype = {
      *                   x_casemgmt_case.type, resolved case-insensitively
      *                   and normalised to the canonical stored value, so a
      *                   value outside the choice list can never be stored.
+     *
+     * NO field is ever silently shortened. Every length violation becomes a
+     * named field error, which the calling REST operation answers as HTTP
+     * 400 with the { error, fields } body - see the block comment at the
+     * length checks for why truncation was the wrong behaviour on an
+     * anonymous intake path.
      *
      * The error response names the offending fields. Those five names are
      * already public - the portal form posts them - so naming them leaks
@@ -601,6 +680,66 @@ CasePortalService.prototype = {
         var fieldErrors = {};
         var i;
 
+        // ------------------------------------------------------------------
+        // OVER-LENGTH IS REFUSED, NEVER TRUNCATED.
+        //
+        // Each of these fields previously did
+        //     values[spec.name] = raw.length > spec.maxLength ?
+        //         raw.substring(0, spec.maxLength) : raw;
+        // which answered HTTP 201 and stored a SILENTLY SHORTENED value.
+        // Measured against the live endpoint, a 4001-character description
+        // was accepted and stored as 4000 characters, a 256-character
+        // subject as 255 and a 101-character requester_name as 100, with
+        // nothing in the response distinguishing that from a submission
+        // stored in full.
+        //
+        // For an anonymous intake form that is the worst available
+        // behaviour. The requester is handed a case number and told the
+        // case was submitted, so they have no reason to check, while the
+        // material sentence of a complaint - the one at the end of a long
+        // description - is gone, and neither they nor the agent who later
+        // reads the case has any way to know that anything was dropped.
+        // Refusing the write and naming the field costs the requester one
+        // edit and loses nothing.
+        //
+        // The public form makes this refusal rare rather than routine: the
+        // submission widget's inputs carry maxlength=255/4000/100 plus a
+        // role="status" notice that fires once a limit is reached
+        // (../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml),
+        // so a requester using the page cannot normally reach this branch.
+        // It is the guard for every OTHER caller of a public endpoint,
+        // which is the population that matters on an unauthenticated write
+        // path.
+        //
+        // The message quotes the limit and the length received so a caller
+        // can fix the payload in one attempt instead of bisecting it. Both
+        // numbers describe the caller's OWN input against a limit the
+        // portal form already publishes as an HTML attribute, so nothing
+        // internal is disclosed.
+        //
+        // The equivalent gap on the INTERNAL form is closed separately and
+        // server-side by
+        //   ../business_rules/x_casemgmt_validate_case_text_lengths.xml
+        // which aborts any insert or update whose subject, description,
+        // requester_name or requester_email exceeds the declared length,
+        // whatever the write path.
+        //
+        // That rule backstops THIS method for description and only for
+        // description, and the reason is worth stating here so the two
+        // files are not read as saying the same thing. Measured on this
+        // instance: a column declared <= 255 characters is VARCHAR-backed
+        // and the platform coerces the value to fit BEFORE before-rules
+        // run, so no business rule can observe that subject,
+        // requester_name or requester_email arrived over-length (a
+        // 300-character subject is answered HTTP 200 and stored at 255).
+        // description is declared 4000, is TEXT-backed, is not coerced,
+        // and IS refused there (4001 characters is answered HTTP 403 with
+        // the stored value unchanged). So for those three fields THIS
+        // method is not merely the first line of defence on the anonymous
+        // path - it is the only layer that can report the violation at
+        // all, which is another reason it must refuse rather than
+        // truncate.
+        // ------------------------------------------------------------------
         for (i = 0; i < MANDATORY_TEXT_FIELDS.length; i++) {
             var spec = MANDATORY_TEXT_FIELDS[i];
             var raw = this._readString(payload, spec.name);
@@ -608,18 +747,32 @@ CasePortalService.prototype = {
                 fieldErrors[spec.name] = spec.label + ' is required.';
                 continue;
             }
-            values[spec.name] = raw.length > spec.maxLength ? raw.substring(0, spec.maxLength) : raw;
+            if (raw.length > spec.maxLength) {
+                fieldErrors[spec.name] = spec.label + ' must be ' + spec.maxLength +
+                    ' characters or fewer (received ' + raw.length + ').';
+                continue;
+            }
+            values[spec.name] = raw;
         }
 
         // requester_email - optional, but validated when present so the
         // stored value is always either empty or plausibly deliverable.
+        // Over-length is refused here for the same reason as above: an
+        // address truncated to fit is not the requester's address, and
+        // storing it would make the case unanswerable while reporting
+        // success. The format test runs first so a caller who sends
+        // something that is not an address at all is told that, rather
+        // than being told about its length.
         var email = this._readString(payload, 'requester_email');
         if (email === '') {
             values.requester_email = '';
         } else if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email)) {
             fieldErrors.requester_email = 'Email must be a valid address.';
+        } else if (email.length > 100) {
+            fieldErrors.requester_email = 'Email must be 100 characters or fewer (received ' +
+                email.length + ').';
         } else {
-            values.requester_email = email.length > 100 ? email.substring(0, 100) : email;
+            values.requester_email = email;
         }
 
         // type - optional, but constrained to the choice list when present.

@@ -4,6 +4,36 @@ A proof-of-concept ServiceNow scoped application that re-platforms a subset of A
 
 This subdirectory contains the ServiceNow scoped application, delivered as a **single self-contained Update Set XML** at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It targets a ServiceNow Personal Developer Instance (PDI); the current validation instance is `dev306625`, running **Zurich Patch 10** (`glide-zurich-07-01-2025__patch10-05-22-2026_06-12-2026_2311`), where the 2026-09-02 run took its measurements. It was originally built and gate-measured on `dev379024` (**Australia Patch 3**), a host that is now **retired and not used** — figures dated to it are dated evidence from that host, never current state. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
 
+> **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
+> The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> What to verify before an upload, and what to assert after it:
+>
+> | | Value |
+> | --- | --- |
+> | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
+> | Bytes | **3,944,374** (was 3,780,373) |
+> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | `…FALLBACK.xml` | byte-identical to the above, as always |
+> | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
+>
+> Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
+> Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
+> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
+> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> remediation creates (was 27), **11** Business Rules (was 7).
+>
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
+> superseded revision and is left as written** — those passages state what was measured at a point in time, and
+> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
+> digest, it has been updated to the values above.
+>
+> **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
+> deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988
+> children against the one sequence that ever previewed to zero problems, and rewriting records inside a file
+> that is retained rather than shipped would destroy that for nothing. The consequence is that promoting it as
+> it stands would undo all 18 QA fixes. A promotion must first carry the 9 inserted and 14 re-synced records
+> named in the elected package's header comment.
+
 > **The package is self-contained; the *installation* is not self-completing, and this POC is not finished.** Committing the Update Set does **not** by itself yield a working application, and four things are open. Read this before planning around it:
 >
 > 1. **Two manual post-import steps are mandatory for the elected package — the delivery election put them back.** The 2026-09-02 native-rebuild run did get both the physical table schema (Defect C's storage half) and all **27** ACL role-link records (Defect 9) **from the package alone** on a single clean-instance commit — three tables at HTTP 200 with dictionary rows 21 / 14 / 13, and 27 links split manager 14 / agent 10 / viewer 3, with `scripts/post_import_remediation.js` never run and no second commit. **That result belongs to export 3's byte sequence — 988 blocks, 4,062,436 bytes, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — which is no file on disk and survives only in git history.** The retained rebuilt package (`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, now **988 blocks, 4,062,067 bytes, SHA-256 `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`** after the 2026-09-03 choice-composite fix, superseding `90ee0249…`) carries **the same 988 records re-sequenced into AAP §0.5.2 dependency order** and therefore the same 27 `sys_security_acl_role` links and the same platform-captured table and dictionary rows — but the complete file was **never uploaded, previewed or committed**, so its evidence is **static corroboration plus the exact-child proof of its seven choice composites**, and its own S1–S6 gate run is still owed before it can be promoted. Neither the measurement nor the retained file transfers to the elected deliverable. A payload census of the elected file counts **0 `sys_security_acl_role` rows and 25 hand-authored `sys_dictionary` rows**, so on it a bare commit still leaves the three tables without physical storage and the 26 ACLs without their 27 role links, and the documented remediation route applies **in full**: run `scripts/post_import_remediation.js` in **Global**, commit a second time, run it again, then seed. Defect C's **choice half is closed on both packages as of 2026-09-03.** Each now carries seven platform-native choice composites — a canonical `sys_choice_<table>_<field>` wrapper holding one `x_casemgmt`-owned `sys_choice_set` with the authored value rows nested inside, 24 values across the seven fields (2 / 6 / 4 / 3 / 4 / 3 / 2) — and that exact seven-child delta was uploaded, previewed to **0 problems of any type**, committed by the native commit action, and took `sys_choice` for the three tables from **0 to 24** rows with every option label rendering on the real forms. **No post-import choice creation is required.** What still needs the documented post-commit step is the seed-row linkage and `opened_date` (`scripts/seed_demo_data.js`). Evidence, with the commit counters and post-commit queries: [`docs/refine-run/FINAL-REPORT.md`](docs/refine-run/FINAL-REPORT.md). The paragraphs below that describe the remediation route are accurate for the elected deliverable and for its byte-identical copy at `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`.
@@ -76,7 +106,7 @@ servicenow-case-management-poc/
 │                                      to x_casemgmt_case_management_update_set.FALLBACK.xml, the retained
 │                                      original. It carries the 2026-09-03 native choice composites (7
 │                                      Choice list blocks · 24 values) but NOT this round's native-rebuild
-│                                      fix, so the 27 sys_security_acl_role links come from the
+│                                      fix, so the 36 sys_security_acl_role links come from the
 │                                      remediation script.
 │                                      x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml
 │                                      is retained but NOT shipped (988 blocks · 4,062,067 bytes ·
@@ -108,10 +138,18 @@ servicenow-case-management-poc/
 │                                      package creates the rows; nothing post-import is needed.
 ├── numbers/                       [3] auto-numbering counters (sys_number)
 ├── roles/                         [3] the three scoped roles (sys_user_role)
-├── acl/                          [26] table-level + field-level ACLs (sys_security_acl).
-│                                      The 27 sys_security_acl_role LINK rows that grant these
+├── acl/                          [29] table-level + field-level ACLs (sys_security_acl):
+│                                      the 26 of AAP 0.5.6 plus 3 field-level query_range
+│                                      grants on case.opened_date, case.closed_date and
+│                                      case_task.due_date (QA finding F17), which let a date
+│                                      RANGE filter participate in the WHERE clause without
+│                                      widening which rows come back.
+│                                      The 36 sys_security_acl_role LINK rows that grant these
 │                                      to the roles are a different table and are created by
 │                                      the post-import remediation script, not by these files.
+│                                      That script also resolves the query_range ACLs' operation
+│                                      reference by name, because 0.7.2 forbids shipping the
+│                                      operation's sys_id.
 ├── flows/                         [9] 2 parent flows + 5 subflows + 1 Custom Action
 │   ├── general_inquiry_state_machine.xml
 │   ├── complaint_state_machine.xml
@@ -122,11 +160,23 @@ servicenow-case-management-poc/
 │                                      shared_flow_logic_block.xml (sys_hub_flow_block, the
 │                                      shared logic block the five subflows reuse)
 ├── script_includes/               [2] CaseTransitionValidator + CasePortalService
-├── business_rules/                [7] before-insert / before-update guards. The two that
+├── business_rules/               [11] before-insert / before-update guards. The two that
 │                                      matter most: x_casemgmt_enforce_forward_transitions
 │                                      (order 250 — calls the subflow and raises the blocking
 │                                      form error) and x_casemgmt_set_closed_date (order 500 —
-│                                      the only writer of closed_date).
+│                                      the only writer of closed_date). Four enforce the
+│                                      0.5.7 data contract on every write path, including the
+│                                      Table API, which no client-side rule can reach:
+│                                      validate_case_mandatory_fields (50), validate_case_
+│                                      text_lengths (70), validate_case_task_integrity and
+│                                      validate_case_party_integrity (100 on their own tables).
+├── client_scripts/                [1] x_casemgmt_case_flush_stale_messages (onLoad) — clears a
+│                                      stale mandatory-field banner as soon as the field it
+│                                      names is filled, so the form never contradicts itself.
+├── form_layout/                   [1] the case form's Default-view section (sys_ui_section plus
+│                                      its 14 sys_ui_element rows) — a SINGLE column in the AAP
+│                                      0.4.4 field order, which is also what makes the keyboard
+│                                      tab order follow the visual order.
 ├── ui_policy/                     [1] case_party conditional person/organization fields
 ├── ui_action/                     [6] the state-transition buttons
 ├── list_layouts/                  [1] the case table's Default-view list layout (sys_ui_list),
@@ -177,7 +227,8 @@ Each subfolder corresponds to a category of ServiceNow record definitions or sup
 - `app/` holds the scoped-application record (`sys_app`).
 - `tables/`, `dictionary/`, `choices/`, `numbers/` define the three custom tables, their fields, choice lists, and auto-numbering counters.
 - `roles/` and `acl/` define the three scoped roles and their table-level and field-level ACLs.
-- `flows/`, `script_includes/`, `business_rules/`, `ui_policy/`, `ui_action/` implement the case state-machine transition rules and form behavior.
+- `flows/`, `script_includes/`, `business_rules/`, `ui_policy/`, `ui_action/`, `client_scripts/` implement the case state-machine transition rules and form behavior. `business_rules/` is also where the AAP Section 0.5.7 data contract is enforced for callers that never load a form — a REST client cannot be reached by a UI Policy, so mandatory fields, string lengths and the party's exactly-one-of-person-or-organization rule are checked server side on every write.
+- `form_layout/` fixes the case form's field order and single-column arrangement to AAP Section 0.4.4, which also makes the keyboard tab order follow the visual order.
 - `list_layouts/` and `related_lists/` configure the internal user experience the AAP asks for in Section 0.4.4: which columns the case list shows, and the two child lists the case form shows beneath its fields.
 - `portal/` holds the Experience Portal record, pages, widgets, and scripted REST endpoints powering external case submission and lookup.
 - `dashboards/` and `reports/` define the two POC dashboards and their eight underlying reports.
@@ -281,7 +332,7 @@ The full role × table × CRUD matrix and the "Assigned only" definition live in
   composites — 926 blocks, 3,780,373 bytes, SHA-256
   `a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274`**, byte-identical to
   `…FALLBACK.xml`. **It does not include this round's native-rebuild fix** — 0 `sys_security_acl_role` rows, so
-  the 27 role links come from `scripts/post_import_remediation.js` — and **the AAP §0.7.1 Update Set gate is
+  the 36 role links come from `scripts/post_import_remediation.js` — and **the AAP §0.7.1 Update Set gate is
   binary and NOT MET on these bytes**, whose complete file was never previewed (item 4 of the note at the top of
   this file); the seven choice children it carries are the one part with a preview and a native commit of their
   own, and they make choice creation a non-step at install time.
@@ -401,7 +452,7 @@ Commit, then run `scripts/post_import_remediation.js` from *System Definition �
 **"In scope" = Global**. Two defects require it, and neither can be automated on a PDI:
 
 - **Defect C** — the three tables commit as dictionary metadata without physical storage.
-- **Defect 9** — the 26 ACLs commit without their **27** `sys_security_acl_role` link rows, so they grant
+- **Defect 9** — the 29 ACLs commit without their **36** `sys_security_acl_role` link rows, so they grant
   nothing until the links exist.
 
 [`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) carries the numbered
@@ -541,7 +592,7 @@ validation gates is in [`docs/validation-gates.md`](docs/validation-gates.md#mea
 > package is retained rather than shipped**
 > (`update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`). On the **elected**
 > deliverable the two paragraphs below apply as written: a bare commit leaves the
-> tables without storage and the 26 ACLs without their 27 role links, because the elected package carries
+> tables without storage and the 29 ACLs without their 36 role links, because the elected package carries
 > 0 `sys_security_acl_role` rows. **The choice lists are no longer a post-commit item on either package**: since
 > 2026-09-03 both carry the seven platform-native choice composites, previewed to 0 problems and committed
 > natively as their own delta (`sys_choice` 0 → 24, exact option labels on the real forms). What remains a
@@ -558,7 +609,7 @@ validation gates is in [`docs/validation-gates.md`](docs/validation-gates.md#mea
 > works — in outline: commit, rebuild the three tables and run `scripts/post_import_remediation.js` in **Global**
 > (*Scripts - Background*, "In scope" = Global — **not** the Fix Script UI, which runs in the application scope
 > and fails), commit a second time to restore the ACLs the rebuild cascaded away, run the remediation again to
-> confirm `verified=true` with exactly 27 role links, then run `scripts/seed_demo_data.js` in scope — which
+> confirm `verified=true` with exactly 36 role links, then run `scripts/seed_demo_data.js` in scope — which
 > **adopts** the packaged seed rows by their pinned numbers rather than requiring you to delete them first. The single-display-field repair that this outline previously listed is
 > **no longer a manual step** — the package now ships one display field per table and the remediation verifies
 > it.

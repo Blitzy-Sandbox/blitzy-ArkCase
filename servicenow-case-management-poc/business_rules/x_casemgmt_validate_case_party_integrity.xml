@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that enforces AAP Section 0.5.7's MANDATORY, REFERENTIAL and CONDITIONAL
+    contracts on every write to `x_casemgmt_case_party`, inside the scoped
+    application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.7 verbatim, x_casemgmt_case_party schema):
+        "case          |  Reference -> x_casemgmt_case  |  Mandatory"
+        "party_type    |  Choice                        |  Person, Organization"
+        "person        |  Reference -> sys_user         |  Conditional: required if party_type = Person"
+        "organization  |  Reference -> core_company     |  Conditional: required if party_type = Organization"
+        "role_label    |  String(100)                   |  Mandatory (e.g., Requester, Respondent, Witness)"
+
+    The two Conditional rows together state an EXACTLY-ONE-OF invariant. AAP
+    Section 0.1.1 makes it explicit: this table is the collapse of ArkCase's two
+    separate association tables (`acm_person_assoc` from PersonAssociation.java
+    and `acm_person_org_assoc` from PersonOrganizationAssociation.java) into ONE
+    polymorphic table whose `party_type` Choice is the discriminator that
+    replaces JPA single-table inheritance's `cm_class_name`. A row that is
+    simultaneously a Person party and an Organization party has no counterpart
+    in the source model and no meaning in the target one: the discriminator
+    exists precisely to make the two mutually exclusive.
+
+    WHY THIS RULE EXISTS (QA finding F15):
+        Before this rule, `x_casemgmt_case_party` carried NO Business Rule at
+        all. All seven shipped before-rules are attached to
+        `x_casemgmt_case`, so the whole polymorphic contract lived in
+        ../ui_policy/x_casemgmt_case_party_conditional_fields.xml - a UI
+        Policy, which runs in the FORM engine only.
+
+        The UI Policy itself is correct and was verified working
+        bidirectionally: with party_type=Person the form shows `person`
+        marked mandatory and removes `organization` from the form entirely,
+        and the mirror holds for Organization. That is exactly why the API
+        gap mattered - the invariant was demonstrably intended and
+        demonstrably unenforced off the form.
+
+        MEASURED against this instance before this rule existed, all as
+        admin:
+            POST {"party_type":"Person", ...} with no `person`          -> HTTP 201
+            POST {...,"person":"<id>","organization":"<id>"}            -> HTTP 201
+            POST {...} with neither and no `party_type`                 -> HTTP 201
+        The second is the serious one: it stored a row that is a Person
+        party and an Organization party at the same time, which breaks the
+        invariant the entire single-table design rests on. The third stored
+        a party that is neither, with no discriminator to say which
+        reference should ever be filled.
+
+    BEHAVIOR:
+        - Trigger          : BEFORE INSERT and BEFORE UPDATE on
+                             `x_casemgmt_case_party`
+        - Conditions, in order:
+              1. `case` empty                          -> refuse
+              2. `case` set but unresolvable            -> refuse
+              3. `role_label` empty/whitespace-only     -> refuse
+              4. `party_type` empty                     -> refuse
+              5. `party_type` not a declared value      -> refuse
+              6. the required reference for that
+                 party_type is empty                    -> refuse
+              7. the OTHER reference is populated AND this is
+                 an UPDATE (current.operation()) whose stored
+                 `party_type` was non-empty and different  -> normalise:
+                 clear it, log, and allow the write
+              8. the OTHER reference is populated on an
+                 INSERT, or on an UPDATE that did not
+                 change `party_type`                       -> refuse
+        - Action           : for 1-6 and 8, gs.addErrorMessage(...) naming
+                             the offending field and, where relevant, the
+                             party_type that makes it wrong, then
+                             current.setAbortAction(true). For 7,
+                             current.setValue(<other>, '') plus a gs.info
+                             audit line, and the write proceeds.
+
+    WHY CASE 7 NORMALISES INSTEAD OF REFUSING (a measured form constraint):
+        Changing Party Type on the rendered case_party form makes
+        ../ui_policy/x_casemgmt_case_party_conditional_fields.xml set the
+        now-inapplicable reference not-visible. A UI Policy has no clear
+        action, so the field keeps its stored value, its row stays in the
+        DOM as display:none, and its submit input is hidden but NOT
+        disabled - the classic form POSTs the stale value verbatim.
+        Captured from the wire on an Organization -> Person conversion:
+            sys_original...party_type = Organization
+            ...party_type             = Person
+            ...person                 = <the newly chosen user>
+            ...organization           = <the OLD company, still sent>
+        Refusing that write would make a legitimate conversion IMPOSSIBLE
+        through the only internal UI the AAP provides (Section 0.4.4), and
+        the caller could not comply with the refusal either, because the
+        field they are told to empty is not on their screen. Case 7
+        therefore treats the stale value as form plumbing rather than
+        intent: the discriminator the caller just changed is the
+        authoritative statement of what the row is. Case 8 keeps the
+        refusal wherever no such statement was made, so finding F15's
+        both-set INSERT is still rejected and the stored row always
+        satisfies the exactly-one-of invariant either way.
+        - Other timing     : does NOT fire on delete or query. Delete is
+                             intentionally out of scope so the cascade
+                             configured on ../dictionary/x_casemgmt_case_party_case.xml
+                             (reference_cascade_rule=cascade) can remove
+                             child parties when their parent case is
+                             deleted, and so AAP Section 0.5.6's unqualified
+                             manager Delete grant is not narrowed.
+
+    THE PARTY_TYPE_FIELDS MAP IS THE ONE DECLARATION OF THE MAPPING:
+        The script declares the discriminator-to-column mapping ONCE, as
+        data, and derives all four downstream decisions from it: which
+        party_type values are recognised, which reference each requires,
+        which reference each forbids, and how each is named in the message.
+        Adding a third party_type is therefore a three-artifact change with
+        no logic to rewrite - a ../choices/ row, a ../dictionary/ reference
+        column, and one entry in this map (plus the matching
+        ../ui_policy/ branch).
+
+        The two literals 'Person' and 'Organization' appear here because
+        they ARE the model: AAP Section 0.5.7 enumerates exactly those two
+        values for `party_type`, and unlike `case.type` ("General Inquiry,
+        Complaint - extensible") the AAP marks this list as closed. The map
+        is not read from sys_choice at run time for two reasons: a choice
+        row declares which VALUES are selectable but says nothing about
+        which reference column each one governs, so the mapping would still
+        have to be declared here; and this rule must refuse an unrecognised
+        discriminator even in the pathological case where a choice row was
+        added without the corresponding column, which a sys_choice-derived
+        allowlist would silently admit.
+
+        Defence in depth, not the only defence: `party_type` carries
+        choice = 3, so the Table API silently DROPS a value outside the
+        declared list before any rule evaluates - the write answers HTTP 200
+        with the previous value retained. Branch 5 therefore fires for a
+        value the platform did admit, which is the case that matters.
+
+    WHY THE PARENT IS RESOLVED WITH GlideRecord AND NOT GlideRecordSecure:
+        The question is "does the parent row EXIST", never "may the caller
+        read it". Access control on this table is owned entirely by the
+        scoped ACLs enumerated in AAP Section 0.5.6 and authored under
+        ../acl/, and AAP Section 0.7.3 Gate 3 is measured against those
+        ACLs. If this rule used GlideRecordSecure, an x_casemgmt_case_agent
+        legitimately creating a party against a case outside their
+        "Assigned only" read scope would be told the CASE DOES NOT EXIST
+        instead of being refused by the ACL that actually governs the
+        operation. Plain GlideRecord performs the existence test only and
+        leaves the authorization decision where it belongs.
+
+    WHY THE CHECK IS UNCONDITIONAL ON UPDATE (and why that is safe here):
+        Every check reads the value the row WOULD CARRY AFTER the write
+        (current.getValue), not the value the write supplied. A PATCH that
+        touches only `role_label` on a conformant party reads the stored,
+        resolvable parent and the stored, consistent party_type/person/
+        organization triple, and passes untouched.
+
+        The checks are not narrowed to "only when the field changed",
+        because the exactly-one-of invariant is a property of the STORED
+        ROW - and it is precisely the kind of invariant a partial update
+        breaks: setting `organization` on an existing Person party changes
+        no other column, so a change-scoped guard would admit the very
+        both-set row that finding F15 reproduced. The risk of unconditional
+        enforcement is making an already non-conformant row unwritable, and
+        that risk was MEASURED away before this rule was activated: all 11
+        rows on x_casemgmt_case_party carry a resolvable `case`, a
+        `party_type` of Person or Organization, a non-empty `role_label`,
+        and exactly one of person/organization populated and matching the
+        discriminator. Zero rows violate the constraint. An orphan sweep
+        over the whole table returned zero dangling parents.
+
+    ORDERING (order = 100):
+        This is the FIRST and, at authoring time, only Business Rule on
+        `x_casemgmt_case_party`. 100 matches the base order the shipped
+        rules on x_casemgmt_case use for their first entries. The script
+        returns early on current.isActionAborted() for the same reason every
+        rule in this application does: setAbortAction(true) cancels the
+        WRITE, not the remaining before rules.
+
+    NO INLINE DUPLICATION OF ANOTHER RULE'S MESSAGE (AAP Section 0.7.4):
+        Section 0.7.4 fixes exactly four verbatim strings:
+            "All tasks must be closed before resolving this case."
+            "Cases cannot be returned to Draft."
+            "Closed cases are terminal and cannot be modified."
+            "No case found with that number."
+        None of them belongs to this rule and none of them is reproduced
+        here. In particular "No case found with that number." is the
+        ANONYMOUS PORTAL LOOKUP's message, owned by
+        ../script_includes/x_casemgmt_CasePortalService.xml and answering an
+        external requester searching by case NUMBER; this rule's
+        unresolvable-parent message answers an internal caller who supplied
+        an unresolvable sys_id, so it is worded differently and
+        deliberately so.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        Zero gs.eventQueue() calls, zero gs.email() calls, zero
+        gs.notificationEngine() calls.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case_party</collection> scoped table
+        - <sys_scope>                                    the x_casemgmt scope record
+        - <sys_package>x_casemgmt</sys_package>          scoped application
+        - <access>package_private</access>               not callable cross-scope
+        The single GlideRecord in the script body targets `x_casemgmt_case`,
+        in the same scope. The rule never reads sys_user or core_company:
+        the person/organization columns are tested for PRESENCE and
+        EXCLUSIVITY only, because the platform's own reference integrity
+        already guarantees a non-empty reference names a live row on the
+        referenced table, and because reading a global user or company table
+        from a scoped rule would add a cross-scope dependency this contract
+        does not need. Zero global-scope writes; the rule performs no write
+        of any kind, only a read and an abort.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the party table BY NAME
+        - <sys_package> resolves the application record BY NAME
+        - the GlideRecord.get() argument is the sys_id the CALLER supplied on
+          the row being written, read at run time from current.getValue('case')
+        - the person/organization columns are compared against emptiness, never
+          against any particular sys_id
+        - the <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_case_party_integrity")
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml         (the parent this rule resolves)
+            - ../tables/x_casemgmt_case_party.xml   (the table this rule attaches to)
+            - ../dictionary/x_casemgmt_case_party_case.xml
+            - ../dictionary/x_casemgmt_case_party_party_type.xml
+            - ../dictionary/x_casemgmt_case_party_person.xml
+            - ../dictionary/x_casemgmt_case_party_organization.xml
+            - ../dictionary/x_casemgmt_case_party_role_label.xml
+            - ../choices/sys_choice_case_party_party_type.xml
+            - ../app/sys_app/x_casemgmt_case_management.xml
+        And BEFORE:
+            - ../seed-data/parties/x_casemgmt_case_party_demo_*.xml, which
+              must therefore be loaded AFTER ../seed-data/cases/*.xml so
+              every demo party's parent already exists when this rule
+              resolves it. That ordering is already required by AAP Section
+              0.5.2 ("Seed data is loaded last").
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_case_party_integrity")
+               = 4004168331b9b9ca07f4cbfd349e25d8
+        32-character lowercase hex, so a re-import matches the existing row
+        on that id and updates it in place rather than inserting a
+        duplicate.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 1 (Data model): "Zero missing mandatory fields" - made true of
+          ROWS on the party table, not only of dictionary metadata, and
+          extended to the Conditional pair the schema declares.
+        - Gate 6 (Dashboards): "no broken report references". Any surface
+          that dot-walks party -> case or party -> person/organization
+          depends on the triple being consistent.
+        - Gate 7 (Update Set): deterministic sys_id and reference-by-name
+          collection, so the rule re-imports with zero preview errors.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case_party</collection>
+        <condition/>
+        <description>Before-insert and before-update on x_casemgmt_case_party: refuses any write that would store an empty mandatory case/party_type/role_label, a `case` reference that does not resolve to a live x_casemgmt_case row, an unrecognised party_type, or a person/organization pair that violates the exactly-one-of invariant AAP Section 0.5.7 states through its two Conditional rows. Closes QA finding F15 for the party table, which carried NO business rule at all - the whole polymorphic contract lived in the UI Policy, which runs in the form engine only. Measured before this rule: party_type=Person with no person returned 201; BOTH person and organization returned 201 (a row that is simultaneously a Person party and an Organization party, breaking the invariant the single-table collapse of ArkCase acm_person_assoc + acm_person_org_assoc rests on per Section 0.1.1); neither set and no party_type returned 201. The discriminator-to-column mapping is declared once as data in PARTY_TYPE_FIELDS, so all four downstream decisions derive from it. One case NORMALISES rather than refuses: when this write itself CHANGED party_type and the newly applicable reference is populated, the now-inapplicable one is cleared and logged via gs.info, because the UI Policy hides that field without clearing it and the classic form POSTs the hidden, non-disabled input verbatim - measured on the wire - so refusing would make a legitimate Organization-to-Person conversion impossible through the only internal UI AAP Section 0.4.4 provides, and the caller could not comply because the field is off their screen. An INSERT carrying both references, and an UPDATE that sets the wrong reference without touching party_type, are both still refused, so the stored row satisfies the exactly-one-of invariant on every path. The parent is resolved with plain GlideRecord, not GlideRecordSecure, so the rule tests EXISTENCE only and leaves authorization to the scoped ACLs of Section 0.5.6. Order=100; returns early on current.isActionAborted(); reproduces none of the four verbatim messages Section 0.7.4 fixes. Does not fire on delete, so the cascade rule on the case reference and the manager Delete grant are both untouched. Contains zero gs.eventQueue() calls per the email-disabled constraint.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_validate_case_party_integrity</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Server-side backstop for AAP Section 0.5.7's MANDATORY, REFERENTIAL
+    // and CONDITIONAL contracts on x_casemgmt_case_party.
+    //
+    // The two Conditional rows ("person required if party_type = Person",
+    // "organization required if party_type = Organization") together state
+    // an EXACTLY-ONE-OF invariant. Per AAP Section 0.1.1 this table is the
+    // collapse of ArkCase's acm_person_assoc and acm_person_org_assoc into
+    // one polymorphic table whose party_type Choice replaces JPA
+    // single-table inheritance's cm_class_name discriminator - so a row that
+    // is both a Person party and an Organization party has no counterpart in
+    // the source model and no meaning in the target one.
+    //
+    // Before this rule the table carried NO business rule at all and the
+    // whole contract lived in
+    // ../ui_policy/x_casemgmt_case_party_conditional_fields.xml, a UI Policy
+    // that runs in the FORM engine only. Measured as admin:
+    //     POST party_type=Person, no person                -> HTTP 201
+    //     POST with BOTH person and organization           -> HTTP 201
+    //     POST with neither and no party_type              -> HTTP 201
+
+    // Stop if an earlier rule in the chain has already rejected this save.
+    // setAbortAction(true) cancels the WRITE, not the remaining before
+    // rules; the platform keeps running them and reports the pending abort
+    // through current.isActionAborted().
+    if (current.isActionAborted()) {
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 1 + 2. THE MANDATORY PARENT REFERENCE.
+    // ------------------------------------------------------------------
+    // getValue() returns the underlying sys_id String, or null when the
+    // reference was never set. It is used in preference to property access
+    // because it has one documented return contract across releases, and
+    // because `case` is a reserved word in JavaScript so this form avoids
+    // relying on the ES5 allowance for reserved words as property names.
+    var parentId = current.getValue('case');
+    if (parentId === null || parentId === undefined || String(parentId).trim() === '') {
+        gs.addErrorMessage('Case is mandatory: a party must reference the case it belongs to.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // EXISTENCE, NOT ACCESS - plain GlideRecord, deliberately not
+    // GlideRecordSecure. Access control on this table belongs to the scoped
+    // ACLs of AAP Section 0.5.6 under ../acl/, which is what AAP Section
+    // 0.7.3 Gate 3 measures. A read-ACL-aware lookup here would tell an
+    // x_casemgmt_case_agent creating a party against a case outside their
+    // "Assigned only" read scope that the CASE DOES NOT EXIST, masking the
+    // ACL that actually governs the operation.
+    var parentGr = new GlideRecord('x_casemgmt_case');
+    if (!parentGr.get(parentId)) {
+        // Worded differently from the anonymous portal lookup's verbatim
+        // "No case found with that number." (owned by
+        // x_casemgmt.CasePortalService, fixed by AAP Section 0.7.4): that
+        // message answers an external requester searching by case NUMBER,
+        // this one answers an internal caller who supplied an unresolvable
+        // sys_id. Reusing it would put a portal-facing string on an
+        // internal write path and duplicate another artifact's message.
+        gs.addErrorMessage('The case this party references does not exist.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 3. role_label - the one plain MANDATORY string column on this table.
+    //
+    // Whitespace counts as empty: role_label IS the party table's display
+    // field (../dictionary/x_casemgmt_case_party_role_label.xml carries
+    // display=true), so a space-only value renders every reference to the
+    // row as a blank label on the case form's Parties related list.
+    // ------------------------------------------------------------------
+    var roleLabel = current.getValue('role_label');
+    if (roleLabel === null || roleLabel === undefined || String(roleLabel).trim() === '') {
+        gs.addErrorMessage('Role Label is mandatory and cannot be empty.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 4 + 5 + 6 + 7. THE POLYMORPHIC DISCRIMINATOR AND ITS EXACTLY-ONE-OF
+    // INVARIANT.
+    //
+    // PARTY_TYPE_FIELDS is the ONE declaration of the mapping. Every
+    // downstream decision derives from it: which party_type values are
+    // recognised (its keys), which reference each requires (`element`),
+    // which reference each forbids (the other entries' `element`), and how
+    // each is named in the message (`label`, the dictionary column_label).
+    // Adding a third party_type is a three-artifact change with no logic to
+    // rewrite: a ../choices/ row, a ../dictionary/ reference column, one
+    // entry here, plus the matching ../ui_policy/ branch.
+    //
+    // The two literals are the model itself: AAP Section 0.5.7 enumerates
+    // exactly Person and Organization for party_type and, unlike
+    // case.type ("General Inquiry, Complaint - extensible"), marks the list
+    // closed. The map is not derived from sys_choice at run time because a
+    // choice row declares which VALUES are selectable but says nothing
+    // about which reference column each governs - the mapping would still
+    // have to be declared here - and because an unrecognised discriminator
+    // must be refused even where a choice row exists without its column,
+    // which a sys_choice-derived allowlist would silently admit.
+    // ------------------------------------------------------------------
+    var PARTY_TYPE_FIELDS = {
+        'Person': { element: 'person', label: 'Person' },
+        'Organization': { element: 'organization', label: 'Organization' }
+    };
+
+    var partyType = current.getValue('party_type');
+    if (partyType === null || partyType === undefined || String(partyType).trim() === '') {
+        gs.addErrorMessage('Party Type is mandatory: choose Person or Organization.');
+        current.setAbortAction(true);
+        return;
+    }
+    partyType = String(partyType).trim();
+
+    // ALLOWLIST, NOT A LOOKUP MISS. Reaching this branch means the stored
+    // discriminator is not one this application knows how to interpret, so
+    // there is no column it can require and no column it can forbid - the
+    // row's polymorphic identity is undefined and it must not be written.
+    //
+    // Defence in depth rather than the only defence: `party_type` carries
+    // choice = 3, so the Table API silently DROPS a value outside the
+    // declared list before any rule evaluates (the write answers HTTP 200
+    // with the previous value retained). This branch therefore fires for a
+    // value the platform did admit - a choice row added without its
+    // reference column, or a value written by a path that bypasses choice
+    // filtering - which is the case that matters.
+    if (!Object.prototype.hasOwnProperty.call(PARTY_TYPE_FIELDS, partyType)) {
+        gs.addErrorMessage('Party Type must be Person or Organization.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ---- The Conditional row for this discriminator: "required if
+    // party_type = <partyType>". Checked before exclusivity, so a caller who
+    // supplied neither the right reference nor a coherent pair is told which
+    // field to SUPPLY rather than which to remove.
+    //
+    // The person/organization columns are tested for PRESENCE only, never
+    // read through to sys_user or core_company: the platform's own reference
+    // integrity already guarantees that a non-empty reference names a live
+    // row on the referenced table, and reading a global table from a scoped
+    // rule would add a cross-scope dependency this contract does not need.
+    var required = PARTY_TYPE_FIELDS[partyType];
+    var requiredValue = current.getValue(required.element);
+    if (requiredValue === null || requiredValue === undefined || String(requiredValue).trim() === '') {
+        gs.addErrorMessage(required.label + ' is required when Party Type is ' + partyType + '.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ---- Did THIS write change the discriminator?
+    //
+    // The insert path must never be treated as a conversion, and testing
+    // `previous` for null is NOT a sufficient way to establish that.
+    // MEASURED on this instance: in a before-INSERT rule the platform still
+    // passes a `previous` OBJECT - an initialized GlideRecord whose columns
+    // are all empty - rather than null. A `!previous` guard therefore
+    // evaluates false on insert, previous.getValue('party_type') returns
+    // empty, empty !== the supplied party_type, and an insert carrying both
+    // references would be mistaken for a conversion and silently normalised.
+    // That is exactly what happened on the first revision of this rule:
+    // finding F15's reproduction 4 (a both-set INSERT) came back HTTP 201
+    // instead of being refused, and the regression was caught by re-running
+    // all six reproductions rather than only the new conversion case.
+    //
+    // current.operation() is the authoritative discriminator between the two
+    // paths and returns 'insert' / 'update' / 'delete'. It is probed with a
+    // typeof check first so the rule degrades to the strict, refusing
+    // behaviour rather than the permissive one if the method is ever
+    // unavailable - a guard that fails closed.
+    //
+    // previousType is additionally required to be NON-EMPTY: a row whose
+    // stored party_type was blank is not converting FROM anything, so there
+    // is no prior statement of identity to supersede and the refusal is the
+    // correct answer there too.
+    //
+    // This flag is what separates a genuine PARTY-TYPE CONVERSION from an
+    // incoherent row, and the distinction is not academic - it was MEASURED
+    // on the rendered form:
+    //
+    //   Changing Party Type from Organization to Person on the case_party
+    //   form makes ../ui_policy/x_casemgmt_case_party_conditional_fields.xml
+    //   set `organization` not-visible and not-mandatory. A UI Policy has no
+    //   clear action, so the field keeps its stored value, its row stays in
+    //   the DOM as display:none, and its submit input is hidden but NOT
+    //   disabled - so the classic form POSTs the stale value verbatim.
+    //   Captured from the wire:
+    //       sys_original...party_type    = Organization
+    //       ...party_type                = Person
+    //       ...person                    = <the newly chosen user>
+    //       ...organization              = <the OLD company, still sent>
+    //
+    //   The server therefore sees all three at once. Refusing that write
+    //   would make a legitimate conversion IMPOSSIBLE through the only
+    //   internal UI the AAP provides (Section 0.4.4: "provided by
+    //   ServiceNow's automatic native list and form views"), and the caller
+    //   could not even comply with the refusal - the field they are told to
+    //   empty is not on their screen.
+    //
+    // So on a conversion the stale reference is NORMALISED AWAY rather than
+    // rejected: it is form plumbing, not an expression of intent. The
+    // discriminator the caller just changed is the authoritative statement of
+    // what the row is, and clearing the column it makes inapplicable is the
+    // only outcome that both honours that statement and leaves the stored row
+    // satisfying the exactly-one-of invariant.
+    //
+    // What is NOT normalised, and stays a refusal:
+    //   - an INSERT carrying both references (finding F15's reproduction 4).
+    //     There is no prior discriminator to convert FROM, so "both set" is
+    //     the caller's own incoherent input, not a form artifact.
+    //   - an UPDATE that leaves party_type alone and sets the wrong
+    //     reference. Nothing about that write says the row is changing
+    //     identity, so silently discarding a value the caller deliberately
+    //     supplied would hide their mistake instead of reporting it.
+    var isUpdate = typeof current.operation === 'function' && current.operation() === 'update';
+    var previousType = (isUpdate && previous)
+        ? String(previous.getValue('party_type') || '').trim()
+        : '';
+    var typeChanged = previousType !== '' && previousType !== partyType;
+
+    // ---- The exclusivity half. Walk every OTHER declared party_type: each
+    // one names a reference this row must not carry. Deriving both halves
+    // from the same PARTY_TYPE_FIELDS map is what keeps them from drifting
+    // apart, and the loop stays correct for any number of declared
+    // party_types without modification.
+    for (var key in PARTY_TYPE_FIELDS) {
+        if (!Object.prototype.hasOwnProperty.call(PARTY_TYPE_FIELDS, key) || key === partyType) {
+            continue;
+        }
+        var spec = PARTY_TYPE_FIELDS[key];
+        var value = current.getValue(spec.element);
+        if (value === null || value === undefined || String(value).trim() === '') {
+            continue;
+        }
+
+        if (typeChanged) {
+            // Normalise: drop the reference the new discriminator makes
+            // inapplicable and let the write proceed. setValue with '' clears
+            // a reference column. This runs in a BEFORE rule, so the cleared
+            // value is what gets persisted - no second write, no recursion.
+            current.setValue(spec.element, '');
+
+            // Logged because this is the one place the rule alters data the
+            // caller sent, and an unexplained disappearance is worse than a
+            // refusal. gs.info writes to the system log under the scoped
+            // application; it fires only on an actual conversion, which is a
+            // rare, deliberate operation, so it cannot become noise. Only
+            // the record number, the field name and the two party_type values
+            // are logged - never the cleared sys_id and never any
+            // person/organization display value, so no identity data reaches
+            // the log.
+            gs.info('x_casemgmt_validate_case_party_integrity: party ' +
+                current.getValue('number') + ' converted from Party Type ' +
+                previousType + ' to ' + partyType +
+                '; cleared the now-inapplicable ' + spec.element + ' reference.');
+            continue;
+        }
+
+        // This is the branch that refuses the both-set row finding F15
+        // reproduced - a row that is simultaneously a Person party and an
+        // Organization party - and the subtler partial update that sets the
+        // wrong reference on an otherwise valid row without touching the
+        // discriminator.
+        gs.addErrorMessage(spec.label + ' must be empty when Party Type is ' + partyType + '.');
+        current.setAbortAction(true);
+        return;
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>4004168331b9b9ca07f4cbfd349e25d8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_case_party_integrity</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_validate_case_party_integrity</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>

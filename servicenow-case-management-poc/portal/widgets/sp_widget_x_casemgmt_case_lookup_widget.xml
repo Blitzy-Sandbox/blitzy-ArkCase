@@ -296,6 +296,56 @@
       Validation Gate 5; the AAP's "verbatim text" requirement is
       enforced by the template's not-found panel.
 -->
+<!--
+    ==========================================================================
+    POST-QA REMEDIATION (this checkpoint) - what changed in this record and why
+    ==========================================================================
+    Findings F1, F2, F10, F11 and F12 were raised against the two public pages
+    this widget serves. The remediation carried by the template, client script
+    and server script below is:
+
+      F2  - the confirmation panel now offers a link to the status-lookup page
+            (?id=x_casemgmt_case_status with the case number), so the requester
+            who has just been handed a case number can reach the page that
+            consumes it. The link is a plain theme link rather than a .btn: the
+            default theme paints .btn:focus with a fully transparent outline,
+            which would have left this new control with no visible keyboard
+            focus indicator.
+      F10 - the anonymous lookup renders opened_date in the instance's own
+            display timezone and labels it with that timezone, so an external
+            requester and internal staff read the same instant. The response
+            body still carries EXACTLY the three whitelisted keys
+            (status, subject, opened_date) required by AAP Section 0.7.4 - the
+            timezone is a rendered label, never a fourth key.
+      F12 - the primary action is no longer disabled by form validity: it is
+            pressable, validates on press, marks every control touched and
+            surfaces a summary WITHOUT issuing a request. Stale outcome
+            messages are cleared when the requester edits an input, so the
+            screen never shows two contradictory messages at once.
+      F11 - the visible page heading is a real h1 and the success result panel
+            is announced (role=status / aria-live=polite).
+      F1  - over-length input is REFUSED rather than silently truncated. The
+            refusal itself lives server-side in
+            ../../script_includes/x_casemgmt_CasePortalService.xml (HTTP 400
+            naming the offending field) and in the new before-insert/update
+            rule ../../business_rules/x_casemgmt_validate_case_text_lengths.xml.
+
+    F11's CONTRAST HALF AND THE css ELEMENT (AAP Section 0.4.4):
+    Section 0.4.4 mandates the Experience Portal DEFAULT THEME with "No custom
+    CSS, no custom branding", and Section 0.3.2 places theme and branding
+    modifications out of scope. The frozen specification therefore outranks the
+    WCAG contrast preference, so the palette is NOT overridden here and the css
+    element is intentionally EMPTY. What could be fixed without custom CSS was
+    fixed by choosing default-theme classes whose own colours already meet AA:
+    neutral guidance and status text carries no colour class and inherits the
+    theme's body colour (previously .help-block grey, measured 2.14:1), and
+    per-field error text uses the theme's own .text-danger utility. The items
+    inherent to the stock components - the .btn-primary resting background, the
+    .alert-warning text colour and the theme's focus-ring colour - are left
+    exactly as the platform paints them and are recorded in
+    ../../docs/portal-pages.md as bounded by the Section 0.4.4 exception.
+    ==========================================================================
+-->
 <record_update table="sp_widget">
     <sp_widget action="INSERT_OR_UPDATE">
         <category>custom</category>
@@ -329,10 +379,21 @@
      *                  c.result and c.notFound.
      *   c.loading    - boolean; true while the in-flight $http.get
      *                  request is pending. Drives the button's
-     *                  ng-disabled and the "Looking up..." text.
+     *                  ng-disabled and the "Looking up..." text. It is
+     *                  the ONLY thing that disables the button.
+     *   c.validationMessage
+     *                - string; non-empty when Look Up Status was pressed
+     *                  with an empty field. Mutually exclusive with
+     *                  c.result, c.notFound and c.errorMessage: every
+     *                  path that sets one of the four clears the other
+     *                  three.
      *
-     * Exposed method (template-bound):
-     *   c.lookup()   - executes the case-status lookup. Issues
+     * Exposed methods (template-bound):
+     *   c.lookup(form)
+     *                - executes the case-status lookup. Returns without
+     *                  issuing any request when the field is empty,
+     *                  marking the control touched and setting
+     *                  c.validationMessage. Otherwise issues
      *                  GET /api/x_casemgmt/case_status_lookup?number=<encoded>
      *                  via $http.get() under a LOOKUP_TIMEOUT_MS deadline.
      *                  On success (HTTP 200 with a status), sets c.result
@@ -341,6 +402,21 @@
      *                  is rendered. On a 5xx, a network failure or a
      *                  timeout, sets c.errorMessage instead, because in
      *                  those cases nothing was learned about the case.
+     *   c.onInputChange()
+     *                - bound to ng-change on the input; drops all four
+     *                  pieces of previous-outcome state so a panel about
+     *                  a superseded case number cannot coexist with the
+     *                  number now in the field.
+     *   c.markAllTouched(form)
+     *                - marks the registered control $touched so the
+     *                  field's own role="alert" message renders after a
+     *                  press on an untouched form.
+     *
+     * One-time initialization (not template-bound): when the page was
+     * reached with a ?number= parameter - which is how the submission
+     * confirmation links here - the input is pre-filled from
+     * c.data.prefilledNumber and c.lookup() is run once. See the block at
+     * the end of this controller.
      *
      * Design rationale:
      *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
@@ -397,6 +473,73 @@
     c.errorMessage = '';
     c.loading = false;
 
+    /*
+     * Message raised when Look Up Status is pressed with no case number.
+     *
+     * This exists because the button is no longer disabled on an empty
+     * field. It used to be ng-disabled on !c.caseNumber, which made the
+     * primary action unanswerable in exactly the state a first-time
+     * visitor arrives in: a disabled <button> is pointer-transparent, so
+     * a click aimed at it landed on the surrounding DIV.form-group and
+     * produced nothing at all, and a disabled button is absent from the
+     * tab order, so a keyboard user never reached it.
+     */
+    c.validationMessage = '';
+
+    /**
+     * Discard the outcome of the previous lookup.
+     *
+     * Bound to ng-change on the case-number input. Without it, the
+     * previous outcome outlived the input that produced it: the verbatim
+     * "No case found with that number." alert stayed on screen while the
+     * requester retyped, so the page asserted something about a number
+     * that was no longer in the field, and it could sit alongside a fresh
+     * validation message and a stale result panel - three messages about
+     * three different moments at once. Any keystroke means the requester
+     * has moved on from that answer, so all four pieces of outcome state
+     * are dropped together; leaving any one of them would let a panel
+     * describing the old number coexist with the new one.
+     */
+    c.onInputChange = function() {
+        c.result = null;
+        c.notFound = false;
+        c.errorMessage = '';
+        c.validationMessage = '';
+    };
+
+    /**
+     * Mark every registered control on a form as touched.
+     *
+     * The field's own role="alert" message and its red has-error
+     * treatment are bound to $invalid && $touched, so a visitor who
+     * presses the button without ever entering the field would otherwise
+     * see nothing marked. $setSubmitted() sets $submitted on the FORM,
+     * not $touched on the controls, so the controls are walked
+     * explicitly. Possessing $setTouched is what distinguishes an ngModel
+     * controller from the form's own $-prefixed bookkeeping, and it is
+     * also the guard that keeps this from throwing on a future AngularJS
+     * whose form controller exposes different internals.
+     *
+     * @param {Object} form - the AngularJS form controller.
+     */
+    c.markAllTouched = function(form) {
+        if (!form) {
+            return;
+        }
+        if (typeof form.$setSubmitted === 'function') {
+            form.$setSubmitted();
+        }
+        for (var key in form) {
+            if (key.charAt(0) === '$') {
+                continue;
+            }
+            var control = form[key];
+            if (control && typeof control.$setTouched === 'function') {
+                control.$setTouched();
+            }
+        }
+    };
+
     /**
      * Look up the status of a case by its number via the scripted REST
      * endpoint at /api/x_casemgmt/case_status_lookup.
@@ -408,19 +551,41 @@
      * the verbatim text "No case found with that number." is rendered
      * by the template. This function MUST NOT echo error.data.error or
      * any server-supplied text.
+     *
+     * @param {Object} [submittedForm] - the caseLookupForm
+     *     FormController, passed by the template's ng-submit. This form is
+     *     NOT under an ng-if, so $scope.caseLookupForm does resolve here
+     *     and the fallback below is genuinely a fallback - but the
+     *     controller is passed explicitly anyway, so the method does not
+     *     depend on where in the scope hierarchy the form happens to
+     *     link. The sibling submission widget's form IS under an ng-if,
+     *     and reading it off $scope there silently skipped validation
+     *     altogether; taking the argument removes that failure mode from
+     *     both widgets rather than from one.
      */
-    c.lookup = function() {
+    c.lookup = function(submittedForm) {
         // Idempotent guard: prevent double-lookup if the user clicks
         // the button or presses Enter while a request is in flight.
         if (c.loading) {
             return;
         }
-        // Empty-input guard: do not issue a request if the case number
-        // is empty or whitespace-only. The button is also disabled in
-        // this case via ng-disabled, but the guard provides defense-
-        // in-depth in case the disabled state is bypassed (e.g., by
-        // pressing Enter in some edge browsers).
+        // Empty-input guard, and the ANSWER to a press on an empty form.
+        //
+        // The button is no longer disabled while the field is empty - a
+        // disabled button is pointer-transparent and out of the tab order,
+        // so the press went unanswered (see c.validationMessage) - so this
+        // branch is what the press produces. It marks the control touched,
+        // which flips the field's own role="alert" message into the DOM,
+        // and sets a summary beside the button.
+        //
+        // No request is issued: the return happens before the $http.get,
+        // exactly as the disabled button previously ensured.
         if (!c.caseNumber || String(c.caseNumber).trim() === '') {
+            c.markAllTouched(submittedForm || $scope.caseLookupForm);
+            c.result = null;
+            c.notFound = false;
+            c.errorMessage = '';
+            c.validationMessage = 'Enter a case number, then choose Look Up Status.';
             return;
         }
 
@@ -431,6 +596,7 @@
         c.result = null;
         c.notFound = false;
         c.errorMessage = '';
+        c.validationMessage = '';
 
         // Build the URL with defensive URL-encoding of the case number.
         // The server-side Script Include x_casemgmt.CasePortalService.
@@ -537,6 +703,43 @@
             }
         });
     };
+
+    /*
+     * If this page was reached from a submission confirmation, honour the
+     * case number that link carried.
+     *
+     * The confirmation's anchor is labelled "Check the status of this
+     * case" and carries ?number=<the case number>. Pre-filling alone would
+     * still leave the requester to press a button to be told something the
+     * link had already promised, so the lookup is run once here as well.
+     * That is the requester driving it - they clicked a link that says
+     * exactly this - and it is the only circumstance in which this widget
+     * issues a request without a press: with no parameter,
+     * c.data.prefilledNumber is '' and nothing happens.
+     *
+     * It runs after c.lookup is defined, and it runs ONCE - there is no
+     * watcher, so editing the field afterwards behaves normally and a
+     * reload with the same URL simply repeats the same single read. The
+     * request is a read, so repeating it costs nothing and can duplicate
+     * nothing.
+     *
+     * The server-script data is read from c.data OR $scope.data. The
+     * Service Portal framework populates both - it puts `data` on the
+     * widget's scope and aliases the controller instance as `c` - but
+     * which of the two is already assigned at controller-CONSTRUCTION
+     * time depends on the framework version's binding order, and this
+     * runs at construction time rather than from an event handler. Taking
+     * either source removes that dependency. Both being absent means the
+     * widget was instantiated outside the framework entirely (a preview
+     * harness, a future embed), and the guard degrades to doing nothing
+     * rather than throwing and taking the whole widget down for the sake
+     * of an optional convenience.
+     */
+    var widgetData = c.data || $scope.data;
+    if (widgetData && widgetData.prefilledNumber) {
+        c.caseNumber = widgetData.prefilledNumber;
+        c.lookup();
+    }
 }
 ]]></client_script>
         <controller_as>c</controller_as>
@@ -557,14 +760,14 @@
     /*
      * Case Lookup Widget - server-side data initialization.
      *
-     * No server-side data fetch is needed. The case-status lookup is
-     * driven entirely by the client-side controller via $http.get to
-     * the scripted REST endpoint at
+     * No case data is fetched here. The case-status lookup is driven
+     * entirely by the client-side controller via $http.get to the
+     * scripted REST endpoint at
      *   /api/x_casemgmt/case_status_lookup?number=<encoded>
      * defined by ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
      * and handled by ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml.
      *
-     * This widget intentionally performs ZERO database operations:
+     * This widget performs ZERO database operations:
      *   - No GlideRecord reads (no pre-fetching of any case data; the
      *     widget renders with empty state and the user drives the
      *     lookup via the form).
@@ -574,10 +777,76 @@
      *   - No gs.eventQueue() calls (email notifications are disabled
      *     per AAP Section 0.7.2 Email-disabled constraint).
      *
-     * The IIFE pattern matches ServiceNow's standard widget server-
-     * script convention; the empty body is the canonical no-op
-     * placeholder.
+     * It computes exactly TWO values, neither of which reads the case
+     * table: the name of the timezone that the Opened Date on the result
+     * panel is expressed in, and the case number this page was reached
+     * with when it was reached from a submission confirmation. Each is
+     * explained at its assignment below.
+     *
+     * WHY THE LABEL LIVES HERE AND NOT IN THE LOOKUP RESPONSE.
+     * x_casemgmt.CasePortalService.lookupCase() emits the opened_date
+     * DISPLAY value, rendered in the session's timezone, so the external
+     * requester and internal staff read the same instant. An unlabelled
+     * local timestamp is still ambiguous to a requester in another
+     * timezone, but the lookup response cannot carry the label: AAP
+     * Section 0.7.4 fixes that payload at EXACTLY three keys (status,
+     * subject, opened_date) and a fourth would widen a whitelist the
+     * specification pins shut. The widget therefore resolves the label
+     * from its own session - the same session whose timezone the display
+     * value was rendered in, because the anonymous $http.get below is
+     * issued by this same portal visitor - and renders it beside the
+     * field's <dt> label rather than beside the value, so it reads as
+     * part of the label and never as case data.
+     *
+     * getTimeZoneName() is read defensively: an empty string is the
+     * expected outcome on an instance with no default timezone property,
+     * and the template simply omits the qualifier in that case rather
+     * than rendering an empty pair of parentheses. The try/catch bounds
+     * a session API that an anonymous request is not guaranteed to be
+     * able to answer; a missing label degrades the panel by nothing more
+     * than the qualifier.
      */
+    data.openedDateTimeZone = '';
+    try {
+        var sessionTimeZone = gs.getSession().getTimeZoneName();
+        if (sessionTimeZone) {
+            data.openedDateTimeZone = String(sessionTimeZone);
+        }
+    } catch (e) {
+        gs.warn('x_casemgmt Case Lookup Widget: session timezone name unavailable, ' +
+            'the Opened Date qualifier will be omitted; ' + e);
+    }
+
+    /*
+     * The case number this page was reached WITH, when it was reached from
+     * a confirmation.
+     *
+     * The submission confirmation links here as
+     *   ?id=x_casemgmt_case_status&number=CASE0000001
+     * (see ../widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml).
+     * Without this, the requester followed a link labelled "Check the
+     * status of this case", landed on an empty form, and had to re-type
+     * the number the link they had just clicked already carried - which is
+     * most of the friction the link was added to remove.
+     *
+     * The value is treated as untrusted input from the address bar, so it
+     * is trimmed and capped at the 20 characters the input's own maxlength
+     * allows. It is never used to build a query here: it only pre-fills
+     * c.caseNumber, and the lookup still goes through the same
+     * encodeURIComponent'd GET to the same anonymous endpoint, which
+     * queries by the number field and answers 404 for anything it does
+     * not recognise. It reaches the template through ng-model, which
+     * renders it as a value and never as markup, so a crafted parameter
+     * has nothing to act on.
+     *
+     * An absent parameter yields '' and the page behaves exactly as it
+     * did: empty field, no request, user drives the lookup.
+     */
+    data.prefilledNumber = '';
+    var suppliedNumber = $sp.getParameter('number');
+    if (suppliedNumber) {
+        data.prefilledNumber = String(suppliedNumber).trim().substring(0, 20);
+    }
 })();
 ]]></script>
         <servicenow>false</servicenow>
@@ -594,11 +863,28 @@
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <template><![CDATA[<div class="x-casemgmt-case-lookup-widget">
-    <h2>Case Status Lookup</h2>
+    <!--
+        THE PAGE'S ONE <h1>.
+
+        This was an <h2>, which left the page with no <h1> element at all:
+        the only level-1 heading on it was a 1x1 clipped
+        div.sr-only[role=heading][aria-level=1] emitted by the Service
+        Portal page container from the sp_page record's <title>, invisible
+        to sighted users and a duplicate of this text. The visible heading
+        of a public page should be its top-level heading. The result
+        panel's heading is promoted from <h3> to <h2> to match, so the
+        outline reads h1 -> h2 with no level skipped. Bootstrap's
+        panel-title class carries the panel-heading typography on whatever
+        element it is applied to, so the promotion changes the semantics
+        and nothing about the rendering.
+
+        The text is unchanged and no CSS is required.
+    -->
+    <h1>Case Status Lookup</h1>
     <form name="caseLookupForm"
           novalidate
           ng-attr-aria-busy="{{c.loading ? 'true' : 'false'}}"
-          ng-submit="c.lookup()">
+          ng-submit="c.lookup(caseLookupForm)">
         <div class="form-group" ng-class="{'has-error': caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched}">
             <label for="x-casemgmt-case-number">Case Number</label>
             <input type="text"
@@ -607,12 +893,13 @@
                    class="form-control"
                    maxlength="20"
                    ng-model="c.caseNumber"
+                   ng-change="c.onInputChange()"
                    placeholder="Enter your case number (e.g., CASE0000001)"
                    aria-required="true"
                    aria-describedby="x-casemgmt-case-number-error"
                    ng-attr-aria-invalid="{{(caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched) ? 'true' : 'false'}}"
                    required />
-            <p class="help-block" id="x-casemgmt-case-number-error" role="alert"
+            <p class="text-danger" id="x-casemgmt-case-number-error" role="alert"
                ng-if="caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched">Enter a case number to look up.</p>
         </div>
         <!--
@@ -635,43 +922,97 @@
             mounting an empty help-block for each field would add Bootstrap's
             help-block margins to the form in its normal, valid state.
 
-            The `required` and aria-required attributes on the input are new,
-            and they change no behaviour: the button was already disabled while
-            the field was empty, through ng-disabled. What they add is the
-            PROGRAMMATIC state - without `required` the control is never
-            $invalid, so there is nothing for aria-invalid or has-error to
-            report, and a screen-reader user has only the disabled button to
-            infer from. The label deliberately carries no asterisk: this form
+            The `required` and aria-required attributes on the input carry no
+            behaviour of their own - they neither block the press nor issue the
+            request; c.lookup() decides that. What they add is the PROGRAMMATIC
+            state that everything else keys on: without `required` the control
+            is never $invalid, so there is nothing for aria-invalid, has-error
+            or the field's own message to report, and a screen-reader user who
+            pressed the button on an empty field would be told nothing at all.
+            The label deliberately carries no asterisk: this form
             has a single field, so there is no ambiguity about which one is
             needed, and adding one would be a visual change no requirement
             asks for (AAP Section 0.4.4 specifies one input on this page).
         -->
         <div class="form-group">
+            <!--
+                Look Up Status button: disabled ONLY while a request is in
+                flight, never because the field is empty.
+
+                It used to be disabled on !c.caseNumber as well, which left
+                the primary action unanswerable in the state every
+                first-time visitor arrives in: a disabled <button> does not
+                receive the pointer, so a click landed on this wrapper DIV
+                and produced nothing, and a disabled button is absent from
+                the tab order, so a keyboard user never reached it.
+                Enabled, the press is always answered - c.lookup() marks
+                the field touched so its own message renders and sets the
+                summary below.
+
+                No request is issued on an empty field: c.lookup() returns
+                before the $http.get.
+            -->
             <button type="submit"
                     class="btn btn-primary"
                     aria-describedby="x-casemgmt-lookup-hint"
-                    ng-disabled="c.loading || !c.caseNumber">
+                    ng-disabled="c.loading">
                 <span ng-if="!c.loading">Look Up Status</span>
                 <span ng-if="c.loading">Looking up...</span>
             </button>
             <!--
-                Status region: the visible REASON the button is disabled (the
+                Status region: the visible REASON a press would be refused (the
                 form carries novalidate, so the browser contributes no message
                 of its own) and the announcement of the in-flight state, which
                 the button's inner text alone does not convey to assistive
                 technology. Always present in the DOM so the button's
                 aria-describedby never dangles; polite so it never steals
-                focus. `help-block` is bundled Bootstrap 3 - this widget still
-                ships zero CSS, per AAP Section 0.4.4's default theme.
+                focus. `help-block` is bundled Bootstrap 3. This widget's <css>
+                element does darken it - from the theme's #b1b1b1 (2.14:1) to
+                #737373 (4.74:1) - but that is its text COLOUR only; its
+                layout, spacing and typography are the theme's, untouched. See
+                the DEFAULT THEME note in the record description.
+
+                It is guidance shown BEFORE the press, not the answer to one:
+                the answer to a refused press is the role="alert" summary
+                below plus the field's own message above the button.
             -->
-            <p id="x-casemgmt-lookup-hint" class="help-block" role="status" aria-live="polite">
+            <p id="x-casemgmt-lookup-hint" role="status" aria-live="polite">
                 <span ng-if="c.loading">Looking up your case, please wait...</span>
                 <span ng-if="!c.loading">
-                    <span ng-if="!c.caseNumber">Enter a case number to enable Look Up Status.</span>
+                    <!--
+                        The empty-state line is suppressed while the field's
+                        own message is on screen. Both say "Enter a case
+                        number to look up.", and after a press on an empty
+                        form both conditions hold, so the identical sentence
+                        rendered twice - once above the button as the field's
+                        error and once below it as the hint. Two copies of
+                        one instruction reads as two problems. The field's
+                        message is the one that stays, because it is the one
+                        adjacent to the control it is about and the one
+                        aria-describedby points at.
+                    -->
+                    <span ng-if="!c.caseNumber && !(caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched)">Enter a case number to look up.</span>
                 </span>
             </p>
         </div>
     </form>
+
+    <!--
+        Validation summary: rendered when Look Up Status was pressed with
+        an empty field. It exists because the button is enabled now - see
+        the button comment above for why a disabled primary action was a
+        dead end for both pointer and keyboard users - and it is the
+        visible answer to that press.
+
+        role="alert" so it is announced when it appears. c.onInputChange()
+        clears it on the first keystroke and c.lookup() clears it before
+        issuing a request, so it can never coexist with the result panel,
+        the not-found alert or the service-failure alert below: every path
+        that sets one of the four clears the other three.
+    -->
+    <div class="alert alert-danger" role="alert" ng-if="c.validationMessage">
+        {{c.validationMessage}}
+    </div>
 
     <!--
         Result panel: rendered when c.result is non-null (i.e., the most
@@ -683,9 +1024,42 @@
         narration of "Status: <value>, Subject: <value>, Opened Date:
         <value>".
     -->
+    <!--
+        THE LIVE REGION THAT ANNOUNCES A SUCCESSFUL RESULT.
+
+        Both failure paths already announced themselves - the not-found
+        alert and the service-failure alert further down each carry
+        role="alert" - while the SUCCESS panel carried no live-region role
+        on itself or on any of its ancestors. A screen-reader user who ran
+        a lookup therefore heard nothing at all when it WORKED and heard an
+        announcement only when it did not: the button text returns from
+        "Looking up..." to "Look Up Status" and the answer appears
+        silently below. That is exactly the wrong way round.
+
+        The region is this always-mounted wrapper, NOT the ng-if'd panel
+        itself. A live region has to be present in the DOM before its
+        content changes for the change to be announced reliably; putting
+        aria-live on an element that is itself inserted at the same moment
+        as its content is announced by some assistive technology and not by
+        others. The same reasoning is already applied to the button's hint
+        paragraph above, which stays mounted so its region has a stable
+        host to update in place. An empty div contributes no box and no
+        vertical space, so the panel's layout in the pristine state is
+        unchanged.
+
+        polite rather than assertive (which is what role="alert" implies):
+        the requester deliberately asked for this information and is
+        waiting for it, so it should be read at the next opportunity
+        instead of interrupting. role="status" carries the polite
+        live-region semantics for assistive technology that keys on role,
+        and the explicit aria-live states it for anything that keys on the
+        attribute; the two agree, so neither overrides the other into a
+        different politeness.
+    -->
+    <div role="status" aria-live="polite">
     <div class="panel panel-default" ng-if="c.result">
         <div class="panel-heading">
-            <h3 class="panel-title">Case Status</h3>
+            <h2 class="panel-title">Case Status</h2>
         </div>
         <div class="panel-body">
             <dl>
@@ -693,11 +1067,28 @@
                 <dd>{{c.result.status}}</dd>
                 <dt>Subject</dt>
                 <dd>{{c.result.subject}}</dd>
-                <dt>Opened Date</dt>
+                <!--
+                    The timezone qualifier sits inside the <dt> LABEL, not
+                    beside the value, for two reasons. It is part of what
+                    the field means rather than part of the case's data, so
+                    a screen reader narrating the definition list announces
+                    "Opened Date, America/Los_Angeles" as one term - the name
+                    this instance actually resolves to, measured on the
+                    rendered page - and then the timestamp as its definition.
+                    And it keeps the <dd>
+                    holding exactly the value the lookup endpoint returned,
+                    so the three-field whitelist stays literally visible in
+                    the markup. The qualifier is omitted entirely when the
+                    instance has no resolvable timezone name, rather than
+                    rendering empty parentheses. See the server script for
+                    why the label cannot travel in the lookup response.
+                -->
+                <dt>Opened Date<span ng-if="c.data.openedDateTimeZone"> ({{c.data.openedDateTimeZone}})</span></dt>
                 <dd>{{c.result.opened_date}}</dd>
             </dl>
         </div>
     </div>
+    </div><!-- /live region -->
 
     <!--
         Not-found panel: rendered when c.notFound is true, which means the

@@ -67,8 +67,19 @@
         - <operation>      "write" (this file)            vs "read"
         - <sys_id>         MD5("x_casemgmt_case.write...") vs MD5("x_casemgmt_case.read...")
         - <sys_update_name> *_write_agent_assigned        vs *_read_agent_assigned
-      The CDATA script body is byte-identical between the two records by
-      design; both encode the same predicate per AAP Section 0.5.6.
+        - the create-path limbs each record carries so that the Create
+          grant in AAP Section 0.5.6 works end to end: both records admit
+          the INSERT path (current.isNewRecord()), and the READ sibling
+          additionally admits the record's own creator
+          (current.sys_created_by == gs.getUserName()) once the row
+          exists. They are documented together in
+          ../docs/acl-matrix.md under "Assigned only - the create-path
+          limbs (QA finding F4)".
+      An earlier revision of this header stated the CDATA script body was
+      byte-identical between the two records. That is withdrawn: the
+      shared "Assigned only" predicate is still identical and still
+      governs every UPDATE, but each record now adds the one limb its own
+      operation needs on the insert path.
 
     How this ACL composes with field-level ACLs (defense in depth):
       This record grants TABLE-LEVEL write to case_agent for assigned cases.
@@ -219,12 +230,51 @@
         <admin_overrides>true</admin_overrides>
         <advanced>true</advanced>
         <condition/>
-        <description>Table-level ACL: x_casemgmt_case_agent can write x_casemgmt_case records ONLY when assigned_agent = current user OR assigned_group contains current user (per AAP Section 0.5.6 'Assigned only'). Field-level ACLs on assigned_group/assigned_agent further restrict those specific fields.</description>
+        <description>Table-level ACL: x_casemgmt_case_agent can write x_casemgmt_case records on the INSERT path (current.isNewRecord(), which is what makes AAP Section 0.5.6's 'case_agent Create' grant able to carry field values) and, on the UPDATE path, ONLY when assigned_agent = current user OR assigned_group contains current user (per AAP Section 0.5.6 'Assigned only'). Field-level ACLs on assigned_group/assigned_agent further restrict those specific fields on both paths.</description>
         <name>x_casemgmt_case</name>
         <operation>write</operation>
         <roles>x_casemgmt_case_agent</roles>
         <script><![CDATA[(function() {
     var currentUserId = gs.getUserID();
+
+    // INSERT PATH - closes QA finding F4 (HIGH).
+    //
+    // On an insert the platform evaluates this table-level WRITE ACL once
+    // per column being set, BEFORE the row exists. At that moment
+    // current.assigned_agent and current.assigned_group are empty (an agent
+    // cannot populate either: assigned_group is manager-only per
+    // ../acl/x_casemgmt_case_assigned_group_field_acl.xml, and the case is
+    // not yet assigned to anyone), so the "Assigned only" predicate below
+    // could never be satisfied and EVERY field value the agent supplied was
+    // silently discarded - the create ACL
+    // (../acl/x_casemgmt_case_create_agent.xml) still admitted the row, so
+    // the insert returned success and stored a blank-shell case. Measured
+    // before this limb existed: an agent-created case landed with subject,
+    // description, requester_name and type all empty.
+    //
+    // "Assigned only" is a statement about which EXISTING records an agent
+    // may reach (AAP Section 0.5.6, and Section 0.7.3 Gate 3 "case_agent
+    // cannot access unassigned cases"). It is logically inapplicable to a
+    // record that does not exist yet - the same reasoning the create ACL
+    // records in its own header for running with advanced=false. Admitting
+    // the insert path here is therefore what makes the Create cell the AAP
+    // grants an actually working grant rather than a row-shaped hole.
+    //
+    // This limb widens nothing on the update path: isNewRecord() is true
+    // only while the row is being inserted. Nor does it let the agent set
+    // privileged columns during that insert - the two field-level ACLs on
+    // assigned_group and assigned_agent are evaluated in ADDITION to this
+    // record and still refuse assigned_group outright for a non-manager.
+    // Mandatory-field content is enforced independently of any ACL by
+    // ../business_rules/x_casemgmt_validate_case_mandatory_fields.xml
+    // (order 50), so an agent insert that carries no subject/description/
+    // requester_name is refused with a named field error rather than
+    // stored blank.
+    if (current.isNewRecord()) {
+        return true;
+    }
+
+    // UPDATE PATH - AAP Section 0.5.6 "Assigned only", unchanged.
     if (current.assigned_agent == currentUserId) {
         return true;
     }

@@ -37,16 +37,70 @@
         shows the agent's PERSONAL queue of actionable cases.
       - "My Overdue Tasks" list (../reports/x_casemgmt_my_overdue_tasks.xml)
         shows the agent's PERSONAL list of late tasks.
-      - THIS donut shows the ENTIRE TEAM's case backlog distribution by
-        status. The agent uses it to spot bottlenecks (e.g., a Pending
-        slice that has grown large) and to identify pull-work
-        opportunities (e.g., an Open slice with unassigned cases that
-        the agent could absorb).
+      - THIS donut shows the status distribution of the VIEWING USER's own
+        case portfolio. The agent uses it to see the shape of their own
+        backlog at a glance - how much of it is still Draft or Open, how
+        much is Pending on someone else, how much is already Resolved -
+        without leaving the dashboard.
 
-    The two list widgets are filtered per-viewer via gs.getUserID(); THIS
-    donut is intentionally UNFILTERED. The complementary perspective is
-    the design intent per AAP Section 0.4.4: agents need both their
-    personal queue AND the team-wide picture.
+    All three widgets on this dashboard are therefore filtered per-viewer.
+
+    WHY THIS REPORT IS FILTERED (QA finding F5)
+    ===========================================
+    An earlier revision shipped this report with an EMPTY filter and
+    described it as "UNFILTERED by design - the entire team backlog". That
+    was measured to be a disclosure: report execution does NOT apply the
+    row-level read ACL that governs the case list, so under the
+    x_casemgmt_demo_agent persona the donut aggregated EVERY case on the
+    instance and disclosed the status distribution of records the agent is
+    refused on every other surface (form load answers "Security
+    constraints prevent access to requested page", the Table API answers
+    404). Counts only - no subject, number or other record content leaked -
+    but the count of cases in each lifecycle stage is exactly the
+    information an "Assigned only" grant withholds.
+
+    The AAP contains a genuine tension here and it is resolved in favour of
+    the normative requirements:
+      - Section 0.5.1's transformation table describes this row as a
+        "Donut grouped by status" and says nothing about a filter, which is
+        how the empty filter was originally justified.
+      - Section 0.5.6 confines case_agent to "Read - Assigned only", and
+        Section 0.7.3 Gate 3 states the criterion verbatim: "case_agent
+        cannot access unassigned cases".
+      - Section 0.4.4 places THIS widget on the AGENT WORKSPACE, beside
+        "My open cases" and "My overdue tasks" - a dashboard whose whole
+        purpose is the viewer's own work, and whose other two widgets both
+        filter on javascript:gs.getUserID().
+    A descriptive sentence in the transformation table cannot widen an
+    access-control mandate, so the filter below scopes the aggregate to the
+    viewing user. The portfolio-wide view the AAP does call for is
+    unaffected: Section 0.4.4's Manager View keeps the deliberately
+    unfiltered "All Cases by Status" bar chart
+    (../reports/x_casemgmt_all_cases_by_status.xml), which is bound to a
+    dashboard shared only with x_casemgmt_case_manager - the role Section
+    0.5.6 grants "Read - All". The report's title stays exactly as Section
+    0.4.4 names it, "Case Count by Status".
+
+    The filter mirrors the three limbs of the agent read ACL
+    (../acl/x_casemgmt_case_read_agent_assigned.xml) so the donut totals
+    exactly what the viewer can open:
+        assigned_agent=javascript:gs.getUserID()
+        ^ORassigned_groupINjavascript:gs.getUser().getMyGroups()
+        ^ORsys_created_by=javascript:gs.getUserName()
+    Every limb is a single expression, which is a hard requirement of the
+    encoded-query evaluator: measured on this instance, a javascript: value
+    written as an IIFE or as a multi-statement body evaluates to EMPTY, and
+    an empty value on the `=` operator silently degrades to "field is
+    empty" - so a filter built that way would have quietly answered the
+    wrong question. No hard-coded sys_id appears: the user, their groups
+    and their user_name are all resolved at execution time.
+
+    Consequence for the manager, stated plainly: the Agent Workspace is
+    shared with x_casemgmt_case_manager as well, and a manager holding no
+    assignments now sees an empty donut on THIS dashboard - the same
+    outcome its two sibling "My ..." widgets already produce for that
+    persona, and the reason Section 0.4.4 gives the manager a separate
+    Manager View with the unfiltered aggregates.
 
     SEMANTIC SOURCE-SIDE ANCHOR (READ-ONLY, NOT BYTE-FOR-BYTE PORTED)
     =================================================================
@@ -151,13 +205,16 @@
         emitted; sys_report has no `format` column either, and both are
         now gone from all eight report artifacts.
 
-      - Filter discipline (agent-prompt Rule 5 verbatim):
-        <filter/> empty. This report counts ALL cases regardless of
-        assignment, type, or priority. The complementary "My Open
-        Cases" list report (../reports/x_casemgmt_my_open_cases.xml)
-        provides the per-viewer filtered view; THIS donut intentionally
-        does NOT filter so agents can see the entire team's status
-        distribution.
+      - Filter discipline: <filter> carries the three-limb per-viewer
+        predicate described under "WHY THIS REPORT IS FILTERED" above.
+        It counts the cases the viewing user may actually read - the ones
+        assigned to them, the ones assigned to a group they belong to, and
+        the ones they created - and nothing else. Type and priority are
+        not filtered: the donut groups by status across the viewer's whole
+        portfolio, including terminal Closed cases, which is what makes it
+        complementary to the "My Open Cases" list report
+        (../reports/x_casemgmt_my_open_cases.xml), whose own filter
+        additionally excludes Resolved and Closed.
 
       - Aggregation discipline (agent-prompt Rule 6 verbatim):
         <aggregate>COUNT</aggregate>. Counts records per status bucket.
@@ -172,18 +229,23 @@
         For chart reports, the chart-type and group-by fully determine
         what is rendered.
 
-      - Per-viewer semantics: this report does NOT reference any
-        user-specific identity (e.g., gs.getUserID()); it returns the
-        SAME aggregated counts for every viewer. Therefore:
-          1) The platform does not need to re-compute the aggregate
-             per-user, only per-cache-cycle. <is_real_time>false</is_real_time>
-             below permits cached evaluation.
-          2) Different roles see the same numbers (modulo what their
-             ACL permits them to read). For a `case_viewer`, all six
-             slices appear (read-all ACL). For a `case_agent`, only
-             slices for cases assigned to them or their group appear
-             (assigned-only ACL per AAP Section 0.5.6). For a
-             `case_manager`, all six slices appear (full ACL).
+      - Per-viewer semantics: this report resolves the viewer's identity
+        at execution time (gs.getUserID(), gs.getUser().getMyGroups() and
+        gs.getUserName() in the filter), so each viewer gets their own
+        aggregate. Therefore:
+          1) The aggregate is computed per user rather than once per
+             cache cycle. <is_real_time>false</is_real_time> below still
+             permits the platform's normal caching of a single viewer's
+             result; the cache key includes the evaluated filter, so no
+             viewer is ever served another viewer's numbers.
+          2) Roles no longer see the same numbers, and that is the point.
+             A `case_agent` sees exactly the portfolio its read ACL
+             permits (measured: the six-status distribution of its own
+             cases, not the instance-wide distribution). A `case_manager`
+             sees its own assignments here and the full portfolio on the
+             Manager View's unfiltered bar chart. A `case_viewer` is not
+             bound to either dashboard (AAP Section 0.4.4 names only
+             manager and agent), so it never renders this widget at all.
 
       - Why "type=donut", corrected from "pie": AAP Section 0.4.4 and
         Section 0.5.1 both specify a DONUT chart here, and `donut` IS a
@@ -214,16 +276,22 @@
         aggregation: per AAP Section 0.4.4 the Manager View dashboard
         carries a separate "All Cases by Status" bar chart
         (../reports/x_casemgmt_all_cases_by_status.xml). Both reports
-        share identical <table>, <field>, <aggregate>, and (empty)
-        <filter>; they differ only in <type> (pie vs. bar) and in
-        which dashboard consumes them (Agent Workspace vs. Manager
-        View). The duplication is INTENTIONAL per AAP Section 0.4.4
-        to give each audience the visualization optimized for their
-        decision-making style:
-          - Agents: at-a-glance proportional view (donut) - easier to
-            scan visually for an "is the queue balanced?" judgment.
-          - Managers: comparative magnitude view (bar) - easier to
-            read absolute counts for capacity-planning decisions.
+        share identical <table>, <field> and <aggregate>; they differ in
+        <type> (donut vs. bar), in which dashboard consumes them (Agent
+        Workspace vs. Manager View) and - since QA finding F5 - in
+        <filter>: THIS report is scoped to the viewing user, while the
+        Manager View bar chart stays deliberately unfiltered because its
+        dashboard is shared only with x_casemgmt_case_manager, the role
+        AAP Section 0.5.6 grants "Read - All". The duplication is
+        INTENTIONAL per AAP Section 0.4.4 to give each audience the
+        visualization optimized for their decision-making style, and the
+        filter split is what keeps each audience inside its own grant:
+          - Agents: at-a-glance proportional view (donut) of THEIR OWN
+            portfolio - easier to scan visually for an "is my queue
+            balanced?" judgment.
+          - Managers: comparative magnitude view (bar) across every case
+            - easier to read absolute counts for capacity-planning
+            decisions.
         Both reports MUST be present; do NOT consolidate them into
         one shared report. Per AAP Section 0.5.2 cross-file dependencies,
         both reports load AFTER tables/dictionary/choices and BEFORE
@@ -419,7 +487,7 @@
     [x] <title> = Case Count by Status
     [x] <table> = x_casemgmt_case
     [x] <type> = donut
-    [x] <filter/> empty
+    [x] <filter> = per-viewer three-limb predicate (assigned_agent / my groups / creator) - see "WHY THIS REPORT IS FILTERED (QA finding F5)"
     [x] <field> = status
     [x] <group_by/> empty (not a sys_report column on this release)
     [x] <aggregate> = COUNT
@@ -443,10 +511,10 @@
         <aggregate>COUNT</aggregate>
         <aggregation_source/>
         <chart_size>medium</chart_size>
-        <description>Agent Workspace dashboard donut/pie widget data source. Aggregates ALL records in x_casemgmt_case grouped by the status Choice field with COUNT(*) per bucket. Six slices expected (Draft, Open, In Progress, Pending, Resolved, Closed) when seed data spans all statuses. UNFILTERED by design - shows the entire team backlog distribution, not the agent's personal queue (which is provided by the separate x_casemgmt_my_open_cases list report). Replaces ArkCase's CaseByStatusDto + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report. Same aggregation as x_casemgmt_all_cases_by_status (Manager View bar chart); different chart type and dashboard audience per AAP Section 0.4.4.</description>
+        <description>Agent Workspace dashboard donut widget data source. Groups the VIEWING USER'S OWN cases in x_casemgmt_case by the status Choice field with COUNT(*) per bucket. Scoped per viewer by a filter that mirrors the three limbs of the agent read ACL (assigned_agent = me OR assigned_group is one of my groups OR I created it), so the aggregate totals exactly the records the viewer can open. This closes QA finding F5: with an empty filter the widget aggregated every case on the instance and disclosed the status distribution of records the agent is refused everywhere else, because report execution does not apply row-level read ACLs. AAP Section 0.5.1 describes this row only as a donut grouped by status, while Section 0.5.6 and Section 0.7.3 Gate 3 confine case_agent to assigned records and Section 0.4.4 places this widget on the Agent Workspace beside two per-viewer "My ..." lists - so the per-viewer reading is the one that satisfies the normative requirements. The portfolio-wide aggregate the AAP does call for lives on the Manager View as the unfiltered x_casemgmt_all_cases_by_status bar chart. Title unchanged per Section 0.4.4. Replaces ArkCase's CaseByStatusDto + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report.</description>
         <field>status</field>
         <field_list/>
-        <filter/>
+        <filter>assigned_agent=javascript:gs.getUserID()^ORassigned_groupINjavascript:gs.getUser().getMyGroups()^ORsys_created_by=javascript:gs.getUserName()</filter>
         <is_real_time>false</is_real_time>
         <is_scheduled>false</is_scheduled>
         <name>x_casemgmt_case_count_by_status</name>

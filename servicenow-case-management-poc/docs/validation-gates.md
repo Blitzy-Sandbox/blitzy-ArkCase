@@ -1,6 +1,37 @@
 # Validation Gates
 
+> **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
+> The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> What to verify before an upload, and what to assert after it:
+>
+> | | Value |
+> | --- | --- |
+> | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
+> | Bytes | **3,944,374** (was 3,780,373) |
+> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | `…FALLBACK.xml` | byte-identical to the above, as always |
+> | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
+>
+> Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
+> Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
+> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
+> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> remediation creates (was 27), **11** Business Rules (was 7).
+>
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
+> superseded revision and is left as written** — those passages state what was measured at a point in time, and
+> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
+> digest, it has been updated to the values above.
+>
+> **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
+> deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988
+> children against the one sequence that ever previewed to zero problems, and rewriting records inside a file
+> that is retained rather than shipped would destroy that for nothing. The consequence is that promoting it as
+> it stands would undo all 18 QA fixes. A promotion must first carry the 9 inserted and 14 re-synced records
+> named in the elected package's header comment.
+
 ## Purpose
+
 
 This document captures the seven validation gates that the scoped application MUST pass before delivery. Each gate corresponds to a critical capability surface and has a specific pass condition; every gate MUST be exercised on a fresh PDI before the Update Set is committed. Failure on any gate blocks delivery — no out-of-scope workarounds are permitted (per AAP Section 0.7.2 Minimal-Change Clause).
 
@@ -134,7 +165,7 @@ Each row below names which of the three it rests on.
 > gate is **not counted as a pass of any kind**, because it is a binary hard gate and no preview of the complete
 > elected file has ever been run. Data model and ACLs are the two qualified gates, and they are qualified for one
 > measured reason: the elected package carries **0 `sys_security_acl_role` rows** and the 25 hand-authored
-> `sys_dictionary` rows, so the physical schema and the 27 role links both have to come from
+> `sys_dictionary` rows, so the physical schema and the 36 role links both have to come from
 > `scripts/post_import_remediation.js` rather than out of the commit. The **choice** half of the Data model
 > qualification is closed: the package's seven native choice composites previewed to 0 problems and committed
 > natively on 2026-09-03, `sys_choice` 0 → 24, so no post-import choice creation is required.
@@ -176,7 +207,7 @@ Each row below names which of the three it rests on.
 >
 > **What the qualifications mean, because "qualified" must not be read as "fine".** Data model and ACLs are
 > correct once an operator has run the Global remediation script, and **incorrect until then** — until that run
-> the three tables are metadata with no physical storage and all 26 ACLs have zero role links, which denies
+> the three tables are metadata with no physical storage and all 29 ACLs have zero role links, which denies
 > everything. **The Update Set gate is not one of these qualifications: it is binary, and in this pre-rebuild
 > accounting it was NOT MET**, for the same reason it is NOT MET today — *which bytes carry which proof*:
 > the zero-problems-of-any-type result belongs to the `7272edfc…` revision, the zero-reference-problems result to
@@ -435,7 +466,7 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
   `update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to `…FALLBACK.xml`. The gate is
   therefore NOT MET for the artifact that ships.** Running §5 of
   [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) against the elected file on a
-  genuinely clean PDI, asserting **926** children, is what discharges steps 1-8 for it; running the same §5
+  genuinely clean PDI, asserting **935** children, is what discharges steps 1-8 for it; running the same §5
   against the `e109e1d1…` file asserting **988** children is what discharges them for the retained rebuilt
   artifact and makes it promotable back to the deliverable path. Both runs are set out in §10.0 of
   [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3c of the

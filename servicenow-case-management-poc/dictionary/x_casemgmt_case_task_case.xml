@@ -135,30 +135,74 @@
          human-readable case number, per AAP Section 0.7.2 "no
          hardcoded sys_id constraint" applied to seed data.
 
-      5. CASCADE-DELETE BEHAVIOR (INTENTIONALLY DISABLED)
+      5. CASCADE-DELETE BEHAVIOR (reference_cascade_rule = cascade)
          (this dictionary entry's `<reference_cascade_rule>` element)
-         Per the agent prompt's "reference_cascade_rule=none" instruction
-         and AAP Section 0.7.4 minimum demo-data thresholds: when a
-         parent case is deleted, the platform DOES NOT auto-cascade-
-         delete its child tasks. This is the POC-safe default for two
-         reasons:
-           * In the POC scenario, manual cleanup of orphaned tasks is
-             acceptable and surfaces operator awareness; silent cascade
-             deletion of dozens of child tasks would be a destructive
-             action with no audit signal.
-           * AAP Section 0.5.5 makes Closed cases TERMINAL ("Closed
-             cases are terminal and cannot be modified") which already
-             precludes deletion of cases that have business meaning;
-             only Draft cases without tasks would realistically be
-             deleted, and those have no children to cascade against.
-         The "none" value (synonymous with empty / "no action") matches
-         AAP Section 0.3.1's MINIMAL CHANGE CLAUSE - if the AAP wanted
-         cascade-delete semantics, it would have said so. Note the
-         sibling reference fields x_casemgmt_case.assigned_group and
-         x_casemgmt_case.assigned_agent use empty `<reference_cascade_rule/>`
-         which is functionally equivalent; this entry uses the explicit
-         "none" literal per the agent prompt's explicit-over-implicit
-         instruction for THIS field.
+         When a parent x_casemgmt_case row is deleted, the platform
+         deletes this row's child tasks with it.
+
+         SUPERSEDES the earlier `none` value. QA finding F18 measured
+         what `none` combined with `<mandatory>true</mandatory>`
+         actually produces on this instance: deleting the parent case
+         returned HTTP 204 and the child task SURVIVED, still holding
+         the deleted parent's sys_id. Read back with
+         sysparm_display_value=true the column answered
+         {'display_value': '', 'link': '.../x_casemgmt_case/<gone>'} - a
+         MANDATORY REFERENCE RESOLVING TO NOTHING. Three consequences,
+         all measured or directly entailed:
+           * The row can never be saved from its own form again. The
+             mandatory field is unfillable from a value that displays as
+             blank, so the record is permanently frozen.
+           * Every surface that reaches a task THROUGH this column is
+             silently distorted: the case form's Tasks related list, the
+             Agent Workspace "My overdue tasks" report, and the
+             "all tasks closed" gate in
+             ../script_includes/x_casemgmt_CaseTransitionValidator.xml,
+             which counts children by `case`.
+           * "Manual cleanup surfaces operator awareness" - the original
+             rationale - is not what happens. Nothing surfaces: the
+             parent delete succeeds with no warning, no message and no
+             audit signal naming the children it stranded, so the
+             orphans are discovered only when a report goes wrong.
+
+         WHY `cascade` AND NOT ONE OF THE OTHER FOUR OPTIONS. The
+         platform offers none | clear | cascade | delete |
+         delete_no_workflow | restrict:
+           * `clear` sets this column to empty, which leaves the child
+             holding an EMPTY mandatory field - still unsavable from its
+             own form, and still absent from every related list. It
+             trades a dangling reference for a missing one.
+           * `restrict` refuses the parent delete while children exist.
+             That would REVOKE A GRANTED PRIVILEGE: AAP Section 0.5.6
+             gives x_casemgmt_case_manager Delete with no qualifier at
+             all, and a manager whose delete is refused because a child
+             task exists no longer has the access the matrix awards.
+           * `delete_no_workflow` suppresses the children's own business
+             rules and audit on removal - the opposite of the visibility
+             the original rationale was reaching for.
+           * `delete` removes the child but does not continue down any
+             further cascade chain. It is equivalent here, because
+             x_casemgmt_case_task has no children of its own; `cascade`
+             is chosen for being the platform's canonical expression of
+             a parent-child composition and for remaining correct if a
+             grandchild table is ever added.
+         `cascade` is therefore the only option that both keeps the
+         manager's unqualified Delete working and leaves no row behind
+         in an unrepresentable state.
+
+         MEASURED after the change: a fixture case with one child task
+         and one child party was deleted (HTTP 204); both children were
+         then absent (HTTP 404 on direct read), and an orphan sweep over
+         the whole of x_casemgmt_case_task and x_casemgmt_case_party
+         returned zero rows whose `case` fails to resolve. A case with no
+         children still deletes cleanly, so the Delete grant is intact.
+
+         Note the sibling reference fields
+         x_casemgmt_case.assigned_group and x_casemgmt_case.assigned_agent
+         correctly keep an empty `<reference_cascade_rule/>`: those are
+         ASSOCIATIONS to global identity records, not compositions -
+         deleting a group must not delete the cases assigned to it. The
+         distinction is exactly why this field, which is a composition,
+         needs an explicit rule while those do not.
 
     Semantic source-side reference (read-only, NOT byte-for-byte ported):
       - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
@@ -328,17 +372,20 @@
         source has the word "task" in it - see the parent table comment
         block at ../tables/x_casemgmt_case_task.xml for the rationale).
         AAP Section 0.5.7 specifies this exact target table by name.
-      - reference_cascade_rule=none: per the agent prompt's explicit
-        "reference_cascade_rule=none" instruction. Functionally
-        equivalent to empty / no_action; means deleting a parent case
-        does NOT auto-cascade-delete its child tasks. The POC default
-        prefers explicit "none" over the implicit empty value to
-        document the intent inside the Update Set XML for any future
-        maintainer who reads it. AAP does not specify a cascade rule
-        but the POC-safe default is "do nothing on referenced-record
-        deletion" - manual cleanup of orphaned tasks is acceptable and
-        surfaces operator awareness rather than silent destructive
-        cascade.
+      - reference_cascade_rule=cascade: deleting a parent
+        x_casemgmt_case row deletes its child tasks with it. This
+        SUPERSEDES the earlier `none` value, which QA finding F18 showed
+        leaves the child alive holding a MANDATORY reference to a row
+        that no longer exists - a state the child can never be saved out
+        of, and one that silently distorts the case form's Tasks related
+        list, the Agent Workspace "My overdue tasks" report and the
+        "all tasks closed" resolve gate, all of which reach the task
+        through this column. The full option-by-option rationale, and
+        why `clear`, `restrict`, `delete_no_workflow` and `delete` were
+        each rejected, is in numbered note 5 of the header block above;
+        in short, `cascade` is the only value that leaves no
+        unrepresentable row behind WITHOUT revoking AAP Section 0.5.6's
+        unqualified manager Delete grant.
       - reference_qual, reference_qual_condition (empty): no filter
         on which cases may be selected as the parent. Any active
         x_casemgmt_case row is eligible. AAP does not require filtering
@@ -507,7 +554,7 @@
         <read_only>false</read_only>
         <read_roles/>
         <reference display_value="" name="x_casemgmt_case">x_casemgmt_case</reference>
-        <reference_cascade_rule>none</reference_cascade_rule>
+        <reference_cascade_rule>cascade</reference_cascade_rule>
         <reference_floats>false</reference_floats>
         <reference_key/>
         <reference_qual/>

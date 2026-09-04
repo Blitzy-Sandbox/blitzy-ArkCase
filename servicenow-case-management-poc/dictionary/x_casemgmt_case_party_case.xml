@@ -141,29 +141,71 @@
          multiple party rows resolve to the SAME parent-case sys_id
          via this column.
 
-      5. CASCADE-DELETE BEHAVIOR (INTENTIONALLY DISABLED)
+      5. CASCADE-DELETE BEHAVIOR (reference_cascade_rule = cascade)
          (this dictionary entry's `<reference_cascade_rule>` element)
-         Per the agent prompt's "reference_cascade_rule=none" instruction
-         and AAP Section 0.7.4 minimum demo-data thresholds: when a
-         parent case is deleted, the platform DOES NOT auto-cascade-
-         delete its child parties. This is the POC-safe default for two
-         reasons:
-           * In the POC scenario, manual cleanup of orphaned parties is
-             acceptable and surfaces operator awareness; silent cascade
-             deletion of dozens of child parties (especially
-             organization-typed ones that might be cross-referenced
-             elsewhere in the corporate graph) would be a destructive
-             action with no audit signal.
-           * AAP Section 0.5.5 makes Closed cases TERMINAL ("Closed
-             cases are terminal and cannot be modified") which already
-             precludes deletion of cases that have business meaning;
-             only Draft cases without parties would realistically be
-             deleted, and those have no children to cascade against.
-         The "none" value (synonymous with empty / "no action") matches
-         AAP Section 0.3.1's MINIMAL CHANGE CLAUSE - if the AAP wanted
-         cascade-delete semantics, it would have said so. The sibling
-         x_casemgmt_case_task_case.xml also uses "none" for the same
-         reason; this consistency simplifies the POC's mental model.
+         When a parent x_casemgmt_case row is deleted, the platform
+         deletes this row's child parties with it.
+
+         SUPERSEDES the earlier `none` value. QA finding F18 measured
+         what `none` combined with `<mandatory>true</mandatory>`
+         actually produces on this instance: deleting the parent case
+         returned HTTP 204 and the child SURVIVED, still holding the
+         deleted parent's sys_id, so the column answered
+         {'display_value': '', 'link': '.../x_casemgmt_case/<gone>'} - a
+         MANDATORY REFERENCE RESOLVING TO NOTHING. The row can never be
+         saved from its own form again (the mandatory field is
+         unfillable from a value that displays as blank), it is absent
+         from every case's Parties related list because no live parent
+         claims it, and "manual cleanup surfaces operator awareness" is
+         not what happens: the parent delete succeeds with no warning,
+         no message and no audit signal naming the children it
+         stranded.
+
+         WHAT THIS DELETES, AND WHAT IT DOES NOT. Cascade removes the
+         ASSOCIATION row on x_casemgmt_case_party and nothing else. The
+         `person` (sys_user) and `organization` (core_company) rows the
+         association points AT are untouched - they live in the global
+         identity and company tables, this application never owns them,
+         and AAP Section 0.3.2 forbids writing to them at all. The
+         earlier concern about "organization-typed parties that might be
+         cross-referenced elsewhere in the corporate graph" was
+         therefore misplaced: the corporate graph is on core_company,
+         which no cascade from this column can reach. What cascade
+         removes is exactly the case-to-party link that has no meaning
+         once the case is gone - which is what AAP Section 0.1.1 says
+         this table IS, a collapse of ArkCase's two ASSOCIATION tables
+         acm_person_assoc and acm_person_org_assoc, never a party
+         registry.
+
+         WHY `cascade` AND NOT ONE OF THE OTHER FOUR OPTIONS. The
+         platform offers none | clear | cascade | delete |
+         delete_no_workflow | restrict:
+           * `clear` leaves the child holding an EMPTY mandatory field -
+             still unsavable from its own form, and still in no related
+             list. It trades a dangling reference for a missing one.
+           * `restrict` refuses the parent delete while children exist,
+             which would REVOKE A GRANTED PRIVILEGE: AAP Section 0.5.6
+             gives x_casemgmt_case_manager Delete with no qualifier at
+             all.
+           * `delete_no_workflow` suppresses the children's own business
+             rules and audit on removal - the opposite of the visibility
+             the original rationale was reaching for.
+           * `delete` removes the child but does not continue down a
+             further cascade chain. It is equivalent here, because
+             x_casemgmt_case_party has no children of its own;
+             `cascade` is chosen for being the platform's canonical
+             expression of a parent-child composition and for remaining
+             correct if a grandchild table is ever added.
+
+         MEASURED after the change: a fixture case with one child task
+         and one child party was deleted (HTTP 204); both children were
+         then absent (HTTP 404 on direct read), and an orphan sweep over
+         the whole of x_casemgmt_case_party and x_casemgmt_case_task
+         returned zero rows whose `case` fails to resolve. A case with no
+         children still deletes cleanly, so the Delete grant is intact.
+         The sibling ../dictionary/x_casemgmt_case_task_case.xml carries
+         the same `cascade` value for the same reason, so the two
+         compositions behave identically.
 
     Semantic source-side reference (read-only, NOT byte-for-byte ported):
       - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
@@ -362,19 +404,25 @@
         sys_db_object.name, which is why ../tables/x_casemgmt_case.xml
         MUST be loaded BEFORE this dictionary entry per AAP Section
         0.5.2 ("Reference fields before referencing tables").
-      - reference_cascade_rule=none: per the agent prompt's explicit
-        "reference_cascade_rule=none" instruction. Functionally
-        equivalent to empty / no_action; means deleting a parent case
-        does NOT auto-cascade-delete its child parties. The POC default
-        prefers explicit "none" over the implicit empty value to
-        document the intent inside the Update Set XML for any future
-        maintainer who reads it. AAP does not specify a cascade rule
-        but the POC-safe default is "do nothing on referenced-record
-        deletion" - manual cleanup of orphaned parties is acceptable
-        and surfaces operator awareness rather than silent destructive
-        cascade. The sibling x_casemgmt_case_task_case.xml uses the
-        same "none" value for consistency across the three-table data
-        model.
+      - reference_cascade_rule=cascade: deleting a parent
+        x_casemgmt_case row deletes its child parties with it. This
+        SUPERSEDES the earlier `none` value, which QA finding F18 showed
+        leaves the child alive holding a MANDATORY reference to a row
+        that no longer exists - a state the child can never be saved out
+        of, and one that appears in no case's Parties related list
+        because no live parent claims it. Cascade removes only the
+        association row on this table; the `person` (sys_user) and
+        `organization` (core_company) rows it points at are global
+        identity records this application never owns and AAP Section
+        0.3.2 forbids writing to, so no cascade from this column can
+        reach them. The full option-by-option rationale, and why
+        `clear`, `restrict`, `delete_no_workflow` and `delete` were each
+        rejected, is in numbered note 5 of the header block above; in
+        short, `cascade` is the only value that leaves no
+        unrepresentable row behind WITHOUT revoking AAP Section 0.5.6's
+        unqualified manager Delete grant. The sibling
+        x_casemgmt_case_task_case.xml carries the same value, so the two
+        compositions behave identically.
       - reference_qual, reference_qual_condition (empty): no filter
         on which cases may be selected as the parent. Any active
         x_casemgmt_case row is eligible. AAP does not require filtering
@@ -532,7 +580,7 @@
         <read_only>false</read_only>
         <read_roles/>
         <reference display_value="" name="x_casemgmt_case">x_casemgmt_case</reference>
-        <reference_cascade_rule>none</reference_cascade_rule>
+        <reference_cascade_rule>cascade</reference_cascade_rule>
         <reference_floats>false</reference_floats>
         <reference_key/>
         <reference_qual/>

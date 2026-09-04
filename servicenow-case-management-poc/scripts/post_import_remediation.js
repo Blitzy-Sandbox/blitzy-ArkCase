@@ -294,29 +294,47 @@ var ROLE_MANAGER = 'x_casemgmt_case_manager';
 var ROLE_AGENT = 'x_casemgmt_case_agent';
 var ROLE_VIEWER = 'x_casemgmt_case_viewer';
 
-// The number of ACL -> role link records the package requires: 26 ACLs, of which
-// the `assigned_agent` field ACL needs two roles (manager AND the assigned
-// agent), so 25 x 1 + 1 x 2 = 27. This is an invariant, not a target to grow
-// into: a run that produces fewer links has failed to derive a mapping and is
-// reported as not converged rather than quietly shipping a partly-open
-// application. See rolesForAcl() for how each link is derived.
-var EXPECTED_ACL_ROLE_LINKS = 27;
-var EXPECTED_ACL_COUNT = 26;
+// The number of ACL -> role link records the package requires: 29 ACLs yielding
+// 36 links. 26 of the ACLs are the table-level and field-level set of AAP
+// Section 0.5.6, of which only the `assigned_agent` field ACL needs two roles
+// (manager AND the assigned agent), so 25 x 1 + 1 x 2 = 27. The remaining 3 are
+// the field-level `query_range` ACLs added for QA finding F17
+// (x_casemgmt_case.opened_date, x_casemgmt_case.closed_date,
+// x_casemgmt_case_task.due_date), each granted to all three roles because
+// query_range shapes the WHERE clause only and never decides which rows are
+// returned - that stays with each role's read ACL - so 3 x 3 = 9, for 36.
+// This is an invariant, not a target to grow into: a run that produces fewer
+// links has failed to derive a mapping and is reported as not converged rather
+// than quietly shipping a partly-open application. See rolesForAcl() for how
+// each link is derived.
+var EXPECTED_ACL_ROLE_LINKS = 36;
+var EXPECTED_ACL_COUNT = 29;
 
-// How those 27 links distribute across the three roles. Derived by reading the
-// `<roles>` element of all 26 ../acl/*.xml artifacts: the manager appears on
-// every table-level operation of all three tables (12) plus both field ACLs (2);
-// the agent on create/read/write of all three tables (9) plus the assigned_agent
-// field ACL (1); the viewer on read of all three tables (3).
+// How those 36 links distribute across the three roles. Derived by reading the
+// `<roles>` element of all 29 ../acl/*.xml artifacts: the manager appears on
+// every table-level operation of all three tables (12) plus both field ACLs (2)
+// plus the three query_range ACLs (3); the agent on create/read/write of all
+// three tables (9) plus the assigned_agent field ACL (1) plus the three
+// query_range ACLs (3); the viewer on read of all three tables (3) plus the
+// three query_range ACLs (3).
 //
 // This is a fail-closed cross-check on the DERIVATION, not just on the total: if
-// rolesForAcl() ever mapped an ACL to the wrong role the total could still be 27
+// rolesForAcl() ever mapped an ACL to the wrong role the total could still be 36
 // while the distribution moved, so both are asserted.
 var EXPECTED_ROLE_LINK_COUNTS = {
-    'x_casemgmt_case_manager': 14,
-    'x_casemgmt_case_agent': 10,
-    'x_casemgmt_case_viewer': 3
+    'x_casemgmt_case_manager': 17,
+    'x_casemgmt_case_agent': 13,
+    'x_casemgmt_case_viewer': 6
 };
+
+// The security operation whose ACLs must have their `operation` reference
+// resolved by name. AAP Sections 0.3.2 and 0.7.2 forbid hard-coded sys_ids in
+// ACL artifacts, so the three F17 records ship `<operation>query_range</operation>`
+// - the operation's NAME. For read/write/create/delete the name and the sys_id
+// are the same string, so those 26 rows import already resolved; query_range's
+// row has a real 32-hex sys_id, so an imported row holds an unresolvable
+// reference until it is looked up here. See resolveQueryRangeOperations().
+var QUERY_RANGE_OPERATION = 'query_range';
 
 // Name of the bootstrap Business Rule that WAS built to auto-execute this script
 // and has been REMOVED from the package (see the header) - kept here only so
@@ -444,7 +462,8 @@ var TABLE_SPECS = [
         plural: 'Case Tasks',
         displayField: 'subject',
         fields: [
-            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false, referenceCascadeRule: 'cascade' },
             { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
             { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
             { element: 'status', label: 'Status', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false, defaultValue: 'Open' },
@@ -458,7 +477,8 @@ var TABLE_SPECS = [
         plural: 'Case Parties',
         displayField: 'role_label',
         fields: [
-            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false, referenceCascadeRule: 'cascade' },
             { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false },
             { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
             { element: 'organization', label: 'Organization', type: 'reference', maxLength: '32', reference: 'core_company', mandatory: false, choice: '0', readOnly: false, display: false },
@@ -527,6 +547,15 @@ var DICTIONARY_ATTRIBUTES = [
     { column: 'max_length', spec: 'maxLength', kind: 'string' },
     { column: 'choice', spec: 'choice', kind: 'string' },
     { column: 'reference', spec: 'reference', kind: 'string' },
+    // Referential behaviour of a reference field when its TARGET row is deleted.
+    // Only the two child `case` fields declare it (referenceCascadeRule: 'cascade'),
+    // so deleting a case removes its tasks and parties instead of leaving children
+    // whose mandatory parent no longer exists - QA finding F18. Every other
+    // reference field in TABLE_SPECS omits the key, which makes the expectation the
+    // platform's own default of '' for assigned_group, assigned_agent, assigned_to,
+    // person and organization: a case is NOT deleted because a user or company row
+    // is, and those five must keep the default rather than inherit 'cascade'.
+    { column: 'reference_cascade_rule', spec: 'referenceCascadeRule', kind: 'string' },
     { column: 'default_value', spec: 'defaultValue', kind: 'string' },
     { column: 'mandatory', spec: 'mandatory', kind: 'bool' },
     { column: 'read_only', spec: 'readOnly', kind: 'bool' },
@@ -641,6 +670,8 @@ var STATS = {
     aclLinksAlready: 0,
     aclLinksReported: 0,
     aclsUnmapped: 0,
+    operationRefsResolved: 0,
+    operationRefsAlready: 0,
     securityCacheFlushes: 0,
     dictionaryCacheFlushes: 0,
     tableAccessRepaired: 0,
@@ -2987,6 +3018,69 @@ function describeCounts(counts) {
  * This is deliberately automated: leaving it as an operator instruction is the
  * difference between "the records exist" and "access control is enforced".
  */
+/**
+ * Resolve the `operation` reference on this application's `query_range` ACLs.
+ *
+ * `sys_security_acl.operation` is a reference to `sys_security_operation`, so
+ * the column holds the target's sys_id. For read, write, create and delete that
+ * row's sys_id is literally the operation name ("read", "write", ...), which is
+ * why the 26 ACLs of AAP Section 0.5.6 import already resolved. `query_range`
+ * is different: its row carries an ordinary 32-hex sys_id, so an artifact that
+ * complies with AAP Sections 0.3.2 and 0.7.2 - which forbid a hard-coded sys_id
+ * in an ACL - can only ship the NAME, and the imported row then holds a
+ * reference that does not resolve. Such a row is inert rather than dangerous
+ * (its Operation field renders blank and the grant does not participate), but
+ * inert is not what the package declares, so it is repaired here by the same
+ * lookup-by-key rule the rest of this script follows for users, groups and
+ * roles.
+ *
+ * Idempotent and narrow: it looks at this application's ACLs only, touches only
+ * rows whose `operation` is not already the resolved sys_id, and writes only
+ * that one column. A row already correct is counted, not rewritten.
+ *
+ * @param {string} scopeSysId the application scope, resolved by name
+ * @return {number} how many rows now hold the resolved reference
+ */
+function resolveQueryRangeOperations(scopeSysId) {
+    var op = new GlideRecord('sys_security_operation');
+    op.addQuery('name', QUERY_RANGE_OPERATION);
+    op.setLimit(1);
+    op.query();
+    if (!op.next()) {
+        logError('OPERATION|no sys_security_operation row named ' + QUERY_RANGE_OPERATION +
+            ' - query_range ACLs cannot be resolved on this release');
+        return 0;
+    }
+    var opSysId = op.getUniqueValue();
+
+    // Both spellings are selected: the unresolved name as shipped, and the
+    // resolved sys_id, so the count reported below is the total in the correct
+    // state rather than only the rows this run had to change.
+    var acl = new GlideRecord('sys_security_acl');
+    acl.addQuery('sys_scope', scopeSysId);
+    acl.addQuery('operation', 'IN', QUERY_RANGE_OPERATION + ',' + opSysId);
+    acl.query();
+    var resolved = 0;
+    while (acl.next()) {
+        if (acl.getValue('operation') === opSysId) {
+            STATS.operationRefsAlready++;
+            resolved++;
+            continue;
+        }
+        acl.setValue('operation', opSysId);
+        if (acl.update()) {
+            STATS.operationRefsResolved++;
+            resolved++;
+            log('OPERATION|resolved ' + acl.getValue('name') + ' operation=' +
+                QUERY_RANGE_OPERATION + ' -> ' + opSysId);
+        } else {
+            logError('OPERATION|failed to resolve operation on ACL ' + acl.getValue('name') +
+                ' - security_admin elevation is required to write sys_security_acl');
+        }
+    }
+    return resolved;
+}
+
 function flushSecurityCache() {
     try {
         GlideSecurityManager.get().reset();
@@ -3280,6 +3374,31 @@ function verifyRemediation(scopeSysId) {
     if (aclCount !== EXPECTED_ACL_COUNT) {
         problems.push('found ' + aclCount + ' ' + SCOPE_NAME + ' ACLs, expected ' + EXPECTED_ACL_COUNT);
     }
+
+    // Every query_range ACL must hold a RESOLVED operation reference. A row that
+    // still holds the shipped name grants nothing at all, so it is reported as
+    // unresolved rather than counted as present. Read back from the database,
+    // not from what resolveQueryRangeOperations() believes it wrote.
+    var opRow = new GlideRecord('sys_security_operation');
+    opRow.addQuery('name', QUERY_RANGE_OPERATION);
+    opRow.setLimit(1);
+    opRow.query();
+    var opSysId = opRow.next() ? opRow.getUniqueValue() : '';
+    var unresolvedOps = 0;
+    var resolvedOps = 0;
+    var opAcl = new GlideRecord('sys_security_acl');
+    opAcl.addQuery('sys_scope', scopeSysId);
+    opAcl.addQuery('operation', 'IN', QUERY_RANGE_OPERATION + ',' + opSysId);
+    opAcl.query();
+    while (opAcl.next()) {
+        if (opSysId && opAcl.getValue('operation') === opSysId) {
+            resolvedOps++;
+        } else {
+            unresolvedOps++;
+            problems.push('ACL ' + opAcl.getValue('name') + ' still holds an unresolved ' +
+                QUERY_RANGE_OPERATION + ' operation reference, so its grant is inert');
+        }
+    }
     if (wantCount !== EXPECTED_ACL_ROLE_LINKS) {
         problems.push('the ACL set derives ' + wantCount + ' role links, expected exactly ' +
             EXPECTED_ACL_ROLE_LINKS + ' - the derivation itself disagrees with the package');
@@ -3537,11 +3656,18 @@ function remediateUnderLease(scopeSysId, started) {
     }
     log('DEFECT_7|service_ids_written=' + STATS.serviceIdsSet + '|service_ids_already_correct=' + STATS.serviceIdsAlready);
 
-    // ---- Defect 9: ACL role links + security cache flush -------------------
+    // ---- Defect 9: ACL operation references, role links, cache flush -------
+    // The operation reference is resolved BEFORE the links and before the flush:
+    // an ACL whose operation does not resolve grants nothing, so repairing it
+    // after the cache flush would leave the grant inert until the next flush.
+    var operationsResolved = resolveQueryRangeOperations(scopeSysId);
     var links = ensureAllAclRoleLinks(scopeSysId);
     var linkTotal = links.total;
     flushSecurityCache();
-    log('DEFECT_9|links_created=' + STATS.aclLinksCreated + '|links_already_present=' + STATS.aclLinksAlready +
+    log('DEFECT_9|query_range_operations_resolved=' + STATS.operationRefsResolved +
+        '|query_range_operations_already_correct=' + STATS.operationRefsAlready +
+        '|query_range_acls_in_correct_state=' + operationsResolved +
+        '|links_created=' + STATS.aclLinksCreated + '|links_already_present=' + STATS.aclLinksAlready +
         '|installer_owned_links_removed=' + STATS.aclLinksRemoved +
         '|foreign_links_reported_not_removed=' + STATS.aclLinksReported +
         '|links_total=' + linkTotal + '|links_expected=' + EXPECTED_ACL_ROLE_LINKS +
@@ -3575,6 +3701,7 @@ function remediateUnderLease(scopeSysId, started) {
         '|acl_links_created=' + STATS.aclLinksCreated + '|acl_links_already=' + STATS.aclLinksAlready +
         '|acl_links_removed_mine=' + STATS.aclLinksRemoved +
         '|acl_links_reported_not_mine=' + STATS.aclLinksReported +
+        '|query_range_ops_resolved=' + resolvedOps + '|query_range_ops_unresolved=' + unresolvedOps +
         '|acl_links_total=' + linkTotal + '|acl_links_expected=' + EXPECTED_ACL_ROLE_LINKS +
         '|security_cache_flushed=' + (STATS.securityCacheFlushes > 0) +
         '|lease=' + LEASE_NAME + '|lease_held_during_run=' + (LEASE.acquiredAt || 'no') +

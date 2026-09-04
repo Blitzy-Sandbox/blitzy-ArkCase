@@ -54,7 +54,7 @@ Referenced contracts live in `docs/data-model.md`, `docs/acl-matrix.md`, `docs/s
 >
 > **Every test in this suite fails, and most fail meaninglessly, if the post-import remediation has not been run.**
 > A commit alone leaves the three tables as dictionary metadata with **no physical storage** (so every insert
-> fails with `invalid table name` and the whole of Scenario A collapses) and leaves the 26 ACLs with **0 of their
+> fails with `invalid table name` and the whole of Scenario A collapses) and leaves the 29 ACLs with **0 of their
 > 27 `sys_security_acl_role` link rows** (so on a high-security instance every ACL evaluates to *deny* and the
 > RBAC assertions measure nothing but the absence of grants). Do not attempt to interpret a red suite until P1a
 > and P1b below both hold.

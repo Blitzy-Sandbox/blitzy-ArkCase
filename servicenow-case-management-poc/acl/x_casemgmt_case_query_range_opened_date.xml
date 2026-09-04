@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the FIELD-LEVEL QUERY_RANGE ACL
+    that grants the three scoped roles (`x_casemgmt_case_manager`,
+    `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`) the right to use a RANGE
+    predicate on `x_casemgmt_case.opened_date` inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS RECORD EXISTS (QA finding F17)
+    =======================================
+    ServiceNow evaluates a separate security operation, `query_range`, whenever a
+    query compares a column against a boundary rather than a value - `>`, `<`,
+    `>=`, `<=`, BETWEEN, and every relative-date operator the condition builder
+    offers ("at or after", "before", "last 30 days", "on or before"). It is a
+    real row in sys_security_operation on this release, it is NOT one of the four
+    operations AAP Sections 0.3.1 and 0.5.6 enumerate (read / write / create /
+    delete), and this instance runs with `glide.sm.default_mode = 'deny'`.
+    No ACL in the x_casemgmt scope granted it before this record was authored
+    (measured: zero query_range ACLs in scope), and this instance runs with
+    `glide.sm.default_mode = 'deny'`.
+
+    CORRECTION TO AN EARLIER READING OF THE INSTANCE
+    ================================================
+    An earlier revision of this header stated that zero query_range ACLs existed
+    instance-wide. That was an artifact of querying sys_security_acl by the
+    operation NAME. The column is a reference and stores the operation's sys_id,
+    which for read/write/create/delete happens to equal the name but for
+    query_range is e66cf897b7300210240b06dd1e11a9fd. Re-measured by sys_id, the
+    base system ships SEVEN query_range ACLs, four of them on `*.*`:
+      - `*.*` 052f3a92a3102210103da1fdc31e6125 - "Deny query_range for all fields
+        in all tables, unless users satisfy the conditions of the Security
+        Attribute UserIsAuthenticated" (no role required)
+      - `*.*` 5c3e8c50935502102504ff92f189187c - "block query_range ... by default"
+      - `*.*` 7fce54b64ff42210ee1a3c11b1ce0b97 - "Allow ... by a user with
+        query_range_role role and rights to read"
+      - `*.*` eb94784c2bc16210b020f9806e91bf62
+      - plus ast_contract.starts, sys_portal_preferences.*,
+        sys_one_extend_eval_applicability.*, on_call_escalation_con_attempt.*,
+        sn_actsub_activitytype_template_field.*, asmt_assessment_instance_question.*
+
+    WHAT RE-VERIFICATION MEASURED AFTER THIS RECORD WAS APPLIED
+    ==========================================================
+    The reported symptom no longer occurs: as each of the three demo personas, a
+    range predicate on this column returns HTTP 200 with rows (manager 13,
+    agent 11 - its assigned subset - viewer 13) and the rendered list shows a
+    normal pager with NO ACL banner (checked four ways: the page text contains
+    neither "insufficient access" nor "query_range" nor "has been ignored", and
+    the only matches for `.outputmsg, #output_messages, [role=alert], .alert` are
+    two permanently-empty `outputmsg_hide` containers).
+
+    Causality, stated honestly: a differential probe run in the same sessions
+    could NOT attribute that behaviour to this record. Range predicates on
+    columns with NO field-level query_range ACL behave identically for the same
+    personas - `number > CASE9000005` returned exactly its 5 matching rows,
+    `subject > M` exactly its 3 (manager) / 2 (agent), and
+    `sys_created_on >= 2026-01-01` and `sys_updated_on >= 2026-01-01` each
+    returned the caller's full readable set - and the list rendered for a
+    non-ACL'd column carried no banner either. On this instance, in this state,
+    the `*.*` UserIsAuthenticated grant above appears to admit range predicates
+    for any authenticated caller, and the most probable cause of the state QA
+    measured is ACL/dictionary cache inconsistency following the native
+    table/role-link rebuild that the same QA checkpoint was exercising - any ACL
+    write flushes that cache, which is what deploying this record did.
+
+    This record is therefore retained as an EXPLICIT SCOPED GRANT rather than as
+    a proven repair: it makes the range filtering that AAP Section 0.5.6's
+    "Read - All" implies independent of the instance's default query_range
+    posture, and it was measured not to widen disclosure (the agent still sees
+    only its 11 assigned cases through a range filter, and the two unassigned
+    seeded cases stay invisible to it).
+
+    HOW THE `operation` REFERENCE IS RESOLVED ON IMPORT
+    ==================================================
+    The payload below carries the human-readable operation NAME `query_range`
+    rather than e66cf897b7300210240b06dd1e11a9fd, because AAP Sections 0.3.2 and
+    0.7.2 prohibit hard-coded sys_id references anywhere, ACLs included, and
+    require every cross-reference to be resolved by GlideRecord lookup against a
+    stable human-readable key. scripts/post_import_remediation.js performs that
+    lookup (sys_security_operation by name) and writes the resolved sys_id onto
+    this row, exactly as it already resolves users by user_name, groups by name
+    and roles by name. A row left un-normalised is inert rather than dangerous:
+    its Operation field renders blank on the ACL form and the grant simply does
+    not participate. The live instance carries the resolved reference, verified
+    reading back operation.display_value = "query_range".
+
+    QA measured the manager persona building the condition `Opened Date`
+      `at or after` `2026-01-01 00:00:00` on /x_casemgmt_case_list.do and
+      receiving 0 rows, no pager count, and this verbatim 143-character
+      banner inside an HTTP 200 page:
+          Part of the query on x_casemgmt_case has been ignored because of
+          insufficient access for 'query_range' operation on
+          x_casemgmt_case.opened_date
+      Over the Table API the same predicate answered HTTP 403
+      {"message":"Insufficient rights to query records","detail":"Field(s)
+      present in the query do not have permission to be read"}, while an
+      equality filter (status=Draft) and an ORDER BY on the same column both
+      succeeded - isolating the refusal to the query_range operation itself.
+
+    The consequence is worse than an error, because the refusal is partial: the
+    platform DROPS the offending predicate and runs the rest of the query, so the
+    caller is shown a result set that silently answers a different question than
+    the one they asked. AAP Section 0.5.6 grants the manager "Read - All"; a range
+    predicate on a column the manager may read must therefore return the matching
+    rows.
+
+    WHAT THIS RECORD COVERS
+    =======================
+    Granting query_range on x_casemgmt_case.opened_date restores
+      the internal case list's "Opened Date" condition ("at or after", "before", "between", "last 30 days"),
+      the Manager View widget "Cases Opened in Last 30 Days" and its
+      drill-down into that same list, and any report or dashboard
+      condition that compares opened_date against a boundary.
+
+    WHY ALL THREE ROLES
+    ===================
+    query_range is a QUERY-shaping right, not a data-disclosure right: it decides
+    whether a predicate is allowed to participate in the WHERE clause, never which
+    rows come back. Row-level disclosure remains entirely governed by the read
+    ACLs authored for each role:
+      - `x_casemgmt_case_manager` - Read All per AAP Section 0.5.6, so a range
+        filter returns every matching row.
+      - `x_casemgmt_case_agent` - Read "Assigned only", so a range filter returns
+        the intersection of the range and the agent's own set. Measured after this
+        record was applied: the same filter that returns every matching case for
+        the manager returns only the agent's subset for the agent.
+      - `x_casemgmt_case_viewer` - Read All per AAP Section 0.5.6 (an audit role
+        whose whole purpose is to look at the data), so a range filter returns
+        every matching row and no write of any kind is permitted.
+    Withholding the operation from a role would not narrow what that role can see;
+    it would only leave that role's date filters silently answering the wrong
+    question, which is the defect this record closes.
+
+    Each role is linked through its own `sys_security_acl_role` row (this release
+    stores ACL role grants in that m2m table, not in a column on
+    sys_security_acl); the `<roles>` element below is retained for consistency
+    with every other ACL artifact in ../acl/ and states the same three grants in
+    human-readable form.
+
+    AAP cross-references:
+      - Section 0.5.6 (ACL Matrix): manager "Read - All", viewer "Read - All",
+        agent "Read - Assigned only". This record makes those three grants usable
+        with a date range and changes none of them.
+      - Section 0.7.3 Gate 3 (ACLs): "case_viewer cannot write; case_agent cannot
+        access unassigned cases; case_manager has full access". Re-verified after
+        this record was applied, with the range filter in place.
+      - Section 0.3.1 (Exhaustively In Scope) authorises table-level and
+        field-level ACL records under `servicenow-case-management-poc/acl/`. This
+        is a field-level ACL on a scoped column of a scoped table; no global ACL
+        is touched and no global record is modified.
+      - Section 0.7.2 (Scoped-namespace-only constraint): sys_scope and
+        sys_package resolve to the x_casemgmt scoped application; `<name>`
+        references the scoped column x_casemgmt_case.opened_date; `<roles>`
+        references the three scoped roles by name.
+
+    Field configuration and why it is what it is:
+      - type = record: a row/field security rule, evaluated by the ACL engine on
+        table data (the same type the 26 pre-existing scoped ACLs use).
+      - operation = query_range: the operation the platform actually refused. A
+        `read` grant does not imply it, which is exactly why the column was
+        readable, sortable and equality-filterable while a range predicate was
+        dropped.
+      - name = x_casemgmt_case.opened_date: field-level (table.column). The
+        platform's own refusal message names the column, so the grant is authored
+        at the column it names rather than table-wide - the minimum that closes
+        the finding.
+      - advanced = false, condition empty, script empty: there is no per-row
+        predicate to evaluate. The three role grants are the whole admission test,
+        and row-level filtering is already done by the read ACLs. An advanced
+        script here would run once per query and decide nothing.
+      - admin_overrides = true: the platform `admin` role bypasses this ACL, the
+        same as every sibling record in ../acl/. (Admin never needed it: the
+        identical range query always succeeded for admin, which is how the
+        refusal was isolated to the ACL layer.)
+      - active = true: in force as soon as the Update Set commits.
+      - sys_id: deterministic, MD5 of the canonical identifier
+        "x_casemgmt_case.opened_date.query_range" - this record's own primary key,
+        not a cross-reference. Stable across fresh PDIs and round-trip previews
+        per AAP Section 0.7.3 Gate 7.
+
+    Cross-dependencies and Update-Set ordering (AAP Section 0.5.2):
+      MUST be loaded AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scope authority for
+          sys_scope / sys_package)
+        - ../tables/x_casemgmt_case.xml (resolves the table half of <name>)
+        - ../dictionary/x_casemgmt_case_opened_date.xml (resolves the column half)
+        - ../roles/sys_user_role_x_casemgmt_case_manager.xml,
+          ../roles/sys_user_role_x_casemgmt_case_agent.xml and
+          ../roles/sys_user_role_x_casemgmt_case_viewer.xml (resolve <roles>)
+      MUST be loaded BEFORE:
+        - ../reports/*.xml and ../dashboards/*.xml, whose date-bounded filters and
+          drill-downs depend on this operation being granted
+        - ../seed-data/**/*.xml, so any post-seed verification that filters by date
+          sees the grant in place
+
+    NOTE FOR THE DEPLOYMENT SCRIPT (../scripts/post_import_remediation.js): this
+    record and its two siblings raise the scoped ACL count from 26 to 29 and the
+    sys_security_acl_role count from 27 to 36 (three roles x three new ACLs). The
+    installer's EXPECTED_ACL_COUNT and EXPECTED_ACL_ROLE_LINKS constants must be
+    updated to 29 and 36 respectively, and the role links for this record are
+    (x_casemgmt_case.opened_date, x_casemgmt_case_manager),
+    (x_casemgmt_case.opened_date, x_casemgmt_case_agent) and
+    (x_casemgmt_case.opened_date, x_casemgmt_case_viewer).
+
+    The concrete scope identifier `casemgmt` is used verbatim per AAP convention.
+    ServiceNow Update Set imports use a standard XML parser, so the scope id is
+    concrete in the XML before export, and the same identifier is used
+    consistently across every artifact in this scoped application.
+-->
+<record_update table="sys_security_acl">
+    <sys_security_acl action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <admin_overrides>true</admin_overrides>
+        <advanced>false</advanced>
+        <condition/>
+        <description>Field-level ACL granting the query_range operation on x_casemgmt_case.opened_date to x_casemgmt_case_manager, x_casemgmt_case_agent and x_casemgmt_case_viewer. Authored for QA finding F17, which reported every range predicate on this column (&gt;, &lt;, BETWEEN, 'at or after', 'last 30 days') being dropped from the query for non-admin callers - 0 rows plus a server ACL banner naming the query_range operation inside an HTTP 200 list page, and HTTP 403 'Insufficient rights to query records' over the Table API. Retained as an explicit scoped grant rather than a proven repair: re-verification could not reproduce the refusal, and a differential probe measured no difference against columns carrying no such ACL, so this record makes the range filtering implied by AAP Section 0.5.6 'Read - All' independent of the instance's default query_range posture. query_range shapes the query only; which rows are returned remains governed by each role's read ACL, so the agent still sees just its assigned set.</description>
+        <name>x_casemgmt_case.opened_date</name>
+        <operation>query_range</operation>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
+        <script/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a76cdd65e47612e82ec81a0ba19bc7c8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case.opened_date</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_security_acl_x_casemgmt_case_query_range_opened_date</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>record</type>
+    </sys_security_acl>
+</record_update>

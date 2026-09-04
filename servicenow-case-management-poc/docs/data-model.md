@@ -159,6 +159,7 @@ The case-task table replicates ArkCase's `acm_task` (mapped to the `AcmTask.java
 
 - Optional auto-numbering with prefix `TASK` and zero-padded width of 7 digits → format `TASK0000001`.
 - The number record file is [`../numbers/sys_number_x_casemgmt_case_task.xml`](../numbers/sys_number_x_casemgmt_case_task.xml).
+- The field is **Read-only** at the dictionary level ([`../dictionary/x_casemgmt_case_task_number.xml`](../dictionary/x_casemgmt_case_task_number.xml)), matching `x_casemgmt_case.number`. The platform's number generator and server-side scripts are exempt from dictionary read-only enforcement, so the column is still populated on insert; what read-only prevents is a caller overwriting an issued number — which was reachable before, and could produce two rows sharing one number. `mandatory` stays `false`, because the generator supplies the value server-side and a mandatory flag would break any `GlideRecord.insert()` that omits it.
 
 ## Table 3: x_casemgmt_case_party
 
@@ -178,9 +179,15 @@ The case-party table is a polymorphic association table that collapses ArkCase's
 | --- | --- | --- | --- |
 | `party_type` | Person, Organization | (no default) | [`../choices/sys_choice_case_party_party_type.xml`](../choices/sys_choice_case_party_party_type.xml) |
 
+### Auto-numbering
+
+- Optional auto-numbering with prefix `PARTY` and zero-padded width of 7 digits → format `PARTY0000001`.
+- The number record file is [`../numbers/sys_number_x_casemgmt_case_party.xml`](../numbers/sys_number_x_casemgmt_case_party.xml).
+- The field is **Read-only** at the dictionary level ([`../dictionary/x_casemgmt_case_party_number.xml`](../dictionary/x_casemgmt_case_party_number.xml)), for the same reason and with the same generator exemption as the task table's `number` described above.
+
 ### Conditional Field Visibility (UI Policy)
 
-The single-table polymorphism is implemented via a UI Policy that conditionally shows the appropriate reference field based on `party_type`. The policy lives at [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml).
+The single-table polymorphism is implemented via a UI Policy that conditionally shows the appropriate reference field based on `party_type`. The policy lives at [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml). The policy governs the **form** only; the same exactly-one-of invariant is enforced on every other write path by [`x_casemgmt_validate_case_party_integrity`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) — see [Server-Side Enforcement of the Schema Contract](#server-side-enforcement-of-the-schema-contract) below.
 
 | When `party_type =` | Show field | Hide field | Mandatory field |
 | --- | --- | --- | --- |
@@ -210,10 +217,43 @@ The three tables form a parent-child hierarchy with `x_casemgmt_case` as the roo
 
 | Parent | Child | Foreign Key | Cascade Behavior |
 | --- | --- | --- | --- |
-| `x_casemgmt_case` | `x_casemgmt_case_task` | `x_casemgmt_case_task.case` | No cascade-delete; tasks are not auto-deleted when case is deleted (manager must delete children explicitly) |
-| `x_casemgmt_case` | `x_casemgmt_case_party` | `x_casemgmt_case_party.case` | No cascade-delete; parties are not auto-deleted when case is deleted |
+| `x_casemgmt_case` | `x_casemgmt_case_task` | `x_casemgmt_case_task.case` | `reference_cascade_rule = cascade` — deleting a case deletes its child tasks with it |
+| `x_casemgmt_case` | `x_casemgmt_case_party` | `x_casemgmt_case_party.case` | `reference_cascade_rule = cascade` — deleting a case deletes its child parties with it |
+
+Both child links are **compositions**, not associations: a task and a party have no meaning outside the case they belong to, and `case` is Mandatory on both. The rule was previously `none`, which left a deleted parent's children alive holding a mandatory reference that resolved to nothing — a row that can never be saved from its own form and that silently distorts the Tasks/Parties related lists, the Agent Workspace "My overdue tasks" report and the task-closure gate, all of which reach a child *through* `case`.
+
+`cascade` was chosen over the four alternatives the platform offers:
+
+| Option | Why not |
+| --- | --- |
+| `clear` | Leaves the child with an **empty** mandatory `case` — still unsavable from its own form, still in no related list |
+| `restrict` | Refuses the parent delete while children exist, which would **revoke** the unqualified `Delete` that [`acl-matrix.md`](./acl-matrix.md) grants `x_casemgmt_case_manager` |
+| `delete_no_workflow` | Suppresses the children's own business rules and audit on removal |
+| `delete` | Equivalent here (neither child table has children of its own); `cascade` is the platform's canonical composition rule and stays correct if a grandchild table is ever added |
+
+Cascade removes only rows on the two child tables. The `person` (`sys_user`) and `organization` (`core_company`) records a party points *at* are global identity records this application never owns and AAP Section 0.3.2 forbids writing to, so no cascade from `case_party.case` can reach them. The reference fields `case.assigned_group`, `case.assigned_agent`, `case_task.assigned_to`, `case_party.person` and `case_party.organization` correctly carry **no** cascade rule: those are associations to global records, and deleting a group or a user must never delete the cases assigned to it.
 
 Related Lists are configured on the case form to surface the child records (Tasks and Parties) inline with the parent case. Each related list uses the platform's standard list view; no custom related-list scripts are required.
+
+## Server-Side Enforcement of the Schema Contract
+
+The `Mandatory` and `Conditional` cells in the three schema tables above are **dictionary metadata**, and dictionary metadata is enforced by the FORM engine — not by the insert/update pipeline. Every non-form write path (the Table API, a background script, an Import Set transform, a scoped Script Include, an inbound email action) bypasses it. Three before-insert/before-update Business Rules make the contract true of stored **rows** rather than only of metadata:
+
+| Rule | Table | Order | Refuses |
+| --- | --- | --- | --- |
+| [`x_casemgmt_validate_case_mandatory_fields`](../business_rules/x_casemgmt_validate_case_mandatory_fields.xml) | `x_casemgmt_case` | 50 | an empty or whitespace-only `subject`, `description` or `requester_name` |
+| [`x_casemgmt_validate_case_task_integrity`](../business_rules/x_casemgmt_validate_case_task_integrity.xml) | `x_casemgmt_case_task` | 100 | an empty `case`, a `case` that does not resolve to a live row, or an empty `subject` / `assigned_to` / `due_date` |
+| [`x_casemgmt_validate_case_party_integrity`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) | `x_casemgmt_case_party` | 100 | an empty or unresolvable `case`, an empty `role_label`, an empty or undeclared `party_type`, a missing required `person`/`organization`, or both references populated at once |
+
+Each refusal calls `gs.addErrorMessage()` with a message naming the offending field and then `current.setAbortAction(true)`, so the failure surfaces as a blocking red banner at the top of the form (per AAP Section 0.7.1) and the Table API answers **HTTP 403** with the rule named in `error.detail`. None of the three reproduces any of the four verbatim messages AAP Section 0.7.4 fixes; those belong to [`state-machine.md`](./state-machine.md)'s rules and to the portal Script Include.
+
+All three rules read the value the row **would carry after** the write, so an update that touches an unrelated column passes untouched. All three return early on `current.isActionAborted()`, so a save an earlier rule already rejected never collects a second, unrelated message. None fires on `delete`, so the cascade rules above and the manager's unqualified `Delete` grant are both untouched.
+
+### The one normalisation: party-type conversion
+
+`x_casemgmt_validate_case_party_integrity` has a single case where it **corrects** the row instead of refusing it. The UI Policy in [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) hides the inapplicable reference field but has no clear action, and the classic form posts hidden, non-disabled inputs verbatim. So converting a party from Organization to Person on the form submits `party_type=Person`, the newly chosen `person`, **and** the stale `organization` together. Refusing that write would make a legitimate conversion impossible through the only internal UI AAP Section 0.4.4 provides, and the caller could not comply with the refusal either — the field they are told to empty is not on their screen.
+
+Therefore, when a write is an **update** that itself changes `party_type` to a different non-empty value and the newly applicable reference is populated, the rule clears the now-inapplicable reference, records a `gs.info` audit line naming the record and the cleared column, and lets the save proceed. An **insert** carrying both references, and an update that sets the wrong reference without changing `party_type`, are both still refused. The stored row satisfies the exactly-one-of invariant on every path.
 
 ## Platform Audit Fields
 
@@ -264,8 +304,10 @@ The following schema-level constraints are non-negotiable per AAP Section 0.7.1:
 
 - **Field set is non-negotiable.** No additions, no renames, no type relaxations beyond what is in AAP Section 0.5.7.
 - **Choice values are non-negotiable.** Each Choice field's values match the user prompt verbatim.
-- **Mandatory flags are non-negotiable.** Every "Mandatory" cell in the schema tables MUST result in `mandatory = true` on the dictionary entry.
-- **Auto-numbering format `CASE0000001` is non-negotiable.** Per AAP Section 0.7.4.
+- **Mandatory flags are non-negotiable.** Every "Mandatory" cell in the schema tables MUST result in `mandatory = true` on the dictionary entry — AND in a server-side refusal of any write that would store the column empty, because the dictionary flag alone is enforced only by the form engine. See [Server-Side Enforcement of the Schema Contract](#server-side-enforcement-of-the-schema-contract).
+- **Conditional flags are non-negotiable.** `person` and `organization` form an exactly-one-of pair keyed on `party_type`: exactly one is populated on every stored row, never both and never neither.
+- **Auto-numbering format `CASE0000001` is non-negotiable.** Per AAP Section 0.7.4. All three `number` columns are Read-only at the dictionary level, so an issued number cannot be overwritten or duplicated by any caller.
+- **Both parent-child links cascade on delete.** `case_task.case` and `case_party.case` carry `reference_cascade_rule = cascade`, so no delete can leave a child holding a mandatory reference that resolves to nothing.
 - **Reference targets are non-negotiable.** `sys_user_group`, `sys_user`, `core_company`, `x_casemgmt_case` are the EXACT reference targets.
 - **No hard-coded `sys_id`s** in any seed data — references resolved by `name`/`user_name`/`number` lookup.
 - **Single-table polymorphism for case_party** — one table, not two; `party_type` Choice plus conditional fields.
@@ -285,7 +327,13 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 3. Open `x_casemgmt_case_task` → confirm 6 fields. Confirm reference targets and Mandatory flags.
 4. Open `x_casemgmt_case_party` → confirm 5 fields. Confirm `party_type` Choice values, conditional `person`/`organization` reference targets.
 5. Open the `x_casemgmt_case_party_conditional_fields` UI Policy → confirm conditional show/hide rules.
-6. Open [`../numbers/sys_number_x_casemgmt_case.xml`](../numbers/sys_number_x_casemgmt_case.xml) → confirm format `CASE0000001` and Read-only flag on the field.
+6. Open [`../numbers/sys_number_x_casemgmt_case.xml`](../numbers/sys_number_x_casemgmt_case.xml) → confirm format `CASE0000001` and Read-only flag on the field. Confirm the same Read-only flag on `x_casemgmt_case_task.number` and `x_casemgmt_case_party.number`; on any of the three, `PATCH /api/now/table/<table>/<sys_id> {"number":"<a value another row holds>"}` must answer HTTP 200 with the value **discarded** and a query on that number must return exactly one row.
+7. Confirm the mandatory contract holds on rows, not only on metadata. Each of these writes must answer **HTTP 403** naming the responsible rule and leave no row behind:
+   - `POST /api/now/table/x_casemgmt_case {}`
+   - `POST /api/now/table/x_casemgmt_case_task` with a `case` that does not exist, and again with an empty `case`
+   - `POST /api/now/table/x_casemgmt_case_party` with `party_type=Person` and no `person`; with **both** `person` and `organization`; and with neither and no `party_type`
+   A fully populated insert on each of the three tables must still answer HTTP 201.
+8. Confirm the cascade. Create a case, attach one task and one party, `DELETE` the case → HTTP 204, and both children must then read HTTP 404. Sweep both child tables for any row whose `case` is empty or does not resolve → zero rows. A case with no children must still delete cleanly, so the manager's `Delete` grant is intact.
 
 ## Cross-References
 
@@ -298,4 +346,5 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 - [`../dictionary/`](../dictionary/) — every dictionary entry for every field.
 - [`../choices/`](../choices/) — every choice list record.
 - [`../numbers/`](../numbers/) — auto-numbering records.
-- [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) — UI Policy for case_party.
+- [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) — UI Policy for case_party (form layer).
+- [`../business_rules/x_casemgmt_validate_case_mandatory_fields.xml`](../business_rules/x_casemgmt_validate_case_mandatory_fields.xml), [`../business_rules/x_casemgmt_validate_case_task_integrity.xml`](../business_rules/x_casemgmt_validate_case_task_integrity.xml), [`../business_rules/x_casemgmt_validate_case_party_integrity.xml`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) — the server-side enforcement of the Mandatory, referential and Conditional cells in the schema tables above.

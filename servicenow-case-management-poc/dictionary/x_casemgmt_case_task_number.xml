@@ -32,6 +32,42 @@
     rebuild and replayed into the platform verbatim. Only statements about HOW the
     record was authored are superseded.
 
+    READ-ONLY (`<read_only>true</read_only>`) - QA finding F16:
+    The platform's number-maintenance machinery created this column with
+    read_only=false, the platform default, and the value shipped that way. The
+    equivalent column on the parent table, ../dictionary/x_casemgmt_case_number.xml,
+    carries read_only=true per AAP Section 0.7.4 ("the case `number` field MUST use
+    format CASE0000001 and be Read-only"), so the three tables disagreed on whether an
+    auto-issued identifier is writable.
+
+    MEASURED consequence before this change:
+        PATCH /api/now/table/x_casemgmt_case_task/<sys_id> {"number":"TASK9000001"}
+          -> HTTP 200, and a query on that number then returned TWO rows.
+    An auto-number could be overwritten with a value another row already held, so the
+    counter's uniqueness guarantee was advisory only. The same PATCH against
+    x_casemgmt_case answered 200 with the value silently DISCARDED - the correct
+    behaviour, and the one this record now matches. `number` also rendered as an
+    editable widget on the task and party forms while being read-only on the case form.
+
+    Why this matters beyond tidiness: AAP Section 0.5.2 makes the human-readable key
+    the ONLY admissible way to resolve a cross-reference ("look up x_[scope]_case by
+    number", and correspondingly for the child tables), and ../scripts/seed_demo_data.js
+    plus every seed artifact resolve references that way rather than by sys_id. A key
+    that any caller can rewrite - or duplicate - is not a key. There is no security
+    consequence on the anonymous portal, which reads only the CASE number, and that is
+    why F16 is filed LOW; the defect is the internal inconsistency and the loss of the
+    uniqueness guarantee.
+
+    read_only=true does NOT prevent the platform from populating the column:
+    ServiceNow exempts the auto-number generator and server-side Business Rule scripts
+    from dictionary read_only enforcement, which is exactly how the parent table's
+    read-only `number` is populated today. `mandatory` stays false for the same reason
+    it is false on the parent: the generator supplies the value server-side on insert,
+    and making it mandatory would break any GlideRecord.insert() that omits it.
+
+    MEASURED after this change: the duplicate-number PATCH answers 200 with the value
+    discarded, and a query on the target number returns exactly one row.
+
     NEW ARTIFACT: the pre-refine package carried no serialized definition for this
     record - the platform's own table/number machinery created it on the instance,
     which is precisely the class of side effect the hand-authored XML bypassed. It is
@@ -87,7 +123,7 @@
         <name>x_casemgmt_case_task</name>
         <next_element/>
         <primary>false</primary>
-        <read_only>false</read_only>
+        <read_only>true</read_only>
         <read_roles/>
         <reference/>
         <reference_cascade_rule/>
