@@ -3386,7 +3386,32 @@ function verifyRemediation(scopeSysId) {
         ',by_role=' + describeCounts(livePairs.byRole) + '}');
 
     if (aclCount !== EXPECTED_ACL_COUNT) {
-        problems.push('found ' + aclCount + ' ' + SCOPE_NAME + ' ACLs, expected ' + EXPECTED_ACL_COUNT);
+        var aclProblem = 'found ' + aclCount + ' ' + SCOPE_NAME + ' ACLs, expected ' +
+            EXPECTED_ACL_COUNT;
+        // The one shortfall that is a KNOWN PROPERTY OF THE SHIPPED PACKAGE rather
+        // than a failure of this run, named so an operator does not debug the
+        // wrong thing. The elected fallback that ships
+        // (update-set/x_casemgmt_case_management_update_set.xml, sha256
+        // 7292a6fe...) carries 26 sys_security_acl payloads: it does NOT carry
+        // the three field-level query_range ACLs on x_casemgmt_case.opened_date,
+        // x_casemgmt_case.closed_date and x_casemgmt_case_task.due_date. A clean
+        // instance that committed those bytes therefore converges at 26 ACLs and
+        // 27 role links, not 29 and 36, and this invariant reports that as
+        // non-convergence - correctly, because the application is not the one the
+        // repository's 29 acl/*.xml artifacts describe until those three records
+        // are present.
+        if (aclCount === EXPECTED_ACL_COUNT - 3) {
+            aclProblem += '. EXPECTED IF THE ELECTED FALLBACK PACKAGE WAS COMMITTED: that ' +
+                'package carries 26 ACL payloads and omits the three field-level query_range ' +
+                'ACLs (' + TABLE_CASE + '.opened_date, ' + TABLE_CASE + '.closed_date, ' +
+                TABLE_CASE_TASK + '.due_date). Import those three records from the ' +
+                'repository artifacts under servicenow-case-management-poc/acl/ and re-run ' +
+                'this script; the links this run created for the other 26 ACLs are correct ' +
+                'and are not disturbed by doing so. Until then the application is missing ' +
+                'the query_range shaping those three ACLs provide, and this figure stays ' +
+                'reported rather than accepted.';
+        }
+        problems.push(aclProblem);
     }
 
     // Every query_range ACL must hold a RESOLVED operation reference. A row that

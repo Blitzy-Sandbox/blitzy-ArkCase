@@ -84,9 +84,17 @@
       The <css> element is empty. All visual styling uses out-of-the-box
       Service Portal Bootstrap classes already shipped with the PDI:
         - alert alert-success: green-bordered success panel with subtle
-          icon and standard padding.
-        - <h3>: standard heading typography.
+          icon and standard padding. Measured against the stylesheet this
+          portal serves, the theme paints it #357935 on #eaf6ea = 4.79:1,
+          which meets WCAG 2.1 AA for normal text, so this panel needed no
+          colour remediation when the two form widgets' failing tokens
+          were swapped for passing ones under Delta QA4 Issue 9.
+        - <h2>: standard heading typography, one level under the page's
+          single <h1>, which the parent submission widget renders outside
+          the ng-if that swaps the form for this panel.
         - <strong>: bold emphasis on the case number for visual scanning.
+        - no class on the status-page link, so it takes the theme's own
+          link colour and the theme's own focus outline.
       No custom CSS is authored or referenced. No custom branding artifacts
       (icons, images, colors) are defined.
 
@@ -226,12 +234,18 @@
     element is intentionally EMPTY. What could be fixed without custom CSS was
     fixed by choosing default-theme classes whose own colours already meet AA:
     neutral guidance and status text carries no colour class and inherits the
-    theme's body colour (previously .help-block grey, measured 2.14:1), and
-    per-field error text uses the theme's own .text-danger utility. The items
-    inherent to the stock components - the .btn-primary resting background, the
-    .alert-warning text colour and the theme's focus-ring colour - are left
-    exactly as the platform paints them and are recorded in
-    ../../docs/portal-pages.md as bounded by the Section 0.4.4 exception.
+    theme's body colour (previously .help-block grey, measured 2.14:1). Delta
+    QA4 Issue 9 completed that pass with two further token choices, measured
+    against the stylesheet this portal actually serves: per-field error text
+    now carries the theme's .alert-danger COLOUR token without the .alert box
+    class (#a02622 on #fdf7f7 = 7.09:1, replacing .text-danger's 3.96:1), and
+    the lookup's not-found notice keeps .alert with no colour variant so its
+    verbatim sentence inherits the body colour at 4.88:1, replacing
+    .alert-warning's 3.32:1. The items inherent to the stock components - the
+    .btn-primary resting background (3.63:1), the 34px control height and the
+    theme's focus-ring colour - are left exactly as the platform paints them
+    and are recorded in ../../docs/portal-pages.md as OPEN limitations blocked
+    by the Section 0.4.4 / 0.3.2 exclusion, not as accepted ones.
     ==========================================================================
 -->
 <record_update table="sp_widget">
@@ -368,13 +382,18 @@
             ../pages/sp_page_x_casemgmt_case_status.xml, resolved by that
             slug and not by sys_id.
 
-            btn / btn-default / btn-primary and alert-link are all bundled
-            Bootstrap 3 classes shipped with the Service Portal, so this
-            adds no branding and needs no styling rule, per AAP Section
-            0.4.4's default-theme mandate. This widget's <css> element
-            carries exactly one rule, and it is not about this link's
-            appearance: it restores the keyboard focus ring that the
-            theme paints transparent. See the DEFAULT THEME note in the
+            The anchor carries NO class at all, so it is the theme's own
+            body link. That is deliberate and it is the reason this widget
+            needs no styling rule: the theme paints `.btn:focus` with a
+            fully transparent outline under its [accessibility] mode, so a
+            `.btn`-styled link here could have been left with no visible
+            keyboard focus indicator of its own, and restoring one would
+            have meant a CSS rule. A plain link takes the theme's link
+            colour and the theme's own focus outline instead. This
+            widget's <css> element is EMPTY and must stay empty, per AAP
+            Section 0.4.4's default-theme mandate ("No custom CSS, no
+            custom branding") and Section 0.3.2's exclusion of theme and
+            branding modifications. See the DEFAULT THEME note in the
             record description above.
 
             The case number is appended as a `number` query parameter when

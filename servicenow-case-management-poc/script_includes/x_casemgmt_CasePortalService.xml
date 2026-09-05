@@ -114,6 +114,20 @@
           with throttled=true, which the REST operation answers as HTTP
           429. Internal case creation is never counted, so it is never
           throttled.
+        - An identical submission received inside a 90-second window is
+          COLLAPSED onto the case that survives it, rather than creating a
+          second case: the endpoint answers with the surviving case's
+          number and removes the duplicate row. "Identical" means all five
+          whitelisted values match, the surviving row is still in Draft,
+          and it was created by the same caller. The collapse happens
+          after the insert, which is what lets two genuinely simultaneous
+          callers converge on one winner rather than only settling
+          sequential retries; see _collapseDuplicateSubmission for the
+          total order that makes the winner the same for every caller, and
+          for the two limits on the guarantee - a duplicate whose sibling
+          row is not yet visible to its query cannot be collapsed, and the
+          discarded row's case number is consumed, leaving a gap in the
+          CASE sequence.
 
       lookupCase whitelist (OUTPUT side - prevents PII / internal-data leak):
         - Returns ONLY: status, subject, opened_date.
@@ -266,7 +280,7 @@
         <api_name>x_casemgmt.CasePortalService</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - and a coarse flood guard bounds the unauthenticated write path; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - a coarse flood guard bounds the unauthenticated write path, and an identical submission received inside a 90-second window is collapsed onto the surviving case (same five values, still Draft, same caller) so a retry or a simultaneous double-post yields one case rather than two - the duplicate row is deleted and its case number is consumed, leaving a gap in the CASE sequence; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
         <name>CasePortalService</name>
         <script><![CDATA[var CasePortalService = Class.create();
 CasePortalService.prototype = {
@@ -296,6 +310,12 @@ CasePortalService.prototype = {
      *   - Returns the auto-generated case number (CASE0000001 format)
      *     on success. The number generator is configured in
      *     ../numbers/sys_number_x_casemgmt_case.xml.
+     *   - An identical submission received inside the de-duplication
+     *     window is answered with the number of the case that survives
+     *     it, and its own row is removed, so a retry or a simultaneous
+     *     double-post yields ONE case rather than two. The response shape
+     *     is unchanged - { number } either way - so no caller has to know
+     *     which of the two happened.
      *
      * Robust input handling per Rule 9 of the agent prompt: gracefully
      * handle null, undefined, and non-object payloads without throwing
@@ -532,12 +552,255 @@ CasePortalService.prototype = {
             };
         }
 
+        // ------------------------------------------------------------------
+        // DOUBLE-SUBMIT COLLAPSE. Two identical anonymous submissions in
+        // quick succession are one intake, not two, and this endpoint had
+        // no defence against them: QA released two barrier-synchronised
+        // POSTs carrying the same body and both were accepted, persisting
+        // CASE0000226 and CASE0000227. The flood guard above does not help
+        // - ten submissions a minute is exactly what it permits - and the
+        // widget's in-flight button lock only covers the single page, not
+        // the public API.
+        //
+        // The collapse runs HERE, after the insert, deliberately. See
+        // _collapseDuplicateSubmission for why a post-insert reconcile is
+        // the only variant that also settles genuinely simultaneous
+        // callers, and for the two honest limits on the guarantee.
+        // ------------------------------------------------------------------
+        var winningNumber = this._collapseDuplicateSubmission(savedGr, validated.values, newSysId);
+        if (winningNumber !== null) {
+            return { number: winningNumber };
+        }
+
         // Return ONLY the auto-generated number - no other fields, no
         // sys_id, no audit fields. The portal confirmation widget
         // (../portal/widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml)
         // displays this number to the requester so they can later look up
         // their case via the status page.
         return { number: String(savedGr.getValue('number')) };
+    },
+
+    /**
+     * Collapse an identical anonymous submission received inside a short
+     * window onto the single case that survives it.
+     *
+     * WHAT IT GUARANTEES, AND WHAT IT DOES NOT. Stated first, because the
+     * value of a de-duplication contract is entirely in its edges:
+     *
+     *   IT DOES collapse a retry - a requester who presses Submit twice,
+     *   a client that repeats a POST after a timeout, a script that loops
+     *   - onto the FIRST case, and answers the later caller with that
+     *   first case's number, so both callers are told the same truth and
+     *   exactly one row survives.
+     *
+     *   IT DOES collapse two genuinely simultaneous callers, provided
+     *   each one's query can see the other's row. Both compute the SAME
+     *   winner, because the winner is defined by a total order over the
+     *   candidate rows (sys_created_on, then sys_id) rather than by
+     *   "whoever noticed first"; the loser removes its own row.
+     *
+     *   IT DOES NOT collapse two callers whose inserts are both still
+     *   invisible to each other's query. Each then sees only its own row,
+     *   each declares itself the winner, and TWO cases survive. This is a
+     *   real residual window, it is a property of reconciling after the
+     *   fact rather than of this implementation, and closing it would
+     *   need a uniqueness constraint or a mutex - neither of which exists
+     *   for this table, and adding a table, a field or an endpoint to
+     *   carry one is refused by the AAP Section 0.7.2 Minimal-Change
+     *   Clause. So the guarantee is "duplicates are collapsed, not
+     *   prevented", and that is the honest wording.
+     *
+     *   IT DOES NOT reclaim the case number the discarded row consumed.
+     *   The platform allocates a number during the insert, so a collapsed
+     *   duplicate leaves a GAP in the CASE sequence. That is already true
+     *   of this method's round-trip refusal and of every form load, so
+     *   gaps carry no meaning here, but they are visible and a reader
+     *   comparing counts should expect them.
+     *
+     * WHY POST-INSERT RATHER THAN PRE-INSERT. A pre-insert "has an
+     * identical case just arrived?" check reads a window in which a
+     * simultaneous sibling has not yet written anything, so two callers
+     * both see nothing and both insert - it collapses retries only. By
+     * inserting first and reconciling after, each caller has already
+     * published its candidate before it looks, which is what lets two
+     * simultaneous callers converge on one winner. The pattern is not new
+     * to this file: the round-trip verification above inserts, asks the
+     * platform what it actually stored, and deletes the row when the
+     * answer is wrong. This is the same shape with a different question.
+     *
+     * WHY 90 SECONDS. The window has to be longer than the interval a
+     * human or a client will re-press within, and short enough that a
+     * requester who deliberately submits the same case again later is not
+     * silently refused a second case. Measured behaviour bounds both
+     * ends: the submission widget has no client-side timeout at all (see
+     * the lookup widget's LOOKUP_TIMEOUT_MS comment for why the write
+     * deliberately differs from the read), so a retry follows a stalled
+     * request by whatever the requester's patience is - tens of seconds -
+     * while the endpoint's own flood guard already thinks in a 60-second
+     * window. 90 seconds sits just above that flood window, so the two
+     * mechanisms describe overlapping periods rather than contradicting
+     * ones, and well below the minutes it takes to retype a case by hand.
+     *
+     * THE FINGERPRINT is the five whitelisted values, and nothing else.
+     * Two submissions are "identical" when subject, type, description,
+     * requester_name and requester_email all match, the row is still in
+     * Draft, and it was created by the same caller as ours. status is in
+     * the fingerprint because a case that has already been worked -
+     * advanced out of Draft by an agent - must never be handed back to an
+     * anonymous caller as the answer to a new submission. The creator is
+     * read off our own row rather than assumed to be 'guest', so this is
+     * correct for whatever user the platform runs an unauthenticated call
+     * as, and it keeps an internal user's identically-worded case from
+     * ever being returned to the public endpoint.
+     *
+     * `description` is compared IN SCRIPT rather than in the query. It is
+     * declared 4000 characters, so the platform backs it with a TEXT
+     * column, and an equality predicate on a TEXT column is the one part
+     * of this query that is neither reliably indexed nor portable across
+     * the databases the platform runs on. The four narrow columns do the
+     * selecting; the wide one does the confirming, on the handful of rows
+     * that survive.
+     *
+     * No hardcoded sys_id (AAP Section 0.7.2): the only identifier used
+     * is the one insert() returned, passed in. No gs.eventQueue and no
+     * notification of any kind (email is disabled per Section 0.7.2). No
+     * new table, field or endpoint (Minimal-Change Clause).
+     *
+     * @param {GlideRecord} savedGr - the post-insert re-query of our own
+     *     row, already positioned on it.
+     * @param {Object} values - the validated whitelisted values that were
+     *     written.
+     * @param {String} newSysId - the sys_id returned by insert().
+     * @return {String|null} the surviving case's number when OUR row was
+     *     the duplicate and has been removed, or null when our row is the
+     *     one that survives (the caller then returns its own number).
+     */
+    _collapseDuplicateSubmission: function(savedGr, values, newSysId) {
+        var DEDUPE_WINDOW_SECONDS = 90;
+
+        var ourNumber = String(savedGr.getValue('number') || '');
+        var creator = String(savedGr.getValue('sys_created_by') || '');
+        if (creator === '') {
+            // Without a creator there is no safe way to scope the search to
+            // this endpoint's own rows, and widening it to every Draft case
+            // could hand an anonymous caller a case somebody else created.
+            // Fail open: keep our row.
+            gs.warn('CasePortalService._collapseDuplicateSubmission: sys_created_by was empty on ' +
+                'sys_id=' + newSysId + '; the duplicate check was skipped for this submission.');
+            return null;
+        }
+
+        if (String(savedGr.getValue('status') || '') !== 'Draft') {
+            // Our own row must satisfy the same fingerprint the candidates
+            // are selected by, or the winner could be a row that is
+            // "identical" to what we submitted while OUR row holds
+            // something else - and we would delete the row the requester
+            // actually created. submitCase() forces status='Draft' before
+            // the insert, so reaching here means something moved it
+            // afterwards; that is a state this method has no basis to
+            // reconcile, so it declines and keeps our row.
+            gs.warn('CasePortalService._collapseDuplicateSubmission: sys_id=' + newSysId +
+                ' is no longer in Draft immediately after insert (status=' +
+                String(savedGr.getValue('status') || '') + '); the duplicate check was skipped.');
+            return null;
+        }
+
+        var windowStart = new GlideDateTime();
+        windowStart.addSeconds(-DEDUPE_WINDOW_SECONDS);
+
+        var ourDescription = Object.prototype.hasOwnProperty.call(values, 'description') ?
+            String(values.description) : '';
+
+        var candidates = new GlideRecord('x_casemgmt_case');
+        candidates.addQuery('status', 'Draft');
+        candidates.addQuery('sys_created_by', creator);
+        candidates.addQuery('sys_created_on', '>=', windowStart);
+        candidates.addQuery('subject', this._fingerprintValue(values, 'subject'));
+        candidates.addQuery('type', this._fingerprintValue(values, 'type'));
+        candidates.addQuery('requester_name', this._fingerprintValue(values, 'requester_name'));
+        candidates.addQuery('requester_email', this._fingerprintValue(values, 'requester_email'));
+        // The order is the whole mechanism: every caller evaluating this
+        // same candidate set picks the same first row. sys_created_on has
+        // one-second resolution, so two simultaneous inserts routinely
+        // share it - sys_id breaks that tie deterministically, since every
+        // caller compares the same 32-character strings.
+        candidates.orderBy('sys_created_on');
+        candidates.orderBy('sys_id');
+        candidates.query();
+
+        var winnerSysId = '';
+        var winnerNumber = '';
+        while (candidates.next()) {
+            if (String(candidates.getValue('description') || '') !== ourDescription) {
+                continue;
+            }
+            winnerSysId = String(candidates.getValue('sys_id') || '');
+            winnerNumber = String(candidates.getValue('number') || '');
+            break;
+        }
+
+        if (winnerSysId === '' || winnerSysId === newSysId) {
+            // Either nothing matched (our own row should always match, so
+            // this means the query could not see it yet) or we ARE the
+            // winner. Both keep our row and return its own number.
+            return null;
+        }
+
+        if (winnerNumber === '') {
+            // A surviving row with no case number is nothing to hand a
+            // requester, and deleting ours in favour of it would lose the
+            // only number we can quote. Keep ours and say why.
+            gs.warn('CasePortalService._collapseDuplicateSubmission: an earlier identical Draft case ' +
+                'sys_id=' + winnerSysId + ' carries no case number, so submission sys_id=' + newSysId +
+                ' was kept as a separate case rather than collapsed onto it.');
+            return null;
+        }
+
+        // We are the duplicate. Remove our row and answer with the case
+        // that survives. deleteRecord() is checked for the same reason the
+        // round-trip cleanup checks it: a failed delete leaves two rows,
+        // and the caller must then be told about the row that actually
+        // exists under its own number rather than about a row we failed to
+        // remove.
+        var duplicateGr = new GlideRecord('x_casemgmt_case');
+        if (!duplicateGr.get(newSysId)) {
+            gs.warn('CasePortalService._collapseDuplicateSubmission: the duplicate row sys_id=' +
+                newSysId + ' could no longer be read for removal; answering with the surviving case.');
+            return winnerNumber;
+        }
+        if (!duplicateGr.deleteRecord()) {
+            gs.error('CasePortalService._collapseDuplicateSubmission: submission sys_id=' + newSysId +
+                ' duplicates case sys_id=' + winnerSysId + ' but the duplicate could NOT be deleted' +
+                ' (lastErrorMessage=' + duplicateGr.getLastErrorMessage() + '); both rows now exist' +
+                ' and the duplicate needs manual removal.');
+            return null;
+        }
+
+        gs.info('CasePortalService._collapseDuplicateSubmission: collapsed an identical anonymous ' +
+            'submission received inside ' + DEDUPE_WINDOW_SECONDS + 's onto the surviving case; the ' +
+            'duplicate row (number ' + ourNumber + ') was removed and the caller was answered with the ' +
+            'earlier case number. The removed row consumed a case number, so the CASE sequence has a gap.');
+        return winnerNumber;
+    },
+
+    /**
+     * One whitelisted value, in the exact form it was written to the row,
+     * for use as a query term in the duplicate fingerprint.
+     *
+     * A field absent from `values` was never written, so the stored column
+     * holds the empty string and the query term must be '' - not null,
+     * which GlideRecord would treat as an unset condition and silently
+     * widen the search with.
+     *
+     * @param {Object} values - the validated whitelisted values.
+     * @param {String} name - the field name.
+     * @return {String} the value written, or '' when the field was absent.
+     */
+    _fingerprintValue: function(values, name) {
+        if (!Object.prototype.hasOwnProperty.call(values, name)) {
+            return '';
+        }
+        return String(values[name]);
     },
 
     /**

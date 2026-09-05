@@ -1,0 +1,712 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the TERMINAL-STATE
+    read-only rendering of the `x_casemgmt_case` custom table inside the
+    scoped application `x_casemgmt`.
+
+    This file produces ELEVEN records - one `sys_ui_policy` row and its
+    ten `sys_ui_policy_action` children - which together make the case
+    form present a Closed case as the terminal record AAP Section 0.5.5
+    says it is, instead of presenting it as an editable record whose
+    edits are then refused by the server. It is the `ui_policy/` entry of
+    AAP Section 0.4.1 for the case table, alongside the sibling
+    x_casemgmt_case_party_conditional_fields.xml which does the same job
+    for the party table's polymorphism.
+
+    THE DEFECT THIS CLOSES (QA finding "Issue 17", Functional / Visual)
+
+      Observed on the running application, on the Closed demo cases
+      CASE9000006 (General Inquiry) and CASE9000010 (Complaint):
+
+        "Closed records still expose editable fields and Update, relying
+         on the server guard to reject the save."
+
+      Every one of the case's ten writable fields rendered as a live
+      input on a row whose committed status is `Closed` - a text box for
+      Subject, a select for Status, a select for Priority, a textarea for
+      Description, reference pickers for Assigned Group and Assigned
+      Agent, and so on - so the only thing standing between an operator
+      and an edit to a terminal record was the before-update Business
+      Rule ../business_rules/x_casemgmt_block_terminal_closed.xml
+      aborting the save after the fact.
+
+      AAP Section 0.5.5's transition matrix, row 8, makes Closed a
+      terminal state whose failure surface is the verbatim message
+      "Closed cases are terminal and cannot be modified.", and AAP
+      Section 0.7.1 requires blocking errors to be surfaced on the form.
+      A form that invites an edit and then refuses it satisfies the
+      letter of the guard and contradicts the state machine it is
+      guarding: the screen tells the operator the record is editable and
+      the server tells them it is not.
+
+      This policy makes the form agree with the state machine BEFORE the
+      gesture, while the guard continues to be the thing that actually
+      enforces it.
+
+    THIS IS PRESENTATION ONLY - THE ENFORCEMENT DOES NOT MOVE
+
+      Nothing here weakens, replaces or duplicates a server-side guard.
+      ../business_rules/x_casemgmt_block_terminal_closed.xml (order 100)
+      remains the enforcement layer for the terminal state, and
+      ../business_rules/x_casemgmt_block_draft_backtransition.xml remains
+      the enforcement layer for the Draft prohibition; both are untouched
+      by this file and both keep surfacing their verbatim messages.
+
+      That division matters because a UI Policy runs in the browser and
+      therefore cannot enforce anything: it does not apply to a write
+      through the Table API, to a write from a script, to a list inline
+      edit, or to any caller that never renders the form. Every one of
+      those paths is still refused by the Business Rule, which compares
+      the case's own columns and aborts the write. What this policy adds
+      is the one thing the Business Rule cannot do - stop the form from
+      inviting the edit in the first place.
+
+      A useful consequence, measured against the guard's own contract:
+      because all ten writable controls are read-only, the form can no
+      longer produce a dirty field on a Closed case, so pressing Update
+      on a Closed case is the "genuine no-op save" that the guard
+      explicitly still allows (it excludes `sys_mod_count`,
+      `sys_updated_on` and the virtual `duration_to_close` from its
+      comparison). The operator therefore sees no error banner for a
+      gesture that changed nothing, and still sees the verbatim message
+      on any path that does attempt a change.
+
+    WHY DECLARATIVE, AND WHY NOT A CLIENT SCRIPT
+
+      AAP Section 0.7.2 constrains authoring to the platform's
+      declarative low-code mechanisms, and the sibling policy file
+      establishes the pattern for this application: a `sys_ui_policy`
+      with `run_scripts=false`, empty script bodies and one
+      `sys_ui_policy_action` per field. An `onLoad` client script calling
+      `g_form.setReadOnly()` in a loop would put field-state logic into
+      an imperative body that no longer appears in the platform's own
+      "UI Policies" surface, would have to be kept in step with every
+      future field addition by hand, and would duplicate a capability the
+      platform already models as data. There is no imperative logic in
+      this file at all.
+
+    WHICH FIELDS GET AN ACTION, AND WHY EXACTLY THESE TEN
+
+      Measured on the verification instance rather than assumed:
+
+        GET /api/now/table/sys_dictionary
+            ?sysparm_query=name=x_casemgmt_case^elementISNOTEMPTY
+            &sysparm_fields=element,internal_type,read_only,mandatory
+
+      returned `read_only=false` for exactly ten application columns -
+
+          type, status, priority, subject, description,
+          requester_name, requester_email, assigned_group,
+          assigned_agent, pending_reason
+
+      - and `read_only=true` for the other four the form renders:
+
+          number             AAP Section 0.5.7 "Read-only, format
+                             CASE0000001"
+          opened_date        auto-set on insert by
+                             ../business_rules/x_casemgmt_set_opened_date.xml
+          closed_date        auto-set on the Resolved -> Closed
+                             transition by
+                             ../business_rules/x_casemgmt_set_closed_date.xml
+          duration_to_close  a derived glide_duration, unwritable by
+                             definition
+
+      The QA screenshot of CASE9000010 corroborates the dictionary
+      exactly: those four render as grey static text on the Closed form
+      while the other ten render as live controls. So the ten actions
+      below are the complete set of fields that a Closed case can
+      currently offer for editing, and an eleventh action would be a
+      record that changes nothing. This is the AAP Section 0.7.2
+      minimal-change clause applied literally: one action per field that
+      is actually editable, none for a field the dictionary already
+      froze.
+
+      The `sys_*` audit columns (sys_created_by, sys_created_on,
+      sys_updated_by, sys_updated_on, sys_mod_count, sys_id) get no
+      action either. They are platform-managed columns, they are not on
+      the form section
+      (../form_layout/sys_ui_section_x_casemgmt_case_default.xml lists
+      fourteen elements, none of them a `sys_*` column), and AAP Section
+      0.3.2 keeps the application out of out-of-the-box platform
+      machinery.
+
+    THE ACTION SHAPE, COLUMN BY COLUMN
+
+      `sys_ui_policy_action` models three independent field states, and
+      the column names do not match their labels - verified against
+      `sys_dictionary` for the action table and its `sys_choice` rows:
+
+        disabled   label "Read only"; choices ignore | true | false;
+                   default ignore.  THIS is the read-only flag.
+        mandatory  choices ignore | true | false; default ignore.
+        visible    choices ignore | true | false; default ignore.
+
+      Each action below therefore carries:
+
+        disabled  = true     the field is presented read-only on a
+                             Closed case. This is the whole point of the
+                             record.
+        mandatory = ignore   the dictionary's mandatory state is left
+                             exactly as it is. Four of these fields
+                             (subject, status, description,
+                             requester_name) carry mandatory=true in
+                             ../dictionary/, and this policy neither
+                             adds nor removes a mandatory flag - setting
+                             mandatory=false would weaken a constraint
+                             this finding never asked to change, and
+                             setting mandatory=true would be redundant.
+                             Read-only plus mandatory is safe here
+                             because a Closed row necessarily has values
+                             in all four (both Closed demo cases were
+                             checked: subject, status, description and
+                             requester_name are populated on each).
+        visible   = ignore   nothing is hidden. A Closed case must stay
+                             fully readable - it is the audit record of
+                             the closed matter, it feeds the dashboards
+                             in ../dashboards/ and the reports in
+                             ../reports/, and AAP Section 0.5.6 gives
+                             `x_casemgmt_case_viewer` read access to all
+                             cases. Hiding fields would remove
+                             information rather than protect it.
+        cleared      = false and
+        value_action = ignore  no field value is read, written or
+                             cleared by this policy. It cannot alter data.
+        field_message / field_message_type  empty, matching the live
+                             party action rows (whose field_message_type
+                             is the empty string rather than the
+                             dictionary default "none"). A per-field
+                             message was considered and rejected: the
+                             only text that could go there is the
+                             verbatim AAP Section 0.7.4 blocking message,
+                             and stamping it under ten fields would put
+                             that reserved string on screen ten times
+                             over on a form where no save has been
+                             refused. The read-only rendering is the
+                             signal; the verbatim message stays the
+                             property of the save that is actually
+                             refused.
+
+    reverse_if_false IS FALSE - A DELIBERATE DEVIATION, AND WHY
+
+      The sibling party policy sets `reverse_if_false=true` because its
+      job is genuinely two-sided: `party_type` legitimately changes on
+      screen, and each state must be undone when the discriminator moves.
+      This policy is one-sided, and making it two-sided would introduce a
+      second defect in the opposite direction.
+
+      The reverse of `disabled=true` is `disabled=false` - an explicit
+      "make this field writable" applied to all ten fields on every
+      NON-Closed case form. Two of those fields are the ones AAP Section
+      0.5.6 singles out for field-level ACLs: `assigned_group` (write
+      restricted to `x_casemgmt_case_manager`) and `assigned_agent`
+      (manager, or the assigned agent). A read-only state that a
+      field-level ACL or the dictionary put on a control is not this
+      application's to reverse, and a policy that announces "writable"
+      to an `x_casemgmt_case_viewer` on five of the six statuses would be
+      the same "the form invites an edit the server then refuses"
+      defect this file exists to close, only pointed at the ACL matrix in
+      ../docs/acl-matrix.md instead of at the terminal state.
+
+      Nothing is lost by leaving the reverse off, because there is no
+      legitimate in-form path OUT of Closed that would need undoing:
+
+        - A Closed row can never leave Closed. The status move is
+          refused by x_casemgmt_block_terminal_closed and the `status`
+          control is itself read-only under this policy.
+        - On a non-Closed row the condition is simply false and this
+          policy contributes nothing, leaving ../dictionary/, the
+          field-level ACLs in ../acl/ and the platform as the only
+          authorities on field state - which is the correct answer.
+        - The one remaining path is an operator on a Resolved case
+          choosing "Closed" from the status list rather than pressing the
+          Close button. The policy re-evaluates on that change (the
+          platform takes `status` as a watched field from the condition
+          itself, independently of reverse_if_false) and freezes the
+          form. That freeze is not reversible on screen under EITHER
+          setting, because `status` is one of the fields it freezes, so
+          reverse_if_false=true would buy nothing there; a reload
+          restores the true state, and the supported path into Closed
+          remains the ../ui_action/x_casemgmt_case_close.xml button,
+          which is a server-side action (`client=false`) and never
+          rewrites the form's status control.
+
+      `on_load=true` is what makes the policy do its job on the surface
+      the finding is about: opening an already-Closed case. `global=true`
+      applies it to every view of the form rather than one named view.
+      `inherit=false` because no table extends x_casemgmt_case.
+      `run_scripts=false` with both script bodies empty - there is no
+      imperative logic to maintain and no dead script is carried.
+
+    WHAT THIS FILE DELIBERATELY DOES NOT DO
+
+      - It does not remove or disable the form's `Update` and `Delete`
+        buttons. Those are out-of-the-box `sys_ui_action` records in the
+        GLOBAL scope; AAP Section 0.3.2 prohibits global-scope changes of
+        any kind and AAP Section 0.7.2 restates it as scoped-namespace
+        exclusivity, so they are out of bounds for this package by rule.
+        With all ten controls read-only, `Update` can only produce the
+        no-op save the terminal guard already allows, and `Delete`
+        remains governed by the delete ACLs in ../acl/ (manager only),
+        exactly as AAP Section 0.5.6 specifies. The residual `Update`
+        button is recorded as a named open limitation in
+        ../docs/state-machine.md.
+      - It does not touch the six transition buttons in ../ui_action/.
+        They need no help: each one's visibility condition is evaluated
+        server-side against `current` and requires an exact non-Closed
+        source status (Draft, Open, In Progress, Pending or Resolved), so
+        none of them renders on a Closed case. That was re-verified
+        against all six records and against the QA screenshot of
+        CASE9000010, whose only buttons are the two global ones.
+      - It does not affect list inline editing, which the platform
+        governs through ACLs rather than UI Policies, and which the
+        terminal guard refuses server-side.
+
+    XML CONVENTIONS HONORED (matching the sibling policy file)
+      - Wrapper element: `<unload unload_date="2025-01-01 00:00:00">`,
+        the dominant payload convention in this package.
+      - Element ordering: alphabetical within each record.
+      - Only columns that actually exist on the target tables are
+        emitted. `sys_ui_policy` has no `name` column (its `sys_name` is
+        derived from `short_description`), so no `<name>` element is
+        written; `sys_ui_policy_action` has no `sys_domain` or
+        `sys_overrides` column, so neither is written on the action rows.
+      - `<sys_scope>` carries the scoped application's sys_id with a
+        `display_value` attribute and `<sys_package>` carries the scope
+        source, which is the exact shape the already-deployed sibling
+        policy uses and which was confirmed to resolve on this instance
+        (a live read of both party rows returns sys_scope = sys_package =
+        82b99028936f74320d74d6f88357a5af).
+      - `<sys_update_name>` is stated explicitly on all eleven records.
+        Both tables extend Application File, and the platform derives the
+        key as `sys_ui_policy_<sys_id>` / `sys_ui_policy_action_<sys_id>`
+        - verified by reading the live party rows, whose sys_update_name
+        values are exactly that. Stating it makes the key the import
+        engine matches on visible in the artifact instead of implicit in
+        the pinned sys_id, so a re-import UPDATES these rows rather than
+        adding a second policy.
+      - `<ui_policy>` on each action carries its parent policy's sys_id
+        with a `display_value` attribute. The parent is defined in THIS
+        file and is carried in the same Update Set, and the preview
+        resolver matches an intra-set reference through the target
+        block's canonical `<table>_<sys_id>` update name, so the
+        reference previews clean on a fresh instance.
+      - `<order>100</order>`: this is the only UI Policy on
+        x_casemgmt_case (a live query of sys_ui_policy for
+        `tableSTARTSWITHx_casemgmt` returns only the two party rows), so
+        no other policy can contend for these fields and the order value
+        is uncontested. 100 matches the application's 100-step ordering
+        convention.
+      - `<ui_type>0</ui_type>` is "Desktop", per the `sys_choice` rows for
+        `sys_ui_policy.ui_type` (0 Desktop, 1 Mobile / Service Portal, 10
+        All). It matches the sibling party policy and the platform's own
+        norm (2,612 of the instance's UI Policies are 0), and it is the
+        right value here because the surface this finding is about is the
+        internal UI16 case form. The public pages in ../portal/ never
+        render this form - they are widget-driven - so nothing is lost by
+        not selecting "All".
+      - No PII: these records carry structural state only.
+
+    IDENTIFIERS
+      Every sys_id is a recomputable MD5 of a canonical string, the same
+      derivation the sibling artifacts in this package use:
+
+        policy   md5("x_casemgmt_case.ui_policy.closed_readonly")
+                 e13c3e9e50df1b846271700b571c5a82
+        actions  md5("x_casemgmt_case.ui_policy_action.closed_readonly."
+                     + the action's field name)
+                 c70139ca5b3e4ce81311b2f2fbda2538  subject
+                 4805b2840552271409e1682f77845510  type
+                 d27870f5faf1756f9e093cdcc241e14f  status
+                 f85a55a85fdd166fced53756f266093e  priority
+                 3f31af883ca60ee992339571ad02274a  description
+                 e54e957feb4e512c65a2baf64a3f819a  requester_name
+                 2ac5b372ace69b0d2e9c9d2fecbc708f  requester_email
+                 a4ced0d7fbd97388a4338fa56ad313f4  assigned_group
+                 1859fc68a1e6d7e05bfdbf8753de5336  assigned_agent
+                 f86588ae9033eb613c18fc85ab1b0f94  pending_reason
+
+      Recomputable via, e.g.
+        printf '%s' 'x_casemgmt_case.ui_policy_action.closed_readonly.status' \
+            | md5sum | cut -c1-32
+      so regenerating this file is byte-deterministic. All eleven values
+      were checked against `sys_metadata` on the verification instance
+      and against every file in this package: none is in use, so these
+      records cannot collide with an existing row.
+
+      These are the records' OWN primary keys. No reference field in this
+      file points at a foreign record by sys_id except `<sys_scope>`,
+      which follows the sibling policy's convention and carries the
+      scope's `display_value`; every table, field and role named
+      anywhere in this file is named by NAME, per AAP Section 0.7.2's
+      no-hardcoded-sys_id constraint. There is no script body, so there
+      is no sys_id literal in any condition or script.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering)
+      THESE RECORDS MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record, against which <sys_scope>/<sys_package>
+          resolve)
+        - ../tables/x_casemgmt_case.xml (parent table; the policy and all
+          ten actions target this table by name)
+        - ../dictionary/x_casemgmt_case_status.xml (the field named by the
+          condition) and the nine other
+          ../dictionary/x_casemgmt_case_*.xml entries for the fields the
+          actions operate on - an action whose field does not yet exist
+          is dropped on import
+        - ../choices/sys_choice_case_status.xml (supplies the 'Closed'
+          condition literal)
+      Within this file the `sys_ui_policy` MUST load before the ten
+      `sys_ui_policy_action` rows that reference it; the records are
+      written in that order.
+
+      THESE RECORDS MUST LOAD BEFORE:
+        - ../seed-data/cases/x_casemgmt_case_demo_*.xml (so the two
+          Closed demo cases, CASE9000006 and CASE9000010, open read-only
+          the first time a verifier opens them post-commit)
+
+      RELATED:
+        - ../business_rules/x_casemgmt_block_terminal_closed.xml - the
+          enforcement layer this policy presents. Unchanged.
+        - ../form_layout/sys_ui_section_x_casemgmt_case_default.xml - the
+          single-column section whose fourteen elements this policy's ten
+          actions cover the writable subset of.
+        - ../docs/state-machine.md - the Closed-state narrative, which
+          now documents this policy and the limitations that remain
+          around it.
+
+    CONDITION STRING
+      status=Closed
+      A single-term encoded query against the state field. The
+      right-hand literal MUST match the `<value>` of the corresponding
+      record in ../choices/sys_choice_case_status.xml byte-for-byte; it
+      was read back from the live sys_choice rows for
+      x_casemgmt_case.status, which are Draft, Open, In Progress,
+      Pending, Resolved and Closed, in that sequence.
+
+    AAP COMPLIANCE SUMMARY
+      - AAP 0.5.5 row 8 (Closed is terminal, "Closed cases are terminal
+        and cannot be modified."): the form now presents the terminal
+        state instead of contradicting it.
+      - AAP 0.7.1 (surface blocking errors on the form): unchanged and
+        reinforced - the verbatim message is still written by the
+        Business Rule on any attempted change, and the form no longer
+        solicits the change that would produce it.
+      - AAP 0.7.2 (declarative low-code authoring): a UI Policy with
+        declarative actions, `run_scripts=false`, no script body.
+      - AAP 0.7.2 (scoped-namespace exclusivity): `<sys_scope>`,
+        `<sys_package>` and `<table>` all reference the scoped
+        application and its `x_casemgmt_case` table.
+      - AAP 0.7.2 (minimal change): one policy, one behaviour, one
+        action per editable field; no field added, removed, relabelled,
+        retyped or reordered, and no existing record modified.
+      - AAP 0.7.2 (no hard-coded sys_id): every table, field and choice
+        literal is named by name; the only sys_id values are these
+        records' own keys and the scope reference the sibling policy
+        already uses.
+      - AAP 0.3.2 (no global-scope write): the global `Update` and
+        `Delete` UI Actions and the platform's field macros are left
+        exactly as the platform renders them.
+      - AAP 0.5.6 / ../docs/acl-matrix.md: nothing here grants or
+        withdraws access; `mandatory` and `visible` are both left alone
+        and the reverse is off, so no field-level ACL state is
+        overridden on any status.
+      - Single Update Set deliverable (AAP 0.7.2): these eleven records
+        are carried as eleven blocks of the exported Update Set.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sys_ui_policy action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <conditions>status=Closed</conditions>
+    <description>Terminal-state read-only UI Policy on x_casemgmt_case. Implements the form-layer half of AAP Section 0.5.5's transition matrix row 8 ("Closed -&gt; * PROHIBITED - terminal state", verbatim failure message "Closed cases are terminal and cannot be modified."), closing QA finding Issue 17: a Closed case rendered all ten of its writable fields as live inputs, so correctness rested entirely on the before-update Business Rule x_casemgmt_block_terminal_closed aborting the save after the gesture. When status=Closed the ten sys_ui_policy_action children present type, status, priority, subject, description, requester_name, requester_email, assigned_group, assigned_agent and pending_reason as read-only (the action column `disabled`), so the form states the terminal restriction before the operator acts. The other four fields the form renders - number, opened_date, closed_date, duration_to_close - already carry read_only=true in sys_dictionary and need no action. This policy is PRESENTATION ONLY: it enforces nothing and replaces nothing. x_casemgmt_block_terminal_closed remains the enforcement layer for every write path a browser is not involved in (Table API, scripts, list inline edit) and keeps surfacing the verbatim message; because no control can now be dirtied on a Closed form, pressing Update is the genuine no-op save that guard explicitly still allows. mandatory=ignore on every action so the four dictionary-mandatory fields keep their constraint untouched; visible=ignore so a Closed case stays fully readable for audit, reporting and the read-only viewer role; cleared=false and value_action=ignore so no field value is ever read, written or cleared. reverse_if_false is deliberately FALSE, unlike the companion party policies: the reverse of disabled=true is an explicit "make writable" that would be applied to all ten fields on every non-Closed case form, including the two fields whose write access AAP Section 0.5.6 restricts through field-level ACLs (assigned_group, assigned_agent), which would recreate this same defect pointed at the ACL matrix. Nothing is lost, because a Closed row can never legally leave Closed and its status control is itself read-only here. run_scripts=false with empty script bodies - there is no imperative logic. The six transition UI Actions need no change: each is evaluated server-side against current and requires an exact non-Closed source status, so none renders on a Closed case. The form's Update and Delete buttons are out-of-the-box global sys_ui_action records that AAP Section 0.3.2 puts out of bounds for this package.</description>
+    <global>true</global>
+    <inherit>false</inherit>
+    <on_load>true</on_load>
+    <order>100</order>
+    <reverse_if_false>false</reverse_if_false>
+    <run_scripts>false</run_scripts>
+    <script_false/>
+    <script_true/>
+    <short_description>Case Closed Terminal State - Read Only: present every writable field of a Closed case as read-only, so the form states AAP 0.5.5's terminal restriction instead of inviting an edit the server guard then refuses.</short_description>
+    <sys_class_name>sys_ui_policy</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_domain>global</sys_domain>
+    <sys_id>e13c3e9e50df1b846271700b571c5a82</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_overrides/>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_e13c3e9e50df1b846271700b571c5a82</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_type>0</ui_type>
+    <view/>
+</sys_ui_policy>
+<!--
+    The ten actions below are written in the form's own field order
+    (../form_layout/sys_ui_section_x_casemgmt_case_default.xml positions
+    1, 2, 3, 4, 5, 6, 7, 10, 11, 12), which is the AAP Section 0.4.4
+    order, so a reviewer can walk the form and this list together. The
+    order they load in is irrelevant to behaviour - no two actions name
+    the same field, so they cannot contend.
+-->
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>subject</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>c70139ca5b3e4ce81311b2f2fbda2538</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_c70139ca5b3e4ce81311b2f2fbda2538</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>type</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>4805b2840552271409e1682f77845510</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_4805b2840552271409e1682f77845510</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<!--
+    `status` is read-only here as well, and that is the point of row 8
+    rather than an oversight: the status of a Closed case is the one
+    field whose edit the state machine names explicitly. The transition
+    buttons are unaffected - ../ui_action/x_casemgmt_case_close.xml and
+    its five siblings are server-side actions that write `current.status`
+    on the server, never through this control.
+-->
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>status</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>d27870f5faf1756f9e093cdcc241e14f</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_d27870f5faf1756f9e093cdcc241e14f</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>priority</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>f85a55a85fdd166fced53756f266093e</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_f85a55a85fdd166fced53756f266093e</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>description</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>3f31af883ca60ee992339571ad02274a</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_3f31af883ca60ee992339571ad02274a</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>requester_name</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>e54e957feb4e512c65a2baf64a3f819a</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_e54e957feb4e512c65a2baf64a3f819a</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>requester_email</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>2ac5b372ace69b0d2e9c9d2fecbc708f</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_2ac5b372ace69b0d2e9c9d2fecbc708f</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<!--
+    assigned_group and assigned_agent are the two fields AAP Section
+    0.5.6 also protects with field-level ACLs (../acl/
+    x_casemgmt_case_assigned_group_field_acl.xml and
+    x_casemgmt_case_assigned_agent_field_acl.xml). Those ACLs decide WHO
+    may write them on a live case; this action decides that NOBODY is
+    invited to write them on a Closed one. The two are complementary and
+    neither is weakened: `mandatory` and `visible` are left alone and the
+    policy has no reverse, so no ACL-derived field state is ever
+    overridden on the other five statuses.
+-->
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>assigned_group</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>a4ced0d7fbd97388a4338fa56ad313f4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_a4ced0d7fbd97388a4338fa56ad313f4</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>assigned_agent</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>1859fc68a1e6d7e05bfdbf8753de5336</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_1859fc68a1e6d7e05bfdbf8753de5336</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+<!--
+    pending_reason is empty on a Closed case by construction - the
+    Pending -> In Progress transition clears it
+    (../business_rules/x_casemgmt_clear_pending_reason_on_inprogress.xml)
+    and both Closed demo cases were read back with the field empty - but
+    it is a writable choice field on the form, so it gets an action like
+    the rest. Leaving it out would leave exactly one editable control on
+    a terminal record.
+-->
+<sys_ui_policy_action action="INSERT_OR_UPDATE">
+    <cleared>false</cleared>
+    <disabled>true</disabled>
+    <field>pending_reason</field>
+    <field_message/>
+    <field_message_type/>
+    <mandatory>ignore</mandatory>
+    <sys_class_name>sys_ui_policy_action</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>f86588ae9033eb613c18fc85ab1b0f94</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sys_ui_policy_action_f86588ae9033eb613c18fc85ab1b0f94</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <table>x_casemgmt_case</table>
+    <ui_policy display_value="Case Closed Terminal State - Read Only">e13c3e9e50df1b846271700b571c5a82</ui_policy>
+    <value/>
+    <value_action>ignore</value_action>
+    <visible>ignore</visible>
+</sys_ui_policy_action>
+</unload>

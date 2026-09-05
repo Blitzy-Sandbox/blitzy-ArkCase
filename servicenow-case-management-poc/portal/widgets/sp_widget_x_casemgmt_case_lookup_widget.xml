@@ -151,19 +151,44 @@
         - btn, btn-primary: standard primary-action button styling.
         - panel, panel-default, panel-heading, panel-title, panel-body:
           standard result-panel styling.
-        - alert, alert-warning: standard "warning" alert styling for
-          the not-found message (yellow-bordered with alert icon).
+        - alert: the box metrics (padding, margin, radius) for the
+          not-found notice and for the two coloured alerts below it.
+        - alert-danger: the theme's error colour, on the service-failure
+          panel, on the validation summary, and - WITHOUT the `alert`
+          class, so it contributes colour only and no box - on the field's
+          own error message.
         - <dl>, <dt>, <dd>: semantic definition list for accessibility
           (screen readers parse <dl> as key-value pairs).
-        - help-block: standard styling for the status paragraph under the
-          button, which carries the visible reason the button is disabled and
-          the announcement of the in-flight state (role="status",
-          aria-live="polite", referenced by the button through
-          aria-describedby). The form also sets aria-busy while a lookup is
-          outstanding, because the button's inner text changing to
-          "Looking up..." is not by itself announced.
+        - no colour class at all on the status paragraph under the button
+          and on the not-found notice, so both inherit the theme's body
+          text colour. That paragraph carries the visible reason a press
+          would be refused and the announcement of the in-flight state
+          (role="status", aria-live="polite", referenced by the button
+          through aria-describedby). The form also sets aria-busy while a
+          lookup is outstanding, because the button's inner text changing
+          to "Looking up..." is not by itself announced.
       No custom CSS is authored or referenced. No custom branding artifacts
       (icons, images, colors) are defined.
+
+      WHICH COLOUR TOKENS ARE USED AND WHY, MEASURED AGAINST THIS THEME:
+        Read out of the stylesheet the public portal actually serves
+        (styles/scss/sp-bootstrap-basic.scss on this instance), against the
+        white page background:
+              .text-danger    #d9534f              3.96:1   fails AA
+              .alert-warning  #c77c11 on white     3.32:1   fails AA
+              .alert-info     #2390b0 on white     3.69:1   fails AA
+              body (unclassed) #717171 on #fff     4.88:1   passes AA
+              .alert-danger   #a02622 on #fdf7f7   7.09:1   passes AA
+        The first two are the figures QA measured on the rendered page. The
+        field message therefore carries `alert-danger` (colour token only)
+        instead of `text-danger`, and the not-found notice carries `alert`
+        with NO colour variant, so its verbatim sentence inherits the
+        theme's body colour at 4.88:1. `alert-info` was measured and
+        rejected - it does not reach 4.5:1 either, so swapping one failing
+        variant for another would have changed the colour without fixing
+        the defect. Nothing is overridden; only chosen, which is what AAP
+        Section 0.4.4's default-theme mandate permits. The residues that no
+        token choice can close are recorded in ../../docs/portal-pages.md.
 
     NO HARDCODED SYS_IDS IN REFERENCES (AAP Section 0.7.2):
       Every cross-reference is a name lookup against a stable identifier:
@@ -338,12 +363,18 @@
     element is intentionally EMPTY. What could be fixed without custom CSS was
     fixed by choosing default-theme classes whose own colours already meet AA:
     neutral guidance and status text carries no colour class and inherits the
-    theme's body colour (previously .help-block grey, measured 2.14:1), and
-    per-field error text uses the theme's own .text-danger utility. The items
-    inherent to the stock components - the .btn-primary resting background, the
-    .alert-warning text colour and the theme's focus-ring colour - are left
-    exactly as the platform paints them and are recorded in
-    ../../docs/portal-pages.md as bounded by the Section 0.4.4 exception.
+    theme's body colour (previously .help-block grey, measured 2.14:1). Delta
+    QA4 Issue 9 completed that pass with two further token choices, measured
+    against the stylesheet this portal actually serves: per-field error text
+    now carries the theme's .alert-danger COLOUR token without the .alert box
+    class (#a02622 on #fdf7f7 = 7.09:1, replacing .text-danger's 3.96:1), and
+    the lookup's not-found notice keeps .alert with no colour variant so its
+    verbatim sentence inherits the body colour at 4.88:1, replacing
+    .alert-warning's 3.32:1. The items inherent to the stock components - the
+    .btn-primary resting background (3.63:1), the 34px control height and the
+    theme's focus-ring colour - are left exactly as the platform paints them
+    and are recorded in ../../docs/portal-pages.md as OPEN limitations blocked
+    by the Section 0.4.4 / 0.3.2 exclusion, not as accepted ones.
     ==========================================================================
 -->
 <record_update table="sp_widget">
@@ -899,7 +930,7 @@
                    aria-describedby="x-casemgmt-case-number-error"
                    ng-attr-aria-invalid="{{(caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched) ? 'true' : 'false'}}"
                    required />
-            <p class="text-danger" id="x-casemgmt-case-number-error" role="alert"
+            <p class="alert-danger" id="x-casemgmt-case-number-error" role="alert"
                ng-if="caseLookupForm.caseNumber.$invalid && caseLookupForm.caseNumber.$touched">Enter a case number to look up.</p>
         </div>
         <!--
@@ -1114,8 +1145,33 @@
         template, NOT pulled from the server's error response body
         (defense against header-injection / response-smuggling attacks
         on the public endpoint).
+
+        THE PANEL CARRIES `alert` WITHOUT `alert-warning`, AND THAT IS A
+        CONTRAST FIX, NOT A TIDY-UP.
+
+        The theme paints `.alert-warning` #c77c11 on a white alert
+        background - 3.32:1, which is the figure QA measured here and is
+        below the 4.5:1 WCAG 2.1 AA minimum for normal text. Unlike the
+        field error above, this sentence has no higher-contrast equivalent
+        among the theme's coloured variants: `alert-info` measures 3.69:1
+        and also fails, `alert-danger` passes but would state that
+        something went WRONG, which is exactly the false answer the
+        service-failure panel below exists to keep separate ("no such
+        case" is a successful answer to the question asked), and
+        `alert-success` would state the opposite of what happened.
+
+        So the colour variant is dropped and the box keeps `alert` alone.
+        `.alert` carries only padding, margin, radius and a TRANSPARENT
+        border, so the notice keeps its spacing and loses its yellow tint,
+        and the sentence inherits the theme's body colour #717171 = 4.88:1
+        and passes. The meaning is carried by the sentence itself and by
+        role="alert", which is what announces it; colour was never the
+        only carrier. Restoring a coloured treatment that also passes AA
+        would mean overriding the theme's warning colour in this record's
+        <css> element, which AAP Section 0.4.4 forbids - that residue is
+        recorded in ../../docs/portal-pages.md rather than taken here.
     -->
-    <div class="alert alert-warning" role="alert" ng-if="c.notFound">
+    <div class="alert" role="alert" ng-if="c.notFound">
         No case found with that number.
     </div>
 

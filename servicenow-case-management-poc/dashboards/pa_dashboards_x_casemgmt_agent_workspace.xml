@@ -69,6 +69,70 @@
     REFERENCED BY: nothing - dashboards are leaves. Per AAP Section 0.5.2 the
     dashboard blocks load after the Report blocks and before the seed data.
 
+    QA ISSUE 10 (MEDIUM, accessibility) - DASHBOARD-CONTROL PORTION
+    ...............................................................
+    QA Issue 10 measured, among several surfaces, that on the rendered
+    dashboards "Refresh/menu/legend controls are below 24/44px and legend
+    toggles are not keyboard reachable" against a checkpoint standard of
+    at least 44x44px with every interactive control keyboard reachable.
+    That half of the finding was adjudicated against THIS file record by
+    record, and the outcome is split:
+
+    WHAT IS OURS, AND WAS FIXED
+      - The `report_type` widget preference on the "Case Count by Status" widget
+        read `pie` while the source report declares <type>donut</type>.
+        Corrected to `donut` below. The widget frame is the only piece of
+        chart chrome this package controls, so it must agree with the
+        report it hosts. Detail and the platform precedent are recorded on
+        that widget's own block.
+      - Canvas geometry was re-audited for anything that could clip or
+        hide a widget - including at the 375px width the finding was
+        measured at. Measured from the sys_grid_canvas_pane rows in this
+        file: My Open Cases (posx 0, posy 0, width 6, height 10), My Overdue
+        Tasks (6, 0, 6, 10), Case Count by Status (0, 10, 12, 10). The per-row column spans sum to exactly 12, no
+        two panes overlap, no span is zero or negative, and the load order
+        of the widget blocks matches the reading order of the canvas. So
+        nothing in this file clips a control, hides a widget or reorders
+        the canvas, at 375px or at any other width, and there was nothing
+        of that kind to fix.
+
+    WHAT IS NOT OURS, AND IS RECORDED OPEN RATHER THAN WORKED AROUND
+      - The dashboard shell's Refresh button, its widget kebab/context
+        menu and the tab strip are emitted by the platform's dashboard
+        renderer. Nothing in this file expresses their size, padding, hit
+        area, tab order or accessible name: the complete writable surface
+        here is pa_dashboards (active, name, order, description,
+        restrict_to_roles, roles), pa_dashboards_permissions (grantee,
+        type, read), sys_portal_page, sys_grid_canvas, pa_tabs,
+        pa_m2m_dashboard_tabs, sys_portal (summary/page) plus the twelve
+        sys_portal_preferences parameters the platform defines
+        (renderer, sys_id, title, report_type, show_title, show_header,
+        show_border, filter_indicator, real_time, can_subscribe,
+        subscriber_widget, publisher_widget) and sys_grid_canvas_pane
+        (posx, posy, width, height). None of those twelve is a size, a
+        tabindex, an ARIA attribute or a label for a shell control.
+      - The chart legend, its per-item show/hide toggles and its 375px
+        "1/6" paging arrows are emitted by the platform's Highcharts
+        wrapper (GlideV2ChartingIncludes.jsx / chart_includes.cssx).
+        Measured corroboration that the control is not ours: `show_legend`
+        reads `false` on the committed row of every report this dashboard
+        renders, yet the paginating legend still draws.
+      - Enlarging those hit areas or adding tab stops to them means
+        editing global chart/dashboard component markup or global CSS.
+        AAP Section 0.3.2 verbatim prohibits "Global scope changes of any
+        kind" and AAP Section 0.7.2 verbatim requires "zero global-scope
+        writes are permitted", so this residue is REPORTED for human
+        authorisation, not mitigated here. It is carried in
+        ../docs/dashboards.md under "Dashboard and chart controls (QA
+        Issue 10)" so it survives outside this header. It is OPEN - not
+        "acceptable" and not "improved".
+      - Related and in-scope: the two donut reports this package ships now
+        enable `show_chart_data_label` and `display_grid`, which is what
+        makes every charted value readable in text WITHOUT operating the
+        legend at all (QA Issue 12). That reduces the legend's importance;
+        it does not repair the legend control, and it is not offered as if
+        it did.
+
     AAP COMPLIANCE
     ..............
       - Section 0.7.2 scope-namespace exclusivity: every record carries
@@ -802,7 +866,21 @@
         ../reports/x_casemgmt_case_count_by_status.xml, so it resolves identically on
         every fresh import and no foreign instance's identifier is baked in.
         `report_type` mirrors that report's own <type> so the widget frame is
-        sized for the visualisation it hosts.
+        sized for the visualisation it hosts. THIS widget's value was
+        `pie` while ../reports/x_casemgmt_case_count_by_status.xml declares
+        <type>donut</type>; that mismatch is corrected to `donut` here.
+        It was found while adjudicating the dashboard half of QA Issue 10
+        (undersized / non-keyboard chart controls): the widget frame is the
+        one piece of the chart's chrome this package DOES control, so it
+        must not describe the visualisation as a chart family the report no
+        longer renders. `donut` is a value the platform itself uses for
+        this preference - measured on this instance, the out-of-box widgets
+        "Subscription Status" and "Allocated" both carry
+        report_type=donut against reports whose own <type> is `donut` - so
+        this is the platform's own vocabulary, not an invention. The report
+        remains the authority on the rendering (a pie is not promoted to a
+        donut by the widget, and a donut is not demoted by it); this
+        preference only stops the widget frame and the report disagreeing.
 
         Geometry: posx/posy are 0-based columns/rows on the 12-column grid,
         preserving the layout the earlier revision described (this widget:
@@ -866,7 +944,7 @@
         <sys_mod_count>0</sys_mod_count>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>pie</value>
+        <value>donut</value>
     </sys_portal_preferences>
 
     <sys_portal_preferences action="INSERT_OR_UPDATE">

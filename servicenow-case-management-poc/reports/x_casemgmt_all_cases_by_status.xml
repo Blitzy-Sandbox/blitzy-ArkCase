@@ -558,6 +558,104 @@
     therefore bounded by the AAP Section 0.3.2 exception: it is reported,
     not worked around.
 
+    RE-FILED AS QA ISSUE 11 (MEDIUM): SECOND REMEDY, AND WHAT STAYS OPEN
+    ====================================================================
+    The residue above was re-measured by a later QA pass and re-filed at
+    MEDIUM as QA Issue 11 ("Bar-chart points announce every category as
+    100%"), with two observations added to the original F8 text:
+        "Every bar announces 100.0%, while tooltips/grids correctly show
+         30.77%, 15.38%, and related values. Fallback tables have no
+         caption/role and are below the chart in an internally scrolling
+         body with no chart/grid toggle."
+    (The 30.77% / 15.38% figures are this package's own baseline: 13
+    cases, Draft 4 = 30.77%, Closed / In Progress / Open / Resolved 2
+    each = 15.38%, Pending 1 = 7.69% - confirmed by a direct count of
+    x_casemgmt_case grouped by status.)
+
+    THE SECOND IN-SCOPE REMEDY APPLIED
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    <show_chart_data_label>true</show_chart_data_label>
+
+    Measured on the committed row before this change, this report shipped
+    `show_chart_data_label = false` - so the only place the real category
+    value existed was a hover tooltip and the data grid, and the grid is
+    below the fold of the widget's scrolling body. `show_chart_data_label`
+    is a stock `sys_report` boolean (column label "Show chart data
+    label", sys_dictionary default `false`, hence OFF when the element is
+    omitted) that turns on Highcharts data labels for the series. With it
+    enabled each bar carries its own COUNT as persistent on-canvas text
+    next to the bar - the real category value, painted once per point,
+    with no hover and no scrolling required. Precedent on this instance:
+    4 of the 182 `type=bar` reports already ship it enabled, so it is a
+    supported report option and not a platform modification, which keeps
+    the remedy inside AAP Section 0.3.2. The chart type is untouched -
+    <type>bar</type> is still mandated verbatim by AAP Section 0.4.4
+    ("bar chart for 'All cases by status'") and Section 0.5.1 ("Bar
+    grouped by status").
+
+    NAMED OPEN LIMITATION 1: PER-POINT PERCENTAGE ANNOUNCED AS 100.0%
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    STATUS: OPEN. Not mitigated, not "acceptable", not "close enough",
+    and not "more accessible than before" - the defect QA Issue 11
+    describes is still present after this change and is recorded as
+    outstanding.
+
+      - WHAT ASSISTIVE TECHNOLOGY SAYS (verbatim, measured per point):
+            "1. Draft, 4, 100.0%"        "2. Closed, 2, 100.0%"
+            "3. In Progress, 2, 100.0%"  "4. Open, 2, 100.0%"
+            "5. Resolved, 2, 100.0%"     "6. Pending, 1, 100.0%"
+      - WHAT IT SHOULD SAY: the category's share of the report total -
+            "1. Draft, 4, 30.8%" · "2. Closed, 2, 15.4%" · … ·
+            "6. Pending, 1, 7.7%" - i.e. the same shares the tooltip and
+            the data grid already print correctly.
+      - WHY NO IN-SCOPE RECORD SETTING CHANGES IT: the string is built by
+        the platform's Highcharts wrapper from
+        `accessibility.point.valueDescriptionFormat =
+         "{index}. {point.name}, {point.y}, {point.percentage:.1f}%"`,
+        and `point.percentage` is computed per STACK. ServiceNow renders
+        each category of a single-series bar report as its own stack, so
+        `point.total === point.y` and `point.percentage === 100` for
+        every bar by construction. `sys_report.compute_percent` cannot
+        redirect it: its active sys_choice list on this release offers
+        exactly two values, `aggregate` ("Use Aggregation") and `count`
+        ("Use Record Count") - both of which select WHICH aggregate a
+        percentage is taken of, not how a point's own percentage is
+        computed or announced. No other column on `sys_report` carries a
+        point-description template: `custom_config` holds only chart
+        `transforms` in every out-of-box row, `style_config` is empty on
+        every report on this instance, and the `legend_*` / axis columns
+        touch presentation only.
+      - WHAT A HUMAN WOULD HAVE TO AUTHORISE: an edit to the platform's
+        own charting bundle (GlideV2ChartingIncludes.jsx /
+        chart_includes.cssx) or an equivalent global accessibility
+        override, so that column series compute the percentage against
+        the report total rather than the per-point stack. That is a
+        GLOBAL, out-of-application change, and AAP Section 0.3.2 verbatim
+        prohibits "Global scope changes of any kind" while AAP Section
+        0.7.2 verbatim requires "zero global-scope writes are permitted".
+        It is therefore reported for human decision, not worked around.
+
+    NAMED OPEN LIMITATION 2: THE FALLBACK GRID IS UNLABELLED AND BELOW
+    THE FOLD
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    STATUS: OPEN. Measured: the `table.chart_legend.display-grid-table`
+    the `display_grid` remedy renders declares no `role` and carries no
+    `<caption>`, so it is announced as an unlabelled table adjacent to
+    the chart; and it sits below the chart inside the widget's
+    `overflow:auto` body (client height 305px against scroll height
+    538px), so reaching it means scrolling INSIDE the widget, with no
+    chart-vs-grid toggle offered - the widget's Highcharts context menu
+    exposes only "Save as PNG" and "Save as JPEG", no "View data table"
+    item. Both the caption/role and the grid's placement are emitted by
+    the same global chart component; nothing on the `sys_report` record
+    or on the dashboard's `sys_portal_preferences` supplies a caption, a
+    `role`, a toggle or a different insertion point. Same AAP Section
+    0.3.2 / Section 0.7.2 boundary as Limitation 1, same disposition:
+    reported for human authorisation, OPEN.
+
+    Both limitations are carried forward in ../docs/dashboards.md so they
+    survive outside this file's header.
+
     VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
     ====================================================
     [x] File path: servicenow-case-management-poc/reports/x_casemgmt_all_cases_by_status.xml
@@ -577,6 +675,12 @@
     [x] chart_size = medium
     [x] display_grid = true (QA finding F8: additive accessible data
         grid; chart type deliberately left as bar per AAP Section 0.4.4)
+    [x] show_chart_data_label = true (QA Issue 11: paints each bar's real
+        status count as persistent on-canvas text, so the value no longer
+        lives only in a hover tooltip and in a grid below the widget's
+        scroll fold; the per-point "100.0%" announcement and the grid's
+        missing caption/role remain OPEN - see the two NAMED OPEN
+        LIMITATIONS above)
     [x] is_real_time = false
     [x] sys_class_name = sys_report
     [x] sys_scope and sys_package reference scoped app by name/source
@@ -603,6 +707,7 @@
         <is_scheduled>false</is_scheduled>
         <name>x_casemgmt_all_cases_by_status</name>
         <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
+        <show_chart_data_label>true</show_chart_data_label>
         <sys_class_name>sys_report</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>

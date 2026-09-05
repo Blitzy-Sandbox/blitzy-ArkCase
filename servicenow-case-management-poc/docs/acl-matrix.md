@@ -4,6 +4,8 @@
 
 This document captures the role × table × CRUD authorization matrix for the ServiceNow scoped application POC. Three named scoped roles (`x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`) replace ArkCase's `ApplicationRolesToPrivilegesConfig`-based privilege resolution. Authorization is enforced through table-level ACLs (read, write, create, delete) and field-level ACLs on the sensitive fields `assigned_group` and `assigned_agent`, plus three field-level `query_range` grants on the date columns the dashboards filter by (see [Field-level `query_range` grants](#field-level-query_range-grants-on-the-three-date-columns-qa-finding-f17)). All 29 ACLs live in the `x_casemgmt` scope; no global ACLs are modified.
 
+**One part of the matrix is not delivered at runtime, and it is not the ACLs' fault.** The `organization` column on `x_casemgmt_case_party` references the out-of-box global table `core_company`, whose `read` operation is role-gated to roles none of the three scoped roles holds — so Organization parties are unusable for every scoped role, including `case_manager`, and are reachable only by an `admin`. The full measured account, the three candidate remedies, the AAP section that blocks each of them and the exact records a human would have to authorise are in [Organization parties are not usable by any of the three scoped roles](#organization-parties-are-not-usable-by-any-of-the-three-scoped-roles-qa4-issue-5--blocked-awaiting-human-authorization). Read that section before relying on the `case_manager` "Read All / Write All / Create" cells below.
+
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
 ## Role × CRUD Matrix
@@ -242,6 +244,113 @@ The role × CRUD matrix is mirrored on the `x_casemgmt_case_task` and `x_casemgm
 
 The "parent case is Assigned only" check uses `current.case.assigned_agent` and `current.case.assigned_group` — i.e., dot-walks through the reference field. No hard-coded `sys_id`s.
 
+### Organization parties are not usable by any of the three scoped roles (QA4 Issue 5 — BLOCKED, awaiting human authorization)
+
+**The scoped ACLs on `x_casemgmt_case_party` are correct and are not the cause.** All eight of them target the table `x_casemgmt_case_party` with an empty condition or the "Assigned only" script, none of them mentions `core_company`, and no field-level ACL exists on `x_casemgmt_case_party.organization` anywhere on the instance. What blocks the Organization branch sits one table away: AAP Section 0.5.7 fixes that branch's reference target verbatim as
+
+```
+organization | Reference -> core_company | Conditional: required if party_type = Organization
+```
+
+and `core_company` is an out-of-box **global** table whose `read` operation is role-gated to roles that none of the three scoped roles holds, contains, or can be granted without a change the AAP forbids. A reference field whose target table the caller may not read is not rendered as an error by the platform — it is **omitted from the form and stripped from the payload**, which is why the symptom looks like a missing field rather than a denial.
+
+This widens the read-only symptom already disclosed as **ADV-1** in [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) (§0.9 ADV-1, §4 item 19, and the N8 rediscovery) into the **create and update** paths as well, and it is recorded here because this is the document that states the manager's grant.
+
+#### What a `case_manager` can and cannot do with an Organization party today
+
+| Operation on an Organization party | Outcome today | How established |
+| --- | --- | --- |
+| Read the party row's own columns (`number`, `case`, `party_type`, `role_label`) | **Works.** `read` on `x_casemgmt_case_party` is granted to all three roles | Measured |
+| Read the `organization` value | **Denied.** The column is absent from the rendered form and blank in the case form's Parties related list | Measured on the rendered form — `qa4-ui-party-organization-manager.png` shows PARTY9000002 rendering only Number / Party Type / Case / Role Label, against `qa4-ui-party-organization-admin.png` where `admin` sees the required *Synthetic Org Alpha*. The matching API behaviour — the column stripped from the payload, and `GET /api/now/table/core_company` answering **403** for each persona — was measured under impersonation and is recorded as ADV-1 |
+| Select a company on a new or existing party | **Impossible.** No control renders at all, so there is nothing to type into | Measured on the rendered form — `qa4-ui-manager-new-party-organization-no-org-field.png` shows a **New** Case Party with Party Type = Organization, no Organization control, and **Submit** offered. The underlying denial on the company endpoint was measured in the QA4 pass and as ADV-1 |
+| Create an Organization party from the form | **Refused server-side; nothing is stored.** [`../business_rules/x_casemgmt_validate_case_party_integrity.xml`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) reaches its conditional-requiredness branch, calls `gs.addErrorMessage('Organization is required when Party Type is Organization.')` and `current.setAbortAction(true)` | Code path; the deployed `sys_script` is byte-identical to the packaged one (SHA-256 `ac92564a7c3dd26195603d6fe48e8b6a2f84481cf6231d2e51619ca2508e0b44` on both sides), `active=true`, `when=before`, `action_insert=true`, `action_update=true` |
+| Create or update one over the Table API by supplying a company `sys_id` directly | **Would be accepted** — no field-level ACL denies `organization`, and the integrity rule resolves the target with plain `GlideRecord`, which applies no ACLs — but the manager **has no authorized path to obtain a `sys_id`**, since discovering one requires the same `core_company` read, and AAP Section 0.7.2 forbids shipping one | Derived from the ACL inventory and the rule's code path; not measured, because exercising it requires a write to the shared instance |
+| Update an existing Organization party's other columns | **Succeeds, and the stored company survives.** A field absent from the form submission is never applied, so `current.getValue('organization')` reads the stored value and the requiredness branch passes | Derived from the same code path; not measured for the same reason |
+| Delete an Organization party | **Works** — `delete` on the party table is granted to `case_manager` | Measured for the table (see the F7 section above) |
+| Everything above, for a **Person** party | **Fully usable.** `sys_user` read is not role-gated on this instance | Measured |
+
+`x_casemgmt_case_agent` and `x_casemgmt_case_viewer` are affected identically on every read row, and the agent additionally on every create/update row: none of the three holds a gating role, so the outcome is a property of the role set and not of the matrix cell.
+
+#### Measured evidence (read-only Table API as `admin`, 2026-09-05T17:30Z)
+
+| Fact | Observed value |
+| --- | --- |
+| ACLs on `core_company` | **8**, every one `sys_scope=Global`: `create`, `delete`, `read` ×2, `write`, `query_range` ×2 (one on `core_company`, one on `core_company.*`), `report_view` |
+| Roles on read ACL `00df2becff3722103ad8ffffffffffeb` (`admin_overrides=false`) | `ai_user_admin` |
+| Roles on read ACL `8109a169c0a801666217a6825787c7ff` (`admin_overrides=true`) | `contract_manager`, `inventory_user`, `itil`, `model_manager`, `problem_task_analyst`, `service_viewer`, `sn_gf.goal_user_read`, `sn_problem_read`, `user_admin` |
+| Roles on the two `query_range` ACLs | `public` — so `public` gates *range predicates*, **never** `read`. The application's own roles are absent from every `core_company` role link (24 link rows in total) |
+| Same-specificity ACL semantics, demonstrated rather than assumed | `admin` holds `user_admin` but **not** `ai_user_admin`, and `admin` reads `core_company` — so two read ACLs at the same specificity are **any-pass**, and an *additional* read ACL can therefore grant the operation without editing either existing row |
+| Roles held by the three demo personas (`sys_user_has_role` filtered on `user.user_name`) | Exactly **3** grant rows: `x_casemgmt_demo_manager → x_casemgmt_case_manager`, `x_casemgmt_demo_agent → x_casemgmt_case_agent`, `x_casemgmt_demo_viewer → x_casemgmt_case_viewer`, all `inherited=false` |
+| Role containment | `sys_user_role_contains` returns **0** rows for `x_casemgmt*`, and `includes_roles` is empty on all three role definitions — so no persona inherits a gating role transitively |
+| The Person branch, for contrast | `sys_user` read is governed by ACL `936dc648eb3630003623666cd206fecc` with **zero** `sys_security_acl_role` links (no role required) and `cfa2be6167230200fba9f1d557415a3a` linked to `public`, which every user holds |
+| Cross-scope addressability of `core_company` | `sys_db_object.read_access=true` — a **scoped script** may address the table; the block is the *caller's* read ACL, not cross-scope access |
+| The dictionary row, unchanged and correct | `organization` → `internal_type=reference`, `reference=core_company`, `mandatory=false`, no reference qualifier — exactly Section 0.5.7 |
+| The UI Policy the platform cannot honour | `507da6cb683691d5a09285ab09297b22` (`party_type=Organization`) sets `organization` `mandatory=true, visible=true`; a UI Policy cannot make mandatory a control that is not on the form, which is precisely why **Submit** is offered on a party that can never be saved |
+| Data affected | **3 of the 11** party rows are Organization parties — `PARTY9000002` (*Synthetic Org Alpha*, CASE9000003), `PARTY9000005` (*Synthetic Org Beta*, CASE9000005), `PARTY9000007` (*Synthetic Org Alpha*, CASE9000008). All three read as blank for every persona |
+| ACLs authored on `core_company` by this application | **Zero.** No ACL in scope `x_casemgmt` targets any global table |
+
+Screenshot artifacts, by absolute path:
+
+- `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa4-ui-party-organization-manager.png` — PARTY9000002 on the Case Party form as `x_casemgmt_demo_manager`: no Organization field.
+- `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa4-ui-party-organization-admin.png` — the same record as `admin`: Organization required and populated with *Synthetic Org Alpha*.
+- `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa4-ui-manager-new-party-organization-no-org-field.png` — a **New** Case Party as the manager with Party Type = Organization: no Organization control, Submit offered.
+
+#### The stored data cannot be corrupted by this, and that part is closed
+
+The one half of this finding that is fixable inside the application was already closed and has been re-verified line by line: the polymorphic contract is enforced **server-side**, not only on the form. The requiredness branch of [`../business_rules/x_casemgmt_validate_case_party_integrity.xml`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) reads the value the row *would carry after* the write (`current.getValue`), is not narrowed to changed fields, and runs on `action_insert` **and** `action_update`, so an Organization party with an empty `organization` is refused on every path — the rendered form, the classic form POST, and the Table API alike — whether or not the client ever drew the control. No half-built Organization party can reach the table as a side effect of the missing field.
+
+Two consequences of that refusal are recorded here rather than papered over:
+
+- **The refusal is honest but unsatisfiable from the manager's screen.** The message names the field to supply — `Organization is required when Party Type is Organization.` — and that field is not on their form, so a manager who follows the instruction has nowhere to follow it to. The message is deliberately left as it is: it states the true reason the write was refused, and rewording it to describe an authorization limitation would move a security explanation into a data-integrity rule while changing nothing about what the user can actually do. The dead end is a symptom of the gap below, and it disappears when the gap is closed.
+- **A refused submit still consumes a party number.** `sys_number` allocates on form render, so the New form in the screenshot above had already taken `PARTY0000095` before the refusal. This is stock platform numbering behaviour, not a defect in this application.
+
+#### Three candidate remedies, and the AAP section that blocks each
+
+| # | Remedy | What it would actually take | Blocked by |
+| --- | --- | --- | --- |
+| 1 | **Grant the three scoped roles `read` on `core_company`** via one *additional* ACL | One new `sys_security_acl` (`name=core_company`, `operation=read`) plus three `sys_security_acl_role` links. Because same-specificity read ACLs are any-pass — demonstrated above — no existing row is edited and nothing already granted is narrowed. It must be authored with `security_admin` elevated through the UI (elevation is impossible over REST) and it lands in the **Global** scope | **AAP Section 0.3.2**, which prohibits "Global scope changes of any kind" and names `core_company` explicitly among the tables that must not be edited; and **AAP Section 0.7.2**, whose scoped-namespace constraint permits "zero global-scope writes" |
+| 2 | **Grant the demo personas an out-of-box role that already carries the read** (`itil`, `user_admin`, `service_viewer`, …) | Three `sys_user_has_role` rows. Trivial to apply, and by far the widest blast radius: `itil` alone carries read/write across most of the platform's operational tables, so the personas would stop being a faithful test of the application's own authorization | **AAP Section 0.5.6**, which fixes the role surface at exactly three scoped roles with exactly the CRUD cells in the matrix above, and **AAP Section 0.7.3 Gate 3**, which measures role-based access against those three roles. **AAP Section 0.3.2** also excludes edits to `sys_user_role` beyond the three scoped roles |
+| 3 | **Re-point `organization` at a scoped proxy table** (e.g. `x_casemgmt_organization`) that the scoped ACLs can govern | One new table, its dictionary and ACLs, a data copy or re-seed of the referenced companies, and a dictionary change on `x_casemgmt_case_party.organization` | **AAP Section 0.5.7**, which states the reference target verbatim as `core_company`, reinforced by **Section 0.7.1** ("Preserve the user-prompt's data-model field set verbatim — no additions, no renames, no type relaxations"); and **Section 0.3.2**'s Minimal-Change Clause, which forbids adding tables beyond the defined scope |
+
+**Recommended remedy: #1, narrowed by condition.** It is the smallest authorization delta that makes Section 0.5.7's Organization branch work: one operation, on one table, for exactly the three roles the matrix already grants `read` on the party table, leaving both the role surface of Section 0.5.6 and the schema of Section 0.5.7 exactly as the AAP fixes them. Remedy 2 buys the same read at the cost of the very matrix Gate 3 exists to measure, and remedy 3 buys it by contradicting the schema the AAP quotes verbatim — so both trade a documented limitation for an undocumented deviation, which is a worse outcome than the limitation. Remedy 1's whole cost is that it is a Global write, which is exactly why it needs a human's explicit authorization rather than an agent's judgement.
+
+**A narrowed variant exists, and the human authorizing this has to choose between the two knowingly.** Instead of granting read on the whole company directory, the new ACL can carry a condition script that grants read only on the companies the application itself already references — resolved by query, with no hard-coded `sys_id`:
+
+```javascript
+// Narrowed variant of remedy #1: grant core_company read only for companies an
+// x_casemgmt_case_party row already references. No hard-coded sys_id. `current`
+// is the core_company row the ACL is being evaluated against.
+(function() {
+    var partyGr = new GlideRecord('x_casemgmt_case_party');
+    partyGr.addQuery('organization', current.sys_id);
+    partyGr.setLimit(1);
+    partyGr.query();
+    return partyGr.hasNext();
+})();
+```
+
+The trade-off is not cosmetic and must not be glossed over. The narrowed variant makes the **three existing** Organization parties readable and their company names visible, but it does **not** restore the create path: the reference picker can only offer rows the caller may read, so a company that no party references yet stays invisible and a *new* Organization party still cannot be given one. It also evaluates one query per company row the caller reads. So:
+
+- choose the **unconditional** grant to deliver Section 0.5.7's Organization branch in full — read *and* create — at the cost of making the company directory readable to anyone holding a scoped role; or
+- choose the **narrowed** grant to fix only the read symptom (ADV-1) while leaving the create half of this finding open, and record it as a partial remedy.
+
+The recommendation is the unconditional grant, because a partial remedy leaves the AAP requirement partly undelivered and leaves this section open either way. What the unconditional grant would expose was measured: `core_company` holds **179** rows on this instance, of which exactly **2** belong to this POC (`Synthetic Org Alpha`, `Synthetic Org Beta`) and the remainder are the platform's out-of-box vendor/company demo directory (`ACME *`, `Apple`, `Cisco`, `Dell Inc.`, …). It contains no customer or personal data, so the read exposure is a policy question about global scope — which is real, and is why a human must authorise it — rather than a data-sensitivity question.
+
+**The exact records a human would have to authorise for remedy #1:**
+
+| Record | Table | Values |
+| --- | --- | --- |
+| 1 new ACL | `sys_security_acl` | `name=core_company`, `operation=read`, `type=record`, `active=true`, `admin_overrides=true`, `sys_scope=Global`; `condition` empty, or the narrowing script above |
+| 3 new role links | `sys_security_acl_role` | that ACL × `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer` — one per role that Section 0.5.6 grants `read` on `x_casemgmt_case_party` |
+| Session prerequisite | — | `security_admin` **elevated through the UI** user menu (ServiceNow does not allow elevation over REST), then a security-cache flush before re-testing |
+| Packaging consequence | — | Four Global-scope payloads would join a package that today contains none, so the "zero global-scope writes" statement in Section 0.7.2 would have to be amended with the authorization, not quietly broken |
+
+Re-verification once authorised, in this order: impersonate `x_casemgmt_demo_manager`, open PARTY9000002 and confirm the Organization field renders with *Synthetic Org Alpha*; open a **New** Case Party, set Party Type = Organization and confirm the control renders, is marked mandatory by UI Policy `507da6cb683691d5a09285ab09297b22`, and that a company can be selected and saved; confirm the Parties related list on CASE9000003 shows the company; then repeat the read half as `x_casemgmt_demo_agent` on an assigned case and as `x_casemgmt_demo_viewer`, and re-run Gate 3 to confirm nothing else widened.
+
+#### Status
+
+**Until one of those remedies is authorised, Organization parties on this application are usable only by a user holding `admin` (or one of the nine roles on the `core_company` read ACL).** AAP Section 0.5.7's party model is therefore **not fully delivered for the three scoped roles**: its Organization branch is readable and writable by no role the application defines, and AAP Section 0.5.6's unqualified `case_manager` cells — Read All, Write All, Create — are not delivered on the `organization` column. Section 0.5.6's Person branch, the eight party ACLs, the dictionary row, the conditional UI Policies and the server-side exactly-one-of invariant are all intact and verified; the gap is exactly and only the authorization to read the reference target. It is open, it is a HIGH-severity functional and security finding, and it stays open in these records until a human authorises one of the three remedies above.
+
 ## Source-Side Semantic Mapping
 
 This section documents how the three ServiceNow scoped roles semantically correspond to ArkCase's `ApplicationRolesToPrivilegesConfig`-based privilege resolution. None of the ArkCase code is reused — it is read-only context.
@@ -274,7 +383,7 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 
 The following ACL constraints from AAP Section 0.7.1 are non-negotiable:
 
-- **No global ACLs touched.** Every ACL is in the `x_casemgmt` scope.
+- **No global ACLs touched.** Every ACL is in the `x_casemgmt` scope. This constraint is the reason the Organization branch of `x_casemgmt_case_party` is undelivered rather than repaired — the repair is a `core_company` read grant, which is a global write. It is an **open, unauthorised** item, not a closed decision: see [Organization parties are not usable by any of the three scoped roles](#organization-parties-are-not-usable-by-any-of-the-three-scoped-roles-qa4-issue-5--blocked-awaiting-human-authorization).
 - **No hard-coded `sys_id`s.** ACL conditions resolve current user via `gs.getUserID()` and group membership via `sys_user_grmember` query — never literal sys_ids.
 - **No global role assignments outside the three scoped roles.** Demo users get only the three new roles via the seed data.
 - **No other roles are introduced.** ArkCase's other roles (admin, supervisor, etc.) are NOT replicated.
@@ -287,3 +396,5 @@ The following ACL constraints from AAP Section 0.7.1 are non-negotiable:
 - [`../roles/`](../roles/) — three role records: `sys_user_role_x_casemgmt_case_manager.xml`, `sys_user_role_x_casemgmt_case_agent.xml`, `sys_user_role_x_casemgmt_case_viewer.xml`
 - [`../acl/`](../acl/) — all ACL records (table-level and field-level)
 - [`../seed-data/role_assignments/`](../seed-data/role_assignments/) — `sys_user_has_role_x_casemgmt_*.xml` records assigning roles to demo users
+- [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — ADV-1 (§0.9), §4 item 19 and the N8 rediscovery record the read-side symptom of the `core_company` gap; the create/update side and the remedy analysis are in [Organization parties are not usable by any of the three scoped roles](#organization-parties-are-not-usable-by-any-of-the-three-scoped-roles-qa4-issue-5--blocked-awaiting-human-authorization) above
+- [`../business_rules/x_casemgmt_validate_case_party_integrity.xml`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) — the server-side backstop that refuses an Organization party with an empty `organization` on both the insert and the update path, independently of what the form rendered

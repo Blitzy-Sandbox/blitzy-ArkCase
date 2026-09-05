@@ -44,7 +44,7 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 | --- | --- | --- | --- | --- | --- |
 | 1 | My Open Cases | List | `x_casemgmt_my_open_cases.xml` | (none) | `assigned_agent = javascript:gs.getUserID() AND status NOT IN (Resolved, Closed)` |
 | 2 | My Overdue Tasks | List | `x_casemgmt_my_overdue_tasks.xml` | (none) | `assigned_to = javascript:gs.getUserID() AND due_date < javascript:gs.daysAgoStart(0) AND status != Closed` |
-| 3 | Case Count by Status | Donut | `x_casemgmt_case_count_by_status.xml` | `status` | `assigned_agent = javascript:gs.getUserID() OR assigned_group IN javascript:gs.getUser().getMyGroups() OR sys_created_by = javascript:gs.getUserName()` — the viewing user's own portfolio (see Widget 3) |
+| 3 | Case Count by Status | Donut (+ persistent segment labels + accessible data grid) | `x_casemgmt_case_count_by_status.xml` | `status` | `assigned_agent = javascript:gs.getUserID() OR assigned_group IN javascript:gs.getUser().getMyGroups() OR sys_created_by = javascript:gs.getUserName()` — the viewing user's own portfolio (see Widget 3) |
 
 #### Widget 1: My Open Cases
 
@@ -76,6 +76,9 @@ The Agent Workspace Dashboard provides a personal operational view for individua
 - **Filter Condition:** `assigned_agent=javascript:gs.getUserID()^ORassigned_groupINjavascript:gs.getUser().getMyGroups()^ORsys_created_by=javascript:gs.getUserName()`
 - **Slice Labels:** Draft, Open, In Progress, Pending, Resolved, Closed
 - **User Action:** clicking a slice opens a filtered case list
+- **`show_chart_data_label = true`** and **`display_grid = true`** — each of the six segments carries a persistent on-canvas label, and a full `(status, count, percentage of count)` data table renders beneath the chart. See [Persistent labels and the data grid on the two donuts (QA Issue 12)](#persistent-labels-and-the-data-grid-on-the-two-donuts-qa-issue-12).
+- **`allow_data_label_overlap` and `show_data_label_position_middle` stay `false`** — deliberately; the reasoning is in the same section.
+- **Widget `report_type` preference = `donut`** — corrected from `pie`, which disagreed with the report's own `<type>donut</type>`. See [Dashboard and chart controls (QA Issue 10)](#dashboard-and-chart-controls-qa-issue-10).
 
 **Why this widget is filtered (QA finding F5).** An earlier revision shipped this report with an empty filter and described it as "unfiltered by design — the whole team's backlog", on the assumption that the table-level read ACL would narrow the aggregate for an agent. **That assumption is measured false: report execution does not apply row-level read ACLs.** Under the `x_casemgmt_demo_agent` persona the donut aggregated every case on the instance and disclosed the status distribution of records the same persona is refused on every other surface (the form answers "Security constraints prevent access to requested page"; the Table API answers HTTP 404). Only counts leaked — no subject, number or other record content — but the number of cases sitting in each lifecycle stage is exactly what an "Assigned only" grant withholds.
 
@@ -103,9 +106,9 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 
 | # | Widget Name | Type | Source Report | Group-By / Aggregate | Filter |
 | --- | --- | --- | --- | --- | --- |
-| 1 | All Cases by Status | Bar (+ accessible data grid) | `x_casemgmt_all_cases_by_status.xml` | `status` | (none) |
-| 2 | All Cases by Type | Donut | `x_casemgmt_all_cases_by_type.xml` | `type` | (none) |
-| 3 | All Cases by Priority | Bar (+ accessible data grid) | `x_casemgmt_all_cases_by_priority.xml` | `priority` | (none) |
+| 1 | All Cases by Status | Bar (+ per-bar data labels + accessible data grid) | `x_casemgmt_all_cases_by_status.xml` | `status` | (none) |
+| 2 | All Cases by Type | Donut (+ persistent segment labels + accessible data grid) | `x_casemgmt_all_cases_by_type.xml` | `type` | (none) |
+| 3 | All Cases by Priority | Bar (+ per-bar data labels + accessible data grid) | `x_casemgmt_all_cases_by_priority.xml` | `priority` | (none) |
 | 4 | Average Time to Close | Single Score | `x_casemgmt_avg_time_to_close.xml` | `AVG(duration_to_close)` (Function Field; see Widget 4 details) | `status = Closed` |
 | 5 | Cases Opened (Last 30 Days) | Single Score | `x_casemgmt_cases_opened_30d.xml` | `COUNT(sys_id)` | `opened_date >= javascript:gs.daysAgoStart(30)` |
 
@@ -119,6 +122,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Bar Order:** Draft, Open, In Progress, Pending, Resolved, Closed (status display order from [`data-model.md`](./data-model.md))
 - **User Action:** clicking a bar opens a filtered case list
 - **`display_grid = true`** — the report also renders an accessible HTML data table under the chart. See [Accessible values for the two bar widgets (QA finding F8)](#accessible-values-for-the-two-bar-widgets-qa-finding-f8).
+- **`show_chart_data_label = true`** — each bar also carries its own case count as persistent on-canvas text, so the real category value no longer lives only in a hover tooltip and in a grid below the widget's scroll fold. The per-point `100.0%` announcement is **not** fixed by this; see [Named open limitations](#named-open-limitations).
 
 #### Widget 2: All Cases by Type
 
@@ -129,6 +133,8 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Aggregate:** `COUNT(sys_id)`
 - **Slice Labels:** General Inquiry, Complaint
 - **User Action:** clicking a slice opens a filtered case list
+- **`show_chart_data_label = true`** and **`display_grid = true`** — both segments carry a persistent on-canvas label and a full `(type, count, percentage of count)` data table renders beneath the chart. This donut had the identical zero-data-label defect QA Issue 12 filed against the Agent Workspace donut, so it is fixed under the same finding rather than left for the same defect to be filed twice. See [Persistent labels and the data grid on the two donuts (QA Issue 12)](#persistent-labels-and-the-data-grid-on-the-two-donuts-qa-issue-12).
+- **Widget `report_type` preference = `donut`** — corrected from `pie`, which disagreed with the report's own `<type>donut</type>`. See [Dashboard and chart controls (QA Issue 10)](#dashboard-and-chart-controls-qa-issue-10).
 
 #### Widget 3: All Cases by Priority
 
@@ -140,6 +146,7 @@ The Manager View Dashboard provides a portfolio-wide operational view for case m
 - **Bar Order:** Low, Medium, High, Critical
 - **User Action:** clicking a bar opens a filtered case list
 - **`display_grid = true`** — the report also renders an accessible HTML data table under the chart. See [Accessible values for the two bar widgets (QA finding F8)](#accessible-values-for-the-two-bar-widgets-qa-finding-f8).
+- **`show_chart_data_label = true`** — each bar also carries its own case count as persistent on-canvas text. The per-point `100.0%` announcement is **not** fixed by this; see [Named open limitations](#named-open-limitations).
 
 #### Accessible values for the two bar widgets (QA finding F8)
 
@@ -174,6 +181,8 @@ The counts are never wrong. The cause is that the platform sets `accessibility.p
 
 **Residue, bounded by AAP Section 0.3.2.** The grid gives assistive technology a correct route to the values; it does not rewrite the point description. Re-measured after the change, the bars still announce the same `100.0%` strings and the screen-reader information region is unchanged (`Bar chart with 6 bars.` / `The chart has 1 Y axis displaying Case Count. Range: 0 to 8.` / `End of interactive chart.`). Correcting the announcement means editing `accessibility.point.valueDescriptionFormat` for column series inside the platform's own charting bundle (`GlideV2ChartingIncludes.jsx` / `chart_includes.cssx`) — a **global** artifact, and AAP Section 0.3.2 prohibits "Global scope changes of any kind" while Section 0.7.2 requires "zero global-scope writes". No scoped `sys_report` column overrides that template on this release: `custom_config` carries only chart `transforms` in every out-of-box row, `style_config` is empty on every report on the instance, `show_chart_total` is enabled by none of the 182 bar reports, and the widget's Highcharts context menu offers only "Save as PNG" / "Save as JPEG" (no "View data table" item). Two measured caveats on the grid itself: it declares no `role` and no caption, so it is announced as an unlabeled table next to the chart; and it sits below the chart inside the widget's `overflow:auto` body (client height 305px vs scroll height 538px), so a sighted user must scroll within the widget to reach it and there is no chart-vs-grid toggle.
 
+**Re-filed, and where it now lives.** A later QA pass re-measured that residue and re-filed it at MEDIUM as QA Issue 11, adding the grid's missing caption/role and its position inside the widget's scrolling body to the original text. A second in-scope remedy has since been applied — `show_chart_data_label = true` on both bar reports, so each bar carries its own case count as persistent on-canvas text rather than leaving the real value to a tooltip and to a grid below the scroll fold — and the part that remains is now stated as an **open defect** rather than as bounded residue. See [Limitation 1](#limitation-1--every-bar-point-announces-1000-qa-issue-11) and [Limitation 2](#limitation-2--the-fallback-data-grid-is-unlabelled-and-below-the-fold-qa-issue-11) under [Named open limitations](#named-open-limitations).
+
 #### Widget 4: Average Time to Close
 
 - **Type:** Single Score
@@ -195,6 +204,67 @@ The counts are never wrong. The cause is that the platform sets `accessibility.p
 - **Aggregate:** `COUNT(sys_id)`
 - **Display Format:** integer count
 - **No-Data Behavior:** If zero cases were opened in the last 30 days, display "0" (not "No data")
+
+## Chart Accessibility Configuration
+
+This section is the single place the four chart reports' accessibility columns are stated, and the single place the limitations that remain **open** are named. It supersedes nothing above it; it collects what would otherwise be scattered across four report headers.
+
+### Configured values, as shipped
+
+| Report | Type | `show_chart_data_label` | `display_grid` | `allow_data_label_overlap` | `show_data_label_position_middle` |
+| --- | --- | --- | --- | --- | --- |
+| `x_casemgmt_case_count_by_status` (Agent Workspace) | donut | **true** | **true** | false | false |
+| `x_casemgmt_all_cases_by_type` (Manager View) | donut | **true** | **true** | false | false |
+| `x_casemgmt_all_cases_by_status` (Manager View) | bar | **true** | true | false | false |
+| `x_casemgmt_all_cases_by_priority` (Manager View) | bar | **true** | true | false | false |
+
+All four are stock `sys_report` boolean columns. Their `sys_dictionary` default is `false`, so an **omitted** element in the record XML loads as OFF — which is precisely how the two donuts came to ship with no data labels and no grid. Every one of the four values above is therefore emitted explicitly where it must be `true`, and left omitted only where `false` is the intended state (documented below).
+
+### Persistent labels and the data grid on the two donuts (QA Issue 12)
+
+**The defect.** Measured on the rendered Agent Workspace, the "Case Count by Status" donut carried **zero** `.highcharts-data-label` elements, so each of the six status values existed only behind a hover or in the legend. At 1280px the six-item legend is correct; at 375px it collapses to a paginated strip reading **`1/6`**, exposing one value at a time behind paging arrows that are not keyboard reachable. The "All Cases by Type" donut on the Manager View had the identical configuration (`show_chart_data_label=false`, `display_grid=false`) and is fixed under the same finding.
+
+**What is done.**
+
+- `show_chart_data_label = true` — Highcharts paints a persistent, on-canvas label for every segment at every viewport width, so a value never depends on the legend surviving the 375px collapse. Precedent: of the 8 `type=donut` reports on this instance, 3 already ship this column enabled ("Today's flow executions by state", "On-Call: HoursDistribution by User - 7 days").
+- `display_grid = true` — the same stock column the two bar reports already carry for QA finding F8. It renders `table.chart_legend.display-grid-table` beneath the chart with a real `<thead>`, `th scope="col"` column headers, `th scope="row"` row headers and a bold total row, outside any `aria-hidden="true"` ancestor. It is what makes all six status values (and both type values) reachable **in text**, whatever the legend does. At the package baseline of 13 cases the status grid reads Draft 4 / 30.77%, Closed 2 / 15.38%, In Progress 2 / 15.38%, Open 2 / 15.38%, Resolved 2 / 15.38%, Pending 1 / 7.69%, Total 13 / 100%; the type grid reads General Inquiry 8 / 61.54%, Complaint 5 / 38.46%, Total 13 / 100%.
+- **Precedent gap, stated rather than glossed:** 6 of the 182 `type=bar` reports on this instance enable `display_grid`, but **no** `pie` or `donut` report does. The column carries no chart-type qualifier in its dictionary row and the grid is emitted by the chart component's legend/grid renderer rather than by the series, so it is expected to render under a donut too — but that is a runtime fact and it is owed a browser check on both dashboards once the live report rows carry the new values. It is not asserted from the repository artifacts.
+
+**What stays `false`, and why.**
+
+- `allow_data_label_overlap = false` — with it off, Highcharts suppresses a label that would collide with its neighbour instead of painting two on top of each other; with it on, six segments in a 375px-wide widget produce overlapping, unreadable text. The accessible route to a value a label had to drop is the data grid, which carries every row in text — so enabling overlap would trade a legible chart for a cluttered one and add nothing the grid does not already carry.
+- `show_data_label_position_middle = false` — it moves the label **inside** the ring, and these donuts render a 70% centre hole (measured `innerR` 67.795 against `r` 96.85 in the dashboard widget), leaving a band far too narrow at 375px to hold "In Progress" or "General Inquiry" without truncation.
+- `show_chart_total = false` — it prints one aggregate total, which does not address per-segment labelling, and it is enabled by zero of the 182 bar reports on this instance.
+- `show_legend` is **not** set by any report in this package. Measured on the committed rows it reads `false`, and the paginating legend still draws — which is what locates legend rendering, its paging arrows and their keyboard reachability in the chart component rather than in a report record. See [Dashboard and chart controls (QA Issue 10)](#dashboard-and-chart-controls-qa-issue-10).
+
+### Named open limitations
+
+These three are **open**. They are recorded here so they survive outside the report headers, and none of them is closed with "acceptable", "close enough" or "more accessible than before" — each is a defect that is still present, with the authorisation it would take to fix it.
+
+#### Limitation 1 — every bar point announces `100.0%` (QA Issue 11)
+
+- **Status:** OPEN. Not mitigated by the `display_grid` remedy of QA finding F8, and not mitigated by the `show_chart_data_label` remedy above.
+- **What assistive technology says (verbatim, measured per point):** `1. Draft, 4, 100.0%` · `2. Closed, 2, 100.0%` · `3. In Progress, 2, 100.0%` · `4. Open, 2, 100.0%` · `5. Resolved, 2, 100.0%` · `6. Pending, 1, 100.0%`; and on priority `1. Medium, 5, 100.0%` · `2. High, 4, 100.0%` · `3. Critical, 2, 100.0%` · `4. Low, 2, 100.0%`.
+- **What it should say:** the category's share of the report total — `1. Draft, 4, 30.8%` … `6. Pending, 1, 7.7%`, and `1. Medium, 5, 38.5%` … `4. Low, 2, 15.4%`. Those are the shares the tooltip and the data grid already print correctly.
+- **Why no in-scope record setting changes it:** the string is built by the platform's Highcharts wrapper from `accessibility.point.valueDescriptionFormat = "{index}. {point.name}, {point.y}, {point.percentage:.1f}%"`, and `point.percentage` is computed **per stack**. ServiceNow renders each category of a single-series bar report as its own stack, so `point.total === point.y` and `point.percentage === 100` for every bar by construction. `sys_report.compute_percent` cannot redirect it: its active `sys_choice` list on this release offers exactly two values, `aggregate` ("Use Aggregation") and `count` ("Use Record Count") — both select **which aggregate** a percentage is taken of, not how a point's own percentage is computed or announced. No other `sys_report` column carries a point-description template: `custom_config` holds only chart `transforms` in every out-of-box row, `style_config` is empty on every report on the instance, and the `legend_*` / axis columns touch presentation only.
+- **What a human would have to authorise:** an edit to the platform's own charting bundle (`GlideV2ChartingIncludes.jsx` / `chart_includes.cssx`) or an equivalent global accessibility override, so that column series compute the percentage against the report total rather than the per-point stack. That is a **global** change, and AAP Section 0.3.2 verbatim prohibits "Global scope changes of any kind" while AAP Section 0.7.2 verbatim requires "zero global-scope writes are permitted". It is reported for human decision, not worked around.
+- **What the in-scope remedies do achieve:** the real category value is now on the canvas next to each bar and in a text table beneath it, so the count is available without hover and without the announcement. The count was never wrong; the percentage in the announcement still is.
+
+#### Limitation 2 — the fallback data grid is unlabelled and below the fold (QA Issue 11)
+
+- **Status:** OPEN.
+- **Measured:** `table.chart_legend.display-grid-table` declares no `role` and carries no `<caption>`, so it is announced as an unlabelled table adjacent to the chart; and it sits below the chart inside the widget's `overflow:auto` body (client height 305px against scroll height 538px), so reaching it means scrolling **inside** the widget. No chart-vs-grid toggle is offered — the widget's Highcharts context menu exposes only "Save as PNG" and "Save as JPEG", with no "View data table" item.
+- **Why it is not ours:** the caption, the `role` and the grid's insertion point are all emitted by the same global chart component. Nothing on the `sys_report` record and nothing in the dashboard's `sys_portal_preferences` vocabulary (`renderer`, `sys_id`, `title`, `report_type`, `show_title`, `show_header`, `show_border`, `filter_indicator`, `real_time`, `can_subscribe`, `subscriber_widget`, `publisher_widget`) supplies a caption, a `role`, a toggle or a different position.
+- **What a human would have to authorise:** the same global chart-component change as Limitation 1, bounded by AAP Section 0.3.2 and Section 0.7.2.
+
+#### Dashboard and chart controls (QA Issue 10)
+
+- **Status:** OPEN for the platform half; the one part of it that was ours is fixed.
+- **Measured:** on the rendered dashboards the Refresh control, the widget kebab/context menu and the chart legend controls are below the 24/44px checkpoint standard, and the legend's per-item show/hide toggles are not keyboard reachable (at 375px that legend is also the paginated `1/6` strip QA Issue 12 measured on the status donut).
+- **Why the shell half is not ours:** the two `pa_dashboards` artifacts bind reports to a canvas and nothing more. Their complete writable surface is `pa_dashboards` (active, name, order, description, `restrict_to_roles`, `roles`), `pa_dashboards_permissions` (grantee, type, read), `sys_portal_page`, `sys_grid_canvas`, `pa_tabs`, `pa_m2m_dashboard_tabs`, `sys_portal` (summary, page), the twelve platform-defined `sys_portal_preferences` parameters listed under Limitation 2, and `sys_grid_canvas_pane` (`posx`, `posy`, `width`, `height`). Not one of those is a size, a `tabindex`, an ARIA attribute or an accessible name for a shell control or a legend item. Enlarging those hit areas or adding tab stops means editing global dashboard/chart component markup or global CSS — prohibited by AAP Section 0.3.2 and Section 0.7.2, so it is reported for human authorisation.
+- **What WAS ours, and is fixed:** the `report_type` widget preference read `pie` on both donut widgets ("Case Count by Status" on the Agent Workspace, "All Cases by Type" on the Manager View) while both source reports declare `<type>donut</type>`, even though each dashboard file's own header states that `report_type` "mirrors that report's own `<type>` so the widget frame is sized for the visualisation it hosts". Both are now `donut`. `donut` is the platform's own vocabulary for this preference — the out-of-box widgets "Subscription Status" and "Allocated" both carry `report_type=donut` against `type=donut` reports. The report remains the authority on the rendering; this preference only stops the widget frame and the report disagreeing.
+- **Canvas geometry, audited for clipping at 375px and found clean:** Agent Workspace — My Open Cases (posx 0, posy 0, width 6, height 10), My Overdue Tasks (6, 0, 6, 10), Case Count by Status (0, 10, 12, 10). Manager View — All Cases by Status (0, 0, 4, 10), All Cases by Type (4, 0, 4, 10), All Cases by Priority (8, 0, 4, 10), Average Time to Close (0, 10, 6, 6), Cases Opened in Last 30 Days (6, 10, 6, 6). Per-row column spans sum to exactly 12, no two panes overlap, no span is zero or negative, and widget load order matches canvas reading order — so nothing in this package clips a control, hides a widget or reorders the canvas at any width.
+- **Out of this document's scope:** the portal-control and native-list halves of QA Issue 10 (34px portal controls, 16-22px list controls, `tabindex=-1` reference magnifiers) belong to the portal widget and list/form artifacts, not to the dashboards or reports.
 
 ## Source-Side Semantic Mapping
 
@@ -252,5 +322,6 @@ column on this release — cosmetic, and not something a caption in an artifact 
 - [`validation-gates.md`](./validation-gates.md) — Gate 6 (Dashboards)
 - [`../dashboards/`](../dashboards/) — `pa_dashboards_x_casemgmt_agent_workspace.xml` and `pa_dashboards_x_casemgmt_manager_view.xml`
 - [`../reports/`](../reports/) — eight `x_casemgmt_*.xml` report records
+- [Chart Accessibility Configuration](#chart-accessibility-configuration) — the four chart reports' label/grid columns as shipped, and the three open accessibility limitations (QA Issues 10, 11, 12)
 - [`../dictionary/x_casemgmt_case_duration_to_close.xml`](../dictionary/x_casemgmt_case_duration_to_close.xml) — Function Field that powers Widget 4 (`AVG(duration_to_close)`) on the Manager View dashboard
 - [`../seed-data/`](../seed-data/) — synthetic data the dashboards render

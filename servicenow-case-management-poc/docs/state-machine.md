@@ -173,6 +173,40 @@ step-by-step evidence and the shape a future requirement change would take, in
 
 Terminal state. Entering Closed requires the caller to have the `x_casemgmt_case_manager` role. The transition auto-populates `closed_date = gs.nowDateTime()` via the `set_closed_date` business rule. NO transitions are permitted from Closed, and no edit to the row's own fields is permitted either: `block_terminal_closed` checks the status move first and then compares the case's own columns, so a change to `status`, `priority`, `subject`, `description`, `assigned_group`, `assigned_agent`, `requester_name`, `requester_email`, `type`, `number`, `opened_date`, `closed_date` or `pending_reason` all raise the verbatim error `"Closed cases are terminal and cannot be modified."`. A save that changes nothing at all is still accepted as the harmless no-op it is (`sys_mod_count` and `sys_updated_on` are excluded from the comparison, as is the virtual `duration_to_close`). Deleting a Closed case is governed by the ACLs, not by this rule.
 
+#### The form states the terminal restriction instead of inviting the edit
+
+Until [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml)
+existed, a Closed case still rendered all ten of its writable fields as live controls — a text box for Subject, a
+select for Status and Priority, a textarea for Description, reference pickers for Assigned Group and Assigned Agent
+— so the whole of row 8 rested on `block_terminal_closed` refusing the save *after* the gesture. QA recorded that as
+`Issue 17` ("Closed records still expose editable fields and Update, relying on the server guard to reject the
+save"), against the Closed demo cases `CASE9000006` and `CASE9000010`.
+
+That UI Policy is now the form-layer half of row 8: condition `status=Closed`, `on_load=true`, `global=true`,
+`run_scripts=false`, and one `sys_ui_policy_action` per writable field setting the action table's `disabled`
+("Read only") column to `true` for `type`, `status`, `priority`, `subject`, `description`, `requester_name`,
+`requester_email`, `assigned_group`, `assigned_agent` and `pending_reason`. `number`, `opened_date`, `closed_date`
+and `duration_to_close` need no action — each already carries `read_only=true` in `sys_dictionary`, which is why
+they render as static text on the Closed form.
+
+Three properties of that policy matter to this state machine:
+
+- **It enforces nothing, and nothing was moved into it.** `block_terminal_closed` (order 100) remains the
+  enforcement layer and is unchanged. A UI Policy runs in the browser, so it says nothing about a write through the
+  Table API, from a script, or through a list inline edit — every one of those is still refused by the Business
+  Rule with the verbatim message.
+- **The no-op save the guard allows is now the only thing Update can do.** With no writable control on the form, a
+  Closed case cannot be dirtied through the form, so pressing Update produces the "changed nothing" save that
+  `validateClosedRecordUnchanged` deliberately still accepts, and the operator sees no error banner for a gesture
+  that changed nothing.
+- **`reverse_if_false` is `false`, unlike the companion party policies.** The reverse of "read only" is an explicit
+  "make writable", which would be applied to all ten fields on every *non*-Closed case form — including
+  `assigned_group` and `assigned_agent`, whose write access AAP Section 0.5.6 restricts through the field-level ACLs
+  in [`../acl/`](../acl/). Announcing "writable" to an `x_casemgmt_case_viewer` on the other five statuses would be
+  the same defect this policy closes, pointed at the ACL matrix instead of at the terminal state. Nothing is lost by
+  leaving the reverse off: a Closed row can never legally leave Closed, and its `status` control is itself read-only
+  here, so no in-form reverse is reachable.
+
 ## Per-Transition Implementation Map
 
 This section maps each transition row in the matrix to the specific subflow and/or business rule that enforces it. Each transition is evaluated in two places: the record trigger of the parent flow (`general_inquiry_state_machine` or `complaint_state_machine`), which runs after the write commits, and the before-update business rule `enforce_forward_transitions` (order 250), which runs the same subflow synchronously *before* the write and is therefore the component that actually blocks the transition and surfaces the message. Supporting business rules handle the prohibitions and side-effects.
@@ -469,6 +503,181 @@ For a complete pass/fail framework see [`validation-gates.md`](./validation-gate
 12. Attempt to change any field on the Closed case (change `priority` only, leaving `status` alone) → verbatim error: `"Closed cases are terminal and cannot be modified."`; then attempt a status change out of Closed → the same verbatim error. Pressing Update with nothing edited is accepted, and is the one save a Closed case still allows
 13. Attempt a skip edge on a fresh Draft case — set status straight to `Closed` — → form-level error `A case cannot go from Draft to Closed. From Draft the only valid next status is Open.`, `status` still `Draft` after reload and `closed_date` still empty. `Open → Closed`, `Pending → Resolved` and `Resolved → Open` are refused the same way
 14. Repeat the entire procedure with a Complaint case
+15. Open `CASE9000006` (Closed, General Inquiry) and `CASE9000010` (Closed, Complaint) as `x_casemgmt_demo_manager` and confirm every field renders read-only — `type`, `status`, `priority`, `subject`, `description`, `requester_name`, `requester_email`, `assigned_group`, `assigned_agent` and `pending_reason` from [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml), and `number`, `opened_date`, `closed_date` and `duration_to_close` from their dictionary `read_only` flags. No transition button is present; the reference pickers on `assigned_group`/`assigned_agent` are inert. Then press Update: the save is accepted as a no-op and no error banner appears
+16. Confirm the policy is inert on a live case: open a `Draft`, an `Open`, an `In Progress`, a `Pending` and a `Resolved` case and confirm the same ten fields are editable exactly as their dictionary and field-level ACLs dictate — for a manager, for the assigned agent, and for the read-only viewer, whose form must stay read-only. The policy has no reverse actions, so it must not have changed any of those three states
+
+## Known Open Limitations — Terminal-State and Native List Presentation
+
+The items below are **OPEN**. Each was observed at runtime, each was traced, and none of them is closed by the
+records this application ships. They are recorded here — the state machine's own document, because the terminal
+state is what the first two are about and because this document is the one in scope for the round that traced them
+— with the exact change each would need and the rule that puts that change out of reach. The application's general
+limitation register is [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); these
+entries belong there too and are cross-referenced rather than duplicated.
+
+The screenshot file names cited are QA evidence held uncommitted under `blitzy/screenshots/` at the repository root.
+
+### L1 — After an aborted transition the action set reflects the rejected status until reload
+
+**Observed** (QA `Issue 17`, first half; `qa4-ui-blocking-1-resolved-open-task-1280.png`): attempting
+`In Progress → Resolved` with an open child task is refused with the verbatim
+`"All tasks must be closed before resolving this case."` and nothing persists — but the redisplayed form can carry
+the *rejected* status in its `status` control, and the buttons drawn beside it are the ones that belong to that
+rejected status, until the record is reloaded.
+
+**Traced.** Not caused by any record in this application. All six UI Actions are evaluated **server-side** against
+`current` and each requires an exact, single, non-Closed source status — `x_casemgmt_case_open.xml`
+(`current.status == 'Draft'`), `x_casemgmt_case_start_progress.xml` (`canShowAction(current, 'Open')`),
+`x_casemgmt_case_set_pending.xml` and `x_casemgmt_case_resolve.xml` (`canShowAction(current, 'In Progress')`),
+`x_casemgmt_case_resume.xml` (`canShowAction(current, 'Pending')`) and `x_casemgmt_case_close.xml`
+(`current.status == 'Resolved'`) — and `CaseTransitionValidator.canShowAction()` returns `false` unless
+`caseGr.getValue('status')` equals the requested status exactly. The conditions are correct; what changes after an
+abort is their **input**. `setAbortAction(true)` cancels the write but leaves the in-memory `current` holding the
+submitted values, and the form the platform renders in response to the aborted submit evaluates the conditions
+against that record rather than against a fresh read of the row. A Closed case, which is never the product of an
+abort, is unaffected: `qa4-ui-case10-closed-form-1280.png` shows no transition button at all on `CASE9000010`.
+
+**The change that would close it.** Make the visibility predicate read the **persisted** row rather than the
+in-flight one: inside `CaseTransitionValidator.canShowAction()`, resolve the case with
+`var fresh = new GlideRecord('x_casemgmt_case'); fresh.get(caseGr.getUniqueValue());` and compare
+`fresh.getValue('status')`, falling back to `caseGr` when the row does not yet exist (an insert form). The two
+inline conditions in `x_casemgmt_case_open.xml` and `x_casemgmt_case_close.xml` would have to move to the same
+predicate to stay consistent, and both must remain inside the 254-character `sys_ui_action.condition` limit
+documented above, so they would delegate rather than inline the lookup.
+
+**Why it is open.** That is one coordinated change to the shared visibility predicate in
+[`../script_includes/x_casemgmt_CaseTransitionValidator.xml`](../script_includes/x_casemgmt_CaseTransitionValidator.xml),
+consumed by four UI Actions plus the two inline conditions; the component was not opened by the round that traced
+this, and changing four of six call sites while leaving two on the old input would make the six buttons behave
+differently from one another — a worse state than one uniform, disclosed behaviour. It cannot be closed from the
+client either: reconciling the displayed action set in the browser needs an authoritative read of the persisted
+status, which means a `GlideAjax` processor or a display Business Rule seeding `g_scratchpad`, plus a re-evaluation
+of each button's role-and-status logic in client script — i.e. the six server-side conditions restated in the
+browser, which AAP Section 0.7.2's declarative-mechanism constraint and the single-source-of-truth design of
+`CaseTransitionValidator` both refuse. Reloading the record shows the true state and the correct action set; the
+persisted row is never wrong.
+
+### L2 — A Closed case still shows the platform's `Update` button
+
+**Observed** (QA `Issue 17`, second half; `qa4-ui-case10-closed-form-1280.png`): `Update` and `Delete` render on a
+Closed case.
+
+**Traced.** Both are out-of-the-box `sys_ui_action` records in the **global** scope. Since
+[`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml) makes every
+writable control read-only, `Update` can no longer submit a change — it produces the no-op save
+`validateClosedRecordUnchanged` explicitly allows — and `Delete` is governed by the delete ACLs in
+[`../acl/`](../acl/), which grant it to `x_casemgmt_case_manager` only, exactly as AAP Section 0.5.6 specifies.
+
+**The change that would close it.** Hiding `Update` on this table means either editing the global `Update` UI
+Action's condition or shipping a scoped override of it.
+
+**Why it is open.** AAP Section 0.3.2 prohibits global-scope changes of any kind, restated as scoped-namespace
+exclusivity in AAP Section 0.7.2. The remedy is out of bounds for this package by rule.
+
+### L3 — Related lists overflow horizontally at 375px with no persistent scroll cue
+
+**Observed** (QA `Issue 15` and the native-list half of QA `Issue 10`;
+`qa4-ui-case3-parties-list-375.png`): at a 375px viewport the Case Tasks and Case Parties related lists on the case
+form are wider than the column, reachable only through internal horizontal scrolling, and the platform paints no
+persistent cue that content continues to the right.
+
+**Traced.** Neither the overflow container nor its (absent) cue is authored by this application: they are the
+platform's stock list component and its global stylesheets. The *column count* that provokes the overflow comes from
+the **child** tables' own list layouts, not from
+[`../related_lists/sys_ui_related_list_x_casemgmt_case_default.xml`](../related_lists/sys_ui_related_list_x_casemgmt_case_default.xml),
+whose two entries carry only `related_list`, `position`, `filter`, `order_by` and `list_id` — read back from
+`sys_dictionary`, those and the audit columns are the whole of `sys_ui_related_list_entry`, so the record has no
+column set and no rendering control to offer. The default list layout for `x_casemgmt_case_party` is
+`number, case, organization, party_type, person, role_label` and for `x_casemgmt_case_task` it is
+`number, assigned_to, case, due_date, status, subject, type`; the related list renders those minus the relationship
+field, which is what exceeds 375px.
+
+**The change that would close it.** Two independent changes, and both are needed for the cue itself: (a) a sticky
+first column and a persistent overflow affordance in the list component, which is global CSS and global UI macros;
+and (b) if the intent is instead to avoid the overflow, a related-list-specific `sys_ui_list` for each child table
+(`name` = child table, `parent` = `x_casemgmt_case`, `relationship` = the reference field) carrying a reduced column
+set, which is a new record for `x_casemgmt_case_task` and `x_casemgmt_case_party`.
+
+**Why it is open.** (a) is a global-scope change, prohibited by AAP Section 0.3.2 and AAP Section 0.7.2. (b) would
+suppress fields AAP Section 0.4.4 requires to be surfaced on these tables' lists and would need records for tables
+this document's owning artifact does not describe; it is a scope decision for the AAP, not a defect fix, and is
+recorded here rather than taken.
+
+### L4 — Native list controls are 16–22px, below the 44×44px checkpoint standard
+
+**Observed** (QA `Issue 10`, native-list portion; `qa4-ui-case3-parties-list-375.png`): the list's row links, row
+check boxes, column-sort arrows, filter/personalize icons and inline-edit affordances measure 16–22px.
+
+**Traced.** Every one of those controls is emitted by the platform's list renderer and sized by global
+stylesheets. The application's own list artifacts —
+[`../list_layouts/sys_ui_list_x_casemgmt_case_default.xml`](../list_layouts/sys_ui_list_x_casemgmt_case_default.xml)
+and the related-list record above — choose **which** columns and lists appear; they carry no property that
+influences how the platform paints a control.
+
+**The change that would close it.** Increase the hit areas in the platform's list stylesheets, or ship a scoped
+style sheet that overrides them for these tables.
+
+**Why it is open.** Both are global-scope changes to out-of-the-box components, prohibited by AAP Section 0.3.2, and
+AAP Section 0.4.4 mandates the platform's default styling for this application's surfaces.
+
+### L5 — Reference lookup and preview buttons carry `tabindex="-1"`
+
+**Observed** (QA `Issue 10`, native-form portion; `qa4-ui-reference-preview-dialog-1280.png`): the magnifier
+(lookup) and ⓘ (preview) buttons beside `assigned_group` and `assigned_agent` are visible, mouse-operable controls
+that the keyboard tab sequence skips.
+
+**Traced.** The buttons are emitted by the platform's stock reference-field macro in the global scope. The
+single-column form section in
+[`../form_layout/sys_ui_section_x_casemgmt_case_default.xml`](../form_layout/sys_ui_section_x_casemgmt_case_default.xml)
+guarantees that the stops which *are* reachable are reached in reading order, and it cannot alter that markup. The
+same finding is recorded on that artifact as the one part of QA finding F13 it could not fix.
+
+**The change that would close it.** Give those buttons a focusable tab stop and a keyboard activation path in the
+reference-field macro.
+
+**Why it is open.** The macro is a global-scope out-of-the-box component; AAP Section 0.3.2 prohibits modifying it.
+
+### L6 — The reference preview extends about 310px below the fold and wraps its labels mid-word
+
+**Observed** (QA `Issue 15`; `qa4-ui-reference-preview-dialog-1280.png`): opening the ⓘ preview on
+`assigned_agent` at 1280×900 renders a popover that reaches the right edge of the viewport, continues roughly 310px
+below the fold, and breaks its own field labels mid-word (`Departme|nt`, `Notificatio|n`).
+
+**Traced.** The popover, its placement logic and its two-column label grid are the platform's stock
+reference-preview dialog; its content is the out-of-the-box `sys_user` form, which is why the labels that wrap are
+`sys_user`'s and not this application's. Its anchor is the `assigned_agent` control, which sits at form position 11
+— and that position is fixed by AAP Section 0.4.4, which mandates the field order
+`subject, type, status, priority, description, requester_name, requester_email, opened_date, closed_date,
+assigned_group, assigned_agent`. Moving the reference fields higher up the form to give the popover more room would
+violate that order, and at roughly 700px tall the popover overflows a 900px viewport from any anchor on this form.
+
+**The change that would close it.** Constrain and reposition the popover within the viewport, and widen its label
+column, in the reference-preview component.
+
+**Why it is open.** That component is global-scope and out-of-the-box (AAP Section 0.3.2), and the alternative of
+reordering the form is refused by AAP Section 0.4.4. `Open Record` inside the popover reaches the same data on a
+full page, and the preview is not the only path to it — but the popover itself remains as described.
+
+### L7 — Choosing `Closed` in the status list freezes the form until reload
+
+**Observed by design review of** [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml),
+**disclosed rather than found by QA.** A manager who selects `Closed` from the status choice list on a `Resolved`
+case — rather than pressing the `Close` button — trips the policy's condition on that change: the ten fields,
+`status` among them, become read-only immediately, so the selection cannot be taken back on screen.
+
+**Traced.** A UI Policy condition is evaluated against the form's current values, and the platform takes `status`
+as a watched field from the condition itself; there is no "persisted value" operand available to a UI Policy
+condition. `reverse_if_false` does not change this: with the reverse enabled the freeze would be equally
+irreversible, because `status` is one of the frozen fields.
+
+**The change that would close it.** Nothing within the UI Policy mechanism. It would take a client-side guard that
+distinguishes the on-screen value from the persisted one — the same authoritative-read problem as L1.
+
+**Why it is open, and why the trade is the right way round.** The supported path into Closed is
+[`../ui_action/x_casemgmt_case_close.xml`](../ui_action/x_casemgmt_case_close.xml), a server-side action
+(`client=false`) that writes `current.status` on the server and never touches the form control. A reload restores
+the true state, no data is changed by the freeze, and the alternative — leaving `status` writable on a Closed case —
+would reopen QA `Issue 17` on the one field AAP Section 0.5.5 row 8 names explicitly.
 
 ## Constraints
 
@@ -490,4 +699,6 @@ The following constraints are mandatory and derived from AAP Sections 0.7.1 and 
 - [`../flows/sub_flows/`](../flows/sub_flows/) — five subflows
 - [`../script_includes/x_casemgmt_CaseTransitionValidator.xml`](../script_includes/x_casemgmt_CaseTransitionValidator.xml) — reusable transition guards
 - [`../business_rules/`](../business_rules/) — six business rules
+- [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml) — the form-layer half of transition-matrix row 8: every writable field of a Closed case rendered read-only, over the unchanged `block_terminal_closed` guard
+- [`../ui_action/`](../ui_action/) — the six transition buttons whose visibility conditions this document tabulates
 

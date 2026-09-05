@@ -3,12 +3,31 @@
 > **⚠ HISTORICAL PHASE RECORD — artifact identities and screenshot paths below are superseded.**
 > This report describes the state at its own phase exit (`2026-09-02T18:40:16Z`). **Three commits
 > landed long afterwards** (`f8454fb078`, `6efb13b141`, `8dfdbcb015`) and rewrote the update-set
-> artifacts without re-running the D36 gate, so **the deliverable path holds
+> artifacts without re-running the D36 gate, taking the deliverable path to
 > `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload
-> blocks today — measured, not gate-verified.** The 926-block / 3,781,097-byte / `7292a6fe…` package
-> this unit imported and retained is what `…FALLBACK.xml` holds (restored to exactly those bytes on
-> 2026-09-05T04:45Z), and it is the base the deliverable was later built on rather than the
-> deliverable itself. Every screenshot basename this report cites is absent from disk; the Phase 0
+> blocks — measured, never gate-verified.
+> **CORRECTED 2026-09-05 — the deliverable path holds the exact, untouched elected package again:**
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, 3,781,097 bytes, 926 payload
+> blocks, `cmp`-identical to `…_update_set.FALLBACK.xml`. Those three commits' amendments
+> (`9f3ea74c…`, 3,973,569 bytes, 935 blocks) were never previewed on any instance and are retained,
+> explicitly non-shipping, at `…_update_set.AMENDED-NOT-GATED.xml`. What the shipped package
+> therefore does NOT include is itemised in [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact
+> identity and evidence — RESTATED": the 7 name-keyed choice collections (the single root cause of
+> the six ATF failures), 4 business rules, 1 form layout, 1 onLoad client script and the 3
+> `query_range` ACLs — and, separately and true of every shippable file, all 27
+> `sys_security_acl_role` role links, which only `…REBUILT-DEPENDENCY-ORDERED.xml` carries.
+> **`scripts/post_import_remediation.js` therefore REMAINS MANDATORY on a clean instance** — without
+> it a bare commit of the shipped bytes leaves the three scoped tables **without physical storage**
+> and the ACLs **without role links**, so every ACL denies every non-admin. One caveat travels with
+> it: the script asserts 29 ACLs / 36 links (the figures the repository's 29 `acl/*.xml` artifacts
+> describe) while the shipped package supplies only **26** ACLs, so a clean-instance run reports that
+> shortfall as a **named** non-convergence and tells the operator to import the three `query_range`
+> ACL records from `acl/` and re-run.
+> The 926-block / 3,781,097-byte / `7292a6fe…` package
+> this unit imported and retained is what both `…FALLBACK.xml` and the deliverable path hold. Every
+> screenshot basename this report originally cited was absent from disk; the two Phase 1 S1 probe
+> checkpoints have since been **re-captured** on a disposable probe and are cited by verified
+> absolute path in §3.2. The Phase 0
 > landing-page checkpoint was re-captured and is cited by verified path in §2.2. Read
 > [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact identity and evidence — RESTATED
 > 2026-09-05T04:45Z" and [`run-state.json`](./run-state.json) `final.qa3_remediation` before relying
@@ -221,6 +240,28 @@ moment a Retrieved Update Set record page or a commit-result page must stay open
 `GET sys_user` for the duration and switch back to the rendered `home.do` navigation as
 soon as the page is no longer needed, recording both transitions.
 
+**(e2) SECOND corrective pass — the QA5 record-integrity checkpoint, 2026-09-05.** The mandated
+**browser-context** heartbeat was executed again, and this time the **mechanism** and the
+**timestamp** are both recorded for **every** interval — which is exactly what the earlier record
+omitted:
+
+| Beat | Timestamp (UTC) | Mechanism, stated per interval | Judged live by | Screenshot (absolute path) |
+| --- | --- | --- | --- | --- |
+| A | `2026-09-05T20:14:57Z` | **browser navigation to `home.do`** in a rendered, authenticated session — not an API read | page **content**: a real rendered page, not a hibernation splash | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa5-heartbeat-a-home.png` |
+| B | `2026-09-05T20:36:12Z` | **browser navigation to `home.do`** | same — confirmed a real rendered page, not a hibernation splash | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa5-heartbeat-b-home.png` |
+| C | `2026-09-05T20:55:00Z` | **browser navigation to `home.do`** | same — confirmed a real rendered page, not a hibernation splash | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa5-heartbeat-c-home.png` |
+| D | `2026-09-05T21:35:42Z` | **browser navigation to `home.do`** | same — confirmed a real rendered page, not a hibernation splash | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa5-heartbeat-d-home.png` |
+
+All four beats used the **same** mechanism; no interval of this pass ran on the API variant, and no
+commit-page exception window arose because the pass performed **no commit and no PDI write of any
+kind**. **0 hibernation events, 0 recovery cycles.**
+
+**Stated plainly, because the earlier record left it to be inferred: the ORIGINAL run used the
+API-context heartbeat for EVERY interval** — `GET /api/now/table/sys_user?sysparm_limit=1` on its
+own 10-minute clock, from Phase 0 to the end of the run — **and no session loss resulted from it.**
+0 hibernation events and 0 recovery cycles for the whole run. The finding against it is one of
+**mechanism selection against directive lines 76–84**, not of cadence, and not of consequence.
+
 **(f) STANDING CONTROL — mechanism selection for every future run on this package. This is
 a rule, not an observation: an executor is bound by it and does not re-derive it.** The
 failure in (b)/(c) is one of mechanism selection, not of cadence — the 10-minute clock ran
@@ -282,7 +323,7 @@ This section is the single-test result, reported ahead of any full-package resul
 | --- | --- |
 | Fallback path | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` |
 | SHA-256 (fallback) | `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — still the bytes `…FALLBACK.xml` holds, re-verified 2026-09-05T04:45Z after an intervening overwrite and restoration |
-| SHA-256 (source deliverable at import time) | `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — **a measurement of the deliverable path at `2026-09-02T17:55Z`, kept as that. Superseded as a statement about that path: it holds `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` (3,973,569 B / 935 blocks) today** |
+| SHA-256 (source deliverable at import time) | `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — **a measurement of the deliverable path at `2026-09-02T17:55Z`, and true of that path again after the 2026-09-05 identity correction.** *(It was untrue of the path in between, while three later commits' amendments `9f3ea74c…` / 3,973,569 B / 935 blocks sat there; those bytes are retained at `…AMENDED-NOT-GATED.xml`.)* |
 | Byte comparison | `cmp` reported the two files identical **at import time**; they are no longer identical, and after the 2026-09-05T04:45Z restoration of the fallback that is the correct state rather than a defect |
 | Well-formedness | `xmllint --noout` passes on the copy |
 | Payload blocks | **926** `<sys_update_xml action="INSERT_OR_UPDATE">` — the reconciliation anchor for the rebuild's count delta. Correct for these bytes; the shipping file carries **935** after three later commits added 9 payloads |
@@ -477,34 +518,81 @@ curl -sS -K <scratch>/sn.cfg -H 'Content-Type: application/json' \
 **S1 verdict: PASS**, verified `2026-09-02T18:37:43Z`. Native creation produces captured records,
 including the role-link class — which is exactly what the rebuild depends on.
 
-**SCREENSHOT — test table's definition in Studio showing native creation: NOT RETRIEVABLE, and
-permanently so.** The capture `phase1-s1-probe-table-studio.png` — basename only, not a path to open
-— is absent from disk, and it **cannot be re-captured on any instance**. Two independent reasons:
-`blitzy/screenshots/` is untracked by design under **INTERP-6**, so absolute paths into it stop
-resolving once the working tree is re-created; and directive **D23** required deleting the very
-artifact it showed, so the probe table no longer exists and its continued absence is itself a D23
-requirement. Re-staging a probe to photograph it would mean writing to a shared instance and
-violating D23.
-Caption it carried: *Phase 1 S1 — probe table definition created natively via Table API*
-(ServiceNow Studio, Data Model → Table → Refine Probe: Name `x_casemgmt_refine_probe`, Application
-`x_casemgmt Case Management`, Columns tab. Studio neither asked to change nor changed the current
-application scope or update set — it issued only read GETs against the picker API.)
-**Surviving evidence:** the `POST /api/now/table/sys_db_object` → HTTP **201** for
-`19999c5a930b435009aa70d19dba107d`, the table endpoint flipping from HTTP 400 "Invalid table" to
-HTTP **200** (physical storage), and the platform's own capture row
-`sys_db_object_19999c5a930b435009aa70d19dba107d` in the SCRATCH set — all recorded above — plus the
-deletion proofs in §3.3.
+**SCREENSHOT — test table's definition in Studio showing native creation: RE-CAPTURED 2026-09-05,
+and the path resolves.**
+`/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-table-studio.png` — 241,921 bytes, PNG 1600×1000.
+Caption: *Phase 1 S1 — probe table definition created natively, shown in ServiceNow Studio.*
+Breadcrumb **Data Model > Table > QA5 Probe Table**; Label **QA5 Probe Table**; Name
+**`x_casemgmt_qa5_probe_table`**; Application **`x_casemgmt Case Management`**; Remote Table
+unchecked; Columns tab pager **“1 to 7 of 7”** listing the platform's own audit columns (Updated,
+Created by, Created, Sys ID, Updates, Updated by) **plus the String column “Probe Note”** that was
+added by hand — which is what makes that column set proof of a native, platform-provisioned table
+rather than a hand-authored dictionary; Application Explorer showing Tables *Case / Case Party /
+Case Task / Qa5 Probe Table*; status bar **`x_casemgmt Case Management | 1.0.0`**.
 
-**SCREENSHOT — role assignment screen showing the test role link: NOT RETRIEVABLE, and permanently
-so**, for exactly the same two reasons. `phase1-s1-probe-role-link.png` is absent from disk and the
-probe role link was deleted at S2 as D23 requires.
-Caption it carried: *Phase 1 S1 — role assignment screen showing the natively created probe role
-link* (The saved ACL with its "Requires role" related list: column Role, one row
-`x_casemgmt_refine_probe_role`, pager "1 to 1 of 1".)
-**Surviving evidence:** `sys_security_acl_role` `96dcd812934b435009aa70d19dba1064`, written **by the
-platform** as the side effect of that UI role assignment and captured as
-`sys_security_acl_role_96dcd812934b435009aa70d19dba1064` — the class that appears zero times in the
-shipping package, which is the whole premise S1 was run to establish.
+**SCREENSHOT — role assignment screen showing the test role link: RE-CAPTURED 2026-09-05, and the
+path resolves.**
+`/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png` — 142,655 bytes, PNG 1600×1000.
+Caption: *Phase 1 S1 — role assignment screen showing the natively created probe role link.*
+The native Access Control form headed **“Access Control / x_casemgmt_qa5_probe_table”**: Type
+**record**, Operation **read**, Decision Type **Allow If**, Admin overrides and Active both ticked,
+Name **“QA5 Probe Table [x_casemgmt_qa5_probe_table]”**, Application **`x_casemgmt Case
+Management`**, and the **“Requires role” related list carrying exactly one row —
+`x_casemgmt.qa5_probe_role` — with the pager reading “1 to 1 of 1”**. That related-list row *is* the
+`sys_security_acl_role` link record, written by the platform as the side effect of the assignment,
+and it is the payload class that appears **zero** times in the shipping package.
+
+**Corrected: this record previously said both S1 captures were “NOT RETRIEVABLE, and permanently
+so”.** The “permanently” rested on the reasoning that directive **D23** forbids re-staging a probe
+at all. That reasoning was wrong in one respect. D23 requires that **no probe artifact survive into
+the shipped package or be left behind on the instance** — not that the checkpoint go unphotographed.
+A disposable probe can be built, photographed and destroyed without breaching it, and that is what
+was done. Both cited basenames now resolve to readable PNGs.
+
+**How the captures were obtained, and how D23 was kept.**
+
+| Step | What was done |
+| --- | --- |
+| 1 | A disposable local update set, **“QA5 SCRATCH PROBE (DO NOT SHIP)”** `0e1f9c5f93c3431009aa70d19dba105a`, was made current, so every probe capture landed in it and nothing landed in the shipping set or in the ABSORBER set |
+| 2 | The probe was built **natively in Studio** under an **elevated `security_admin`** session — table `x_casemgmt_qa5_probe_table` with the added String column “Probe Note”, role `x_casemgmt.qa5_probe_role`, and a `read` ACL on the table with that role attached through the ACL form's own “Requires role” related list, so the platform wrote the `sys_security_acl_role` link itself |
+| 3 | Both screens were captured |
+| 4 | **Every probe artifact was then deleted** |
+| 5 | Absence was verified **five ways**: `sys_db_object`, `sys_user_role`, `sys_security_acl`, `sys_dictionary` and `sys_app_application` each return **zero** rows on a `qa5` match, and the probe table's list URL returns the platform's own **“Page not found”** body |
+| 6 | The scratch set was set to **State = Ignore**, holding **22 probe-only DELETE updates** and nothing else, so it can never be previewed or committed anywhere |
+| 7 | The **previous current set was restored**, with its **111 children unchanged** — no capture leaked into it |
+
+**One deviation, recorded rather than smoothed over.** Inside a scoped application the Role form
+exposes only a **Suffix** field and derives a read-only **Name** from it, so the probe role is named
+**`x_casemgmt.qa5_probe_role`** — with a dot — rather than `x_casemgmt_qa5_probe_role`. That is the
+platform's own convention inside a scope: the role the table creation auto-generated is named
+`x_casemgmt.qa5_probe_table_user` by the same rule. The name shape differs from the original S1
+probe role; the mechanism it evidences does not.
+
+**The probe used for the re-capture is not the original, and these are equivalent-evidence captures
+rather than recoveries of the lost binaries.** The original S1 probe (`x_casemgmt_refine_probe` /
+`x_casemgmt_refine_probe_role`, created by REST `POST` against `sys_db_object` and `sys_user_role`)
+was deleted at S2 and stays deleted; its captures are gone for good. The re-capture used a **fresh,
+differently named probe** built through the UI, and it evidences the same mechanism — that native
+creation produces platform-captured records **including the role-link class** — on the **current**
+release rather than on the release of the original run. Every record that names these two files says
+so.
+
+**The contemporaneous evidence for the ORIGINAL probe is unchanged and still stands**, because the
+re-capture evidences the mechanism, not the original artifacts: the `POST
+/api/now/table/sys_db_object` → HTTP **201** for `19999c5a930b435009aa70d19dba107d`; the table
+endpoint flipping from HTTP 400 "Invalid table" to HTTP **200** (physical storage); the platform's own
+capture row `sys_db_object_19999c5a930b435009aa70d19dba107d` in the SCRATCH set — all recorded above
+— plus `sys_security_acl_role` `96dcd812934b435009aa70d19dba1064`, written **by the platform** as the
+side effect of that UI role assignment and captured as
+`sys_security_acl_role_96dcd812934b435009aa70d19dba1064` (the class that appears zero times in the
+shipping package, which is the whole premise S1 was run to establish), and the deletion proofs in
+§3.3. The original captions were: *Phase 1 S1 — probe table definition created natively via Table
+API* (Studio, Data Model → Table → Refine Probe, name `x_casemgmt_refine_probe`) and *Phase 1 S1 —
+role assignment screen showing the natively created probe role link* (the saved ACL's "Requires role"
+related list, one row `x_casemgmt_refine_probe_role`, pager "1 to 1 of 1"). Those two **original
+binaries remain lost for good** — `blitzy/screenshots/` is untracked by design under **INTERP-6**, so
+absolute paths into it stop resolving once the working tree is re-created, and nothing carried them
+across.
 
 ### 3.3 S2 — delete the test artifacts, re-set the master set current
 
@@ -546,8 +634,24 @@ reads **36** (manager 17 / agent 13 / viewer 6) and scoped `sys_security_acl` re
 three field-level `query_range` ACLs were created on the instance at `2026-09-04 10:48 UTC` on
 `x_casemgmt_case.closed_date`, `x_casemgmt_case.opened_date` and `x_casemgmt_case_task.due_date`,
 carrying exactly 9 role links between them — 36 − 9 = **27** and 29 − 3 = **26**, so the figures below
-were correct when taken. Instance rows on the three tables read 13 / 13 / 11 today rather than the 12
-recorded below, which is later seeding activity on a shared instance.
+were correct when taken. **These three ACLs are authorised package content, not drift.** Each exists as a repository artifact
+under `acl/`, and each carries one role link per scoped role — which is the 9. The role links
+distribute **manager 17 / agent 13 / viewer 6**. [`docs/acl-matrix.md`](../acl-matrix.md) carries a
+dedicated section stating the 26→29 and 27→36 arithmetic and recording that
+`scripts/post_import_remediation.js` asserts both figures; that section is the authority for it and
+this record cites it rather than re-arguing it.
+
+**The settled census is 10 / 10 / 8**, measured four separate times: `x_casemgmt_case` **10** rows
+(`CASE9000001`–`CASE9000010`), `x_casemgmt_case_task` **10** (`TASK9000001`–`TASK9000010`),
+`x_casemgmt_case_party` **8** (`PARTY9000001`–`PARTY9000008`). **Corrected from the 13 / 13 / 11
+this record previously reported as today's reading**, which counted QA2/portal fixture rows created
+after the commit: **those rows are gone, none remains**, so the instance now holds exactly what the
+package carries — which is precisely what OVERRIDE-3 authorised when the three tables were deleted,
+re-created and the package re-committed. The units caveat still holds for any *future* divergence
+(package seed payloads and instance rows are different units), but there is no divergence to explain
+today. The `x_casemgmt_case` row count recorded in the
+table below is **12**, the pre-deletion figure measured at `2026-09-02T18:40:16Z`; it is a historical
+reading and stays as taken.
 
 | Object | Expected | Observed (instance rows, as measured 2026-09-02T18:40:16Z) |
 | --- | --- | --- |
@@ -574,7 +678,7 @@ recorded below, which is later seeding activity on a shared instance.
 | Pre-existing committed retrieved set (leave alone) | `9929f50df18ccec91ea13b2a3bccfc90` — `committed`, 926 children |
 | Stale local sets sharing the package name (do not confuse) | `066c23c69383435009aa70d19dba10d3`, `59a5a3069343435009aa70d19dba10e8` |
 | SCRATCH set (complete, must never ship) | `4999985a930b435009aa70d19dba102e` |
-| Fallback package | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`, SHA-256 `7292a6fe…1add66b7` — **still true of that file** (overwritten by three post-run commits, restored to these exact bytes on 2026-09-05T04:45Z). The **deliverable** path is a different file with different bytes today: `9f3ea74c…` / 3,973,569 B / 935 blocks |
+| Fallback package | `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`, SHA-256 `7292a6fe…1add66b7` — **true of that file** (overwritten by three post-run commits, restored to these exact bytes on 2026-09-05T04:45Z) **and true of the deliverable path as well** after the identity correction; `cmp` reports no difference between them. The three commits' amendments `9f3ea74c…` / 3,973,569 B / 935 blocks are retained, explicitly non-shipping, at `…AMENDED-NOT-GATED.xml` |
 | Heartbeat | API-context loop, PID 8099, 10-minute interval, still running — the **API variant where §2.4(a) requires the browser/UI variant** outside the record/commit-page exception: a **deviation** from directive lines 76–84, recorded in §2.4 |
 | Scope | resolve by query every time: `sys_scope?sysparm_query=scope=x_casemgmt` → `82b99028936f74320d74d6f88357a5af` |
 

@@ -4,14 +4,41 @@
 > This report describes the state as it stood at Phase 2's own exit (`2026-09-02T20:53:14Z`) and at
 > the CR1/CR4 passes that amended it. **Three commits landed afterwards** (`f8454fb078`,
 > `6efb13b141`, `8dfdbcb015`) and rewrote the update-set artifacts in place without re-running the
-> D36 gate. **The bytes on the deliverable path today are
+> D36 gate, taking the deliverable path to
 > `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload
-> blocks — measured, not gate-verified.** The retained fallback holds `7292a6fe…` (3,781,097 B / 926
-> blocks) and the retained rebuilt package holds `e109e1d1…` (4,062,067 B / 988 blocks). Every
+> blocks — measured, never gate-verified.
+> **CORRECTED 2026-09-05 — the deliverable path holds the exact, untouched elected package again:**
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, 3,781,097 bytes, 926 payload
+> blocks, `cmp`-identical to `…_update_set.FALLBACK.xml`. Those three commits' amendments
+> (`9f3ea74c…`, 3,973,569 bytes, 935 blocks) were never previewed on any instance and are retained,
+> explicitly non-shipping, at `…_update_set.AMENDED-NOT-GATED.xml`. What the shipped package
+> therefore does NOT include is itemised in [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact
+> identity and evidence — RESTATED": the 7 name-keyed choice collections (the single root cause of
+> the six ATF failures), 4 business rules, 1 form layout, 1 onLoad client script and the 3
+> `query_range` ACLs — and, separately and true of every shippable file, all 27
+> `sys_security_acl_role` role links, which only `…REBUILT-DEPENDENCY-ORDERED.xml` carries.
+> **`scripts/post_import_remediation.js` therefore REMAINS MANDATORY on a clean instance** — without
+> it a bare commit of the shipped bytes leaves the three scoped tables **without physical storage**
+> and the ACLs **without role links**, so every ACL denies every non-admin. One caveat travels with
+> it: the script asserts 29 ACLs / 36 links (the figures the repository's 29 `acl/*.xml` artifacts
+> describe) while the shipped package supplies only **26** ACLs, so a clean-instance run reports that
+> shortfall as a **named** non-convergence and tells the operator to import the three `query_range`
+> ACL records from `acl/` and re-run.
+> The retained rebuilt package holds `e109e1d1…` (4,062,067 B / 988 blocks). Every
 > screenshot basename this report originally cited is absent from disk. Read
 > [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact identity and evidence — RESTATED
 > 2026-09-05T04:45Z" and [`run-state.json`](./run-state.json) `final.qa3_remediation` before relying
-> on any hash, size, payload count, instance figure or screenshot path below.
+> on any hash, size, payload count, instance figure or screenshot path below.>
+> **⚠ THIS PHASE WAS EXECUTED BEFORE THE ADJUDICATION, AND IS SUPERSEDED BY IT — CORRECTED
+> 2026-09-05.** Phase 1 is a **HARD GATE** and its derived verdict is **NOT MET** on two
+> independent grounds (the native role-assignment mechanism, and OVERRIDE-3's destructive
+> boundary) — see [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §4, where the verdict is derived from
+> the unresolved hard-gate rows rather than asserted. Under directive **D3** the correct behaviour
+> at that point was to **stop, invoke the untouched fallback, perform no rollback and report what
+> failed**. This phase was entered instead, on the `"met"` value recorded at the time — which is
+> exactly what D1 exists to prevent. **Everything below is therefore retained as the record of what
+> was executed, and is NOT read as a delivery result.** Nothing in it is deleted, nothing in it
+> gates delivery, and no verdict in it makes Phase 1's gate met.
 
 Refine PR, Phase 2 **HARD GATE**, work unit **U3**. Directives owned here: **D28** (S1 clean
 confirm), **D29** (S2 checksum), **D30** (S3a retrieve + preview), **D31** (S3b zero `type=error`
@@ -26,8 +53,14 @@ query at the time it was used (`sys_scope?scope=x_casemgmt`, `sys_update_set?nam
 as inputs. No credential, cookie or `sysparm_ck` value appears in this file or in any committed
 artifact.
 
-**Entry gate (D1).** `run-state.json` `phase1.exit_condition` read **`"met"`** when Phase 2 took its
-entry gate at `19:47:16Z` (the value recorded at `2026-09-02T19:22:09Z`), so Phase 2 was entered.
+**Entry gate (D1) — and why it should have refused entry.** `run-state.json`
+`phase1.exit_condition` read **`"met"`** when Phase 2 took its entry gate at `19:47:16Z` (the value
+recorded at `2026-09-02T19:22:09Z`), so Phase 2 was entered. **That value was wrong when it was
+read**: [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §2.4 had already documented the role-link
+mechanism failure at that moment, and §2.5's destructive-boundary violation had already happened. The
+derived verdict is **NOT MET**, so the entry gate should have failed here and D3's stop-and-ship-the-
+fallback path should have been taken instead. This phase's record is retained as what was executed,
+labelled superseded above, and it does not make Phase 1's gate met.
 That value is now recorded as **`"partially_met"`**: the CR2 remediation pass qualified Phase 1's
 hard gate as **NOT MET for the native role-assignment half** — the 27 `sys_security_acl_role` links
 and the 3 `sys_user_has_role` grants came from a direct server-side insert rather than the platform's
@@ -129,20 +162,23 @@ stale and the Phase 2 S1–S6 re-run is owed on the retained rebuilt bytes — t
 re-verification pass then **elected the untouched fallback as the shipping *base*** under OVERRIDE-2
 / directive D3, which put `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` (926
 blocks, 3,781,097 bytes) on the deliverable path at commit `3671901b5b` — **the state this section
-describes**. Three later commits then amended those bytes in place, so **the deliverable path today
-holds that elected base *as amended*:
+describes, and — after the 2026-09-05 identity correction — the state of that path again.** Three
+later commits had amended those bytes in place, taking the path to
 `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload
-blocks** (+9 over the base: 4 business rules, 1 client script, 3 field-level ACLs, 1 form-layout
-record, and the 7 `sys_choice` payloads renamed to `sys_choice_x_casemgmt_*`; 919 payload names in
-common). Each of those additions is the accepted resolution of a later QA round, which is why the
-deliverable was not reverted. The re-sequenced rebuilt package remains **retained, not shipped**, at
+blocks (+9 over the base: 4 business rules, 1 client script, 3 field-level ACLs, 1 form-layout
+record, and the 7 `sys_choice` payloads re-keyed to `sys_choice_x_casemgmt_*`; 919 payload names in
+common). Each of those additions was the accepted resolution of a later QA round — but **no sequence
+containing them was ever previewed**, and D3's authorised path on an unmet hard gate is the
+*untouched* package, so the elected bytes were copied back and the amended bytes are retained,
+explicitly non-shipping, at `…_update_set.AMENDED-NOT-GATED.xml`. The re-sequenced rebuilt package
+remains **retained, not shipped**, at
 `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`.
 
 The gate is binary, so it takes one verdict per byte sequence and no other: **NOT MET for
-`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, the sequence on the deliverable
-path today; NOT MET for
-`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, the elected base and the retained
-fallback's own bytes; NOT MET for the retained rebuilt package (`e109e1d1…` today, `90ee0249…` when
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, the sequence on the deliverable
+path and the retained fallback's own bytes alike; NOT MET for
+`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, the retained amended package;
+NOT MET for the retained rebuilt package (`e109e1d1…` today, `90ee0249…` when
 CR1 produced it); MET for
 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, export 3's
 sequence.** Electing settles the shipping decision and not the gate — §7.1 states the position in
@@ -162,15 +198,17 @@ as satisfying the gate.
 The fallback `…_update_set.FALLBACK.xml` was untouched **through this phase and the election** and
 hashes to `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`; those are the bytes
 elected onto the deliverable path at `3671901b5b`, at which moment the two files were byte-identical
-— exactly what OVERRIDE-2 describes for this path. **Superseded on both counts as of
-2026-09-05T04:45Z:** the three later commits amended the deliverable *and* the fallback in lockstep,
-and the fallback was then **restored** to the elected bytes `7292a6fe…` (3,781,097 B / 926 blocks)
-while the deliverable was deliberately left at its amended state `9f3ea74c…` (3,973,569 B / 935
-blocks). **The two files are therefore no longer byte-identical, and that is now the correct state
-rather than a defect.** Per INTERP-11 nothing was re-exported or regenerated after the verified
-checksum below: the CR1 pass rearranged the blocks already in the file, and the re-verification pass
-restored the fallback's own bytes to the deliverable path and kept the re-sequenced rebuilt package
-beside it.
+— exactly what OVERRIDE-2 describes for this path. **Interrupted and then CORRECTED:** the three
+later commits amended the deliverable *and* the fallback in lockstep; the fallback was **restored**
+to the elected bytes `7292a6fe…` (3,781,097 B / 926 blocks) on 2026-09-05T04:45Z and the deliverable
+was left at its amended state `9f3ea74c…` (3,973,569 B / 935 blocks) for a period, which meant the
+package on the deliverable path was neither the untouched fallback D3 authorises nor any gated
+sequence. **Both files now hold the elected bytes and `cmp` reports no difference**; the amended
+bytes are retained, explicitly non-shipping, at `…_update_set.AMENDED-NOT-GATED.xml`, which is what
+keeps the fallback a fallback rather than a tracking copy. Per INTERP-11 nothing was re-exported or
+regenerated at any point: the CR1 pass rearranged the blocks already in the file, the
+re-verification pass restored the fallback's own bytes to the deliverable path, and the identity
+correction was a byte copy of those same bytes.
 
 **Sanity checks on export 3's bytes, all pass:**
 
@@ -492,8 +530,18 @@ The instance had none of this beforehand (§1). Measured after the commit, with
 > post-commit figures below were correct when taken. Unchanged on re-measurement: the three tables
 > answer HTTP 200, `sys_dictionary` is 21/14/13, and the committed retrieved set
 > `0b3b7452934f435009aa70d19dba100d` is still `state=committed` with 988 children and zero preview
-> problems of any type. Instance rows today are 13/13/11 rather than the 10/10/8 the package carries,
-> which is seeding activity on a shared instance and not a package figure.
+> The three `query_range` ACLs are **authorised package content, not drift** — each exists as a
+> repository artifact under `acl/`, the role links distribute manager **17** / agent **13** / viewer
+> **6**, and `docs/acl-matrix.md` carries a dedicated section stating the 26→29 and 27→36 arithmetic
+> and recording that `scripts/post_import_remediation.js` asserts both figures; that section is the
+> authority for it. **Row counts, corrected:** the settled census is **10 / 10 / 8** —
+> `x_casemgmt_case` 10 (`CASE9000001`–`CASE9000010`), `x_casemgmt_case_task` 10
+> (`TASK9000001`–`TASK9000010`), `x_casemgmt_case_party` 8 (`PARTY9000001`–`PARTY9000008`), measured
+> four separate times. **This record previously said instance rows today are 13/13/11**; the
+> QA2/portal fixture rows behind that figure have since been removed and **none remains**, so the
+> instance now holds exactly the 10/10/8 the package carries — which is what OVERRIDE-3 authorised
+> when the three tables were deleted, re-created and the package re-committed. The units caveat still
+> applies to any future divergence, but there is no divergence to explain today.
 
 | Check | Before (S1) | After commit — instance rows, as measured at 2026-09-02T20:40:00Z |
 | --- | --- | --- |
@@ -584,10 +632,12 @@ untouched at `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`.
 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` at 4,062,436 bytes / 988 payloads
 remains export 3's digest and **the only byte sequence this project has ever put through the S1–S6
 gate** — do not update it to any other value. What is superseded is only its relationship to the
-deliverable path: no file in the tree has held those bytes since the CR1 re-sequencing, and the path
-holds `9f3ea74c…` / 3,973,569 B / 935 blocks today. The fallback's `7292a6fe…` was true at this
-moment, was overwritten by three later commits, and was restored to exactly these bytes on
-2026-09-05T04:45Z, so it is true again — of `…FALLBACK.xml` alone, no longer of the deliverable.*
+deliverable path: no file in the tree has held those bytes since the CR1 re-sequencing. The
+fallback's `7292a6fe…` was true at this moment, was overwritten by three later commits, was restored
+on 2026-09-05T04:45Z, and **is now true of the deliverable path as well**: the elected bytes were
+copied back there and `cmp` reports no difference between the two files. The three commits'
+amendments (`9f3ea74c…` / 3,973,569 B / 935 blocks) are retained, explicitly non-shipping, at
+`…_update_set.AMENDED-NOT-GATED.xml`.*
 
 > **RULE (D36).** This checksum is what makes the package shippable, independent of Phase 3. **If the
 > package changes after this point the checksum is stale, and Phase 2 (S1 clean confirm, S2 checksum,
@@ -604,8 +654,8 @@ through it or it has not, and there is no partial, conditional or qualified resu
 
 | Byte sequence | Gate S1–S6 (and AAP §0.7.1 with it) |
 | --- | --- |
-| `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` — **the sequence on the deliverable path today** (3,973,569 B / 935 blocks; the elected base as amended by three later commits) | **NOT MET.** Never uploaded, previewed or committed anywhere. Measured, not gate-verified. This row was added on 2026-09-05T04:45Z; the three rows below were the whole table when this section was written |
-| `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — the **elected base**, and the retained fallback's own bytes (3,781,097 B / 926 blocks) | **NOT MET.** The fallback's own bytes were never uploaded, previewed or committed on any instance. Electing it settled the shipping decision, not the gate |
+| `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — **the sequence on the deliverable path** (3,781,097 B / 926 blocks), the exact untouched elected package, `cmp`-identical to the retained `…FALLBACK.xml` | **NOT MET.** The elected package's own bytes were never uploaded, previewed or committed on any instance. Electing it settled the shipping decision, not the gate |
+| `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` — the elected base **as amended** by three later commits (3,973,569 B / 935 blocks), retained at `…_update_set.AMENDED-NOT-GATED.xml` and **explicitly non-shipping**. It sat on the deliverable path until the identity correction | **NOT MET.** Never uploaded, previewed or committed anywhere. Measured, not gate-verified |
 | The retained rebuilt package — `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` (4,062,067 B) today; `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` (4,062,436 B) as CR1 produced it | **NOT MET.** Never uploaded, never previewed, never committed on any instance, under either digest |
 | `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — export 3's sequence | **MET.** Uploaded onto a genuinely clean instance, previewed to zero problems of any type, committed by the native UI action, storage and all 27 role links confirmed after, S6 sum recorded 2026-09-02T20:53:14Z. **No file on disk holds these bytes**; they are recoverable only from git history (see "The third artifact", below) |
 
@@ -615,12 +665,14 @@ frozen directive made it.** The deliverable path
 base** — the original unmodified package, 926 payload blocks, 3,781,097 bytes, SHA-256
 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to
 `…_update_set.FALLBACK.xml` **at the election commit `3671901b5b`, which is the state this
-subsection records**. *Superseded as a statement about the path today: three later commits amended
-those bytes in place, so the deliverable now holds that base **as amended** —
-`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 blocks — and
-it is no longer byte-identical to `…FALLBACK.xml`. The content statements that follow about 0
-`sys_security_acl_role` rows and 25 hand-authored `sys_dictionary` rows were re-verified on the
-amended bytes and still hold; the identity, size and block count do not.* Directive lines 16-24,
+subsection records — and, after the identity correction, the state of the path again.** *History,
+kept because it happened: three later commits amended those bytes in place, taking the deliverable to
+`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 blocks. No
+sequence containing those amendments was ever previewed, and D3's authorised path on an unmet hard
+gate is the **untouched** package, so the elected bytes were copied back to the deliverable path and
+the amended bytes are retained, explicitly non-shipping, at `…_update_set.AMENDED-NOT-GATED.xml`.
+The content statements that follow — 0 `sys_security_acl_role` rows, 25 hand-authored
+`sys_dictionary` rows — were verified on both files and hold on both.* Directive lines 16-24,
 211-218, 220-222 and 310-322 tie Phase 2's exit
 condition to the package being **shipped**, so that exit condition is not reached for the artifact on
 the deliverable path while its bytes are ungated; on that path OVERRIDE-2 (directive **D3**)
@@ -640,10 +692,15 @@ alongside the three hand-authored `sys_db_object_<32hex>` table records (`bd806f
 **D2/D21** ordered nor the **27** ACL-role links, which means an importer **must run
 `scripts/post_import_remediation.js`** after the commit to create the physical schema and those 27
 links — exactly as the pre-refine deployment did, per [`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5.
-*Re-verified on the amended shipping bytes `9f3ea74c…` on 2026-09-05T04:45Z: all five of those
-content statements still hold — 0 `sys_documentation`, 0 `sys_security_acl_role`, 25
-`sys_dictionary_<32hex>`, the same three hand-authored `sys_db_object_<32hex>` ids — so the
-post-import remediation requirement is unchanged by the amendments.*
+*Verified on both files: all five of those content statements hold on the shipped elected bytes
+`7292a6fe…` and on the retained amended bytes `9f3ea74c…` alike — 0 `sys_documentation`, 0
+`sys_security_acl_role`, 25 `sys_dictionary_<32hex>`, the same three hand-authored
+`sys_db_object_<32hex>` ids — so the post-import remediation requirement is unchanged by the
+amendments and unchanged by their removal from the shipping path. One figure does differ and it
+matters to an importer: the shipped elected package carries **26** `sys_security_acl` payloads and
+the retained amended package carries **29**, the three extra being the field-level `query_range`
+ACLs. `scripts/post_import_remediation.js` asserts 29 and names that exact shortfall in its own
+output when it meets 26.*
 
 **What the election does not give up: ordering.** The elected fallback satisfies AAP §0.5.2 in its own
 right, measured on the file rather than assumed — the application record first (payload index 0), the
@@ -656,17 +713,20 @@ assertion is vacuous here because the package carries 0 such links. **Electing i
 re-open the review's AAP §0.5.2 ordering finding; what it gives up is content, which OVERRIDE-2
 authorizes by name.**
 
-> **Those indices are measured on the elected base (926 blocks) and are kept as that measurement.**
-> Nine payloads were inserted into the file afterwards, so the literal index numbers no longer
-> describe the shipping bytes; **every ordering assertion still holds, and the assertions are the
-> evidence — the indices merely locate them.** Re-measured on the shipping bytes `9f3ea74c…` (935
-> blocks) at 2026-09-05T04:45Z: `sys_app` at index **0**; the 3 table records at **1–3**, before all
-> **25** dictionary rows at **4–28**; the 7 `sys_choice` payloads at **29–35**, after those
-> dictionary rows; the 3 roles at **39–41**, before all ACLs at **42–70** — now **29** ACLs rather
-> than 26, the three additions being the field-level `query_range` ACLs; the 8 reports at
-> **126–133**, before both dashboards at **134–135**; the flows at **75–81**; case rows **907–916**
-> before task **917–926** and party **927–934**; and the 38-row seed block at **897–934**, contiguous
-> and ending on the file's last payload. Read the assertions, not the numbers, if the file changes
+> **Those indices are measured on the elected base (926 blocks), which is what ships, so they
+> describe the shipping bytes directly.** They were re-measured on the file after the identity
+> correction, by indexing its 926 `<sys_update_xml>` children in document order and reading each
+> one's own `<name>` and `<type>`: the application record at index **0**; the 3 table records at
+> **1–3**, before all **25** dictionary rows at **4–28**; the 7 `sys_choice` payloads at **29–35**,
+> after those dictionary rows; the 3 `sys_number` counters at **36–38** and the 3 roles at
+> **39–41**, before all **26** ACLs at **42–67**; the flow block at **71**, the 5 subflows at
+> **72–76** and both state machines at **77–78**; the 8 reports at **117–124** before both
+> dashboards at **125–126**; all **180** ATF steps after their own test, checked pair by pair by
+> resolving each step's `<test>` reference — **180 of 180 parents resolved, 0 unresolved, 0 ordering
+> violations**; and the 38-row seed block at **888–925**, contiguous and ending on the file's last
+> payload, with 10 case rows at **898–907** before 10 task rows at **908–917** and 8 party rows at
+> **918–925**. *(For the record: on the retained amended 935-block file the same assertions hold with
+> the ACL span at 42–70 and 29 ACLs.)* Read the assertions, not the numbers, if the file changes
 > again.
 
 **The retained rebuilt package — Path A, still available.** The re-sequenced native rebuild is kept
@@ -710,9 +770,11 @@ the checksum recorded above is **stale**, and Phase 2 — S1 clean confirm, S2 c
 S3b zero `type=error`, S4 UI-action commit, S5 storage/role-link confirmation, S6 recorded checksum —
 **must re-run on the exact bytes of whichever artifact is to be made ship-ready. It has been run on
 no artifact on disk:** not on the retained rebuilt package (`e109e1d1…` today, `90ee0249…` as CR1
-produced it), not on the elected base `7292a6fe…` that the retained fallback holds, and **not on
-`9f3ea74c…`, the amended bytes actually on the deliverable path since commit `8dfdbcb015`** — a
-sequence that postdates this subsection and was likewise never previewed anywhere.
+produced it), **not on the elected bytes `7292a6fe…` that the deliverable path and the retained
+fallback now both hold**, and not on `9f3ea74c…`, the amended bytes that sat on the deliverable path
+between commit `8dfdbcb015` and the identity correction and are now retained at
+`…AMENDED-NOT-GATED.xml` — a sequence that postdates this subsection and was likewise never
+previewed anywhere.
 `eee9fabd…` remains Phase 2's verified checksum and export 3's historical digest; it is not the
 digest of any file on disk. AAP §0.7.1 — the exported XML must re-import on a fresh PDI with zero
 preview errors — is satisfied for export 3's byte sequence and **NOT MET** for every artifact now on
@@ -762,10 +824,11 @@ and without the **30** field/table label rows, without the native table/dictiona
 directives **D2/D21** ordered, and with the random-32-hex hand-authored schema record names this PR
 existed to replace — so `scripts/post_import_remediation.js` is required after the commit. Its own
 bytes were **never previewed at all**, so it does not satisfy AAP §0.7.1 either. *Those figures name
-the elected base, which is what the retained `…FALLBACK.xml` holds today. The deliverable path holds
-that base **as amended** — `9f3ea74c…` / 3,973,569 B / 935 blocks — and every cost listed here
-applies to it unchanged, because the amendments added business rules, a client script, three ACLs and
-a form layout rather than the missing role links or label rows.*
+the elected package, which is what both `…FALLBACK.xml` and the deliverable path hold after the
+2026-09-05 identity correction. Every cost listed here applied unchanged to the amended bytes
+`9f3ea74c…` / 3,973,569 B / 935 blocks that sat on the path in between — the amendments added
+business rules, a client script, three ACLs and a form layout, not the missing role links or label
+rows — and those bytes are retained at `…AMENDED-NOT-GATED.xml`.*
 
 **Path A is the only path that would satisfy both AAP §0.5.2 and AAP §0.7.1 at once**, and the
 retained artifact keeps it open. No artifact on disk satisfies AAP §0.7.1 today; all of them satisfy
@@ -791,9 +854,10 @@ reproduces 4,062,436 bytes hashing to `eee9fabd…`, **re-verified by that exact
 2026-09-05T04:45Z**. They are the only bytes in this repository whose
 exact sequence passed the gate, and they are precisely the sequence the review's HIGH ordering
 finding rejected. **No artifact in the repository satisfies both requirements at once; only Path A
-creates one, on the retained rebuilt bytes. The elected base — as amended by the three later
-remediation commits, `9f3ea74c…` / 3,973,569 B / 935 blocks — ships in the meantime, labelled for
-exactly what it is: measured, not gate-verified.**
+creates one, on the retained rebuilt bytes. The elected package itself — untouched, `7292a6fe…` /
+3,781,097 B / 926 blocks — ships in the meantime, labelled for exactly what it is: never previewed,
+not gate-verified, and missing both the 27 role links and the nine post-election amendments retained
+at `…AMENDED-NOT-GATED.xml`.**
 
 ---
 
@@ -828,18 +892,20 @@ was recorded against those bytes — a statement about that byte sequence at the
 with Phase 3 (ATF, U4) not gating it. The fallback package was **not** invoked by this phase; it was
 elected afterwards, by the frozen directive, and it is what now ships.
 
-**What ships: the elected fallback base, as amended.** The deliverable path
-`update-set/x_casemgmt_case_management_update_set.xml` held the original unmodified package — **926
+**What ships: the exact, untouched elected fallback.** The deliverable path
+`update-set/x_casemgmt_case_management_update_set.xml` holds the original unmodified package — **926
 payload blocks, 3,781,097 bytes, SHA-256
 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`**, byte-identical to
-`…_update_set.FALLBACK.xml` — at the election commit `3671901b5b`, which is the state this report
-records. **Today that path holds those elected bytes as amended by three later commits:
-`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload
-blocks — measured 2026-09-05T04:45Z, and not gate-verified.** The base is elected under OVERRIDE-2 /
-directive **D3** on the unmet-exit-condition path, and both base and amended bytes are labelled for
-what they are: they do **not** include this round's
+`…_update_set.FALLBACK.xml` — as it did at the election commit `3671901b5b`, which is the state this
+report records. **CORRECTED 2026-09-05: for a period that path held those elected bytes as amended by
+three later commits (`9f3ea74c…`, 3,973,569 bytes, 935 payload blocks, measured and never
+gate-verified); the elected bytes were copied back and the amended bytes are retained, explicitly
+non-shipping, at `…_update_set.AMENDED-NOT-GATED.xml`.** The package is elected under OVERRIDE-2 /
+directive **D3** on the unmet-exit-condition path, and it is labelled for what it is: it does
+**not** include this round's
 native-rebuild fix (0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored
-`sys_dictionary` rows with random-32-hex update names — re-verified on the amended bytes), so an
+`sys_dictionary` rows with random-32-hex update names — verified on both files), and it does not
+include the nine amendments either, so an
 importer must run
 `scripts/post_import_remediation.js` to create the physical schema and the 27 ACL-role links, exactly
 as the pre-refine deployment did. The re-sequenced rebuilt package is **retained, not shipped**, at
@@ -849,9 +915,9 @@ AAP §0.5.2 assertion passing; §7.1 records the one action that would make it s
 promotion it then earns.
 
 **Electing settles the shipping decision, not the gate.** S1–S6 is binary and takes one verdict per
-byte sequence: **NOT MET** for `9f3ea74c…`, the sequence on the deliverable path today; **NOT MET**
-for the elected base `7292a6fe…`, whose own bytes were never previewed
-anywhere; **NOT MET** for the retained rebuilt package (`e109e1d1…` today, `90ee0249…` as CR1
+byte sequence: **NOT MET** for `7292a6fe…`, the elected sequence on the deliverable path, whose own
+bytes were never previewed anywhere; **NOT MET** for `9f3ea74c…`, the retained amended package;
+**NOT MET** for the retained rebuilt package (`e109e1d1…` today, `90ee0249…` as CR1
 produced it), never uploaded, previewed or committed; **MET** for `eee9fabd…`, export 3's sequence.
 The recorded checksum is **stale** under D36
 and AAP §0.7.1 is **NOT MET** for every artifact on disk. Nothing here designates any of them

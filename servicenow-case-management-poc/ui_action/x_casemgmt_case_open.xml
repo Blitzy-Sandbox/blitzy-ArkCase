@@ -474,7 +474,7 @@
         <active>true</active>
         <client>false</client>
         <comments>UI Action that transitions a Draft case to Open status. Visible only to x_casemgmt_case_manager users on cases with status=Draft. Delegates the assigned_group-populated check to x_casemgmt.CaseTransitionValidator.canTransitionToOpen() (single source of truth shared with ../flows/sub_flows/validate_open_transition.xml). Per AAP Section 0.5.5 row 1 verbatim: "Draft -&gt; Open: assigned_group populated - Surface form-level error". Server-side-only (no client prompt) - the transition has no required parameters beyond the assigned_group field that the operator should have populated on the form before clicking. Performs the transition on the server with defense-in-depth re-validation of role and status. Surfaces a form-level blocking error via gs.addErrorMessage if assigned_group is empty (verbatim message "Required field assigned_group is empty." returned by the Script Include). Contains zero gs.eventQueue() calls per the email-disabled constraint, zero hardcoded sys_id literals, and zero PII.</comments>
-        <condition><![CDATA[current.status == 'Draft' && gs.getUser().hasRole('x_casemgmt_case_manager')]]></condition>
+        <condition><![CDATA[new x_casemgmt.CaseTransitionValidator().canShowManagerAction(current, 'Draft')]]></condition>
         <form_action>true</form_action>
         <form_button>true</form_button>
         <form_button_v2>false</form_button_v2>

@@ -249,9 +249,47 @@
          ../reports/x_casemgmt_avg_time_to_close.xml,
          ../reports/x_casemgmt_cases_opened_30d.xml).
 
-      - Chart-size discipline: <chart_size>medium</chart_size>. The
-        platform-default rendering size for embedded dashboard widgets.
-        Matches the sibling reports.
+      - Chart-size discipline: <chart_size>medium</chart_size>,
+        unchanged - though not for want of trying. The measurement
+        behind that is recorded here because it bounds what the data
+        labels enabled below can show.
+
+        The platform builds a donut data label as "<name> = <value>" and
+        clips it to the budget named by
+        glide.chart.data.label.truncate_to (13 on this instance) for a
+        medium chart, or glide.chart.data.label.truncate_to.large (27)
+        for a large one - measured in the platform bundle
+        /scripts/GlideV2ChartingIncludes.jsx, where
+        hc_addPropsForDataLabelsTruncation() copies the per-report
+        budget onto each point and the formatter applies
+        label.substring(0, labelMaxLength) + '...'. At 13, "General
+        Inquiry = 6" (19 characters) arrives as the stub "General
+        Inqui...", which the SVG layout then ellipsizes again to
+        "General..." at 1280 and to a bare "G..." at 375. "Complaint =
+        4" is exactly 13 and survives.
+
+        Raising the chart to large is the only lever this application
+        owns over that budget, so it was set and measured on the
+        rendered dashboard. It made the widget worse rather than better:
+        at large the labels stopped painting at all - the <text> nodes
+        were emitted with empty content and 0x0 rects, positioned by
+        transforms outside the chart box (one at negative x), leaving
+        two orphan leader-line stubs pointing at nothing, at both 1280
+        and 375. The platform sizes the SVG to the dashboard column
+        while computing label geometry for the larger canvas. So the
+        value was reverted to medium, where the labels do paint.
+
+        What that leaves: per-slice labels are drawn, and a label longer
+        than 13 characters is clipped with an ellipsis. The values
+        themselves are not lost - the SVG legend prints them in full
+        ("General Inquiry = 6 (60%)", "Complaint = 4 (40%)") and
+        <display_grid> below adds a keyboard-reachable (type, count,
+        percentage) table. Closing the clipping needs
+        glide.chart.data.label.truncate_to raised, which is a global
+        sys_properties row and is barred by AAP Section 0.3.2 (no
+        global-scope writes): a human with instance administration can
+        change that single property and the labels print in full with no
+        change to this application.
 
       - Scope binding: <sys_scope>x_casemgmt</sys_scope> and
         <sys_package source="x_casemgmt">x_casemgmt</sys_package>
@@ -421,6 +459,101 @@
         agent prompt; no new dimensions or aggregations beyond
         group-by-type COUNT.
 
+    PERSISTENT SEGMENT LABELS AND A FULL DATA GRID (QA ISSUE 12 CLASS)
+    =================================================================
+    QA Issue 12 (MEDIUM, visual/accessibility) was filed against the
+    Agent Workspace status donut
+    (../reports/x_casemgmt_case_count_by_status.xml): a DOM count of
+    `.highcharts-data-label` returned ZERO, so segment values existed
+    only behind a hover or a legend that paginates to "1/6" at 375px.
+    THIS report had the identical defect on the Manager View - same
+    chart family, same two omitted columns, same measured values on the
+    committed row before this change:
+        show_chart_data_label = false      <- no per-segment labels
+        display_grid          = false      <- no fallback data table
+    Both are `sys_report` BOOLEAN columns whose sys_dictionary
+    default_value is `false`, so omitting the element loads them OFF.
+    Fixing only the report the finding names would have left the second
+    donut in exactly the state the finding describes, so the same remedy
+    is applied here rather than waiting for the same defect to be filed
+    twice.
+
+    THE IN-SCOPE REMEDY APPLIED
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      - <show_chart_data_label>true</show_chart_data_label>
+        Each type segment (General Inquiry, Complaint) carries its own
+        persistent, on-canvas label at every viewport width instead of
+        surrendering its value to a hover or to the legend. Precedent on
+        this instance: 3 of the 8 `type=donut` reports already ship this
+        column enabled, so it is a supported report option, not a
+        platform modification - which keeps the remedy inside AAP
+        Section 0.3.2's prohibition on global-scope changes.
+      - <display_grid>true</display_grid>
+        Renders the aggregate as an HTML data table beneath the chart
+        with every (type, count, percentage-of-count) row plus a total
+        row - the same stock column the two sibling bar reports already
+        ship for QA finding F8, where it was measured to emit
+        `table.chart_legend.display-grid-table` with a real <thead>,
+        `th scope="col"` / `th scope="row"` headers and a bold total row,
+        outside any `aria-hidden="true"` ancestor. Precedent is stated
+        honestly rather than overclaimed: 6 of the 182 `type=bar`
+        reports enable it, but NO `pie` or `donut` report on this
+        instance does; the column carries no chart-type qualifier in its
+        dictionary row and the grid is emitted by the chart component's
+        legend/grid renderer rather than by the series, so it is
+        expected to render here - and that expectation is a RUNTIME fact
+        owed a browser re-verification on the Manager View after the
+        live report row is updated. It is not asserted from this file.
+
+    FIELDS DELIBERATELY LEFT AT false, AND WHY
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      - allow_data_label_overlap = false (element omitted, dictionary
+        default false). Off ON PURPOSE: with it off Highcharts drops a
+        colliding label instead of painting two on top of each other,
+        and the data grid enabled above is the accessible route to any
+        value a label has to drop. Turning it on would trade a legible
+        chart for a cluttered one and add nothing the grid does not
+        already carry.
+      - show_data_label_position_middle = false (element omitted). Off
+        ON PURPOSE: it moves the label inside the ring, and this donut
+        renders a 70% centre hole (measured innerR 67.795 against r
+        96.85 in the dashboard widget), leaving a band too narrow at
+        375px to hold "General Inquiry" without truncation.
+      - show_chart_total = false (element omitted). It prints one
+        aggregate total and does not address per-segment labelling; it
+        is enabled by zero of the 182 bar reports on this instance
+        (measured for QA finding F8).
+
+    WHAT IS NOT FIXED HERE, STATED AS OPEN
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    The legend itself - its 375px "1/6" paging control and its
+    non-keyboard per-item toggles - is emitted by the platform's
+    Highcharts wrapper (GlideV2ChartingIncludes.jsx /
+    chart_includes.cssx), a GLOBAL artifact that AAP Section 0.3.2
+    ("Global scope changes of any kind") and AAP Section 0.7.2 ("zero
+    global-scope writes are permitted") both put out of reach from this
+    scoped application. Measured corroboration that the control is not
+    ours: `show_legend` reads `false` on the committed row of every
+    report in this folder, yet the rendered widget still draws the
+    paginating legend. The `legend_*` columns this record could set
+    cover only colour, border, radius and alignment - none of them adds
+    a tab stop or a focus ring. Labels plus grid make every value
+    readable WITHOUT the legend; the legend control stays OPEN, awaiting
+    human authorisation, and is recorded in ../docs/dashboards.md.
+
+    WHAT THIS CHANGE DOES NOT TOUCH
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    <filter/> stays empty - this report is unfiltered by design because
+    the Manager View is shared only with x_casemgmt_case_manager, the
+    role AAP Section 0.5.6 grants "Read - All". <type>, <field>,
+    <aggregate>, <table>, <roles>, <user>, <title> and <chart_size> are
+    unchanged: this change adds two accessibility booleans and nothing
+    else. <chart_size> was moved to large and measured, because it is
+    the only in-scope lever over the data-label truncation budget, and
+    was reverted when the labels stopped painting altogether - see
+    "Chart-size discipline" above for the measurement and for the one
+    global property that would close the clipping.
+
     VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
     ====================================================
     [x] File path: servicenow-case-management-poc/reports/x_casemgmt_all_cases_by_type.xml
@@ -437,7 +570,16 @@
     [x] <aggregate> = COUNT
     [x] <aggregation_source/> empty
     [x] <field_list/> empty
-    [x] <chart_size> = medium
+    [x] <chart_size> = medium (unchanged; large was measured and
+        reverted - see "Chart-size discipline")
+    [x] show_chart_data_label = true (QA Issue 12 class: persistent
+        per-segment labels; this donut measured zero
+        .highcharts-data-label elements)
+    [x] display_grid = true (QA Issue 12 class: full (type, count,
+        percentage) data table beneath the chart)
+    [x] allow_data_label_overlap and show_data_label_position_middle
+        deliberately left at their false defaults - see "FIELDS
+        DELIBERATELY LEFT AT false, AND WHY" above
     [x] <is_real_time> = false
     [x] <sys_class_name> = sys_report
     [x] <sys_scope> and <sys_package> reference scoped app by name/source
@@ -456,6 +598,7 @@
         <aggregation_source/>
         <chart_size>medium</chart_size>
         <description>Manager View dashboard donut/pie widget data source. Aggregates ALL records in x_casemgmt_case grouped by the type Choice field with COUNT(*) per bucket. Two slices expected (General Inquiry, Complaint) when seed data spans both case types; the type field is extensible per AAP Section 0.5.7 so future Choice additions automatically appear as new slices without report modification. UNFILTERED by design - shows the entire team caseload split between the two case-handling pipelines (one Flow Designer flow per case type), enabling managers to assess subdomain volume balance and pipeline-staffing needs. Replaces ArkCase's CaseFile.caseType + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report. Different aggregation than x_casemgmt_all_cases_by_status (group by status) and x_casemgmt_all_cases_by_priority (group by priority); same dashboard audience per AAP Section 0.4.4.</description>
+        <display_grid>true</display_grid>
         <field>type</field>
         <field_list/>
         <filter/>
@@ -463,6 +606,7 @@
         <is_scheduled>false</is_scheduled>
         <name>x_casemgmt_all_cases_by_type</name>
         <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
+        <show_chart_data_label>true</show_chart_data_label>
         <sys_class_name>sys_report</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>

@@ -3,16 +3,53 @@
 > **⚠ HISTORICAL PHASE RECORD — artifact identities, screenshot paths and the suite result below are
 > superseded.** This report describes the state at Phase 3's own exit (`2026-09-02T22:10:59Z`).
 > **Three commits landed afterwards** (`f8454fb078`, `6efb13b141`, `8dfdbcb015`) and rewrote the
-> update-set artifacts without re-running the D36 gate: the deliverable path holds
+> update-set artifacts without re-running the D36 gate, taking the deliverable path to
 > `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload
-> blocks today — measured, not gate-verified — while `…FALLBACK.xml` holds the elected base
-> `7292a6fe…` and `…REBUILT-DEPENDENCY-ORDERED.xml` holds `e109e1d1…` (4,062,067 B). The first of
-> those commits also **fixed the choice materialization that caused 5 of this phase's 6 failures**,
-> so the TES0001002 result recorded below is **stale and a suite re-run is owed** (see §3's staleness
-> warning). Every screenshot basename this report cites is absent from disk; three checkpoints were
+> blocks — measured, never gate-verified.
+> **CORRECTED 2026-09-05 — the deliverable path holds the exact, untouched elected package again:**
+> `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, 3,781,097 bytes, 926 payload
+> blocks, `cmp`-identical to `…FALLBACK.xml`; the amended bytes are retained, explicitly
+> non-shipping, at `…AMENDED-NOT-GATED.xml`, and `…REBUILT-DEPENDENCY-ORDERED.xml` holds
+> `e109e1d1…` (4,062,067 B).
+> **What the shipped package therefore does NOT include, itemised:** the **7 name-keyed choice
+> collections** `sys_choice_x_casemgmt_case_type`, `_case_status`, `_case_priority`,
+> `_case_pending_reason`, `_case_task_status`, `_case_task_type`, `_case_party_party_type` — **the
+> single root cause of the six ATF failures recorded below** — plus **4 business rules**, **1 form
+> layout** (`sys_ui_section_x_casemgmt_case_null`), **1 onLoad client script**
+> (`sys_script_client_86c130f8d9751167631b8438610153ef`) and the **3 field-level `query_range` ACLs**
+> on `x_casemgmt_case.opened_date`, `x_casemgmt_case.closed_date` and `x_casemgmt_case_task.due_date`
+> (26 `sys_security_acl` payloads shipped where the amended package holds 29). **Stated separately
+> because it is true of BOTH shippable files:** neither the shipped fallback nor the retained amended
+> package carries **any** of the **27 `sys_security_acl_role` role links** — zero such payloads in
+> each — and only `…REBUILT-DEPENDENCY-ORDERED.xml` carries them.
+> **`scripts/post_import_remediation.js` therefore REMAINS MANDATORY on a clean instance** — without
+> it a bare commit of the shipped bytes leaves the three scoped tables **without physical storage**
+> and the ACLs **without role links**, so every ACL denies every non-admin. One caveat travels with
+> it: the script asserts 29 ACLs / 36 links (the figures the repository's 29 `acl/*.xml` artifacts
+> describe) while the shipped package supplies only **26** ACLs, so a clean-instance run reports that
+> shortfall as a **named** non-convergence and tells the operator to import the three `query_range`
+> ACL records from `acl/` and re-run.
+> **THIS BEARS DIRECTLY ON THIS PHASE'S RESULTS AND IS THE MOST IMPORTANT LINE IN THIS BANNER.** The
+> first of those three commits **fixed the choice materialization that caused all six of this phase's
+> failures**, by re-keying the 7 `sys_choice` payloads to `sys_choice_x_casemgmt_*`. **That fix is
+> NOT in the shipped package.** The shipped elected fallback carries the 7 older
+> `sys_choice_<32-hex>` rows instead, so **the six failures recorded below are the expected
+> behaviour of the package that ships**, not a stale artefact of an old run. A suite re-run against
+> the shipped bytes would be expected to reproduce them. Every screenshot basename this report cites
+> is absent from disk; three checkpoints were
 > re-captured live and are cited by verified path below. Read
 > [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact identity and evidence — RESTATED
-> 2026-09-05T04:45Z" and [`run-state.json`](./run-state.json) `final.qa3_remediation` first.
+> 2026-09-05T04:45Z" and [`run-state.json`](./run-state.json) `final.qa3_remediation` first.>
+> **⚠ THIS PHASE WAS EXECUTED BEFORE THE ADJUDICATION, AND IS SUPERSEDED BY IT — CORRECTED
+> 2026-09-05.** Phase 1 is a **HARD GATE** and its derived verdict is **NOT MET** on two
+> independent grounds (the native role-assignment mechanism, and OVERRIDE-3's destructive
+> boundary) — see [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §4, where the verdict is derived from
+> the unresolved hard-gate rows rather than asserted. Under directive **D3** the correct behaviour
+> at that point was to **stop, invoke the untouched fallback, perform no rollback and report what
+> failed**. This phase was entered instead, on the `"met"` value recorded at the time — which is
+> exactly what D1 exists to prevent. **Everything below is therefore retained as the record of what
+> was executed, and is NOT read as a delivery result.** Nothing in it is deleted, nothing in it
+> gates delivery, and no verdict in it makes Phase 1's gate met.
 
 Refine PR, Phase 3, work unit **U4**. Directives owned here: **D38** (S1 single-test validation),
 **D39** (S2 full suite + 13-assertion harness), **D40** (RESUME CHECK), **D41** (ATF suite
@@ -440,9 +477,9 @@ outside this unit's scope. The consequences, stated plainly:
 | --- | --- |
 | Was any fix applied? | **No** |
 | Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload, and the re-verification pass after it elected the untouched fallback onto the deliverable path as the shipping *base* and retained the re-sequenced bytes at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. **Three commits after that — `f8454fb078`, `6efb13b141`, `8dfdbcb015` — did change payloads in both files**, adding 4 business rules, 1 client script, 3 field-level ACLs and 1 form layout and renaming the 7 `sys_choice` payloads; `…FALLBACK.xml` was subsequently restored to the elected bytes and the deliverable was left amended |
-| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run owed** — not performed by this phase, and not by the CR1 pass that made the change. *`90ee0249…` is the CR1 re-sequencing history and is kept as that; the re-run is owed on the retained rebuilt file's **current** bytes, `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B, after commit `f8454fb078` amended it — and equally on `9f3ea74c…`, the amended bytes now on the deliverable path.* |
-| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It is owed on the retained rebuilt bytes for the reason in the row above, it has not been performed, and it is equally unperformed on the elected base and on the amended bytes `9f3ea74c…` that ship from the deliverable path today |
-| What ships? | **The elected fallback base, as amended.** The deliverable path held the original unmodified package — 926 payload blocks, 3,781,097 bytes, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to `…FALLBACK.xml` — at the election commit `3671901b5b`, which is the state this row records. **Today it holds those bytes as amended by three later commits: `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload blocks, measured and not gate-verified**, and it is no longer byte-identical to `…FALLBACK.xml` (the fallback was restored to the elected bytes on 2026-09-05T04:45Z while the deliverable kept its amendments — the correct state, not a defect). The base is elected under OVERRIDE-2 / directive **D3** on the unmet-exit-condition path and labelled as **not** carrying this round's native-rebuild fix (0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role links. The S1–S6 gate is **NOT MET** for those elected bytes and for the retained rebuilt package `90ee0249…` alike, and **MET** for export 3's sequence only: electing settles the shipping decision, not the gate. **This phase presented nothing unverified** — while it ran, the deliverable was export 3's Phase-2-verified byte sequence, and **the ATF suite ran against the rebuilt content as committed on the instance**, not against the elected fallback. The delivery position is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d), [`PHASE2.md`](./PHASE2.md) §7.1, and `final.delivery_position` in [`run-state.json`](./run-state.json) |
+| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run owed** — not performed by this phase, and not by the CR1 pass that made the change. *`90ee0249…` is the CR1 re-sequencing history and is kept as that; the re-run is owed on the retained rebuilt file's **current** bytes, `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B, after commit `f8454fb078` amended it — and equally on `7292a6fe…`, the elected bytes now on the deliverable path, and on the retained amended `9f3ea74c…`.* |
+| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It is owed on the retained rebuilt bytes for the reason in the row above, it has not been performed, and it is equally unperformed on the elected bytes `7292a6fe…` that ship from the deliverable path and on the retained amended bytes `9f3ea74c…` |
+| What ships? | **The exact, untouched elected fallback.** The deliverable path holds the original unmodified package — 926 payload blocks, 3,781,097 bytes, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, `cmp`-identical to `…FALLBACK.xml` — as it did at the election commit `3671901b5b`, which is the state this row records. **CORRECTED: for a period it held those bytes as amended by three later commits (`9f3ea74c…`, 3,973,569 bytes, 935 payload blocks, measured and never gate-verified); the elected bytes were copied back and the amended bytes are retained, explicitly non-shipping, at `…AMENDED-NOT-GATED.xml`.** The package is elected under OVERRIDE-2 / directive **D3** on the unmet-exit-condition path and labelled as **not** carrying this round's native-rebuild fix (0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role links. **It also does not carry the choice-materialization fix**, which is why the six failures in this phase describe the shipped package's own behaviour. The S1–S6 gate is **NOT MET** for those elected bytes and for the retained rebuilt package `90ee0249…` alike, and **MET** for export 3's sequence only: electing settles the shipping decision, not the gate. **This phase presented nothing unverified** — while it ran, the deliverable was export 3's Phase-2-verified byte sequence, and **the ATF suite ran against the rebuilt content as committed on the instance**, not against the elected fallback. The delivery position is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d), [`PHASE2.md`](./PHASE2.md) §7.1, and `final.delivery_position` in [`run-state.json`](./run-state.json) |
 
 **D6 two-attempt cap: 0 of 2 attempts consumed.** No class (a) or actionable class (b) issue arose, so
 no fix-and-re-verify loop was entered; nothing was abandoned mid-loop and nothing hit the cap.
@@ -546,7 +583,7 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 | XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files at the time of this phase; **221 as measured 2026-09-05T04:45Z** — the “212 today” recorded here was overtaken by the three post-run commits and is superseded) |
 | JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files at the time of this phase; **4 as measured 2026-09-05T04:45Z** — the CR6 pass added [`scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js), which passes the same gate) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
-| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (That equality is a measurement taken while this phase ran and stands as such; the file was re-sequenced afterwards into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` and retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, whose bytes are `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B today. **The deliverable path holds `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` / 3,973,569 B / 935 blocks as of 2026-09-05T04:45Z** — the elected base `7292a6fe…` as amended by three later commits, not the untouched fallback. Under D36 every one of those changes leaves the recorded checksum stale and an S1–S6 re-run owed — §5.5) |
+| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (That equality is a measurement taken while this phase ran and stands as such; the file was re-sequenced afterwards into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` and retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, whose bytes are `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B today. **The deliverable path holds `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` / 3,781,097 B / 926 blocks after the 2026-09-05 identity correction** — the untouched elected package, with the amended `9f3ea74c…` / 935-block bytes retained, explicitly non-shipping, at `…AMENDED-NOT-GATED.xml`. Under D36 every one of those changes leaves the recorded checksum stale and an S1–S6 re-run owed — §5.5) |
 | No binaries staged | `git status` | no PNG/video staged; `blitzy/screenshots/*.png` remain untracked |
 
 ---
@@ -582,10 +619,12 @@ fallback** as the shipping *base* under OVERRIDE-2 / directive D3, which put
 `3671901b5b` — labelled as not carrying this
 round's fix — while the re-sequenced bytes were retained at
 `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. **Three further commits then amended both files
-without re-running the gate**, so as of 2026-09-05T04:45Z the deliverable path holds
-`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` (3,973,569 B / 935 blocks) and the
-retained rebuilt file holds `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`
-(4,062,067 B / 988 blocks), while `…FALLBACK.xml` was restored to the elected `7292a6fe…`. The gate
+without re-running the gate**, taking the deliverable path to
+`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` (3,973,569 B / 935 blocks); **that
+was CORRECTED on 2026-09-05 — the deliverable path holds the elected `7292a6fe…` again,
+`cmp`-identical to `…FALLBACK.xml`, and the amended bytes are retained at `…AMENDED-NOT-GATED.xml`**.
+The retained rebuilt file holds `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`
+(4,062,067 B / 988 blocks). The gate
 stays **NOT MET** for every one of those sequences (§5.5, and
 [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d) for the position).
 
@@ -593,10 +632,17 @@ stays **NOT MET** for every one of those sequences (§5.5, and
 
 1. **ATF 01, ATF 10, ATF 15, ATF 16, ATF 17, ATF 18** — six named failures, one shared root cause
    (`sys_choice` rows absent for the three scoped tables), all class **(c)**, **0 fix attempts**.
-   **STALE as of 2026-09-05T04:45Z:** these verdicts belong to suite result TES0001002
-   (`0b7d459a93cf435009aa70d19dba10be`, `2026-09-02 21:45:31Z`) and predate the
-   choice-materialization fix in commit `f8454fb078`; `sys_choice` reads **24** rows on the instance
-   today, so a suite re-run is owed before any of them may be read as current. The same suite passed
+   **CORRECTED 2026-09-05 — these six are NOT stale with respect to the package that ships.** The
+   verdicts belong to suite result TES0001002 (`0b7d459a93cf435009aa70d19dba10be`,
+   `2026-09-02 21:45:31Z`) and predate the choice-materialization fix in commit `f8454fb078`. They
+   are stale with respect to the **live instance**, where `sys_choice` reads **24** rows today, so a
+   suite re-run against the instance is owed before they may be read as the instance's current
+   state. But **the shipped package does not contain that fix**: the elected fallback carries the 7
+   older `sys_choice_<32-hex>` payloads and not the 7 name-keyed
+   `sys_choice_x_casemgmt_*` collections, and the absence of those collections is the single root
+   cause of all six failures. **So these six describe the behaviour of the bytes that ship**, and
+   they are handed to the FINAL REPORT as known, named, shipped defects rather than as an outdated
+   result. The same suite passed
    **20/20** hours earlier the same day as TES0001001 (`1768f7429307435009aa70d19dba10a4`,
    `08:33:54 → 08:36:27` instance-local). And
    for each of ATF 01/15/16/17/18 the later steps were **skipped**, so their downstream assertions are
@@ -622,16 +668,20 @@ stays **NOT MET** for every one of those sequences (§5.5, and
      `…FALLBACK.xml` at that moment (both confirmed by `sha256sum` then). **No preview of any kind was
      ever run on these bytes**, so it is unverified rather than verified, and it does not carry this
      round's native rebuild — `scripts/post_import_remediation.js` is required with it. *Today these
-     bytes live at `…FALLBACK.xml` alone, which was restored to them on 2026-09-05T04:45Z.*
-   - **What actually ships today: `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`**,
-     3,973,569 bytes, 935 payload blocks, at `update-set/x_casemgmt_case_management_update_set.xml` —
-     the elected base **as amended** by commits `f8454fb078`, `6efb13b141` and `8dfdbcb015` (+9
-     payloads: 4 business rules, 1 client script, 3 field-level ACLs, 1 form layout, and the 7
-     `sys_choice` payloads renamed to `sys_choice_x_casemgmt_*`). Also never previewed anywhere:
-     **measured, not gate-verified**, and it still requires
-     `scripts/post_import_remediation.js` — re-verified as carrying 0 `sys_security_acl_role` rows and
-     25 hand-authored `sys_dictionary` rows. This row was added on 2026-09-05T04:45Z; the amendment
-     above was written when only three sequences existed.
+     bytes live at `…FALLBACK.xml` **and at the deliverable path**, which was restored to them on
+     2026-09-05 by byte copy; `cmp` reports no difference. **These are the bytes that ship.***
+   - **The retained amended package, `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`**,
+     3,973,569 bytes, 935 payload blocks, now at
+     `update-set/x_casemgmt_case_management_update_set.AMENDED-NOT-GATED.xml` and **explicitly
+     non-shipping** — the elected base **as amended** by commits `f8454fb078`, `6efb13b141` and
+     `8dfdbcb015` (+9 payloads: 4 business rules, 1 client script, 3 field-level ACLs, 1 form layout,
+     and the 7 `sys_choice` payloads re-keyed to `sys_choice_x_casemgmt_*`). It sat on the
+     deliverable path until the 2026-09-05 identity correction. Never previewed anywhere:
+     **measured, not gate-verified**, and it too requires
+     `scripts/post_import_remediation.js` — verified as carrying 0 `sys_security_acl_role` rows and
+     25 hand-authored `sys_dictionary` rows. **It is the only artifact on disk that carries the
+     choice-materialization fix in a shippable shape, and it does not ship** — which is precisely why
+     the six failures above stand against the shipped package.
    - **The retained rebuild, `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`**
      (4,062,067 B; `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` at 4,062,436 B
      when CR1 produced it) —
@@ -639,12 +689,17 @@ stays **NOT MET** for every one of those sequences (§5.5, and
      uploaded, previewed or committed under either identity; static corroboration only, and a full
      Phase-2 S1–S6 run on its **current** exact bytes is owed before it may be promoted.
 
-   So Option 2 today reads: **ship the elected base as amended (`9f3ea74c…`), labelled as measured
-   and not gate-verified**, with §9.5's post-commit remediation as the install procedure — not
-   "accept the verified package". Note also that Option 1's premise has partly been executed without
-   Phase 2 being re-run: commit `f8454fb078` **did** amend the package to fix the choice
-   materialization, so the six failures below are stale, and the new verified checksum Option 1 calls
-   for has never been produced.
+   So Option 2 today reads: **ship the exact, untouched elected package (`7292a6fe…`), labelled as
+   never previewed and not gate-verified**, with §9.5's post-commit remediation as the install
+   procedure — not "accept the verified package". And Option 1 is **still open, unexecuted, and now
+   the human decision that matters most about this phase**: commit `f8454fb078` did amend a package
+   to fix the choice materialization, but Phase 2 was never re-run on any sequence containing that
+   amendment, so under D36 those bytes could not ship and they are retained at
+   `…AMENDED-NOT-GATED.xml` instead. **The consequence, stated without softening: the shipped
+   package carries the choice defect, and therefore carries these six named ATF failures.** Closing
+   Option 1 means running the full Phase 2 S1–S6 gate on the amended bytes on a genuinely clean,
+   dedicated PDI and recording a new verified checksum — the "new verified checksum Option 1 calls
+   for" has never been produced.
 
 2. **`opened_date` empty on 8 of 10 seeded cases** — pre-existing, unchanged, and **not** exercised by
    the suite (ATF 19 passed on its own fixture). Carried forward as a known issue, not as a Phase 3

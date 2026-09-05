@@ -947,7 +947,12 @@ CaseTransitionValidator.prototype = {
      * identity, including the read-only x_casemgmt_case_viewer, whose
      * form has no Update button at all. The two short conditions
      * (x_casemgmt_case_open at 76 characters and x_casemgmt_case_close at
-     * 79) were unaffected and are left inline.
+     * 79) were unaffected by the truncation and were left inline at that
+     * point. They no longer are: both now call canShowManagerAction()
+     * below, because the inline form carried the post-abort defect
+     * described there - it reads the status the user attempted rather
+     * than the status the row holds. All six conditions are therefore
+     * method calls, and none of them is close to the character limit.
      *
      * There is a second reason the condition must carry the whole guard
      * on this release: sys_ui_action has NO `roles` column here - UI
@@ -1007,8 +1012,35 @@ CaseTransitionValidator.prototype = {
             return false;
         }
 
+        // EVALUATE AGAINST THE STORED ROW, NOT THE IN-MEMORY ONE.
+        //
+        // When a Business Rule calls setAbortAction(true), the platform
+        // answers the POST with a redirect back to the same form and
+        // re-renders it from the SUBMITTED values, so `current` carries the
+        // status the user attempted rather than the status the row still
+        // holds. UI Action conditions are evaluated during that re-render.
+        // Measured on the rendered form: saving CASE9000003 (In Progress,
+        // one Open child task) with status Resolved was correctly refused
+        // with "All tasks must be closed before resolving this case.", and
+        // the returned form then dropped "Set Pending" and "Resolve" and
+        // drew "Close" - the transition belonging to Resolved - on a record
+        // whose stored status was still In Progress. A clean reload showed
+        // In Progress and the correct two buttons, so the affordance
+        // disagreed with the database for exactly as long as the refusal
+        // was on screen, which is the window in which the user is deciding
+        // what to do next.
+        //
+        // Re-reading the row makes the button set describe what is stored.
+        // On an ordinary form load the two are the same record and the read
+        // changes nothing; on a new record there is nothing to read and the
+        // in-memory values are the only ones there are. Assignment is read
+        // from the same stored row for the same reason: an uncommitted edit
+        // to assigned_agent or assigned_group must not widen "Assigned
+        // only" while the write that would have made it true is refused.
+        var stored = this._storedRecord(caseGr);
+
         var wanted = String(requiredStatus).trim();
-        var actual = caseGr.getValue('status');
+        var actual = stored.getValue('status');
         actual = (actual === null || actual === undefined) ? '' : String(actual).trim();
         if (actual === '' || actual !== wanted) {
             return false;
@@ -1032,18 +1064,132 @@ CaseTransitionValidator.prototype = {
         // "Assigned only", per AAP Section 0.5.6: the agent named on the
         // case, or any member of the group the case is assigned to.
         var me = String(gs.getUserID());
-        var agent = caseGr.getValue('assigned_agent');
+        var agent = stored.getValue('assigned_agent');
         agent = (agent === null || agent === undefined) ? '' : String(agent);
         if (agent !== '' && agent === me) {
             return true;
         }
 
-        var group = caseGr.getValue('assigned_group');
+        var group = stored.getValue('assigned_group');
         group = (group === null || group === undefined) ? '' : String(group);
         if (group === '') {
             return false;
         }
         return this.isAgentInGroup(me, group);
+    },
+
+    /**
+     * The manager-only variant of canShowAction().
+     *
+     * Two of the six transitions are reserved to x_casemgmt_case_manager
+     * by AAP Section 0.5.5: Draft -> Open and Resolved -> Closed. Their
+     * conditions were short enough to survive the sys_ui_action.condition
+     * 254-character limit inline, so they were left as
+     * `current.status == '<status>' && gs.getUser().hasRole('x_casemgmt_case_manager')`
+     * while the four broader ones moved into canShowAction().
+     *
+     * That inline form has the defect canShowAction() was changed to fix,
+     * and it was still visible after that change: `current` on a
+     * post-abort redisplay carries the status the user ATTEMPTED.
+     * Measured on the rendered form - saving CASE9000003 (In Progress)
+     * with status Resolved was refused with "All tasks must be closed
+     * before resolving this case.", and the returned form drew the red
+     * "Close" button, because Close's inline condition read the
+     * uncommitted "Resolved". So the bar offered the Resolved -> Closed
+     * transition on a record the database still had at In Progress, one
+     * banner below the sentence explaining that it had not moved.
+     *
+     * This method is deliberately NOT canShowAction(): that one also
+     * grants an assigned x_casemgmt_case_agent, which for these two
+     * transitions would widen the affordance past what Section 0.5.5
+     * allows. The role test here is exactly the one the inline
+     * expressions carried - hasRole('x_casemgmt_case_manager'), true for
+     * an administrator by platform design - and nothing else changes.
+     *
+     * VISIBILITY IS NOT AUTHORIZATION, as for canShowAction(): each UI
+     * Action re-checks role and status in its own script, the Business
+     * Rules re-check the transition on the write, and the scoped ACLs
+     * decide who may write the row at all.
+     *
+     * @param {GlideRecord} caseGr - the case record the form is showing,
+     *     i.e. the platform-injected `current`.
+     * @param {String} requiredStatus - the source status the button
+     *     belongs to: 'Draft' for Open, 'Resolved' for Close.
+     * @return {Boolean} true when the button should render. Fails CLOSED
+     *     on a missing record or status, and never throws.
+     */
+    canShowManagerAction: function(caseGr, requiredStatus) {
+        if (!caseGr || !requiredStatus) {
+            return false;
+        }
+
+        var stored = this._storedRecord(caseGr);
+        var wanted = String(requiredStatus).trim();
+        var actual = stored.getValue('status');
+        actual = (actual === null || actual === undefined) ? '' : String(actual).trim();
+        if (actual === '' || actual !== wanted) {
+            return false;
+        }
+
+        return gs.getUser().hasRole('x_casemgmt_case_manager');
+    },
+
+    /**
+     * Resolve the STORED row behind an in-memory case record.
+     *
+     * Returns a freshly-read GlideRecord for caseGr's sys_id when one can
+     * be read, and caseGr itself otherwise. Used by canShowAction() so
+     * that transition affordances describe the database rather than an
+     * uncommitted form; see the comment there for the measured behaviour
+     * that made it necessary.
+     *
+     * Both fallbacks are deliberate and both fail CLOSED:
+     *
+     *   - A record with no sys_id is a new record that has never been
+     *     written. There is nothing to re-read, and its in-memory values
+     *     are the only description of it that exists.
+     *
+     *   - A read that returns nothing means the row is gone or the caller
+     *     may not read it. Scoped GlideRecord applies the read ACLs of the
+     *     running user, so for an x_casemgmt_case_agent this is precisely
+     *     the unassigned case they are refused everywhere else: falling
+     *     back to caseGr hands canShowAction the same values it would have
+     *     used before, and its "Assigned only" test then refuses the
+     *     button anyway.
+     *
+     * No hardcoded sys_id: the identifier is read off the record passed
+     * in, per AAP Section 0.7.2.
+     *
+     * @param {GlideRecord} caseGr - an x_casemgmt_case record, typically
+     *     the platform-injected `current`.
+     * @return {GlideRecord} the stored row when readable, else caseGr.
+     *     Never null, and never throws.
+     */
+    _storedRecord: function(caseGr) {
+        if (!caseGr) {
+            return caseGr;
+        }
+
+        var sysId = '';
+        try {
+            sysId = caseGr.getUniqueValue();
+            sysId = (sysId === null || sysId === undefined) ? '' : String(sysId).trim();
+        } catch (e) {
+            // getUniqueValue() is defined on every GlideRecord, but this
+            // method must never be the reason a form fails to render.
+            gs.debug('x_casemgmt.CaseTransitionValidator._storedRecord: could not read sys_id: ' + e);
+            return caseGr;
+        }
+
+        if (sysId === '') {
+            return caseGr;
+        }
+
+        var stored = new GlideRecord('x_casemgmt_case');
+        if (stored.get(sysId)) {
+            return stored;
+        }
+        return caseGr;
     },
 
     /**

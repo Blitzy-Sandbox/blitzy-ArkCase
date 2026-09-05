@@ -41,7 +41,59 @@
  * ANY future execution of an authorised targeted deletion of these tables MUST
  * run this guard first and MUST honour its verdict. A PROCEED verdict is the
  * only state in which deleting is permitted; an ABORT verdict means nothing is
- * deleted and the operation stops for human decision.
+ * deleted and the operation stops for human decision. This is a MANDATORY
+ * pre-delete step, not an advisory one: the guard never warns and proceeds.
+ * There is exactly one path from a non-zero collateral count, and it is ABORT.
+ *
+ * ---------------------------------------------------------------------------
+ * DIRECT EVIDENCE FROM THE CURRENT RELEASE - Zurich Patch 10, 2026-09-05
+ * ---------------------------------------------------------------------------
+ * The cascade above was measured in September 2026 on the same release this
+ * guard runs on, on a disposable probe table built for the purpose
+ * (x_casemgmt_qa5_probe_table, created natively in Studio and deleted again).
+ * That re-measurement is why this guard is mandatory rather than advisory, and
+ * it is recorded here so no future executor has to re-run a destructive probe
+ * to learn it:
+ *
+ *   1. THE PLATFORM OFFERS NO DEPENDENCY MANIFEST BEFORE CONSENTING. The table
+ *      form's Delete button is the `delete_table_complete` UI action. It
+ *      confirms through a NATIVE BROWSER PROMPT that requires the operator to
+ *      type the word "delete" - and that prompt lists NOTHING about what else
+ *      will be removed. No class, no count, no record. An operator therefore
+ *      has nothing to review before consenting, which is precisely the gap
+ *      this read-only enumeration fills. A guard that merely warned would add
+ *      nothing the platform does not already fail to provide.
+ *
+ *   2. THE CASCADE REACHED AT LEAST EIGHT METADATA CLASSES, SILENTLY. For the
+ *      one probe table it removed: 4 auto-created ACLs (create/read/write/
+ *      delete), their 4 sys_security_acl_role links, 7 sys_dictionary entries,
+ *      the desktop Module and the mobile Module, the field labels
+ *      (sys_documentation), the database index and the table-subscription
+ *      configuration. None of it was named anywhere before the delete.
+ *
+ *   3. IT LEFT THREE ORPHANS BEHIND THAT IT DOES NOT CLEAN UP. These had to be
+ *      found by re-querying after the fact and deleted by hand:
+ *        - the desktop Application Menu   sys_app_application
+ *                                         602020139307431009aa70d19dba10ce
+ *        - the mobile Application Menu    sys_ui_application
+ *                                         642020139307431009aa70d19dba10df
+ *        - the auto-generated role        sys_user_role
+ *          x_casemgmt.qa5_probe_table_user
+ *                                         1420e8df93c3431009aa70d19dba1027
+ *      So "the cascade cleans up after itself" is false in both directions: it
+ *      reaches further than the authorisation, AND it leaves residue. The
+ *      sys_ids above are recorded as evidence of what was measured; they are
+ *      not inputs to this script, which holds no sys_id literal and resolves
+ *      everything by query.
+ *
+ * Two things follow, and both are implemented below rather than left as prose.
+ * (a) The enumeration covers the companion classes item 2 names, not only the
+ *     classes the 2026-09-02 cascade happened to hit - see
+ *     COMPANION_DEPENDENT_CLASSES and enumerateForTable().
+ * (b) A PROCEED verdict is not the end of the operator's obligations: because
+ *     the cascade leaves the three orphan classes in item 3 behind, the guard
+ *     emits a mandatory POST-DELETE ORPHAN SWEEP obligation with every verdict,
+ *     and postDeleteOrphanSweep() implements that sweep read-only.
  *
  * ---------------------------------------------------------------------------
  * THE AUTHORISED DESTRUCTIVE SUBSET
@@ -130,6 +182,18 @@
  *   var verdict = preDeleteCollateralGuard();                 // the 3 tables
  *   var verdict = preDeleteCollateralGuard(['x_casemgmt_case']); // a subset
  *
+ * The file auto-runs preDeleteCollateralGuard() and nothing else, so pasting it
+ * into a background script performs the pre-delete enumeration. The post-delete
+ * half is a separate call, made AFTER an authorised delete, because the cascade
+ * leaves orphans the platform does not remove:
+ *
+ *   var sweep = postDeleteOrphanSweep(
+ *       ['x_casemgmt_case'],                  // what was deleted
+ *       ['<Application Menu sys_id(s) recorded from the enumeration>']);
+ *
+ * Both calls are read-only. Their obligations are stated in every verdict line
+ * rather than left to be remembered.
+ *
  * ---------------------------------------------------------------------------
  * GUARANTEES
  * ---------------------------------------------------------------------------
@@ -194,6 +258,86 @@ var DEFAULT_TARGET_TABLES = [
  * different phase should pass their own label as the second argument.
  */
 var DEFAULT_PHASE_LABEL = 'Phase 1 S6 (delete the created tables/role links)';
+
+/**
+ * The COMPANION classes the platform creates alongside a table and removes
+ * again with it. Every one of them was observed being removed by the Zurich
+ * Patch 10 cascade (see the header, item 2) and none of them is inside the
+ * authorised destructive subset, so a record in any of them aborts.
+ *
+ * `fields` is an ORDERED list of candidate column names that carry the table
+ * name on the class. The column differs between classes and between releases -
+ * some name it `name`, some `table`, some `collection` - so the guard PROBES
+ * which one exists with GlideRecord.isValidField() instead of assuming one.
+ * The first valid candidate is used and is reported in the enumeration row, so
+ * the record shows which column was actually queried.
+ *
+ * `scoped` adds `sys_scope=<SCOPE>` to the count. It is set only for classes
+ * whose rows are scope-owned; a class keyed purely by table name (a dictionary
+ * or index row, for instance) is not scoped and adding the condition there
+ * would silently under-count.
+ *
+ * Two deliberate behaviours, because both are measurements and not guesses:
+ *   - A class whose TABLE does not exist on the running release is reported as
+ *     absent and does not abort: a class that does not exist cannot hold a row
+ *     the delete would remove, and GlideRecord.isValid() settles that
+ *     definitively.
+ *   - A class that DOES exist but exposes none of its candidate columns is
+ *     UNMEASURED and therefore aborts, exactly like an aggregate that fails to
+ *     return. An unmeasured class is never a class counted at zero.
+ */
+var COMPANION_DEPENDENT_CLASSES = [
+    {
+        className: 'sys_app_module',
+        label: 'Module (desktop and, on releases that fold them in, mobile)',
+        fields: ['name', 'table'],
+        scoped: false
+    },
+    {
+        className: 'sys_ui_module',
+        label: 'Mobile Module (releases that keep a separate mobile module class)',
+        fields: ['name', 'table'],
+        scoped: false
+    },
+    {
+        className: 'sys_index',
+        label: 'Database index',
+        fields: ['table', 'name'],
+        scoped: false
+    },
+    {
+        className: 'sys_ui_section',
+        label: 'Form Layout / form section',
+        fields: ['name', 'table'],
+        scoped: false
+    },
+    {
+        className: 'sys_ui_form',
+        label: 'Form',
+        fields: ['name', 'table'],
+        scoped: false
+    },
+    {
+        className: 'sys_script_client',
+        label: 'Client Script',
+        fields: ['table', 'name'],
+        scoped: true
+    }
+];
+
+/**
+ * Suffix of the role the platform auto-generates for a new table
+ * (`<scope>.<table>_user`). It is not one of the three scoped roles the
+ * authorisation covers, so it is collateral - and the Zurich Patch 10 cascade
+ * does NOT remove it (header item 3), which is why it is both enumerated here
+ * and swept for afterwards.
+ *
+ * Both separators are checked. Inside a scoped application the Role form
+ * exposes only a Suffix field and derives a read-only Name, which produces the
+ * dotted form `x_casemgmt.<table>_user`; a role created outside that form can
+ * carry the underscore form. Neither is assumed.
+ */
+var AUTO_TABLE_ROLE_SUFFIX = '_user';
 
 // ============================================================================
 // Output helpers
@@ -347,6 +491,191 @@ function countRows(tableName, applyQuery) {
     } catch (e) {
         return { readable: false, count: 0, error: '' + e };
     }
+}
+
+/**
+ * The first of `candidates` that is a real column on `className` for this
+ * release, established with GlideRecord.isValidField() rather than assumed.
+ *
+ * @param {string}   className  the class to inspect
+ * @param {string[]} candidates ordered candidate column names
+ * @return {string} the column name, or '' when none of them exists
+ */
+function firstValidField(className, candidates) {
+    try {
+        var gr = new GlideRecord(className);
+        if (!gr.isValid()) {
+            return '';
+        }
+        for (var i = 0; i < candidates.length; i++) {
+            if (gr.isValidField(candidates[i])) {
+                return candidates[i];
+            }
+        }
+        return '';
+    } catch (e) {
+        return '';
+    }
+}
+
+/**
+ * Count the rows of one COMPANION class that belong to a target table.
+ *
+ * Distinguishes the three states that matter, because collapsing them is how a
+ * guard reports a clean instance it never measured:
+ *
+ *   present=false            the class does not exist on this release. Not
+ *                            collateral: a class that does not exist holds no
+ *                            row the delete could remove.
+ *   present=true,            the class exists but the guard could not measure
+ *   readable=false           it - no table-naming column, or the aggregate
+ *                            failed. ABORTS (fail-closed).
+ *   present=true,            a real count. Non-zero ABORTS.
+ *   readable=true
+ *
+ * @param {Object} spec      one entry of COMPANION_DEPENDENT_CLASSES
+ * @param {string} tableName the target table
+ * @param {string} scopeSysId the sys_scope sys_id resolved at Step 0
+ * @return {Object} { present, readable, count, error, query }
+ */
+function countCompanionRows(spec, tableName, scopeSysId) {
+    if (!tableIsResolvable(spec.className)) {
+        return {
+            present: false,
+            readable: true,
+            count: 0,
+            error: '',
+            query: 'class ' + spec.className + ' is not present on this release'
+        };
+    }
+
+    var field = firstValidField(spec.className, spec.fields);
+    if (!field) {
+        return {
+            present: true,
+            readable: false,
+            count: 0,
+            error: 'none of the candidate table-naming columns (' + spec.fields.join(', ') +
+                ') exists on ' + spec.className + ' on this release, so its rows for ' +
+                tableName + ' are UNMEASURED',
+            query: '(unmeasurable - no table-naming column)'
+        };
+    }
+
+    var queryText = field + '=' + tableName + (spec.scoped ? ' AND sys_scope=<SCOPE>' : '');
+    var result = countRows(spec.className, function (ga) {
+        ga.addQuery(field, tableName);
+        if (spec.scoped) {
+            ga.addQuery('sys_scope', scopeSysId);
+        }
+    });
+    return {
+        present: true,
+        readable: result.readable,
+        count: result.count,
+        error: result.error,
+        query: queryText
+    };
+}
+
+/**
+ * Count the roles the platform auto-generates for a table
+ * (`<scope>.<table>_user` and the underscore variant). Collateral: the
+ * authorisation covers the three named scoped roles and nothing else.
+ *
+ * @return {Object} { readable, count, error, names }
+ */
+function countAutoTableRoles(tableName) {
+    var names = [
+        SCOPE_NAME + '.' + tableName + AUTO_TABLE_ROLE_SUFFIX,
+        SCOPE_NAME + '_' + tableName + AUTO_TABLE_ROLE_SUFFIX,
+        tableName + AUTO_TABLE_ROLE_SUFFIX
+    ];
+    var result = countRows('sys_user_role', function (ga) {
+        ga.addQuery('name', 'IN', names.join(','));
+    });
+    return {
+        readable: result.readable,
+        count: result.count,
+        error: result.error,
+        names: names
+    };
+}
+
+/**
+ * The Application Menus (desktop, and mobile where the release keeps a separate
+ * class) that own the modules of a target table. The cascade removes the
+ * modules and LEAVES THESE BEHIND (header item 3), so they are enumerated
+ * before the delete and swept for after it.
+ *
+ * Derived from the modules rather than matched on a title: an Application Menu
+ * carries no table column, and matching on a label would be guesswork.
+ *
+ * @return {Object} { readable, count, sysIds, error, query }
+ */
+function appMenusForTable(tableName) {
+    var moduleClasses = ['sys_app_module', 'sys_ui_module'];
+    var menus = {};
+    var queried = [];
+    var i;
+
+    for (i = 0; i < moduleClasses.length; i++) {
+        var moduleClass = moduleClasses[i];
+        if (!tableIsResolvable(moduleClass)) {
+            continue;
+        }
+        var field = firstValidField(moduleClass, ['name', 'table']);
+        if (!field) {
+            return {
+                readable: false,
+                count: 0,
+                sysIds: [],
+                error: moduleClass + ' exposes no table-naming column on this release, so the ' +
+                    'Application Menus of ' + tableName + ' are UNMEASURED',
+                query: '(unmeasurable)'
+            };
+        }
+        if (!firstValidField(moduleClass, ['application'])) {
+            // The class carries no parent pointer, so it names no menu. That is
+            // a measurement, not a failure: nothing to collect from this class.
+            queried.push(moduleClass + '.' + field + '=' + tableName + ' (no application column)');
+            continue;
+        }
+        try {
+            var gr = new GlideRecord(moduleClass);
+            gr.addQuery(field, tableName);
+            gr.query();
+            while (gr.next()) {
+                var parent = '' + gr.getValue('application');
+                if (parent && parent !== 'null') {
+                    menus[parent] = true;
+                }
+            }
+            queried.push(moduleClass + '.' + field + '=' + tableName + ' -> application');
+        } catch (e) {
+            return {
+                readable: false,
+                count: 0,
+                sysIds: [],
+                error: 'reading ' + moduleClass + ' for ' + tableName + ' threw: ' + e,
+                query: '(unmeasurable)'
+            };
+        }
+    }
+
+    var ids = [];
+    for (var key in menus) {
+        if (menus.hasOwnProperty(key)) {
+            ids.push(key);
+        }
+    }
+    return {
+        readable: true,
+        count: ids.length,
+        sysIds: ids,
+        error: '',
+        query: queried.length ? queried.join(' ; ') : 'no module class on this release names a table'
+    };
 }
 
 /**
@@ -517,7 +846,144 @@ function enumerateForTable(tableName, scopeSysId, roleSysIds) {
             ga.addQuery('category', tableName);
         }));
 
+    // Rows 12+ - the COMPANION classes the platform creates with a table and
+    // removes with it, measured on the current release (header item 2). None is
+    // inside the authorised subset. A class absent from this release is recorded
+    // as absent and does not abort; a class present but unmeasurable does.
+    for (var c = 0; c < COMPANION_DEPENDENT_CLASSES.length; c++) {
+        var spec = COMPANION_DEPENDENT_CLASSES[c];
+        var companion = countCompanionRows(spec, tableName, scopeSysId);
+        push(spec.className + ' [' + spec.label + ']', companion.query, false, {
+            readable: companion.readable,
+            count: companion.count,
+            error: companion.error
+        });
+        rows[rows.length - 1].classPresent = companion.present;
+    }
+
+    // Row - the role the platform auto-generates for the table. Collateral, and
+    // the cascade does not remove it: it is enumerated here and swept for after
+    // the delete (header item 3).
+    var autoRoles = countAutoTableRoles(tableName);
+    push('sys_user_role [auto-generated table role]',
+        'name IN ' + autoRoles.names.join(','), false, {
+            readable: autoRoles.readable,
+            count: autoRoles.count,
+            error: autoRoles.error
+        });
+
+    // Row - the Application Menus that own this table's modules. Collateral,
+    // and the cascade leaves them behind as orphans.
+    var menus = appMenusForTable(tableName);
+    push('sys_app_application / sys_ui_application [Application Menu, via this table\'s modules]',
+        menus.query, false, {
+            readable: menus.readable,
+            count: menus.count,
+            error: menus.error
+        });
+
     return rows;
+}
+
+// ============================================================================
+// The post-delete orphan sweep - read-only, and mandatory with every verdict
+// ============================================================================
+
+/**
+ * Enumerate the records the Zurich Patch 10 cascade LEAVES BEHIND after a table
+ * delete (header item 3): the desktop Application Menu, the mobile Application
+ * Menu and the auto-generated `<scope>.<table>_user` role.
+ *
+ * This is the read-only half of the obligation. It reports what an executor
+ * must then remove by hand; it removes nothing itself, because this file holds
+ * no write API call and that guarantee is not negotiated per function.
+ *
+ * Run it after ANY authorised delete of these tables, including one this guard
+ * cleared: a PROCEED verdict says the delete is permitted, never that the
+ * platform will clean up after it.
+ *
+ * @param {string[]} [targetTables] tables that were deleted; defaults to the
+ *                                  three scoped tables
+ * @param {string[]} [appMenuSysIds] the Application Menu sys_ids this guard
+ *                                   enumerated BEFORE the delete, when the
+ *                                   caller kept them - the modules that pointed
+ *                                   at them are gone by now, so they can no
+ *                                   longer be derived
+ * @return {string} the summary line, beginning "ORPHAN_SWEEP="
+ */
+function postDeleteOrphanSweep(targetTables, appMenuSysIds) {
+    var tables = (targetTables && targetTables.length) ? targetTables : DEFAULT_TARGET_TABLES;
+    var priorMenus = appMenuSysIds || [];
+    var measuredAtUtc = new GlideDateTime().getValue();
+    var findings = [];
+    var i;
+
+    log('ORPHAN_SWEEP|START|read-only|measured_at_utc=' + measuredAtUtc +
+        '|targets=' + tables.join(','));
+
+    // 1. The auto-generated table role, per target.
+    for (i = 0; i < tables.length; i++) {
+        var roles = countAutoTableRoles(tables[i]);
+        if (!roles.readable) {
+            findings.push('sys_user_role for ' + tables[i] +
+                ' could not be read, so the orphan state is UNKNOWN' +
+                (roles.error ? ' - ' + roles.error : ''));
+        } else if (roles.count > 0) {
+            findings.push(roles.count + ' auto-generated role(s) survive for ' + tables[i] +
+                ' (searched: ' + roles.names.join(', ') + ') - delete by hand');
+        }
+        log('ORPHAN_SWEEP|' + tables[i] + '|class=sys_user_role [auto-generated table role]' +
+            '|count=' + (roles.readable ? roles.count : 'UNREADABLE'));
+    }
+
+    // 2. The Application Menus. After the delete their modules are gone, so a
+    //    surviving menu with zero modules is the orphan. Both the caller's
+    //    pre-delete list and any menu still resolvable are checked.
+    var menuClasses = ['sys_app_application', 'sys_ui_application'];
+    for (i = 0; i < menuClasses.length; i++) {
+        var menuClass = menuClasses[i];
+        if (!tableIsResolvable(menuClass)) {
+            log('ORPHAN_SWEEP|class=' + menuClass + '|not present on this release');
+            continue;
+        }
+        for (var m = 0; m < priorMenus.length; m++) {
+            try {
+                var gr = new GlideRecord(menuClass);
+                if (gr.get(priorMenus[m])) {
+                    findings.push(menuClass + ' ' + priorMenus[m] +
+                        ' ("' + gr.getValue('title') + '") survives the delete of its ' +
+                        'table\'s modules - delete by hand');
+                    log('ORPHAN_SWEEP|class=' + menuClass + '|sys_id=' + priorMenus[m] +
+                        '|state=SURVIVES');
+                } else {
+                    log('ORPHAN_SWEEP|class=' + menuClass + '|sys_id=' + priorMenus[m] +
+                        '|state=already gone');
+                }
+            } catch (e) {
+                findings.push('reading ' + menuClass + ' ' + priorMenus[m] + ' threw: ' + e +
+                    ' - the orphan state is UNKNOWN');
+            }
+        }
+        if (priorMenus.length === 0) {
+            log('ORPHAN_SWEEP|class=' + menuClass + '|no pre-delete Application Menu sys_id was ' +
+                'handed in, so this class can only be checked by hand: the modules that named ' +
+                'the menu are deleted by the cascade, which is what makes the menu unfindable ' +
+                'afterwards. Capture the enumeration row for it BEFORE deleting.');
+        }
+    }
+
+    var summary = 'ORPHAN_SWEEP=' + (findings.length === 0 ? 'CLEAN' : 'ORPHANS_FOUND') +
+        '|findings=' + findings.length + '|targets=' + tables.join(',') +
+        '|measured_at_utc=' + measuredAtUtc + '|data_and_metadata_writes=0';
+    for (i = 0; i < findings.length; i++) {
+        logWarn('ORPHAN_SWEEP|finding ' + (i + 1) + '/' + findings.length + '|' + findings[i]);
+    }
+    if (findings.length === 0) {
+        log(summary);
+    } else {
+        logWarn(summary);
+    }
+    return summary;
 }
 
 // ============================================================================
@@ -603,6 +1069,7 @@ function preDeleteCollateralGuard(targetTables, phaseLabel) {
             '|query=' + row.query +
             '|count=' + (row.readable ? row.count : 'UNREADABLE') +
             '|authorised=' + row.authorised +
+            (row.classPresent === false ? '|class_absent_on_this_release=true' : '') +
             (row.error ? '|error=' + row.error : ''));
     }
 
@@ -633,11 +1100,19 @@ function preDeleteCollateralGuard(targetTables, phaseLabel) {
         tables.join(',') + '|classes_enumerated=' + allRows.length +
         '|scope=' + SCOPE_NAME + '|measured_at_utc=' + measuredAtUtc +
         '|phase=' + phase + '|data_and_metadata_writes=0|deleted=0' +
-        '|log_records_emitted=' + (LOG_RECORDS_EMITTED + 2);
+        '|post_delete_orphan_sweep=REQUIRED' +
+        '|log_records_emitted=' + (LOG_RECORDS_EMITTED + 4);
     log(summary);
     log('STEP2|the deletion is permitted for the enumerated targets, and ONLY for them. ' +
         'Re-run this guard immediately before the first delete if any time has passed: ' +
         'a PROCEED verdict describes the instance at measured_at_utc, not later.');
+    log('STEP2|PROCEED does NOT mean the platform cleans up after itself. Measured on Zurich ' +
+        'Patch 10: the table-delete cascade leaves the desktop Application Menu, the mobile ' +
+        'Application Menu and the auto-generated <scope>.<table>_user role behind. Record the ' +
+        'Application Menu sys_ids from the enumeration rows above BEFORE deleting - the modules ' +
+        'that name them are removed by the cascade, after which the menus cannot be derived.');
+    log('STEP2|MANDATORY AFTER THE DELETE: postDeleteOrphanSweep(targets, appMenuSysIds). It is ' +
+        'read-only and reports every survivor by class and sys_id for manual removal.');
     return summary;
 }
 
@@ -688,11 +1163,17 @@ function abort(reasons, allRows, tables, phase, measuredAtUtc, scopeSysId) {
         'destructive scope, recorded with who authorised it, what classes and counts it ' +
         'covers, and when - after which this guard is re-run immediately before the delete ' +
         'and aborts again if the enumeration no longer matches what was authorised.');
+    log('STEP4|and if a human does expand the scope: the platform will not clean up after the ' +
+        'cascade. Capture the Application Menu sys_ids from the enumeration above, then run ' +
+        'postDeleteOrphanSweep(targets, appMenuSysIds) afterwards - the cascade leaves the ' +
+        'desktop Application Menu, the mobile Application Menu and the auto-generated ' +
+        '<scope>.<table>_user role behind, measured on Zurich Patch 10.');
 
     var summary = 'VERDICT=ABORT|reasons=' + reasons.length + '|targets=' + tables.join(',') +
         '|classes_enumerated=' + allRows.length + '|scope=' + SCOPE_NAME +
         '|measured_at_utc=' + measuredAtUtc + '|phase=' + phase +
         '|phase_exit_condition=UNMET|data_and_metadata_writes=0|deleted=0' +
+        '|post_delete_orphan_sweep=REQUIRED_IF_A_HUMAN_EXPANDS_THE_SCOPE' +
         '|log_records_emitted=' + (LOG_RECORDS_EMITTED + 1);
     logWarn(summary);
     return summary;

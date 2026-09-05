@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_client`
+    record x_casemgmt_case_closed_readonly_enforce.
+
+    WHY THIS RECORD EXISTS
+    ======================
+    AAP Section 0.5.5 makes Closed a TERMINAL state: "Closed cases are
+    terminal and cannot be modified." The write side of that rule is
+    enforced by the before-update Business Rule
+    ../business_rules/x_casemgmt_block_terminal_closed.xml, which refuses
+    any change to a Closed row and surfaces that exact sentence. The READ
+    side - presenting a Closed case as a record that is finished rather
+    than one the form invites you to edit - is the UI Policy
+    ../ui_policy/x_casemgmt_case_closed_readonly.xml, which carries a
+    read-only action for each of the ten writable fields.
+
+    This client script exists because that UI Policy does not fully take
+    effect on this release, measured on the rendered form rather than
+    inferred:
+
+      - Opening CASE9000006 (status Closed) as admin, seven of the ten
+        fields came back protected - g_form.isDisabled() true, the input
+        carrying readonly="readonly" and the `readonly disabled` classes -
+        but `description` came back EDITABLE: isDisabled('description')
+        returned false, the textarea had no readonly attribute and no
+        readonly class, it took focus on load (it was the only white
+        control on an otherwise grey form), and typing into it changed the
+        value. Reproduced on three independent loads, so not a race.
+
+      - The UI Policy itself is not at fault: it is the only UI Policy on
+        the table, it holds all ten actions with Read only = True, and
+        `description` is a plain String dictionary field. Calling
+        g_form.setDisabled('description', true) by hand on the loaded form
+        applied immediately and correctly. The policy's description action
+        simply has no runtime effect at load time. The strongest
+        correlating signal is a platform exception logged five times on
+        every x_casemgmt_case form load - "Exception while evaluating NACM
+        configuration in text area: ReferenceError: renderNACMFieldLevel
+        is not defined", raised from runBeforeRender - i.e. the platform's
+        field-level access-control rendering path for TEXT AREAS fails
+        before render, and `description` is this form's only textarea.
+        That path is platform code in the global scope, so AAP Section
+        0.3.2 bars changing it; calling the supported g_form API from
+        scoped app content is the fix available to this application.
+
+      - The four Choice fields (type, status, priority, pending_reason)
+        are a second, narrower gap. The UI Policy styles them read-only
+        and g_form.isDisabled() answers true for them, but the underlying
+        <select> element is not actually inert: select.disabled stayed
+        false and only the HTML `readonly` attribute was set, which has no
+        effect on a <select>. Selecting a different Priority on the Closed
+        form therefore succeeded client-side and was not reverted. There
+        is no platform API that renders an already-drawn choice control as
+        static text - the platform does that SERVER-side, at render, which
+        is why the unconditionally read-only fields (number, opened_date,
+        closed_date) arrive as `sys_readonly.x_casemgmt_case.<field>`
+        inputs instead - so this script sets the DOM `disabled` property
+        on choice controls directly. A disabled control is not submitted
+        by the browser, which is exactly the representation the platform
+        itself uses for a server-side read-only field (renaming the input
+        to sys_readonly.* keeps it out of the POST), so this matches
+        platform semantics rather than working around them.
+
+    WHAT THIS DELIBERATELY DOES NOT DO
+    ==================================
+    It does not remove the form's Update verb. That is not an oversight:
+    AAP Section 0.5.5 requires the sentence "Closed cases are terminal and
+    cannot be modified." to be SURFACED on an attempt, which presupposes
+    that an attempt can still be made and answered. Locking the fields
+    removes the invitation to change the data; leaving Update in place
+    keeps the platform's own attempt path - and therefore the AAP's
+    required blocking message - reachable, including for the inline-list
+    and Table-API paths the Business Rule also guards.
+
+    It does not reverse anything when the status is not Closed. The early
+    return leaves a non-Closed form exactly as the dictionary and the
+    field-level ACLs left it. Forcing fields writable in an else-branch
+    would undercut the Section 0.5.6 field-level ACLs on assigned_group
+    and assigned_agent, which is the same reason
+    ../ui_policy/x_casemgmt_case_closed_readonly.xml sets
+    reverse_if_false = false.
+
+    RELATIONSHIP TO THE OTHER CLIENT SCRIPT
+    =======================================
+    ./x_casemgmt_case_flush_stale_messages.xml (order 100) handles form
+    message hygiene on the same table. This record is order 200 so the two
+    run in a defined sequence; they touch disjoint concerns and neither
+    depends on the other.
+
+    NO HARDCODED sys_id (AAP Section 0.7.2): the field names below are
+    dictionary element names and the status value is the Choice value from
+    ../choices/sys_choice_case_status.xml. The record's own sys_id is
+    pinned - md5("x_casemgmt_case.client_script.closed_readonly") - so
+    that re-importing this file updates this row rather than inserting a
+    second copy.
+
+    Scope: x_casemgmt (no global-scope content, per AAP Section 0.3.2).
+-->
+<record_update table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>Terminal-state form lockdown for x_casemgmt_case (QA Issue 17). On load, when status is Closed, disables the ten writable fields (subject, type, status, priority, description, requester_name, requester_email, assigned_group, assigned_agent, pending_reason) through g_form.setDisabled, and additionally sets the DOM disabled property on Choice controls because the platform's client-side read-only treatment sets only the inert HTML readonly attribute on a select. Backs up ../ui_policy/x_casemgmt_case_closed_readonly.xml, whose description action has no runtime effect on this release: measured on CASE9000006, g_form.isDisabled('description') returned false and the textarea was editable while the other nine fields were protected, correlating with the platform's repeated "renderNACMFieldLevel is not defined" text-area exception in runBeforeRender. Does not touch a non-Closed form (early return) and does not remove the Update verb, because AAP Section 0.5.5 requires the blocking message "Closed cases are terminal and cannot be modified." to be surfaced on an attempt. Enforcement of the rule itself remains server-side in ../business_rules/x_casemgmt_block_terminal_closed.xml; this record governs only what the form presents. Per AAP Sections 0.4.4, 0.5.5 and 0.7.2.</description>
+        <field/>
+        <global>true</global>
+        <isolate_script>false</isolate_script>
+        <messages/>
+        <name>x_casemgmt_case_closed_readonly_enforce</name>
+        <order>200</order>
+        <script><![CDATA[function onLoad() {
+    'use strict';
+
+    // The terminal status, spelled as the Choice VALUE in
+    // ../choices/sys_choice_case_status.xml.
+    var TERMINAL_STATUS = 'Closed';
+
+    // Every field the UI Policy protects, in form order. number,
+    // opened_date and closed_date are absent on purpose: they are
+    // unconditionally read-only in the dictionary, so the platform
+    // already renders them server-side as sys_readonly.* controls.
+    var FIELDS = [
+        'subject',
+        'type',
+        'status',
+        'priority',
+        'description',
+        'requester_name',
+        'requester_email',
+        'assigned_group',
+        'assigned_agent',
+        'pending_reason'
+    ];
+
+    // Only a Closed record is locked. On every other status this script
+    // returns having changed nothing at all, leaving the form as the
+    // dictionary and the field-level ACLs rendered it.
+    if (g_form.getValue('status') !== TERMINAL_STATUS) {
+        return;
+    }
+
+    for (var i = 0; i < FIELDS.length; i++) {
+        var field = FIELDS[i];
+
+        // A view may omit a field, and a field-level ACL may remove it
+        // from the form entirely. Either way there is nothing to disable
+        // and asking the platform to do it would log a client error.
+        if (!g_form.hasField(field)) {
+            continue;
+        }
+
+        // The supported API first. This is what closes the `description`
+        // gap: called here it applies, where the equivalent UI Policy
+        // action does not.
+        g_form.setDisabled(field, true);
+
+        // Then the one case the supported API cannot finish. For a
+        // <select> the platform's read-only treatment sets the HTML
+        // `readonly` attribute, which the specification defines as having
+        // no effect on a select, so the control stays operable. Setting
+        // the DOM property is what actually makes it inert. Guarded by
+        // tagName so nothing else on the form is touched, and by a
+        // null/undefined check because getControl() returns nothing for a
+        // field the platform renders without a single addressable
+        // control.
+        var control = g_form.getControl(field);
+        if (control && control.tagName === 'SELECT') {
+            control.disabled = true;
+        }
+    }
+}]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>c6e53b45c50d4b9325f281b7876590bb</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_closed_readonly_enforce</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_client_c6e53b45c50d4b9325f281b7876590bb</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <type>onLoad</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>
