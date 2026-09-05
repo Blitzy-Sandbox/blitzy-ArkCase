@@ -130,7 +130,7 @@ The following ArkCase locations were consulted as semantic source-of-truth when 
 
 ## Directory Layout
 
-Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`235` files in total, README included — re-derive with `find servicenow-case-management-poc -type f | wc -l`).
+Every directory is listed below with its exact file count, so the tree can be diffed against the working copy (`244` files in total, README included — the bracketed counts below sum to 243 plus this file). Measured 2026-09-05T07:40Z; re-derive either way with `find servicenow-case-management-poc -type f | wc -l` or `git ls-files servicenow-case-management-poc | wc -l`, which agree at 244. The earlier figure of `235` was correct at commit `6efb13b141`'s predecessor and went stale when that commit added 9 files (3 `query_range` ACLs, 4 business rules, 1 client script, 1 form layout).
 
 ```plaintext
 servicenow-case-management-poc/
