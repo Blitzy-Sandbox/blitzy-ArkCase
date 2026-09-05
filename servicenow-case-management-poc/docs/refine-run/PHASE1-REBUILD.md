@@ -1,5 +1,18 @@
 # Phase 1 — Native rebuild of the master Update Set (S3 – S6)
 
+> **⚠ HISTORICAL PHASE RECORD — artifact identities and screenshot paths below are superseded.**
+> This report describes the state at Phase 1's own exit (`2026-09-02T19:22:09Z`) and at the CR1/CR4
+> passes that amended it. **Three commits landed afterwards** (`f8454fb078`, `6efb13b141`,
+> `8dfdbcb015`) and rewrote the update-set artifacts in place without re-running the D36 gate.
+> **The deliverable path holds `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`,
+> 3,973,569 bytes, 935 payload blocks today — measured, not gate-verified**; the retained fallback
+> holds the elected base `7292a6fe…` (3,781,097 B / 926 blocks) and this unit's retained rebuilt
+> package holds `e109e1d1…` (4,062,067 B / 988 blocks), not the `90ee0249…` §7 was written with.
+> Every screenshot basename this report cites is absent from disk. Read
+> [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact identity and evidence — RESTATED
+> 2026-09-05T04:45Z" and [`run-state.json`](./run-state.json) `final.qa3_remediation` before relying
+> on any hash, size, payload count or screenshot path below.
+
 Refine PR, Phase 1 **HARD GATE**, work unit **U2**. Directives owned here: **D2** (the
 OBJECTIVE), **D21** (S3 rebuild), **D22** (S3 resume check), **D23** (S4 confirm), **D24**
 (S4a count delta), **D25** (S5 mark Complete), **D26** (S6 clean the instance), **D27**
@@ -29,12 +42,32 @@ This section restates U1's S1 outcome; the detail is in `PHASE0-1.md` §3.2.
 | Persistence after marking the SCRATCH set Complete | table endpoint still HTTP 200; `sys_user_role?name=x_casemgmt_refine_probe_role` → exactly 1 | PASS |
 | Nothing from the probe shipped | SCRATCH set `4999985a930b435009aa70d19dba102e` never exported/previewed/committed | PASS |
 
-**S1 verdict: PASS**, verified `2026-09-02T18:37:43Z`. Screenshots cited by U1:
-`blitzy/screenshots/phase1-s1-probe-table-studio.png` ("probe table definition created
-natively via Table API") and `blitzy/screenshots/phase1-s1-probe-role-link.png` ("role
-assignment screen showing the natively created probe role link"), both under the
-repository root. S1 established the premise the full rebuild depends on: **native creation
-produces captured records, including the role-link class.**
+**S1 verdict: PASS**, verified `2026-09-02T18:37:43Z`. S1 established the premise the full rebuild
+depends on: **native creation produces captured records, including the role-link class.**
+
+**The two S1 screenshot checkpoints are NOT RETRIEVABLE, and permanently so.** The captures U1 cited
+— `phase1-s1-probe-table-studio.png` ("probe table definition created natively via Table API") and
+`phase1-s1-probe-role-link.png` ("role assignment screen showing the natively created probe role
+link"), named here as basenames only rather than as paths to open — are absent from disk:
+`blitzy/screenshots/` is untracked by design under **INTERP-6**, so absolute paths into it stopped
+resolving once the working tree was re-created, and nothing carried the binaries across. **They
+cannot be re-captured on any instance**, because directive **D23** required deleting the very
+artifacts they showed — the probe table, its ACL, that ACL's role link and the probe role were all
+removed at S2/S6, and their continued absence is itself a D23 requirement. Re-staging a probe to
+photograph it would mean writing to a shared instance and violating D23.
+
+**The surviving evidence for this checkpoint is the S1 probe's own recorded REST results**, which are
+platform-attested and durable, and which are the table immediately above: `POST
+/api/now/table/sys_db_object` → HTTP **201** for `x_casemgmt_refine_probe`
+(`19999c5a930b435009aa70d19dba107d`); the table endpoint flipping from HTTP 400 "Invalid table" to
+HTTP **200**, proving physical storage; `POST /api/now/table/sys_user_role` → HTTP **201** for
+`x_casemgmt_refine_probe_role` (`caa9509a930b435009aa70d19dba1033`); the platform writing
+`sys_security_acl_role` `96dcd812934b435009aa70d19dba1064` as the side effect of the ACL form's
+"Requires role" assignment; and the SCRATCH set capturing all six records, the role link among them.
+The deletion proofs at `PHASE0-1.md` §3.3 close the loop: HTTP 400 "Invalid table" on the probe
+endpoint, 0 rows for the probe role, 0 rows for the probe link, HTTP 404 on all four `sys_id`s, and
+`nameLIKErefine_probe` → 0 rows across five tables. A 7-term probe-name search over both packages
+returns **0** occurrences, so no probe artifact ever shipped.
 
 ---
 
@@ -149,10 +182,15 @@ SHA-256 after every subsequent step; the combined guard hash never changed.
 >    other, in this run or in any remediation pass since. The table/dictionary half genuinely
 >    was (3 `sys_db_object` + 30 `sys_dictionary` platform-captured, §2.5); the role-link half
 >    never was.
-> 2. **Delivery.** The package that ships is the elected fallback
->    `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, which is
->    byte-identical to the pre-refine file. It carries **0** `sys_security_acl_role` rows and
->    the **25 hand-authored** `sys_dictionary` records this PR existed to replace. So the
+> 2. **Delivery.** The package that ships is the **elected fallback base as amended** —
+>    `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935
+>    payload blocks, measured 2026-09-05T04:45Z. OVERRIDE-2 / **D3** elected the untouched
+>    pre-refine package (`7292a6fe…`, 926 blocks, 3,781,097 bytes) as the shipping *base* at
+>    commit `3671901b5b` — the state this section was written against — and three later
+>    commits then amended those bytes in place with the accepted resolutions of subsequent QA
+>    rounds. **The delivery finding is unchanged by that**, because it was re-verified on the
+>    amended bytes: they still carry **0** `sys_security_acl_role` rows and the **25
+>    hand-authored** `sys_dictionary` records this PR existed to replace. So the
 >    delivered artifact contains **neither** half of the objective — not even the half that
 >    was rebuilt natively, which lives only in the retained
 >    `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`.
@@ -200,8 +238,9 @@ SHA-256 after every subsequent step; the combined guard hash never changed.
 >   protects; (3) the platform assigns a **fresh random GUID** to each new link, so
 >   re-created rows would no longer match the retained rebuilt package's captured payloads,
 >   breaking the correspondence between artifact and instance; (4) the shipping deliverable
->   is the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`,
->   which carries **0** `sys_security_acl_role` rows, so the work cannot change what ships;
+>   is the **elected fallback base as amended** — `9f3ea74c…` today, `7292a6fe…` at the
+>   election commit `3671901b5b` — and it carries **0** `sys_security_acl_role` rows under
+>   either identity, so the work cannot change what ships;
 >   (5) under INTERP-9 / D36 any resulting package change demands a Phase 2 re-run, and this
 >   PDI cannot provide that clean target — both relevant retrieved-set descriptors are
 >   already committed and a repeat upload appends children. Recorded as open work, not as
@@ -371,7 +410,7 @@ first table delete. It is written so the next executor runs it verbatim instead 
 re-deriving it.
 
 > **STATUS — the control is no longer specification-only.** It is implemented at
-> [`../../scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js)
+> [`scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js)
 > and executes on the platform. That closes the gap this heading previously recorded: the
 > guard was **not** run before this run's deletion, which is history and cannot change, but a
 > future executor no longer has to build it from the prose below — the prose is now the
@@ -496,8 +535,8 @@ no longer matches what was authorised.
 **Step 5 — one exclusion, stated explicitly because it would otherwise be mis-applied.** This
 control governs deletion on a **live, converged instance under a narrower authorisation**. It
 does **not** reclassify the documented two-commit **install** path
-([`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5/§5a,
-[`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §9.5
+([`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5/§5a,
+[`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §9.5
 step 2), which deliberately relies on the same platform cascade on a target where the second
 commit restores those records by design; that path stands as documented. For the same reason
 the guard must **not** be bolted onto `scripts/post_import_remediation.js`: its rebuild path
@@ -963,7 +1002,7 @@ it does not make this gate met.
 | 1 | The brief expected a platform-captured table to be named `sys_db_object_x_casemgmt_case`. The platform in fact names it `sys_db_object_<sys_id>`; the name-pattern discriminator holds for `sys_dictionary` only. | Reported, not worked around. The swap is proven by sys_id instead (§2.5, §2.6). |
 | 2 | `sys_user_has_role` is not auto-captured by update sets. | Delivered through the platform's own update-set writer rather than hand-authored XML (§2.4). |
 | 3 | Re-created role links necessarily get new sys_ids (the platform assigns a GUID; the old composite ids were produced by `post_import_remediation.js`). | Pairing reproduced exactly, 27 links, 14/10/3. Identity change is inherent to re-creating the links at all, by whichever mechanism. |
-| 4 | The platform's table-delete cascade also removed the 26 ACLs, 24 choices, 7 business rules, 8 reports, the layouts and the 3 counters from the **live instance**. | **SCOPE VIOLATION of OVERRIDE-3's destructive boundary** — not an authorised side effect. Those classes sit outside the authorised subset (the three tables, their dictionary rows and data, and the scoped role links), and neither the command having named only the three `sys_db_object` records nor the Phase 2 commit's later restoration authorises their removal: the application stood on a live instance without authorisation or transition controls from `2026-09-02T19:22:09Z` to the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. The verdict, the enumerated cascade and the **pre-delete collateral guard** that should have aborted the operation before its first delete are in §2.5 — and that guard is now **implemented and platform-verified** at [`../../scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js), which returns `VERDICT=ABORT` with 14 collateral reasons against this instance; it is the second, independent ground on which Phase 1's hard gate is NOT MET (§4). The payloads do remain in the package and U3's commit restored them, which mitigates the outcome without licensing the act. |
+| 4 | The platform's table-delete cascade also removed the 26 ACLs, 24 choices, 7 business rules, 8 reports, the layouts and the 3 counters from the **live instance**. | **SCOPE VIOLATION of OVERRIDE-3's destructive boundary** — not an authorised side effect. Those classes sit outside the authorised subset (the three tables, their dictionary rows and data, and the scoped role links), and neither the command having named only the three `sys_db_object` records nor the Phase 2 commit's later restoration authorises their removal: the application stood on a live instance without authorisation or transition controls from `2026-09-02T19:22:09Z` to the Phase 2 commit at `2026-09-02T20:53:14Z`, roughly 91 minutes. The verdict, the enumerated cascade and the **pre-delete collateral guard** that should have aborted the operation before its first delete are in §2.5 — and that guard is now **implemented and platform-verified** at [`scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js), which returns `VERDICT=ABORT` with 14 collateral reasons against this instance; it is the second, independent ground on which Phase 1's hard gate is NOT MET (§4). The payloads do remain in the package and U3's commit restored them, which mitigates the outcome without licensing the act. |
 | 5 | `sys_number` identity — first attempt used `setValue('sys_id')`, which the platform ignores. | **The only fix-and-re-verify loop in this phase: 2 attempts of the 2 permitted, resolved** with `setNewGuidValue()` and confirmed in the captured payloads (§2.5). |
 | 6 | `x_casemgmt_case_task`/`_case_party` `number_ref` were dangling pre-refine; they now resolve. Known cosmetic defect #2 (no label row for `duration_to_close`) is also incidentally repaired, because the platform writes a `sys_documentation` row for every column it creates. | Improvements produced by the native path. Reported, not hidden. |
 | 7 | Known pre-existing defect: `opened_date` empty on 8 of 10 seeded cases. | Untouched by this unit. The live data was destroyed with the tables (authorised), so the defect will reappear from the package's own seed rows after U3's commit; it is classified under D5 and is not caused here. |
@@ -1011,21 +1050,29 @@ obligation recorded below.
 | --- | --- | --- |
 | **2 (MEDIUM)** — payload-class census | The S4a census keyed each payload off the update-record/target label, so the one `sys_script_fix` row (the post-import remediation Fix Script, `sys_script_fix_227b757f182d8f3e1d9b774187ae8358`) was folded into `sys_script` and reported as 8. The mis-key propagated into the derived class totals: §2.2 put the baseline at 41 classes where there are 42, and §2.7 put the numerically identical count at 39 where it is 41 | §2.7's table now carries a distinct `sys_script_fix` row (`sys_script` 7, `sys_script_fix` 1, both `+0` in both packages) and an explicit class census; §2.2 reads **42** baseline classes; §2.7 reads **41 of the 44** numerically unchanged; §4's row names the 39 baseline classes outside the five swap classes. No count, line item, total or verdict moved — `926 − 31 + 93 = 988` stands unchanged |
 | **3 (MEDIUM)** — repository-impact inventory | §3's table put the number of files added under `dictionary/` at zero and left the "The new files are:" list blank, though this unit created 35 serialized artifacts | §3 now records **3 table files updated, 25 dictionary files updated, 35 dictionary files created, 0 removed**, with the complete 35-path inventory grouped as 30 `sys_documentation` label records, 3 collection dictionary records and 2 field dictionary records for the live-only `number` columns |
-| **1 (HIGH)** — AAP §0.5.2 dependency ordering | Not this report's defect, and not this unit's artifact: the deliverable update-set XML carried the 988 payload blocks in the order the native re-export produced them | The deliverable's blocks were re-assembled into dependency-safe order by the group holding that file. **Block sequence only**: header, tail and every payload block byte-identical, size unchanged at 4,062,436 bytes, 988 blocks, and the 44-class census unchanged. Because the byte sequence changed, the re-sequenced file hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` instead of export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, and under D36 that puts a Phase 2 S1–S6 re-run on the new bytes **owed**. Those bytes are now retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` and the deliverable path holds the elected fallback — see below |
+| **1 (HIGH)** — AAP §0.5.2 dependency ordering | Not this report's defect, and not this unit's artifact: the deliverable update-set XML carried the 988 payload blocks in the order the native re-export produced them | The deliverable's blocks were re-assembled into dependency-safe order by the group holding that file. **Block sequence only**: header, tail and every payload block byte-identical, size unchanged at 4,062,436 bytes, 988 blocks, and the 44-class census unchanged. Because the byte sequence changed, the re-sequenced file hashes to `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` instead of export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, and under D36 that puts a Phase 2 S1–S6 re-run on the new bytes **owed**. Those bytes are now retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` and the deliverable path holds the elected fallback — see below. *The `90ee0249…` / 4,062,436-byte pair is the CR1 re-sequencing history and stays as written; it is no longer that file's identity (`e109e1d1…` / 4,062,067 bytes today), and the deliverable path holds the elected base as amended (`9f3ea74c…` / 3,973,569 B / 935 blocks) rather than the untouched fallback.* |
 
 **What the Phase 2 evidence covers, and what is still owed.** Phase 2's verified digest is
 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — export 3's bytes. That
 byte sequence was uploaded onto a clean instance, previewed to zero problems of any type and
-committed, and it is the only sequence that evidence covers. The digest of the re-sequenced
-rebuilt package is `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and
-those bytes have never been uploaded, previewed or committed anywhere; the elected fallback
-that ships in their place (`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`)
-was never previewed either. **Under D36 the package changed
+committed, and it is the only sequence that evidence covers; **that statement is permanent and
+correct, and no file in the tree holds those bytes** (they are recoverable only from
+`git show 7d36aec06e:…/x_casemgmt_case_management_update_set.xml`, re-verified 2026-09-05T04:45Z at
+4,062,436 bytes). The digest of the re-sequenced
+rebuilt package *when CR1 produced it* was `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, and
+those bytes have never been uploaded, previewed or committed anywhere. **Superseded as that file's
+identity:** commit `f8454fb078` applied the choice-materialization fix to it too, so
+`…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` holds
+`e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` at 4,062,067 bytes / 988 payloads
+today, and `90ee0249…` is now the digest of no file in the tree. The package elected as the shipping
+*base* in their place (`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, which
+`…FALLBACK.xml` still holds) was never previewed either, and neither were the amended bytes
+`9f3ea74c…` now on the deliverable path. **Under D36 the package changed
 after the S6 checksum, so the recorded checksum is stale and Phase 2 (S1 clean confirm, S2
 checksum, S3a preview, S3b zero `type=error`, S4 UI-action commit, S5 storage/role-link
-confirmation, S6 recorded checksum) must re-run on the `90ee0249…` bytes before the rebuilt
-package is ship-ready. That re-run has not been performed** — not by this unit, which predates
-the change, and not by the CR1 pass, which took no instance action of any kind.
+confirmation, S6 recorded checksum) must re-run on the retained rebuilt package's current bytes —
+`e109e1d1…` — before it is ship-ready. That re-run has not been performed** — not by this unit, which
+predates the change, and not by the CR1 pass, which took no instance action of any kind.
 
 What that pass did instead was **corroborating, not the D36 gate**: `xmllint --noout` clean,
 988 blocks, a per-block SHA-256 multiset identical to export 3's bytes, an unchanged 44-class
@@ -1037,18 +1084,25 @@ user/group/membership/grant/company rows, at payload indices 950–987). That bo
 to block sequence alone; it does not discharge the re-run.
 
 **The delivery position that follows, stated the same way here as everywhere else.** The election is
-**made, and the frozen directive made it**: with the exact-byte gate on the `90ee0249…` bytes
-unavailable, OVERRIDE-2 (directive **D3**) authorizes the untouched fallback by name, so the
-deliverable path holds the **elected fallback** — 926 payload blocks, 3,781,097 bytes,
-`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to
-`…_update_set.FALLBACK.xml` — labelled as **not** carrying this round's native rebuild (0
+**made, and the frozen directive made it**: with the exact-byte gate on the re-sequenced rebuilt
+bytes unavailable, OVERRIDE-2 (directive **D3**) authorizes the untouched fallback by name, so the
+deliverable path was given the **elected fallback** as its shipping base — 926 payload blocks,
+3,781,097 bytes, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical
+to `…_update_set.FALLBACK.xml` at the election commit `3671901b5b`. **That path holds those bytes as
+amended today: `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes,
+935 blocks**, and it is no longer byte-identical to `…FALLBACK.xml` — the fallback was restored to
+the elected bytes on 2026-09-05T04:45Z while the deliverable kept its amendments, which is the
+correct state rather than a defect. The label is unchanged and was re-verified on the amended bytes:
+**not** carrying this round's native rebuild (0
 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so
 an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role
 links. This unit's rebuilt package, re-sequenced, is **retained, not shipped**, at
 `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks,
-4,062,436 bytes, `90ee0249…`) with every AAP §0.5.2 assertion passing, and one clean-PDI S1–S6 run on
+**4,062,067 bytes, `e109e1d1…`** today — 4,062,436 bytes / `90ee0249…` when CR1 produced it) with
+every AAP §0.5.2 assertion passing, and one clean-PDI S1–S6 run on
 those exact bytes would let it be promoted back to the deliverable path. Electing settles the
-shipping decision and not the gate: it is binary and stays **NOT MET** for the elected fallback and
+shipping decision and not the gate: it is binary and stays **NOT MET** for the elected base, for the
+amended bytes that ship and
 for the retained rebuilt package alike, **MET** only for `eee9fabd…`, export 3's sequence. The full
 account — both paths with their measured costs, the measured reasons the exact-byte gate was
 unavailable, and why the directive elects the fallback here — is in

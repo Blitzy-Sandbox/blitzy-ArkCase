@@ -7,7 +7,36 @@
  "fallback_package": {
   "path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml",
   "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
-  "source_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7"
+  "source_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+  "bytes": 3781097,
+  "payload_count": 926,
+  "modified": true,
+  "modified_note": "TRUE for the file's history: modified after election in three commits and then restored. The CURRENT bytes at this path are the elected bytes again (sha256 above), re-verified 2026-09-05T04:45:00Z. Full chain in .immutability below.",
+  "xmllint": "pass (no output)",
+  "sha256_reverified_at_utc": "2026-09-05T04:45:00Z",
+  "immutability": {
+   "status": "RESTORED. Modified after election, then restored to the elected bytes.",
+   "untouched_through_the_refine_run": true,
+   "modified_after_election": true,
+   "modified_in_commits": [
+    "f8454fb078 - Fix ServiceNow choice materialization and seed references",
+    "6efb13b141 - Resolve 18 QA findings in the x_casemgmt ServiceNow scoped app",
+    "8dfdbcb015 - Remediate independent-verification findings in the x_casemgmt scoped app"
+   ],
+   "sha256_while_modified": [
+    "a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274",
+    "4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63",
+    "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9"
+   ],
+   "restored_at_utc": "2026-09-05T04:45:00Z",
+   "restored_from": "git show 3671901b5b:servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml",
+   "sha256_after_restore": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+   "bytes_after_restore": 3781097,
+   "payload_count_after_restore": 926,
+   "xmllint_after_restore": "pass (no output)",
+   "why": "D3 retains this file as the original, unmodified master package and D48 requires it be usable directly and unmodified. Three post-election remediation passes edited it in lockstep with the deliverable, which left no on-disk copy of the elected bytes and defeated the retention OVERRIDE-2 depends on. The elected bytes are now back at this path, so remedy (a) for the D48 stop condition is executable from the working tree without git archaeology.",
+   "forward_rule": "This path is excluded from every future remediation pass. A fallback that tracks the deliverable is not a fallback."
+  }
  },
  "phase0": {
   "exit_condition": "met_with_recorded_deviation",
@@ -80,8 +109,13 @@
   "screenshots": [
    {
     "checkpoint": "L86 landing page",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase0-landing-page.png",
-    "caption": "Phase 0 - instance landing page confirmed live and authenticated"
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase0-landing-page-recaptured.png",
+    "recaptured_at_utc": "2026-09-05T04:50:00Z",
+    "original_path_no_longer_resolves": "phase0-landing-page.png",
+    "caption": "Phase 0 - instance landing page confirmed live and authenticated: Polaris Admin Home on dev306625, 'Welcome to Admin Home, System!', Instance upgrade tile reading Current version Zurich, and the top-right user menu reading System Administrator",
+    "surviving_platform_evidence": "the original capture is not retrievable; this is an equivalent live re-capture of the same checkpoint, taken 2026-09-05T04:50:00Z. Build tag confirmed from /stats.do: glide-zurich-07-01-2025__patch10-05-22-2026 (Zurich Patch 10), instance dev306625.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    }
   ]
  },
@@ -133,14 +167,20 @@
   "s0_s2_exit_timestamp_utc": "2026-09-02T18:40:16Z",
   "screenshots": [
    {
-    "checkpoint": "L115-116 Studio table + role link",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-table-studio.png",
-    "caption": "Phase 1 S1 - probe table definition created natively via Table API"
+    "checkpoint": "L115 Studio probe table",
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase1-s1-probe-table-studio.png",
+    "caption": "Phase 1 S1 - probe table definition created natively via Table API (Studio, Data Model, table 'Refine Probe')",
+    "surviving_platform_evidence": "Not re-capturable in principle, not merely lost: the S1 probe table and its role link were deliberately deleted at S2/S6, and directive D23 requires their absence - phase2.package_sanity.s1_probe_artifacts_present = 0 and a 7-term probe-name search over both packages returns 0 occurrences. Re-staging a probe would mean writing to a shared instance whose row counts sibling pipelines measure. The surviving evidence for this checkpoint is therefore the recorded absence, not an image.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
-    "checkpoint": "L115-116 Studio table + role link",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png",
-    "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link"
+    "checkpoint": "L116 role-assignment screen",
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase1-s1-probe-role-link.png",
+    "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link (ACL 'Requires role' related list, 1 of 1)",
+    "surviving_platform_evidence": "Same as the checkpoint above: the probe role link was deleted at S2/S6 as D23 requires.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    }
   ],
   "absorber_set": {
@@ -668,7 +708,10 @@
    },
    "s1_probe_artifacts_present": 0,
    "credentials_or_tokens_present": 0,
-   "rows_not_attributed_to_x_casemgmt_scope": 0
+   "rows_not_attributed_to_x_casemgmt_scope": 0,
+   "units": "PACKAGE payload counts, measured on the update-set XML. These are not instance row counts and do not drift with instance state.",
+   "as_measured_at_utc": "2026-09-02T20:53:14Z (Phase 2 S2, the recorded verified-checksum moment), re-verified on the retained rebuilt file 2026-09-05T04:45:00Z",
+   "revalidation_note": "Re-verified 2026-09-05T04:45:00Z on update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml, whose bytes are now e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d: payload_count 988, sys_dictionary 30 all platform-named, sys_documentation 30, sys_security_acl_role 27 split manager 14 / agent 10 / viewer 3, sys_security_acl 26, sys_choice 7, hand-authored table ids 0, probe artifacts 0. Every figure in this object still holds. Do not compare these payload counts with instance row counts: phase2.post_commit holds those, they are different units, and they have drifted."
   },
   "preview": {
    "retrieved_update_set_sys_id": "0b3b7452934f435009aa70d19dba100d",
@@ -887,7 +930,50 @@
      "caused_by_this_run": false,
      "fixed": false
     }
-   ]
+   ],
+   "units": "INSTANCE row counts on dev306625. These drift as the instance changes and must be read with the timestamp below.",
+   "as_measured_at_utc": "2026-09-02T20:40:00Z (immediately after the Phase 2 commit)",
+   "remeasured": {
+    "as_measured_at_utc": "2026-09-05T04:45:00Z",
+    "method": "read-only REST GET against /api/now/stats and /api/now/table on dev306625; no write, no impersonation",
+    "table_http_codes": {
+     "x_casemgmt_case": 200,
+     "x_casemgmt_case_task": 200,
+     "x_casemgmt_case_party": 200
+    },
+    "dictionary_counts": {
+     "x_casemgmt_case": 21,
+     "x_casemgmt_case_task": 14,
+     "x_casemgmt_case_party": 13
+    },
+    "acl_role_links_total": 36,
+    "acl_role_links_split": {
+     "x_casemgmt_case_manager": 17,
+     "x_casemgmt_case_agent": 13,
+     "x_casemgmt_case_viewer": 6
+    },
+    "sys_security_acl": 29,
+    "row_counts": {
+     "x_casemgmt_case": 13,
+     "x_casemgmt_case_task": 13,
+     "x_casemgmt_case_party": 11
+    },
+    "committed_retrieved_set": {
+     "sys_id": "0b3b7452934f435009aa70d19dba100d",
+     "state": "committed",
+     "children": 988,
+     "preview_problems_type_error": 0,
+     "preview_problems_type_warning": 0,
+     "preview_problems_all_types": 0
+    },
+    "drift_attribution": "The 27 -> 36 role-link and 26 -> 29 ACL movement is fully attributed and is not unexplained drift. Three field-level query_range ACLs were created on the instance at 2026-09-04 10:48 UTC (03:48 as the UI renders it in the UTC-7 session timezone) - 663cfa5f92d4b5208f2a0a4a7bc625ee on x_casemgmt_case.closed_date, a76cdd65e47612e82ec81a0ba19bc7c8 on x_casemgmt_case.opened_date and bade7e7294de81bda174f70df76d94ff on x_casemgmt_case_task.due_date - carrying exactly 9 role links between them. 36 - 9 = 27 and 29 - 3 = 26, so the figures recorded immediately after the commit were correct when taken. The same three ACLs are the +3 sys_security_acl payloads in the shipping package, so the file and the instance agree at 29.",
+    "figures_that_did_not_drift": "three tables HTTP 200, sys_dictionary 21/14/13, the committed retrieved set's state and its 988 children, and its zero preview problems - all identical to the values recorded immediately after the commit.",
+    "row_count_note": "seeded rows read 13/13/11 against the package's 10/10/8 payloads. Different units again: the package carries 10/10/8 seed payloads and the instance rows include those created by scripts/seed_demo_data.js and by portal validation after the commit.",
+    "measurement_method_caveat": "sys_security_acl_role cannot be counted by role over plain REST on this instance. Both /api/now/stats/sys_security_acl_role and /api/now/table/sys_security_acl_role SILENTLY IGNORE sysparm_query on the role field - the stats endpoint returns the whole-table count (40,626) and the table endpoint returns unfiltered pages - and sysparm_fields=role returns nothing, because a field ACL hides it without security_admin elevation. This is the same silent-discard class as the sys_atf_test_result 'test_suite_result' column that does not exist. The reliable method, re-run 2026-09-05T07:00Z, is to enumerate per ACL: resolve the 29 scoped ACLs by nameSTARTSWITHx_casemgmt, then query sys_security_acl_role?sysparm_query=sys_security_acl=<acl_sys_id> for each - that filter DOES apply - and sum. That yields exactly 36.",
+    "independent_corroboration": "The 17/13/6 split is derived independently of the instance, from the packaged artifacts: parsing the <roles> element of the 29 sys_security_acl records in acl/*.xml gives manager 17, agent 13, viewer 6, total 36. The three query_range ACLs (x_casemgmt_case.closed_date, x_casemgmt_case.opened_date, x_casemgmt_case_task.due_date) each carry all three roles, so they account for exactly 9 links: 36 - 9 = 27 and 29 - 3 = 26. scripts/post_import_remediation.js asserts the same constants (EXPECTED_ACL_ROLE_LINKS 36, EXPECTED_ACL_COUNT 29, {manager:17, agent:13, viewer:6}). The live instance's operation breakdown also matches the package's exactly: read 9, write 8, create 6, delete 3, query_range 3 = 29.",
+    "reverified_at_utc": "2026-09-05T07:00:23Z"
+   },
+   "reading_guidance": "Every figure directly under post_commit is dated to immediately after the Phase 2 commit and must be read as of then. For the current instance state read post_commit.remeasured."
   },
   "verified_checksum": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
   "verified_checksum_at_utc": "2026-09-02T20:53:14Z",
@@ -896,7 +982,17 @@
   "verified_checksum_rule": "If the package changes after this point the checksum is stale and Phase 2 (S1-S6) must re-run before the package is ship-ready again.",
   "fallback_package_untouched": {
    "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
-   "modified": false
+   "modified": false,
+   "modified_scope": "answers Phase 2 only: the fallback was untouched from its S0 retention through the Phase 2 exit at 2026-09-02T20:53:14Z, and that remains true of Phase 2.",
+   "modified_after_phase2": true,
+   "modified_after_phase2_in_commits": [
+    "f8454fb078 - Fix ServiceNow choice materialization and seed references",
+    "6efb13b141 - Resolve 18 QA findings in the x_casemgmt ServiceNow scoped app",
+    "8dfdbcb015 - Remediate independent-verification findings in the x_casemgmt scoped app"
+   ],
+   "restored_at_utc": "2026-09-05T04:45:00Z",
+   "sha256_after_restore": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+   "note": "Do not read `modified: false` as a statement about the file's whole history. It is scoped to Phase 2. Post-Phase-2 history is in fallback_package.immutability."
   },
   "exit_condition": "met",
   "exit_timestamp_utc": "2026-09-02T20:53:14Z",
@@ -908,53 +1004,61 @@
   "screenshots": [
    {
     "checkpoint": "L206 commit result (D34)",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-result.png",
-    "caption": "Phase 2 - commit result screen showing the outcome (zero problems / success)"
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase2-committed-retrieved-set-recaptured.png",
+    "recaptured_at_utc": "2026-09-05T04:50:00Z",
+    "original_path_no_longer_resolves": "phase2-commit-result.png",
+    "caption": "Phase 2 - commit outcome, re-captured from the platform record itself: Retrieved Update Set 'x_casemgmt_case_management v1.0.0 (native rebuild)' (sys_id 0b3b7452934f435009aa70d19dba100d) at State = Committed, Total 988, Inserted 613, Updated 375, Deleted 0, Collisions 0, Customer Updates (988), Loaded 2026-09-02 13:25:47 / Committed 2026-09-02 13:36:27 in the session timezone (UTC-7)",
+    "surviving_platform_evidence": "The transient commit-progress modal cannot be re-created without re-committing, which is prohibited. What was re-captured instead is the durable platform record of the same outcome, which is stronger evidence than the modal: the committed retrieved set with 0 collisions and 988 children.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
+   },
+   {
+    "checkpoint": "L206 commit result - zero preview problems",
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase2-preview-problems-empty-recaptured.png",
+    "recaptured_at_utc": "2026-09-05T04:50:00Z",
+    "caption": "Phase 2 - sys_update_preview_problem filtered to remote_update_set = 0b3b7452934f435009aa70d19dba100d renders verbatim 'No records to display', with the live filter breadcrumb 'Update Set = x_casemgmt_case_management v1.0.0 (native rebuild)'. Zero rows, and demonstrably a real filter result: the unfiltered list shows 25 rows belonging to four other update sets.",
+    "surviving_platform_evidence": "corroborates phase2.problems: 0 type=error and 0 type=warning for the committed set, re-read by REST at 2026-09-05T04:45:00Z and rendered in the UI at 2026-09-05T04:50:00Z."
    },
    {
     "checkpoint": "commit precondition",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-previewed-record.png",
-    "caption": "Phase 2 - Retrieved Update Set at state=previewed with the Commit Update Set action present, before the click"
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase2-previewed-record.png",
+    "caption": "Phase 2 - Retrieved Update Set at state=previewed with the Commit Update Set action present, before the click",
+    "surviving_platform_evidence": "the record has since moved to state=committed, so a previewed-state capture of it cannot be re-taken without a new load and preview. The state transition itself is evidenced by the committed record's Loaded and Committed timestamps.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
     "checkpoint": "commit precondition (full page)",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-previewed-record-fullpage.png",
-    "caption": "Phase 2 - full record form before the commit click"
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase2-previewed-record-fullpage.png",
+    "caption": "Phase 2 - full record form before the commit click",
+    "surviving_platform_evidence": "as above.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
     "checkpoint": "authenticated session",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-login-confirmed.png",
-    "caption": "Phase 2 - authenticated session, user menu showing System Administrator"
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase2-login-confirmed.png",
+    "caption": "Phase 2 - authenticated session, user menu showing System Administrator",
+    "surviving_platform_evidence": "re-evidenced by the Phase 0 re-capture above, whose user menu reads System Administrator on the same instance.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
     "checkpoint": "commit in progress",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-progress-0pct.png",
-    "caption": "Phase 2 - Update Set Commit progress modal at 0%"
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase2-commit-progress-0pct.png",
+    "caption": "Phase 2 - Update Set Commit progress modal at 0%",
+    "surviving_platform_evidence": "a transient modal; not re-creatable without re-committing, which is prohibited.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
-    "checkpoint": "committed record",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-result-record-form.png",
-    "caption": "Phase 2 - Retrieved Update Set showing State = Committed after the commit"
-   },
-   {
-    "checkpoint": "post-commit storage",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-tables-created.png",
-    "caption": "Phase 2 - the three scoped tables present in sys_db_object after the commit"
-   },
-   {
-    "checkpoint": "post-commit commit log",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-progress-worker-success.png",
-    "caption": "Phase 2 - commit progress worker: Complete / Success / Update set committed"
-   },
-   {
-    "checkpoint": "post-commit seed data",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-case-seed-rows.png",
-    "caption": "Phase 2 - 10 seeded cases present after the commit"
-   },
-   {
-    "checkpoint": "post-commit seed data",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-postcommit-party-seed-rows.png",
-    "caption": "Phase 2 - 8 seeded case parties present after the commit"
+    "checkpoint": "committed record / post-commit confirmations",
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase2-commit-result-record-form.png, phase2-postcommit-progress-worker-success.png, phase2-postcommit-tables-created.png, phase2-postcommit-case-seed-rows.png, phase2-postcommit-party-seed-rows.png",
+    "caption": "Phase 2 - post-commit confirmations: committed record form, progress-worker success, tables created, case and party seed rows",
+    "surviving_platform_evidence": "the states these captured are all still readable on the instance and are re-recorded numerically in phase2.post_commit, whose figures were re-measured at 2026-09-05T04:45:00Z (three tables HTTP 200, dictionary 21/14/13, rows 13/13/11).",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    }
   ],
   "report": "servicenow-case-management-poc/docs/refine-run/PHASE2.md",
@@ -1003,7 +1107,8 @@
      "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
      "role": "the retained rebuilt package (final.retained_rebuilt_package.path; delivery_position.path_a)",
      "state": "NOT MET",
-     "why": "these bytes have never been uploaded, previewed or committed on any instance"
+     "why": "these bytes have never been uploaded, previewed or committed on any instance",
+     "file_holding_these_bytes": "none. This is a historical byte sequence produced by the CR1 re-sequencing pass; the retained rebuilt file was taken to e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d / 4,062,067 by commit f8454fb078. The gate state recorded here is correct for this sequence."
     },
     {
      "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
@@ -1304,7 +1409,7 @@
    "ui_batches_executed": 3,
    "impersonation": "driven by ATF itself (Demo Manager); no impersonation modal blocked, so the user_name+ArrowDown+Enter workaround was not needed",
    "sole_writer_for_duration": true,
-   "page_vs_record_agreement": "agree row-for-row on all 20 verdicts and on every count; page pager read \"Showing rows 1 to 20 of 20\"",
+   "page_vs_record_agreement": "agree row-for-row on all 20 verdicts and on every count; page pager read \"1 to 20 of 20\"",
    "failures_by_name": [
     "ATF 01",
     "ATF 10",
@@ -1377,29 +1482,40 @@
   },
   "screenshots": [
    {
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-atf-suite-results.png",
-    "caption": "Phase 3 - ATF suite results screen showing the final pass/fail summary",
-    "directive": "D41"
+    "directive": "D41",
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-suite-result-recaptured.png",
+    "recaptured_at_utc": "2026-09-05T04:50:00Z",
+    "original_path_no_longer_resolves": "phase3-atf-suite-results.png",
+    "caption": "Phase 3 - ATF suite result TES0001002 (sys_id 0b7d459a93cf435009aa70d19dba10be) for suite 'x_casemgmt Case Management POC': Status Failure, Duration 2 Minutes, Rolled up test success count 14, failure count 6, error count 0, skip count 0, with the Test Results (20) related list fully enumerated",
+    "surviving_platform_evidence": "re-captured from the stored suite-result record. The stored result dates from 2026-09-02 21:45:31 UTC, i.e. BEFORE the choice-materialization fix landed, and 5 of its 6 failures (ATF 01, 10, 15, 16, 17) reduce to the x_casemgmt_case choice lists resolving empty at runtime, with ATF 18 separately recording the anonymous portal submit returning 400 where 201 was expected. A suite re-run is owed and this artifact must not be read as the current state of the application.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-single-test-result.png",
-    "caption": "Phase 3 - S1 single-test result read from the rendered page: ATF 01, Status Failure, failing step 3, all five step outcomes",
-    "directive": "D38"
+    "directive": "D38",
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-recaptured.png",
+    "recaptured_at_utc": "2026-09-05T04:50:00Z",
+    "original_path_no_longer_resolves": "phase3-single-test-result.png",
+    "caption": "Phase 3 - sys_atf_test_result list as filtered by the prescribed query, header reading '1 to 20 of 41'",
+    "surviving_platform_evidence": "the 41-row count is the whole unfiltered table: sys_atf_test_result has no column named test_suite_result - the field labelled 'Test suite result' has column name `parent` - so the prescribed condition was silently discarded. The corrected filter parent=0b7d459a93cf435009aa70d19dba10be returns exactly 20 rows tallying 14 Success / 6 Failure, captured at /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-CORRECTED-parent-query-20-rows.png. Read the corrected capture, not the 41.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-runner-tab-idle.png",
-    "caption": "Phase 3 - ATF client test runner attached and idle (\"Waiting for a test to run\", \"Connected\")",
-    "directive": "D38 supporting"
+    "directive": "D38 corrected",
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-CORRECTED-parent-query-20-rows.png",
+    "recaptured_at_utc": "2026-09-05T04:50:00Z",
+    "caption": "Phase 3 - the 20 test results of suite result TES0001002, breadcrumb resolving to 'Test suite result = TES0001002', footer '1 to 20 of 20', tallying 14 Success / 6 Failure with the failures being ATF 01, 10, 15, 16, 17 and 18",
+    "surviving_platform_evidence": "matches the suite record's own rolled-up 14/6 and its 'Failed Tests in Suite (6)' tab exactly."
    },
    {
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/06_pick_a_browser_dialog.png",
-    "caption": "Phase 3 - \"Pick a Browser\" dialog with the current browser session pre-selected",
-    "directive": "D39 supporting"
-   },
-   {
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/09_progress_dialog_final_suite_failed.png",
-    "caption": "Phase 3 - suite progress dialog at its definitive final state (\"Failed at 100% / Suite failed\")",
-    "directive": "D39 supporting"
+    "directive": "D39 supporting",
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "06_pick_a_browser_dialog.png, 09_progress_dialog_final_suite_failed.png, phase3-runner-tab-idle.png",
+    "caption": "Phase 3 - 'Pick a Browser' dialog, suite progress dialog at its final state, and the idle ATF client test runner",
+    "surviving_platform_evidence": "all three are transient runner dialogs that exist only while a suite is executing. Re-creating them means launching the suite, which this pass is not permitted to do on a shared instance and which ATF headless being disabled would stall in any case. The stored outcome they led to is the suite result re-captured above.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    }
   ],
   "screenshot_policy": "INTERP-6: cited by absolute path + caption; PNG binaries are NOT committed",
@@ -1460,26 +1576,26 @@
    "D48"
   ],
   "report": "servicenow-case-management-poc/docs/refine-run/FINAL-REPORT.md",
-  "shipping_package": "the FALLBACK. servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml now holds the original unmodified package: 926 payload records, 3,781,097 bytes, sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, byte-identical to fallback_package.path. Elected under OVERRIDE-2 / directive D3 on the unmet-exit-condition path (final.election_owner), because the exact-byte S1-S6 gate on the rebuilt bytes was unavailable (final.delivery_position.why_the_exact_byte_gate_was_unavailable). Phase 2's verified verdict was recorded against export 3's byte sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae and nothing else.",
-  "shipping_package_label": "the elected fallback - the original unmodified package. It does NOT include this round's native-rebuild fix. Measured on the elected file: 0 sys_documentation rows, 0 sys_security_acl_role rows and 25 hand-authored sys_dictionary rows with random-32-hex update names, so it does not carry the platform-captured table and dictionary records directives D2/D21 ordered and does not carry the 27 sys_security_acl_role links; an importer must run scripts/post_import_remediation.js after the commit to create the physical schema and the 27 sys_security_acl_role links, exactly as the pre-refine deployment did (docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5). The S1-S6 gate and AAP 0.7.1 are NOT MET for its byte sequence 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - its own bytes were never previewed on any instance - and MET for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only.",
+  "shipping_package": "The elected fallback base AS AMENDED. servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml holds 935 payload records, 3,973,569 bytes, sha256 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 (measured 2026-09-05T04:45:00Z). It is NOT byte-identical to fallback_package.path any more. OVERRIDE-2 / directive D3 elected the original unmodified package (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, 926 records, 3,781,097 bytes) as the shipping base at commit 3671901b5b, on the unmet-exit-condition path, because the exact-byte S1-S6 gate on the rebuilt bytes was unavailable. Three subsequent authorized remediation passes then amended those bytes in place - see final.artifact_identity_ledger.deliverable_path - adding 4 business rules, 1 client script, 3 field-level ACLs and 1 form-layout record and renaming the 7 sys_choice payloads to sys_choice_x_casemgmt_*, for a net +9 payloads over the elected base with 919 names in common. Phase 2's verified verdict was recorded against export 3's byte sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae and nothing else, so it does not cover these bytes.",
+  "shipping_package_label": "the elected fallback base as amended by three post-election remediation passes. It does NOT include this round's native-rebuild fix. Measured on the shipping file 2026-09-05T04:45:00Z: 0 sys_documentation rows, 0 sys_security_acl_role rows and 25 hand-authored sys_dictionary rows with random-32-hex update names, so it does not carry the platform-captured table and dictionary records directives D2/D21 ordered and does not carry the 27 sys_security_acl_role links; an importer must run scripts/post_import_remediation.js after the commit to create the physical schema and the 27 sys_security_acl_role links, exactly as the pre-refine deployment did (docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5). It does carry the choice-materialization fix (7 sys_choice payloads under platform-style names) and 29 sys_security_acl records rather than the elected base's 26, the three extra being the field-level query_range ACLs on x_casemgmt_case.closed_date, x_casemgmt_case.opened_date and x_casemgmt_case_task.due_date. The S1-S6 gate and AAP 0.7.1 are NOT MET for its byte sequence 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 - these bytes were never previewed on any instance - and MET for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only.",
   "deliverable_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
-  "deliverable_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
-  "d48_matched_against_last_recorded_checksum_for_the_shipping_package": "fallback_package.sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - the checksum recorded for the elected fallback when it was retained at S0, before any write to the instance. D48 lines 316-322 requires the final comparison to be made against the last checksum recorded for the package that ACTUALLY SHIPS, which is this one.",
-  "d48_fallback_identity_match": true,
-  "d48_fallback_identity_match_note": "TRUE. The bytes on the deliverable path and the bytes of update-set/x_casemgmt_case_management_update_set.FALLBACK.xml both hash to 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, so the package that ships is byte-for-byte the package whose checksum was recorded for it. This answers fallback identity only; Phase 2 exact-byte gate coverage is the separate field below.",
+  "deliverable_sha256": "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9",
+  "d48_matched_against_last_recorded_checksum_for_the_shipping_package": "fallback_package.sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - the checksum recorded for the elected fallback when it was retained at S0, before any write to the instance. D48 requires the final comparison to be made against the last checksum recorded for the package that ACTUALLY SHIPS, which is this one. Measured 2026-09-05T04:45:00Z, the comparison is NOT EQUAL: see final.d48_stop_condition.",
+  "d48_fallback_identity_match": false,
+  "d48_fallback_identity_match_note": "FALSE, as measured 2026-09-05T04:45:00Z. The bytes on the deliverable path hash to 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 and the checksum recorded for the elected fallback is 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7. They differ, so the package that ships is NOT byte-for-byte the package whose checksum was recorded for it. The deliverable is the elected fallback base AS AMENDED by the three post-election remediation commits in final.artifact_identity_ledger. That is D48's own stop-and-report condition and it is recorded at final.d48_stop_condition. The previously recorded value of this field was true; it was true at commit 3671901b5b and became false at f8454fb078.",
   "phase2_exact_byte_gate_coverage_of_the_shipping_bytes": false,
   "phase2_exact_byte_gate_coverage_matched_against": "phase2.verified_checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, recorded 2026-09-02T20:53:14Z on export 3's bytes - the exact sequence that was previewed with zero problems and committed",
   "phase2_exact_byte_gate_coverage_note": "FALSE. The shipping bytes are not export 3's sequence, so the Phase-2-verified sequence does not cover them. This is coverage of the Phase-2-verified sequence, not the D48 comparison; the D48 comparison is d48_fallback_identity_match above.",
   "matched_against": "SUPERSEDED FIELD NAME, retained so existing references resolve: it holds the Phase-2 coverage comparator, not the D48 comparator. phase2.verified_checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, recorded 2026-09-02T20:53:14Z on the bytes that were previewed with zero problems and committed. For the D48 comparison see d48_matched_against_last_recorded_checksum_for_the_shipping_package.",
   "matches_recorded": false,
-  "matches_recorded_note": "This field answers PHASE 2 COVERAGE, not the D48 comparison (d48_fallback_identity_match = true). NOT equal. The deliverable holds the elected fallback and hashes to 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, while the recorded verified checksum is eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, export 3's bytes. Two changes produced the inequality: the post-review CR1 pass re-sequenced the file's block order after Phase 2 (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, now retained at final.retained_rebuilt_package.path), and the re-verification pass elected the untouched fallback as the shipping package under OVERRIDE-2 / directive D3. The elected artifact is presented as what it is - the original package, without this round's fix, its own platform verification never performed - and not as a Phase-2-verified byte sequence. final.checksum_stale is true and final.owed_verification states the gate, its blockers and the promotion route for the retained rebuilt package.",
+  "matches_recorded_note": "NOT equal, on either comparator, as measured 2026-09-05T04:45:00Z. Phase 2 coverage: the deliverable hashes to 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 and phase2.verified_checksum is eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, export 3's bytes. D48 fallback identity: the deliverable hashes to 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 and the recorded fallback checksum is 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7. Four changes produced the inequality: the post-review CR1 pass re-sequenced the file's block order after Phase 2 (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, now retained at final.retained_rebuilt_package.path as e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d), the re-verification pass elected the untouched fallback under OVERRIDE-2 / directive D3, and then three post-election remediation commits amended the elected bytes in place (final.artifact_identity_ledger). The shipping artifact is presented as what it is - the elected base as amended, its own platform verification never performed - and never as a Phase-2-verified byte sequence.",
   "re_export_performed": false,
   "re_export_note": "INTERP-11: no re-export was performed. At the end of the run the deliverable was the exact bytes Phase 2 previewed and committed, already at the deliverable path, and sha256 was recomputed over that file rather than re-exporting from the instance. The file's block sequence was afterwards re-ordered in place by the post-review CR1 pass - no re-export and no instance action - which changed the file's bytes and therefore its digest; the re-verification pass then restored the untouched fallback bytes to the deliverable path as the elected shipping package and kept the re-ordered rebuilt package at final.retained_rebuilt_package.path. Neither pass exported, uploaded or otherwise touched the instance.",
   "checksum_stale": true,
-  "checksum_stale_note": "STALE. The post-review CR1 pass re-sequenced the deliverable's sys_update_xml blocks after Phase 2, so the package changed after the S6 checksum was taken. Under phase2.verified_checksum_rule (D36), applied without exception, the recorded checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae is stale and Phase 2 - S1 clean confirm, S2 checksum, S3a preview, S3b zero type=error, S4 UI-action commit, S5 storage/role-link confirmation, S6 recorded checksum - must re-run on the exact bytes of whichever artifact is to be made ship-ready. It has been run on neither artifact now on disk: not on the retained rebuilt package 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 (final.retained_rebuilt_package) and not on the elected fallback 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 that ships in its place, whose own bytes were never previewed at all.",
+  "checksum_stale_note": "STALE, and staler than previously recorded. Two separate causes. First: the post-review CR1 pass re-sequenced the deliverable's sys_update_xml blocks after Phase 2, so the recorded verified checksum eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae went stale at that point. Second: after the shipping election at commit 3671901b5b, three further commits amended the deliverable and the fallback in place - f8454fb078, 6efb13b141, 8dfdbcb015 - without re-running the gate or updating the recorded values, which is what left the record describing bytes that no longer existed. Under phase2.verified_checksum_rule (D36), applied without exception, Phase 2 - S1 clean confirm, S2 checksum, S3a preview, S3b zero type=error, S4 UI-action commit, S5 storage/role-link confirmation, S6 recorded checksum - must re-run on the exact bytes of whichever artifact is to be made ship-ready. It has been run on neither artifact now on disk: not on the retained rebuilt package e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d and not on the shipping bytes 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9.",
   "owed_verification": {
    "gate": "Phase 2 S1-S6, re-run in full on the exact bytes of whichever artifact is to be made ship-ready. Neither artifact on disk has been through it",
-   "applies_to_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+   "applies_to_sha256": "e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d",
    "rule": "phase2.verified_checksum_rule (D36), applied without exception",
    "trigger": "the post-review CR1 pass re-sequenced the deliverable's 988 sys_update_xml blocks into AAP 0.5.2 dependency order after Phase 2 had recorded its checksum, which changed the file's bytes",
    "status": "owed",
@@ -1494,13 +1610,13 @@
     "S5 - confirm physical storage for the three scoped tables and all 27 sys_security_acl_role links",
     "S6 - record the checksum of the bytes that were previewed and committed"
    ],
-   "phase2_verified_checksum_covers": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only, i.e. export 3's byte sequence; it is not the digest of the elected artifact that ships (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7) nor of the retained rebuilt package (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7)",
-   "aap_0_7_1_status": "AAP 0.7.1 (the exported XML must re-import on a fresh PDI with zero preview errors) is satisfied for export 3's byte sequence and NOT MET for both artifacts now on disk: the elected fallback 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, never previewed at all, and the retained rebuilt package 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, never uploaded, previewed or committed",
+   "phase2_verified_checksum_covers": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only, i.e. export 3's byte sequence. It is not the digest of the shipping artifact (9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9), nor of the retained rebuilt package (e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d), nor of the elected base retained at the fallback path (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7).",
+   "aap_0_7_1_status": "AAP 0.7.1 - the exported XML must re-import on a fresh PDI with zero preview errors - is satisfied for export 3's byte sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae and NOT MET for either artifact now on disk: the shipping bytes 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9, never previewed at all, and the retained rebuilt package e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d, never uploaded, previewed or committed.",
    "blockers": [
-    "the environment directive records the scoped app as already installed, committed, converged and seeded on the single provisioned PDI, and states that re-running the deployment, re-committing it or backing it out would destroy that verified environment",
-    "the code-review boundary the CR1 pass worked under permitted read-only REST and no PDI write of any kind",
-    "AAP 0.7.1 wants a FRESH PDI, and provisioning or re-requesting an instance is prohibited, while the one provisioned instance is not clean - it holds the committed application and, as measured now, 10 x_casemgmt_case rows, 10 x_casemgmt_case_task rows and 8 x_casemgmt_case_party rows (this blocker was first written when 12 case rows existed; the two extra were portal-validation cases that no longer exist) - so a preview there produces \"Found a local update that is newer than this one\" collisions instead of the clean-slate zero-problem result the gate defines",
-    "this package's own scripts/round_trip_verify.md warning is measured fact: the file's sys_remote_update_set descriptor makes the loader REUSE the existing retrieved set and APPEND its children, so an upload would mutate the committed Phase 2 record itself"
+    "No clean, dedicated PDI exists. The single provisioned instance dev306625 holds the committed application: measured 2026-09-05T04:45:00Z it carries 13 x_casemgmt_case rows, 13 x_casemgmt_case_task rows, 13/21/14 dictionary rows across the three tables, 29 scoped ACLs and 36 scoped ACL-role links, so a preview there returns 'Found a local update that is newer than this one' collisions instead of the clean-slate zero-problem result the gate defines. Provisioning or re-requesting an instance is prohibited.",
+    "The shipping file's own sys_remote_update_set descriptor sys_id 9929f50df18ccec91ea13b2a3bccfc90 - present 936 times in the file - is an already-committed retrieved set on dev306625. Measured 2026-09-05T04:45:00Z by GET /api/now/table/sys_remote_update_set/9929f50df18ccec91ea13b2a3bccfc90: state=committed. Uploading the file there would make the loader reuse that row and append its 935 children to a committed set, destroying the 0-error/0-warning commit evidence the run rests on. The retained rebuilt package has the same problem with descriptor 0b3b7452934f435009aa70d19dba100d, the committed native-rebuild set.",
+    "The environment directive records the scoped app as already installed, committed, converged and seeded on that single instance, and states that re-running the deployment, re-committing it or backing it out would destroy the verified environment.",
+    "The instance is shared with sibling pipelines that measure its record counts, so a preview that created several hundred sys_update_preview_problem rows would corrupt their baselines as well."
    ],
    "corroborating_static_evidence": {
     "xmllint": "pass (no output)",
@@ -1514,13 +1630,17 @@
     "read_only_rest_cross_check": "the instance's captured set 1109981a930b435009aa70d19dba1098 still holds 988 children whose update names are set-identical to the file's"
    },
    "corroborating_evidence_is_not_the_gate": "the static checks bound the risk to block sequence alone and are recorded as corroborating evidence. They are not the platform test D36 requires and do not discharge it: no upload, preview or commit of the 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 bytes has taken place anywhere",
-   "human_next_step": "optional, and it is the promotion route rather than a delivery blocker: on a genuinely clean, dedicated PDI run docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 against the retained file at final.retained_rebuilt_package.path (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7) - confirm a clean target, checksum the bytes, upload asserting 988 children, preview to zero type=error, commit through the native Commit Update Set UI action, confirm physical storage for all three tables and all 27 sys_security_acl_role links, then record 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 as verified with that run's own timestamp - after which those bytes may be promoted back to final.deliverable_path as the shipping package. Until then the elected fallback ships, labelled per final.shipping_package_label, and an importer must run scripts/post_import_remediation.js after the commit to create the physical schema and the 27 sys_security_acl_role links, exactly as the pre-refine deployment did (docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5)",
-   "shipping_decision": "MADE, and the frozen directive made it: OVERRIDE-2 / directive D3 on the unmet-exit-condition path elects the original unmodified package, so the fallback 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 ships from final.deliverable_path, labelled per final.shipping_package_label. That settles the shipping decision and not the gate: S1-S6 and AAP 0.7.1 are NOT MET for the elected bytes and for the retained rebuilt package 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 alike, and MET only for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae. Reverting the re-sequencing is not one of the options and was not done: the retained artifact preserves that work with every AAP 0.5.2 assertion passing, and final.delivery_position.path_a promotes it once its bytes clear the gate.",
+   "human_next_step": "Unchanged in substance, corrected in identity: on a genuinely clean, dedicated PDI run docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 against the retained file at final.retained_rebuilt_package.path, whose bytes are now e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d at 4,062,067 - confirm a clean target, checksum those exact bytes, upload asserting 988 children, preview to zero type=error, commit through the native Commit Update Set UI action, confirm physical storage for all three tables and all 27 sys_security_acl_role links, then record e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d as verified with that run's own timestamp - after which those bytes may be promoted to final.deliverable_path. Until then the shipping artifact is the elected base as amended, labelled per final.shipping_package_label, and an importer must run scripts/post_import_remediation.js after the commit to create the physical schema and the 27 sys_security_acl_role links.",
+   "shipping_decision": "MADE, and the frozen directive made it: OVERRIDE-2 / directive D3 on the unmet-exit-condition path elected the original unmodified package as the shipping base. What ships from final.deliverable_path is that elected base as amended by three subsequent authorized remediation passes - 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9, 3,973,569 bytes, 935 payload blocks - labelled per final.shipping_package_label. That settles the shipping decision and not the gate: S1-S6 and AAP 0.7.1 are NOT MET for the shipping bytes, NOT MET for the retained rebuilt package e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d, and MET only for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae. Reverting the re-sequencing is not one of the options and was not done, and neither was reverting the three remediation passes: final.d48_stop_condition.why_the_shipping_bytes_were_not_reverted records why.",
    "applies_to_path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml",
-   "also_unmet_for_the_elected_artifact": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - the elected fallback that ships. Its own bytes were never uploaded, previewed or committed on any instance, so the gate and AAP 0.7.1 are NOT MET for it too. Electing it settles the shipping decision, not the gate"
+   "also_unmet_for_the_elected_artifact": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - the elected fallback that ships. Its own bytes were never uploaded, previewed or committed on any instance, so the gate and AAP 0.7.1 are NOT MET for it too. Electing it settles the shipping decision, not the gate",
+   "applies_to_sha256_note": "re-recorded 2026-09-05T04:45:00Z from the file itself; the previously recorded 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 is no longer the digest of any file in the tree.",
+   "also_owed_for_the_shipping_bytes_sha256": "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9",
+   "blockers_are_measured": "Every blocker above is a measurement taken 2026-09-05T04:45:00Z by read-only REST GET, not an assumption. The first two are the ones that make remedy (b) of the D48 stop condition unavailable to an automated pass.",
+   "also_unmet_for_the_shipping_artifact": "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 - the bytes that ship. They were never uploaded, previewed or committed on any instance, so the gate and AAP 0.7.1 are NOT MET for them. Electing a base settles the shipping decision, not the gate."
   },
-  "deliverable_bytes": 3781097,
-  "deliverable_payload_count": 926,
+  "deliverable_bytes": 3973569,
+  "deliverable_payload_count": 935,
   "deliverable_xmllint": "pass (no output)",
   "fallback_package": {
    "path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml",
@@ -1528,13 +1648,75 @@
    "bytes": 3781097,
    "payload_count": 926,
    "invoked": true,
-   "modified": false,
+   "modified": true,
    "retained_in_place": true,
    "elected": true,
    "elected_by": "the frozen directive - OVERRIDE-2 / directive D3 on the unmet-exit-condition path (final.election_owner)",
-   "deliverable_path_holds_these_bytes": true,
-   "label": "the elected fallback - the original unmodified package. It does NOT include this round's native-rebuild fix. Measured on the elected file: 0 sys_documentation rows, 0 sys_security_acl_role rows and 25 hand-authored sys_dictionary rows with random-32-hex update names, so it does not carry the platform-captured table and dictionary records directives D2/D21 ordered and does not carry the 27 sys_security_acl_role links; an importer must run scripts/post_import_remediation.js after the commit to create the physical schema and the 27 sys_security_acl_role links, exactly as the pre-refine deployment did (docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5). The S1-S6 gate and AAP 0.7.1 are NOT MET for its byte sequence 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - its own bytes were never previewed on any instance - and MET for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only.",
-   "aap_0_5_2": "satisfied in its own right - measured on the elected file: the application record first (payload index 0), the 3 sys_db_object rows before all 25 sys_dictionary rows (3 < 4), the 7 sys_choice payloads after those dictionary rows, the 3 sys_user_role records before all 26 sys_security_acl records (41 < 42), both dashboards after all 8 reports (124 < 125), every one of the 180 sys_atf_step rows after its own sys_atf_test (0 violations), the 5 validation subflows before both state-machine flows (76 < 77), the task and party rows after their case rows (907 < 908), and all 38 seed rows last (payload indices 888-925). The ACL-role-link ordering assertion is vacuous here because the elected package carries 0 such links. Electing it therefore does not re-open the AAP 0.5.2 ordering finding"
+   "deliverable_path_holds_these_bytes": false,
+   "label": "the original unmodified package, restored to this path 2026-09-05T04:45:00Z from git commit 3671901b5b. Measured on it: 926 payload records, 3,781,097 bytes, 0 sys_documentation rows, 0 sys_security_acl_role rows, 25 hand-authored sys_dictionary rows with random-32-hex update names, 26 sys_security_acl records, xmllint clean. The S1-S6 gate and AAP 0.7.1 are NOT MET for its byte sequence 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - its own bytes were never previewed on any instance - and MET for export 3's sequence eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae only.",
+   "aap_0_5_2": "satisfied in its own right - measured on this file: the application record first (payload index 0), the 3 sys_db_object rows before all 25 sys_dictionary rows, the 7 sys_choice payloads after those dictionary rows, the 3 sys_user_role records before all 26 sys_security_acl records, both dashboards after all 8 reports, every one of the 180 sys_atf_step rows after its own sys_atf_test, the 5 validation subflows before both state-machine flows, the task and party rows after their case rows, and all 38 seed rows last and contiguous. The ACL-role-link ordering assertion is vacuous here because this package carries 0 such links. Read the assertions rather than payload indices: the indices shift whenever a payload is inserted.",
+   "modified_note": "Modified after election in three commits and then restored. See fallback_package.immutability (top level) for the full chain. `modified: true` is the honest answer for the file's history; the file's CURRENT bytes are the elected bytes 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 again, re-verified 2026-09-05T04:45:00Z.",
+   "retained_in_place_note": "the path was never removed; its contents were overwritten by three remediation passes and restored 2026-09-05T04:45:00Z.",
+   "deliverable_path_holds_these_bytes_note": "FALSE as of 2026-09-05T04:45:00Z. The deliverable path holds the elected base as amended (9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9); this path holds the elected base itself (7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7). Keeping the two distinct is the point of the retention: it is what makes remedy (a) of final.d48_stop_condition executable from the working tree.",
+   "elected_note": "elected as the shipping BASE. What ships is this base as amended; see final.shipping_package.",
+   "aap_0_5_2_remeasured_at_utc": "2026-09-05T04:45:00Z",
+   "aap_0_5_2_remeasured_indices": {
+    "method": "leading record element of each of the 926 payloads, in document order",
+    "sys_app": 0,
+    "sys_db_object": [
+     1,
+     3
+    ],
+    "sys_dictionary": [
+     4,
+     28
+    ],
+    "sys_choice": [
+     29,
+     35
+    ],
+    "sys_number": [
+     36,
+     38
+    ],
+    "sys_user_role": [
+     39,
+     41
+    ],
+    "sys_security_acl": [
+     42,
+     67
+    ],
+    "validation_subflows": [
+     72,
+     76
+    ],
+    "state_machine_flows": [
+     77,
+     78
+    ],
+    "sys_report": [
+     117,
+     124
+    ],
+    "x_casemgmt_case": [
+     898,
+     907
+    ],
+    "x_casemgmt_case_task": [
+     908,
+     917
+    ],
+    "x_casemgmt_case_party": [
+     918,
+     925
+    ],
+    "seed_block": [
+     888,
+     925
+    ],
+    "all_assertions_pass": true
+   }
   },
   "phase_exit_conditions": {
    "phase0": {
@@ -1582,37 +1764,167 @@
   "screenshots": [
    {
     "checkpoint": "directive L86 - Phase 0 landing page",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase0-landing-page.png",
-    "caption": "Phase 0 - instance landing page confirmed live and authenticated",
-    "resolves_on_disk": true
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase0-landing-page-recaptured.png",
+    "caption": "Phase 0 - instance landing page confirmed live and authenticated (Polaris Admin Home, Current version Zurich, user menu System Administrator)"
    },
    {
     "checkpoint": "directive L115 - Phase 1 S1 Studio probe table",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-table-studio.png",
-    "caption": "Phase 1 S1 - probe table definition created natively via Table API (Studio, Data Model, table \"Refine Probe\")",
-    "resolves_on_disk": true
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase1-s1-probe-table-studio.png",
+    "caption": "Phase 1 S1 - probe table definition created natively via Table API",
+    "surviving_platform_evidence": "the probe artifacts were deleted at S2/S6 and directive D23 requires their absence, which is itself verified: phase2.package_sanity.s1_probe_artifacts_present = 0 and a 7-term probe-name search over both packages returns 0 occurrences. This checkpoint has no retrievable image and cannot acquire one without violating D23.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
     "checkpoint": "directive L116 - Phase 1 S1 role-assignment screen",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase1-s1-probe-role-link.png",
-    "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link (ACL \"Requires role\" related list, 1 of 1)",
-    "resolves_on_disk": true
+    "status": "PRODUCED DURING THE RUN - NOT RETRIEVABLE. The PNG binaries were written to the run's canonical screenshots directory, which INTERP-6 deliberately leaves untracked. Nothing carried them across the working-tree rebuild, so the path no longer resolves and the image cannot be recovered. The claim that these paths resolve on disk was true when the report was written and is false now; it has been removed rather than restated.",
+    "original_path_no_longer_resolves": "phase1-s1-probe-role-link.png",
+    "caption": "Phase 1 S1 - role assignment screen showing the natively created probe role link",
+    "surviving_platform_evidence": "as above.",
+    "original_path_no_longer_resolves_note": "Recorded as file NAMES rather than absolute paths on purpose: the binaries do not exist, so an absolute path here would be a citation that fails `test -f` and would read as a live evidence reference. The directory they were written to was /tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/ ."
    },
    {
     "checkpoint": "directive L206 - Phase 2 commit result",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase2-commit-result.png",
-    "caption": "Phase 2 - commit result screen showing the outcome: zero problems, \"Succeeded 100%\", \"Update set committed\"",
-    "resolves_on_disk": true
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase2-committed-retrieved-set-recaptured.png",
+    "caption": "Phase 2 - commit outcome re-captured from the platform record: retrieved set 0b3b7452934f435009aa70d19dba100d at State = Committed, Total 988, Collisions 0, Customer Updates (988)",
+    "companion": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase2-preview-problems-empty-recaptured.png",
+    "companion_caption": "the same set's preview-problem list rendering verbatim 'No records to display' - zero problems"
    },
    {
     "checkpoint": "directive L243 - Phase 3 ATF suite summary",
-    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-atf-suite-results.png",
-    "caption": "Phase 3 - ATF suite results screen showing the final pass/fail summary (TES0001002, 14 success / 6 failure of 20, 180 steps)",
-    "resolves_on_disk": true
+    "status": "RE-CAPTURED 2026-09-05T04:50:00Z against the live instance; path resolves and the PNG is a readable image.",
+    "path": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-suite-result-recaptured.png",
+    "caption": "Phase 3 - ATF suite result TES0001002, Status Failure, 14 success / 6 failure / 0 error / 0 skip of 20 tests, suite 'x_casemgmt Case Management POC'",
+    "companion": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-CORRECTED-parent-query-20-rows.png",
+    "companion_caption": "the 20 per-test rows of that suite result, failures being ATF 01, 10, 15, 16, 17, 18",
+    "staleness_warning": "the stored result predates the choice-materialization fix; a suite re-run is owed and this is not the current state of the application"
    }
   ],
-  "screenshots_missing": [],
-  "screenshot_policy": "INTERP-6: attached by absolute path plus caption next to each checkpoint result in FINAL-REPORT.md; PNG binaries are NOT committed",
+  "screenshots_missing": [
+   {
+    "basename": "phase0-landing-page.png",
+    "checkpoint": "Phase 0 landing page",
+    "superseded_by": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase0-landing-page-recaptured.png"
+   },
+   {
+    "basename": "phase1-s1-probe-table-studio.png",
+    "checkpoint": "Phase 1 S1 Studio probe table",
+    "superseded_by": null,
+    "reason": "the probe artifacts were deleted at S2/S6 as D23 requires; no equivalent capture can exist"
+   },
+   {
+    "basename": "phase1-s1-probe-role-link.png",
+    "checkpoint": "Phase 1 S1 role assignment",
+    "superseded_by": null,
+    "reason": "as above"
+   },
+   {
+    "basename": "phase2-commit-result.png",
+    "checkpoint": "Phase 2 commit result",
+    "superseded_by": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase2-committed-retrieved-set-recaptured.png"
+   },
+   {
+    "basename": "phase3-atf-suite-results.png",
+    "checkpoint": "Phase 3 ATF suite summary",
+    "superseded_by": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-suite-result-recaptured.png"
+   },
+   {
+    "basename": "phase2-previewed-record.png",
+    "checkpoint": "commit precondition",
+    "superseded_by": null,
+    "reason": "the record has moved to state=committed"
+   },
+   {
+    "basename": "phase2-previewed-record-fullpage.png",
+    "checkpoint": "commit precondition",
+    "superseded_by": null,
+    "reason": "as above"
+   },
+   {
+    "basename": "phase2-login-confirmed.png",
+    "checkpoint": "authenticated session",
+    "superseded_by": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase0-landing-page-recaptured.png"
+   },
+   {
+    "basename": "phase2-commit-progress-0pct.png",
+    "checkpoint": "commit in progress",
+    "superseded_by": null,
+    "reason": "transient modal"
+   },
+   {
+    "basename": "phase2-commit-result-record-form.png",
+    "checkpoint": "committed record",
+    "superseded_by": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase2-committed-retrieved-set-recaptured.png"
+   },
+   {
+    "basename": "phase2-postcommit-progress-worker-success.png",
+    "checkpoint": "post-commit",
+    "superseded_by": null,
+    "reason": "transient progress worker; outcome re-recorded numerically in phase2.post_commit"
+   },
+   {
+    "basename": "phase2-postcommit-tables-created.png",
+    "checkpoint": "post-commit",
+    "superseded_by": null,
+    "reason": "state still readable; re-recorded numerically in phase2.post_commit"
+   },
+   {
+    "basename": "phase2-postcommit-case-seed-rows.png",
+    "checkpoint": "post-commit",
+    "superseded_by": null,
+    "reason": "as above"
+   },
+   {
+    "basename": "phase2-postcommit-party-seed-rows.png",
+    "checkpoint": "post-commit",
+    "superseded_by": null,
+    "reason": "as above"
+   },
+   {
+    "basename": "phase3-single-test-result.png",
+    "checkpoint": "Phase 3 single test",
+    "superseded_by": "/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-CORRECTED-parent-query-20-rows.png"
+   },
+   {
+    "basename": "phase3-runner-tab-idle.png",
+    "checkpoint": "Phase 3 runner",
+    "superseded_by": null,
+    "reason": "transient runner UI"
+   },
+   {
+    "basename": "06_pick_a_browser_dialog.png",
+    "checkpoint": "Phase 3 runner dialog",
+    "superseded_by": null,
+    "reason": "transient dialog"
+   },
+   {
+    "basename": "09_progress_dialog_final_suite_failed.png",
+    "checkpoint": "Phase 3 suite progress",
+    "superseded_by": null,
+    "reason": "transient dialog"
+   },
+   {
+    "basename": "heartbeat-beat1-home-rendered.png",
+    "checkpoint": "heartbeat",
+    "superseded_by": null,
+    "reason": "supporting only; no directive checkpoint"
+   },
+   {
+    "basename": "heartbeat-beat2-home-rendered.png",
+    "checkpoint": "heartbeat",
+    "superseded_by": null,
+    "reason": "as above"
+   },
+   {
+    "basename": "04_atf_test_runner_connected.png, 05_suite_form_before_launch.png, 08_runner_ui_batches_2.png, 10_suite_results_list_newest_first.png, 11_runner_final_connected_ui_batches_3.png, 12_suite_result_summary_closeup.png, 13_per_test_rows_atf17_to_atf07.png, 14_per_test_rows_atf06_to_atf01_and_pager.png, atf01_form_loaded.png, atf_test_result_list_top.png, run_test_dialog_no_pick_a_browser.png, runner_poll_01_after_launch.png, phase2-commit-dialog.png",
+    "checkpoint": "supporting captures cited in prose",
+    "superseded_by": null,
+    "reason": "supporting only; none is a directive SCREENSHOT checkpoint. All are absent for the same reason."
+   }
+  ],
+  "screenshot_policy": "INTERP-6: attached by absolute path plus caption next to each checkpoint result in FINAL-REPORT.md; PNG binaries are NOT committed. Consequence, now recorded rather than discovered: because the directory is untracked by design, an absolute path into it stops resolving the moment the working tree is re-created, so any report citing one becomes unverifiable. Every entry above therefore carries an explicit status - RE-CAPTURED with a resolving path, or NOT RETRIEVABLE with the surviving platform-side evidence named - instead of a bare resolves_on_disk claim. Making evidence survive a rebuild needs either committing the binaries, which INTERP-6 forbids, or a durable store outside the working tree. That is a human decision item.",
   "classified_issues": [
    {
     "id": "I1",
@@ -1769,7 +2081,7 @@
   "human_decision_items": [
    {
     "ref": "I0",
-    "item": "promote the retained rebuilt package (path_a), optional. The delivery election itself is settled: the frozen directive elected the fallback (final.election_owner) and it ships from final.deliverable_path, labelled per final.shipping_package_label. What remains for a human is whether to run the full S1-S6 gate on the retained rebuilt bytes 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 on a genuinely clean, dedicated PDI and promote them back to the deliverable path",
+    "item": "promote the retained rebuilt package (path_a), optional. The delivery election itself is settled: the frozen directive elected the fallback (final.election_owner) and it ships from final.deliverable_path, labelled per final.shipping_package_label. What remains for a human is whether to run the full S1-S6 gate on the retained rebuilt bytes e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d (re-measured 2026-09-05T04:45:00Z; supersedes 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 / 4,062,436, now the digest of no file) on a genuinely clean, dedicated PDI and promote them back to the deliverable path",
     "gates_delivery": false,
     "options": [
      "1) Run the gate on the retained bytes (final.retained_rebuilt_package.promotion_procedure) and promote them: restores the platform-captured table/dictionary records D2/D21 ordered and the 27 sys_security_acl_role links, and satisfies AAP 0.7.1 for the shipping artifact. Cost: one clean instance and one operator pass",
@@ -1784,7 +2096,7 @@
      "1) amend the choice payloads of whichever artifact is to ship, then run the full Phase 2 gate on the amended bytes (clean instance, checksum, upload, preview, zero errors, UI commit, storage/link confirmation) for a NEW verified checksum on THOSE bytes",
      "2) ship the ELECTED FALLBACK 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 (update-set/x_casemgmt_case_management_update_set.xml) as UNVERIFIED - no preview of any kind was ever run on these bytes - and keep scripts/post_import_remediation.js as the documented post-commit step, which creates the 24 choice rows along with the physical schema and the 27 sys_security_acl_role links",
      "3) hand-create the 24 choice rows on the instance - available but NOT recommended: it masks the package-alone defect (D4)",
-     "NOT AN OPTION: accepting a verified package. No artifact on disk has a completed exact-byte Phase 2 gate - the retained rebuild 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 (final.retained_rebuilt_package.path) owes a full Phase 2 S1-S6 run on its own exact bytes and carries the same choice payloads, and the only sequence that ever previewed 0 error / 0 warning and committed is export 3's eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, which no file on disk holds"
+     "NOT AN OPTION: accepting a verified package. No artifact on disk has a completed exact-byte Phase 2 gate - the retained rebuild e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d (re-measured 2026-09-05T04:45:00Z; supersedes 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, now the digest of no file) (final.retained_rebuilt_package.path) owes a full Phase 2 S1-S6 run on its own exact bytes and carries the same choice payloads, and the only sequence that ever previewed 0 error / 0 warning and committed is export 3's eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, which no file on disk holds"
     ],
     "then": "re-run the six named tests"
    },
@@ -1793,7 +2105,7 @@
     "item": "opened_date empty on 8 of 10 seeded cases",
     "options": [
      "1) amend the seed payloads of whichever artifact is to ship and run the full Phase 2 gate on the amended bytes for a new verified checksum on THOSE bytes",
-     "2) ship the ELECTED FALLBACK 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 as UNVERIFIED - never previewed or committed on any instance - and keep the documented post-commit seed_demo_data.js step, which fills the field. Promoting the retained rebuild 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 instead does not avoid this: it carries the same seed payloads and still owes its own Phase 2 S1-S6 run"
+     "2) ship the ELECTED FALLBACK 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 as UNVERIFIED - never previewed or committed on any instance - and keep the documented post-commit seed_demo_data.js step, which fills the field. Promoting the retained rebuild e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d (re-measured 2026-09-05T04:45:00Z; supersedes 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, now the digest of no file) instead does not avoid this: it carries the same seed payloads and still owes its own Phase 2 S1-S6 run"
     ]
    },
    {
@@ -1801,7 +2113,7 @@
     "item": "seed child rows carry no parent-case linkage",
     "options": [
      "1) amend the seed payloads of whichever artifact is to ship and run the full Phase 2 gate on the amended bytes",
-     "2) ship the ELECTED FALLBACK 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 as UNVERIFIED - never previewed or committed on any instance - and keep the post-commit seed_demo_data.js step, which creates the linkage. The retained rebuild 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 carries the same seed payloads and still owes its own Phase 2 S1-S6 run, so it is not a verified alternative"
+     "2) ship the ELECTED FALLBACK 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 as UNVERIFIED - never previewed or committed on any instance - and keep the post-commit seed_demo_data.js step, which creates the linkage. The retained rebuild e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d (re-measured 2026-09-05T04:45:00Z; supersedes 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, now the digest of no file) carries the same seed payloads and still owes its own Phase 2 S1-S6 run, so it is not a verified alternative"
     ]
    },
    {
@@ -2193,17 +2505,22 @@
    "not_present_in_the_repository": "the brief’s example \"a from-scratch first commit legitimately fails with 22 errors\" appears only in the environment handover, not in any repository document (grep: 0 occurrences), so it had nothing to correct; the related \"second commit required\" claim is in the documentation and was corrected"
   },
   "validation": {
-   "deliverable_sha256_matches_recorded_fallback_identity_d48": true,
-   "deliverable_sha256_matches_recorded_fallback_identity_d48_note": "TRUE. The D48 comparison is against the last checksum recorded for the package that actually ships: fallback_package.sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7. The deliverable file and FALLBACK.xml both hash to it, so the shipping bytes are byte-for-byte the bytes whose checksum was recorded for them.",
+   "deliverable_sha256_matches_recorded_fallback_identity_d48": false,
+   "deliverable_sha256_matches_recorded_fallback_identity_d48_note": "FALSE, measured 2026-09-05T04:45:00Z. The D48 comparison is against the last checksum recorded for the package that actually ships: fallback_package.sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7. The deliverable hashes to 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9, so the shipping bytes are NOT the bytes whose checksum was recorded for them. This is D48's stop-and-report condition; it is raised at final.d48_stop_condition and it is not reconciled by relabelling the observed digest as verified.",
    "deliverable_sha256_matches_recorded_phase2_verified_sequence": false,
-   "deliverable_sha256_matches_recorded_phase2_verified_sequence_note": "the deliverable hashes to 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 - the elected fallback - and phase2.verified_checksum is eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae. They differ because the post-review CR1 pass re-sequenced the file's block order after Phase 2 (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7, retained at final.retained_rebuilt_package.path) and the re-verification pass then elected the untouched fallback as the shipping package. Under D36 the recorded checksum is stale, and the S1-S6 gate is unperformed on both artifacts now on disk - final.owed_verification.",
-   "xmllint_all_xml": "no output over every servicenow-case-management-poc/**/*.xml",
-   "node_check_all_js": "no output over the *.js scripts",
+   "deliverable_sha256_matches_recorded_phase2_verified_sequence_note": "the deliverable hashes to 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 and phase2.verified_checksum is eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae, export 3's bytes. Four changes produced the inequality: the post-review CR1 re-sequencing, the election of the untouched fallback as the shipping base under OVERRIDE-2 / directive D3, and three subsequent remediation commits that amended the elected bytes in place. Under D36 the recorded checksum is stale and the S1-S6 gate is unperformed on both artifacts now on disk - final.owed_verification.",
+   "xmllint_all_xml": "no output over every servicenow-case-management-poc/**/*.xml, re-run 2026-09-05T04:45:00Z",
+   "node_check_all_js": "no output over every servicenow-case-management-poc/**/*.js, re-run 2026-09-05T04:45:00Z",
    "run_state_parses": true,
-   "every_screenshot_path_in_the_report_resolves": true,
    "fallback_present_and_hash_intact": true,
    "no_png_or_video_binaries_staged": true,
-   "no_credential_token_cookie_or_sysparm_ck_in_new_or_edited_files": true
+   "no_credential_token_cookie_or_sysparm_ck_in_new_or_edited_files": true,
+   "run_state_parses_note": "re-verified 2026-09-05T04:45:00Z under json.load and jq -e ., with a strict object_pairs_hook duplicate-key scan returning 0.",
+   "every_screenshot_path_in_the_report_resolves": false,
+   "every_screenshot_path_in_the_report_resolves_note": "FALSE as originally recorded and now corrected rather than restated. Measured 2026-09-05T04:45:00Z: all 33 distinct basenames cited across the six docs/refine-run files were absent, 0 of 18 absolute paths resolved, and 0 of the 5 directive checkpoints had a resolvable artefact. After this pass: every path cited as current evidence resolves - the three re-captured checkpoints at 2026-09-05T04:50:00Z - and every citation that cannot be re-captured is labelled NOT RETRIEVABLE with the surviving platform-side evidence named. See final.screenshots and final.screenshots_missing.",
+   "fallback_present_and_hash_intact_note": "re-verified 2026-09-05T04:45:00Z AFTER restoration: sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7, 3,781,097 bytes, 926 payload blocks, xmllint clean. It was NOT intact before this pass - see fallback_package.immutability.",
+   "recorded_numbers_match_the_files_they_describe": true,
+   "recorded_numbers_match_the_files_they_describe_note": "re-derived 2026-09-05T04:45:00Z from the files themselves: shipping 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 / 3,973,569 / 935, fallback 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 / 3,781,097 / 926, retained rebuilt e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d / 4,062,067 / 988."
   },
   "blockers": [
    {
@@ -2309,7 +2626,8 @@
     {
      "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
      "role": "the retained rebuilt package (path_a)",
-     "state": "NOT MET"
+     "state": "NOT MET",
+     "file_holding_these_bytes": "none. This is a historical byte sequence produced by the CR1 re-sequencing pass; the retained rebuilt file was taken to e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d / 4,062,067 by commit f8454fb078. The gate state recorded here is correct for this sequence."
     },
     {
      "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
@@ -2328,7 +2646,7 @@
    "path_a": {
     "name": "verify and promote the retained rebuilt package - available, not chosen",
     "target": "a genuinely clean, dedicated PDI",
-    "applies_to_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+    "applies_to_sha256": "e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d",
     "steps": [
      "S1 - confirm a genuinely clean target",
      "S2 - checksum the exact bytes about to be uploaded",
@@ -2336,7 +2654,7 @@
      "S3b - preview with zero sys_update_preview_problem rows of type=error",
      "S4 - commit through the native Commit Update Set UI action",
      "S5 - confirm physical storage for all three scoped tables and all 27 sys_security_acl_role links",
-     "S6 - record 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 as verified with that run's own timestamp and evidence"
+     "S6 - record e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d as verified with that run's own timestamp and evidence"
     ],
     "procedure": "servicenow-case-management-poc/docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5",
     "cost": "one clean instance and one operator pass",
@@ -2347,7 +2665,8 @@
     ],
     "status": "AVAILABLE - the retained artifact keeps this option open",
     "artifact": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml",
-    "aap_0_5_2_already_satisfied": "yes, and measured on the retained file rather than assumed: satisfied - measured on the retained file: the application record first (payload index 0), the 3 sys_db_object rows before all 30 platform-named sys_dictionary rows (3 < 4), the 7 sys_choice payloads after them, the 3 roles before all 26 ACLs (76 < 77), all 27 sys_security_acl_role links after both their ACL and their role (links at 103-129, ACL max 102, role max 76), both dashboards after all 8 reports (186 < 187), every one of the 180 sys_atf_step rows after its own sys_atf_test (0 violations), the 5 validation subflows before both state machines (138 < 139), the task and party rows after their case rows (969 < 970), and all 38 seed rows last (payload indices 950-987)"
+    "aap_0_5_2_already_satisfied": "yes, and measured on the retained file rather than assumed: satisfied - measured on the retained file: the application record first (payload index 0), the 3 sys_db_object rows before all 30 platform-named sys_dictionary rows (3 < 4), the 7 sys_choice payloads after them, the 3 roles before all 26 ACLs (76 < 77), all 27 sys_security_acl_role links after both their ACL and their role (links at 103-129, ACL max 102, role max 76), both dashboards after all 8 reports (186 < 187), every one of the 180 sys_atf_step rows after its own sys_atf_test (0 violations), the 5 validation subflows before both state machines (138 < 139), the task and party rows after their case rows (969 < 970), and all 38 seed rows last (payload indices 950-987)",
+    "applies_to_sha256_note": "re-measured 2026-09-05T04:45:00Z from update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml (4,062,067 bytes, 988 payloads). SUPERSEDES 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 / 4,062,436, which was this file's identity until commit f8454fb078 applied the choice-materialization fix to it and is now the digest of no file in the tree. An operator who checksums against the old value will correctly abort."
    },
    "path_b": {
     "name": "invoke the fallback - CHOSEN",
@@ -2412,8 +2731,8 @@
   },
   "retained_rebuilt_package": {
    "path": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml",
-   "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
-   "bytes": 4062436,
+   "sha256": "e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d",
+   "bytes": 4062067,
    "payload_count": 988,
    "xmllint": "pass (no output)",
    "status": "retained, not shipped - delivery_position.path_a, still available",
@@ -2422,18 +2741,46 @@
    "gate_state": "NOT MET - these exact bytes have never been uploaded, previewed or committed on any instance",
    "promotion_procedure": [
     "confirm a genuinely clean, dedicated target PDI",
-    "checksum the exact bytes about to be uploaded (90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7)",
+    "checksum the exact bytes about to be uploaded (e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d, 4,062,067 bytes)",
     "upload the file and assert 988 children on the retrieved set",
     "preview to zero sys_update_preview_problem rows of type=error",
     "commit through the native Commit Update Set UI action",
     "confirm physical storage for all three scoped tables and all 27 sys_security_acl_role links",
-    "record 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 as verified with that run's own timestamp and evidence"
+    "record e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d as verified with that run's own timestamp and evidence"
    ],
    "promotion_procedure_reference": "servicenow-case-management-poc/docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5",
-   "promotion_outcome": "whoever completes that run may promote these bytes back to final.deliverable_path as the shipping package, which restores the D2/D21 native table/dictionary swap and the 27 ACL-role links and satisfies AAP 0.7.1 for the shipping artifact"
+   "promotion_outcome": "whoever completes that run may promote these bytes back to final.deliverable_path as the shipping package, which restores the D2/D21 native table/dictionary swap and the 27 ACL-role links and satisfies AAP 0.7.1 for the shipping artifact",
+   "sha256_measured_at_utc": "2026-09-05T04:45:00Z",
+   "superseded_sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+   "superseded_bytes": 4062436,
+   "superseded_note": "The previously recorded identity 90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7 at 4,062,436 bytes was the file's identity at commit 3671901b5b. Commit f8454fb078 applied the choice-materialization fix to this package too, which changed its bytes to e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d at 4,062,067 while leaving the payload count at 988 and every content assertion intact. The 90ee0249 bytes were NOT restored. The only difference between them and the bytes now on disk is the same choice-materialization fix that commit f8454fb078 applied to every package in the tree; restoring 90ee0249 would remove that fix from the promotion target. The identity was re-recorded from the file instead, which is the first of the two remedies the QA finding offers.",
+   "content_assertions_reverified_at_utc": "2026-09-05T04:45:00Z",
+   "content_assertions": {
+    "payload_count": 988,
+    "sys_db_object": 3,
+    "sys_dictionary": 30,
+    "sys_dictionary_all_platform_named": true,
+    "sys_documentation": 30,
+    "sys_security_acl": 26,
+    "sys_security_acl_role": 27,
+    "sys_security_acl_role_split": {
+     "x_casemgmt_case_manager": 14,
+     "x_casemgmt_case_agent": 10,
+     "x_casemgmt_case_viewer": 3
+    },
+    "sys_choice": 7,
+    "hand_authored_table_ids_present": 0,
+    "s1_probe_artifacts_present": 0,
+    "duplicate_update_names": 0,
+    "xmllint": "pass (no output)",
+    "aap_0_5_2_assertions": "all pass",
+    "note": "Every content assertion recorded for this package still holds. Only its identity drifted."
+   },
+   "descriptor_sys_id": "0b3b7452934f435009aa70d19dba100d",
+   "descriptor_collision_warning": "This file's own sys_remote_update_set descriptor sys_id is 0b3b7452934f435009aa70d19dba100d, which on dev306625 is the already-committed native-rebuild retrieved set (measured 2026-09-05T04:45:00Z: state=committed, 988 children, 0 preview problems). On that instance the loader would reuse that row and append this file's 988 children to committed evidence. The promotion run must therefore be on a clean, dedicated PDI where that sys_id does not exist, which the first step already requires."
   },
-  "deliverable_byte_identical_to_fallback": true,
-  "deliverable_byte_identical_to_fallback_note": "measured: sha256sum reports 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 for both servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml and servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml, at 3,781,097 bytes and 926 <sys_update_xml action=\"INSERT_OR_UPDATE\"> blocks each. That is exactly the outcome OVERRIDE-2 describes for this path",
+  "deliverable_byte_identical_to_fallback": false,
+  "deliverable_byte_identical_to_fallback_note": "FALSE as of 2026-09-05T04:45:00Z, and correctly so. cmp reports the two files differ at char 1966, line 42: the deliverable is 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 at 3,973,569 bytes / 935 payload blocks, and update-set/x_casemgmt_case_management_update_set.FALLBACK.xml is 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 at 3,781,097 bytes / 926 blocks. They were byte-identical at the election commit and stayed so only because the three post-election passes edited both files in lockstep, which is precisely the defect: it left no independent copy of the elected bytes. The fallback has been restored to the elected bytes and is now excluded from remediation, so the two files are expected to differ from here on.",
   "post_review_cr6_remediation": {
    "performed_at_utc": "2026-09-03",
    "findings_addressed": "CR6-1 through CR6-10",
@@ -2441,6 +2788,375 @@
    "shipping_package_unchanged": true,
    "shipping_package_unchanged_note": "the deliverable bytes were not touched: update-set/x_casemgmt_case_management_update_set.xml remains byte-identical to ...FALLBACK.xml and to the pre-refine file, sha256 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7. INTERP-9 is therefore not triggered and no checksum went stale in this pass.",
    "d2_objective_status": "UNDELIVERED, and now recorded as such rather than as an unverified deviation: the role-link half was never created by the native role-assignment action, and the elected fallback carries neither that half nor the natively rebuilt table half. The native re-do remains unavailable on this instance - the master set is Complete/locked (D25), Phase 2 needs a genuinely clean target obtainable only by repeating the D46-breaching cascade, no human expansion of the destructive scope exists, and D47 forbids provisioning another PDI."
+  },
+  "deliverable_sha256_status": "MEASURED, NOT GATE-VERIFIED. This is the digest of the bytes presently at final.deliverable_path. It is not a verified checksum: no upload, preview or commit of these bytes has taken place on any instance. See final.d48_stop_condition and final.owed_verification.",
+  "deliverable_sha256_measured_at_utc": "2026-09-05T04:45:00Z",
+  "deliverable_sha256_measurement_command": "sha256sum servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
+  "deliverable_inventory_measured_at_utc": "2026-09-05T04:45:00Z",
+  "deliverable_inventory_measurement_commands": [
+   "stat -c %s servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml",
+   "grep -c '<sys_update_xml action=\"INSERT_OR_UPDATE\">' servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml"
+  ],
+  "deliverable_payload_census": {
+   "as_measured_at_utc": "2026-09-05T04:45:00Z",
+   "total_payloads": 935,
+   "method": "Each of the 935 sys_update_xml children was parsed on its own and counted by the LEADING record element inside its <record_update> wrapper. This supersedes the earlier prefix-derived count, which was taken from the sys_update_xml <name> column and therefore conflated tables sharing a name prefix.",
+   "composite_payload_caveat": "Some payloads bundle child records under one leading element. Each of the 2 dashboard payloads leads with sys_portal_page but carries exactly one pa_dashboards record (x_casemgmt_agent_workspace, x_casemgmt_manager_view) plus its grid canvas, tabs, permissions and widget instances; so 'dashboards: 2' and 'leading element sys_portal_page: 2' describe the same two payloads. Read the leading-element table as the payload inventory, not as a per-row table census of the instance.",
+   "by_leading_record_element": {
+    "sys_variable_value": 540,
+    "sys_atf_step": 180,
+    "sys_security_acl": 29,
+    "sys_dictionary": 25,
+    "sys_atf_test": 20,
+    "sys_atf_test_suite_test": 20,
+    "sys_script": 11,
+    "x_casemgmt_case": 10,
+    "x_casemgmt_case_task": 10,
+    "sys_report": 8,
+    "x_casemgmt_case_party": 8,
+    "sys_choice": 7,
+    "sys_hub_flow": 7,
+    "sys_ui_action": 6,
+    "sp_widget": 3,
+    "sys_db_object": 3,
+    "sys_number": 3,
+    "sys_user": 3,
+    "sys_user_has_role": 3,
+    "sys_user_role": 3,
+    "core_company": 2,
+    "sp_column": 2,
+    "sp_container": 2,
+    "sp_instance": 2,
+    "sp_page": 2,
+    "sp_row": 2,
+    "sys_portal_page": 2,
+    "sys_script_include": 2,
+    "sys_ui_policy": 2,
+    "sys_ui_policy_action": 2,
+    "sys_ws_definition": 2,
+    "sys_ws_operation": 2,
+    "sp_portal": 1,
+    "sys_app": 1,
+    "sys_atf_test_suite": 1,
+    "sys_hub_action_type_definition": 1,
+    "sys_hub_flow_block": 1,
+    "sys_script_client": 1,
+    "sys_script_fix": 1,
+    "sys_ui_list": 1,
+    "sys_ui_related_list": 1,
+    "sys_ui_section": 1,
+    "sys_user_grmember": 1,
+    "sys_user_group": 1
+   },
+   "dashboards_carrying_a_pa_dashboards_record": 2,
+   "sys_hub_flow_by_type": {
+    "subflow": 5,
+    "flow": 2
+   },
+   "corrections_made_in_this_pass": [
+    "sys_hub_flow was recorded as 8. It is 7 (5 subflows + 2 state-machine flows). The eighth name-prefix match was one sys_hub_flow_block payload, a different table.",
+    "sys_security_acl is 29, not the 26 recorded before this pass: the three field-level query_range ACLs added by the post-election remediation are in the package."
+   ],
+   "unchanged_from_the_elected_base_and_still_requiring_post_import_remediation": {
+    "sys_dictionary": 25,
+    "sys_dictionary_note": "all hand-authored, random-32-hex update names",
+    "sys_documentation": 0,
+    "sys_security_acl_role": 0,
+    "consequence": "scripts/post_import_remediation.js is still required after a bare commit of these bytes"
+   },
+   "seed_rows": {
+    "x_casemgmt_case": 10,
+    "x_casemgmt_case_task": 10,
+    "x_casemgmt_case_party": 8
+   },
+   "superseded_note_retained_for_audit": "sys_dictionary 25 (all hand-authored, random-32-hex update names), sys_documentation 0 and sys_security_acl_role 0 are unchanged from the elected base, so post_import_remediation.js is still required. sys_security_acl is 29, not the 26 recorded before this pass: the three field-level query_range ACLs added by the post-election remediation are in the package."
+  },
+  "deliverable_structure": {
+   "as_measured_at_utc": "2026-09-05T04:45:00Z",
+   "root_element": "unload",
+   "root_unload_date": "2026-04-30 12:00:00",
+   "direct_children": 936,
+   "descriptor_blocks": 1,
+   "sys_update_xml_children": 935,
+   "actions": {
+    "INSERT_OR_UPDATE": 935
+   },
+   "duplicate_update_names": 0,
+   "children_missing_name_type_or_payload": 0,
+   "distinct_remote_update_set_linkage": [
+    "9929f50df18ccec91ea13b2a3bccfc90"
+   ],
+   "dtd_or_external_entity_constructs": 0
+  },
+  "deliverable_aap_0_5_2_indices": {
+   "as_measured_at_utc": "2026-09-05T04:45:00Z",
+   "method": "xml.etree.ElementTree, indexing the 935 sys_update_xml children in document order",
+   "sys_app": 0,
+   "sys_db_object": [
+    1,
+    3
+   ],
+   "sys_dictionary": [
+    4,
+    28
+   ],
+   "sys_choice": [
+    29,
+    35
+   ],
+   "sys_number": [
+    36,
+    38
+   ],
+   "sys_user_role": [
+    39,
+    41
+   ],
+   "sys_security_acl": [
+    42,
+    70
+   ],
+   "validation_subflows": [
+    75,
+    79
+   ],
+   "state_machine_flows": [
+    80,
+    81
+   ],
+   "sys_report": [
+    126,
+    133
+   ],
+   "pa_dashboards": [
+    134,
+    135
+   ],
+   "x_casemgmt_case": [
+    907,
+    916
+   ],
+   "x_casemgmt_case_task": [
+    917,
+    926
+   ],
+   "x_casemgmt_case_party": [
+    927,
+    934
+   ],
+   "seed_block": [
+    897,
+    934
+   ],
+   "assertions": {
+    "application_record_first": true,
+    "tables_before_all_dictionary_rows": true,
+    "choices_after_all_dictionary_rows": true,
+    "roles_before_all_acls": true,
+    "all_five_validation_subflows_before_both_state_machines": true,
+    "dashboards_after_all_reports": true,
+    "task_and_party_rows_after_case_rows": true,
+    "seed_block_contiguous_and_last": true,
+    "acl_role_links_after_their_acl_and_role": "vacuous - the shipping package carries 0 sys_security_acl_role rows"
+   },
+   "note": "Every AAP 0.5.2 ordering assertion holds on the shipping bytes. The indices themselves move whenever a payload is inserted, so read the assertions rather than the numbers."
+  },
+  "artifact_identity_ledger": {
+   "as_measured_at_utc": "2026-09-05T04:45:00Z",
+   "purpose": "The commit-by-commit identity of every update-set artifact in the tree, so no recorded checksum is erased and no reader has to reconstruct the chain from git.",
+   "deliverable_path": {
+    "elected_at": "3671901b5b - Elect the untouched fallback as the shipping deliverable per OVERRIDE-2",
+    "elected_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+    "elected_bytes": 3781097,
+    "elected_payload_count": 926,
+    "amended_after_election_by": [
+     {
+      "commit": "f8454fb078",
+      "subject": "Fix ServiceNow choice materialization and seed references",
+      "deliverable_sha256_after": "a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274",
+      "deliverable_bytes_after": 3780373
+     },
+     {
+      "commit": "6efb13b141",
+      "subject": "Resolve 18 QA findings in the x_casemgmt ServiceNow scoped app",
+      "deliverable_sha256_after": "4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63",
+      "deliverable_bytes_after": 3944374
+     },
+     {
+      "commit": "8dfdbcb015",
+      "subject": "Remediate independent-verification findings in the x_casemgmt scoped app",
+      "deliverable_sha256_after": "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9",
+      "deliverable_bytes_after": 3973569
+     }
+    ],
+    "current_sha256": "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9",
+    "current_bytes": 3973569,
+    "current_payload_count": 935,
+    "delta_against_the_elected_base": {
+     "measured_against": "the elected base bytes 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 recovered from git commit 3671901b5b",
+     "payload_names_added": 16,
+     "payload_names_removed": 7,
+     "net_payload_change": 9,
+     "payload_names_common": 919,
+     "added_by_class": {
+      "sys_script": 4,
+      "sys_script_client": 1,
+      "sys_security_acl": 3,
+      "sys_ui_section": 1,
+      "sys_choice": 7
+     },
+     "removed_by_class": {
+      "sys_choice": 7
+     },
+     "interpretation": "4 business rules, 1 client script, 3 field-level ACLs and 1 form-layout record were added, and the 7 sys_choice payloads were renamed from random-32-hex update names to sys_choice_x_casemgmt_* (net 0 for that class). The 7 renames are the choice-materialization fix; the +9 are the accumulated QA remediation of the three passes above."
+    }
+   },
+   "fallback_path": {
+    "elected_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+    "modified_after_election_by": [
+     "f8454fb078",
+     "6efb13b141",
+     "8dfdbcb015"
+    ],
+    "restored_at_utc": "2026-09-05T04:45:00Z",
+    "current_sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+    "current_bytes": 3781097,
+    "current_payload_count": 926
+   },
+   "retained_rebuilt_path": {
+    "sha256_at_3671901b5b": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+    "bytes_at_3671901b5b": 4062436,
+    "changed_by": "f8454fb078 - the same choice-materialization fix; payload count unchanged at 988",
+    "current_sha256": "e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d",
+    "current_bytes": 4062067,
+    "current_payload_count": 988
+   },
+   "superseded_checksums": [
+    {
+     "sha256": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+     "was": "the elected shipping bytes and the retained fallback identity",
+     "still_true_of": "servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.FALLBACK.xml, restored 2026-09-05T04:45:00Z",
+     "no_longer_true_of": "the deliverable path"
+    },
+    {
+     "sha256": "a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274",
+     "was": "the deliverable at commit f8454fb078",
+     "still_true_of": null,
+     "no_longer_true_of": "any file in the tree"
+    },
+    {
+     "sha256": "4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63",
+     "was": "the deliverable at commit 6efb13b141",
+     "still_true_of": null,
+     "no_longer_true_of": "any file in the tree"
+    },
+    {
+     "sha256": "90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7",
+     "was": "the retained rebuilt package at commit 3671901b5b",
+     "still_true_of": null,
+     "no_longer_true_of": "any file in the tree"
+    },
+    {
+     "sha256": "eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae",
+     "was": "export 3's byte sequence - the only sequence that ever cleared the Phase 2 S1-S6 gate, at 2026-09-02T20:53:14Z",
+     "still_true_of": "no file in the tree; it is a historical gate result and remains true as such",
+     "no_longer_true_of": "any file in the tree"
+    }
+   ]
+  },
+  "d48_status": "STOP CONDITION RAISED AND REPORTED",
+  "d48_stop_condition": {
+   "raised": true,
+   "raised_at_utc": "2026-09-05T04:45:00Z",
+   "directive": "D48 - export it, or use the retained fallback file directly and unmodified, then confirm its checksum matches the last one recorded for whichever package is actually shipping. If the checksum does not match, stop and report the discrepancy rather than treating an unverified export as the deliverable.",
+   "recorded_checksum_for_the_shipping_package": "7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7",
+   "measured_checksum_of_the_shipping_package": "9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9",
+   "equal": false,
+   "guard_against_a_false_positive": "Compared case-folded and whitespace-stripped as well; the two strings differ from the first nibble, so this is genuinely different bytes and not a formatting artefact.",
+   "response_taken": "REPORTED, NOT RECONCILED. The recorded checksum was not overwritten with the observed one under any field that means verified. final.deliverable_sha256 now carries the measured digest explicitly labelled MEASURED, NOT GATE-VERIFIED, every superseded value is preserved in final.artifact_identity_ledger.superseded_checksums, and the gate remains recorded as owed.",
+   "why_the_shipping_bytes_were_not_reverted": "The three post-election commits are the accepted resolutions of earlier QA rounds - the choice-materialization and seed-reference fix, 18 QA findings, and the independent-verification remediation. Reverting the deliverable to 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 would remove all three from the shipped package and re-open every finding they closed. The elected bytes are instead retained intact at the fallback path so remedy (a) stays available to a human.",
+   "remedies": [
+    {
+     "id": "(a)",
+     "action": "Restore the elected bytes 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 to the deliverable path. They are on disk at update-set/x_casemgmt_case_management_update_set.FALLBACK.xml (restored 2026-09-05T04:45:00Z), so this is a file copy with no git archaeology.",
+     "cost": "The three post-election remediation passes are then absent from the shipped package.",
+     "available": true
+    },
+    {
+     "id": "(b)",
+     "action": "Run the full Phase 2 S1-S6 gate on the exact bytes 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 against a genuinely clean, dedicated PDI and record a new verified checksum, as phase2.verified_checksum_rule (D36) requires.",
+     "cost": "One clean dedicated instance and one operator pass.",
+     "available": false,
+     "unavailable_because": "the two measured blockers in final.owed_verification.blockers"
+    }
+   ],
+   "human_decision_required": true,
+   "human_decision_note": "Both remedies are human-gated. Neither can be taken by an automated pass: (a) trades away three rounds of accepted remediation, and (b) needs an instance that is not provisioned. What an automated pass can do, and what this pass did, is make the record true and raise the condition."
+  },
+  "shipping_package_label_measured_at_utc": "2026-09-05T04:45:00Z",
+  "screenshots_missing_summary": "All 33 distinct basenames cited across the six docs/refine-run files were absent when this remediation pass measured them on 2026-09-05T04:45:00Z, across 87 citation occurrences. Three of the five directive SCREENSHOT checkpoints were re-captured live; the two Phase 1 S1 probe checkpoints cannot be re-captured because D23 required deleting the artifacts they showed. The reports previously asserted that all five paths resolved on disk and that no checkpoint was missing. Both assertions were false and have been removed.",
+  "qa3_remediation": {
+   "performed_at_utc": "2026-09-05T04:45:00Z",
+   "trigger": "QA3 - Delta QA3 deliverable-artifact and evidence verification - returned FAIL with 7 findings (1 CRITICAL, 2 HIGH, 3 MEDIUM, 1 LOW), all class (a): caused after the refine run by three commits on this branch that rewrote artifacts whose checksums the run had frozen.",
+   "single_root_cause": "Commits f8454fb078, 6efb13b141 and 8dfdbcb015 amended update-set/*.xml after the refine run's final step without re-running the D36 gate or re-recording the frozen values, so every recorded identity, inventory and evidence statement about those artifacts became false. The untracked screenshot directory was emptied by the working-tree rebuild independently.",
+   "findings_resolved": [
+    {
+     "id": "Issue 1",
+     "severity": "CRITICAL",
+     "what_was_wrong": "the deliverable's SHA-256 did not match the checksum recorded for the shipping package, and the record asserted it did (d48_fallback_identity_match: true)",
+     "resolution": "MEASURED separated from GATE-VERIFIED throughout; final.deliverable_sha256 re-derived from the file and explicitly labelled MEASURED, NOT GATE-VERIFIED; the D48 stop condition raised and reported at final.d48_stop_condition with both remedies, the measured blockers for remedy (b) and the human decision gate; every superseded checksum preserved in final.artifact_identity_ledger.superseded_checksums rather than erased. The shipping bytes were deliberately not reverted.",
+     "status": "RESOLVED as a record-truth defect. The underlying gate remains OWED and is a human decision item - that is the finding's own required response, not an omission."
+    },
+    {
+     "id": "Issue 2",
+     "severity": "MEDIUM",
+     "what_was_wrong": "recorded payload count 926, byte size 3,781,097 and ACL count 26 were untrue of the artifact that ships",
+     "resolution": "re-derived from the shipping file: 935 payloads, 3,973,569 bytes, 29 sys_security_acl, with the full census, structure and AAP 0.5.2 index measurement added and each stamped with the moment it was taken.",
+     "status": "RESOLVED"
+    },
+    {
+     "id": "Issue 3",
+     "severity": "HIGH",
+     "what_was_wrong": "the retained fallback was modified in three commits after election, leaving no on-disk copy of the elected bytes while the record claimed it was untouched",
+     "resolution": "restored to the elected bytes 7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7 from git commit 3671901b5b and re-verified at 3,781,097 bytes / 926 blocks / xmllint clean; fallback_package.immutability records the full chain and the forward exclusion rule; phase2.fallback_package_untouched.modified is now explicitly scoped to Phase 2; final.deliverable_byte_identical_to_fallback corrected to false.",
+     "status": "RESOLVED"
+    },
+    {
+     "id": "Issue 4",
+     "severity": "MEDIUM",
+     "what_was_wrong": "the retained rebuilt package's recorded SHA-256 and byte size named bytes that no longer existed, making the run's own Path A unreachable",
+     "resolution": "re-recorded as e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d at 4,062,067 bytes with the superseded value and the commit that changed it preserved; the promotion procedure and owed_verification.applies_to_sha256 now quote the same digest; every content assertion re-verified and holding.",
+     "status": "RESOLVED"
+    },
+    {
+     "id": "Issue 5",
+     "severity": "HIGH",
+     "what_was_wrong": "all 33 cited screenshot basenames were unresolvable and the reports asserted the opposite",
+     "resolution": "three of the five directive checkpoints re-captured live against the instance; the two Phase 1 S1 probe checkpoints recorded as NOT RETRIEVABLE with the reason (D23 required deleting the artifacts) and the surviving evidence named; every remaining citation labelled with an explicit status; the false assertions removed from final.screenshots, final.screenshots_missing and final.validation.",
+     "status": "RESOLVED"
+    },
+    {
+     "id": "Issue 6",
+     "severity": "MEDIUM",
+     "what_was_wrong": "the headline sys_security_acl_role and sys_security_acl figures no longer agreed with the instance",
+     "resolution": "package units and instance units separated and each stamped; phase2.post_commit dated to immediately after the commit and phase2.post_commit.remeasured added with the 2026-09-05T04:45:00Z figures (36 links, 17/13/6, 29 ACLs) and the full +3 ACL / +9 link attribution showing the original 27/26 was correct when taken.",
+     "status": "RESOLVED"
+    },
+    {
+     "id": "Issue 7",
+     "severity": "LOW",
+     "what_was_wrong": "the AAP 0.5.2 ordering evidence cited stale payload indices and a stale ACL count",
+     "resolution": "re-measured on the shipping file and recorded at final.deliverable_aap_0_5_2_indices as assertions first and indices second, so the evidence stops going stale on every payload insertion; FINAL-REPORT.md restated to match.",
+     "status": "RESOLVED"
+    }
+   ],
+   "still_open_and_human_gated": [
+    "The D48 stop condition itself: the shipping bytes 9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9 are covered by no verified checksum, and closing that needs either remedy (a) - restoring the elected bytes and giving up three rounds of remediation - or remedy (b) - a clean dedicated PDI. final.d48_stop_condition holds both.",
+    "AAP 0.7.1 / Gate 7 on the bytes now on disk. Unchanged by this pass and recorded as owed at final.owed_verification, with the two measured blockers.",
+    "The ATF suite result re-captured for the Phase 3 checkpoint predates the choice-materialization fix, so a suite re-run is owed before the 14/6 figure can be read as current.",
+    "Durable retention of screenshot evidence. INTERP-6 forbids committing the PNGs and the directory is untracked, so absolute paths into it will stop resolving on every future working-tree rebuild."
+   ],
+   "instance_discipline": "read-only throughout. Every ServiceNow request was a plain GET; no write, no impersonation, and no upload, preview, commit or re-import of any update-set XML. The browser sessions navigated and screenshotted only; both re-capture runs reported zero network responses with status >= 400 and the ATF run proved non-mutation by an unchanged sys_mod_count on the record it read."
   }
  }
 }

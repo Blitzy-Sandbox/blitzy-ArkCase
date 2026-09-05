@@ -57,7 +57,7 @@
  *   Defect 9 - ACL -> role link records.
  *       On a high-security instance an ACL with no role, no condition and no
  *       script evaluates to DENY ("Deny access for empty term"), so an
- *       application whose 26 ACLs carry no role links is unusable by every
+ *       application whose 29 ACLs carry no role links is unusable by every
  *       non-admin. `sys_security_acl` has no `roles` column on this release
  *       (confirmed against sys_dictionary for the table and its sys_metadata
  *       super-class), so the `<roles>` element every ACL artifact carries is
@@ -2487,7 +2487,7 @@ function ensureServiceId(spec, scopeSysId) {
  * `sys_security_acl_<sys_id>`. That row is therefore a durable, on-instance,
  * name-based copy of the package's own declaration, and reading it back is what
  * makes this mapping immune to the failure mode described in rolesForAcl().
- * Across the 26 shipped ACLs the `<roles>` elements total exactly
+ * Across the 29 shipped ACLs the `<roles>` elements total exactly
  * EXPECTED_ACL_ROLE_LINKS links.
  *
  * Versions are scanned newest-first rather than only `state=current`, because a
@@ -2544,7 +2544,7 @@ function rolesFromCommittedPayload(aclSysId) {
  *      roles, while an ACL on `assigned_group` is manager-only;
  *   3. the ACL's own `description`, which names the intended role in prose.
  *
- * Across the 26 shipped ACLs this yields exactly EXPECTED_ACL_ROLE_LINKS links,
+ * Across the 29 shipped ACLs this yields exactly EXPECTED_ACL_ROLE_LINKS links,
  * and each of the three sources independently agrees on that total.
  *
  * Source 3's regex deliberately matches the role name anywhere in the
@@ -2688,7 +2688,7 @@ function ensureAclRoleLink(aclSysId, aclName, roleName, roleIds, scopeSysId) {
 /**
  * Build the EXACT set of ACL -> role pairs this application requires.
  *
- * The set is derived, never invented: the 26 ACLs are resolved at run time by
+ * The set is derived, never invented: the 29 ACLs are resolved at run time by
  * name prefix, and each one's roles come from rolesForAcl() (the package's own
  * `<roles>` declaration first, then the field-ACL naming convention, then the
  * ACL description). The result is keyed by the two sys_ids that make up the m2m

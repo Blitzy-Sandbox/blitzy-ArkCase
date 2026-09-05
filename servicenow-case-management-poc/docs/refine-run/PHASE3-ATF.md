@@ -1,5 +1,19 @@
 # Phase 3 — Execute the ATF suite and the 13-assertion harness (NON-BLOCKING)
 
+> **⚠ HISTORICAL PHASE RECORD — artifact identities, screenshot paths and the suite result below are
+> superseded.** This report describes the state at Phase 3's own exit (`2026-09-02T22:10:59Z`).
+> **Three commits landed afterwards** (`f8454fb078`, `6efb13b141`, `8dfdbcb015`) and rewrote the
+> update-set artifacts without re-running the D36 gate: the deliverable path holds
+> `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload
+> blocks today — measured, not gate-verified — while `…FALLBACK.xml` holds the elected base
+> `7292a6fe…` and `…REBUILT-DEPENDENCY-ORDERED.xml` holds `e109e1d1…` (4,062,067 B). The first of
+> those commits also **fixed the choice materialization that caused 5 of this phase's 6 failures**,
+> so the TES0001002 result recorded below is **stale and a suite re-run is owed** (see §3's staleness
+> warning). Every screenshot basename this report cites is absent from disk; three checkpoints were
+> re-captured live and are cited by verified path below. Read
+> [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact identity and evidence — RESTATED
+> 2026-09-05T04:45Z" and [`run-state.json`](./run-state.json) `final.qa3_remediation` first.
+
 Refine PR, Phase 3, work unit **U4**. Directives owned here: **D38** (S1 single-test validation),
 **D39** (S2 full suite + 13-assertion harness), **D40** (RESUME CHECK), **D41** (ATF suite
 screenshot), **D42** (pass/fail by name), **D43** (classify each failure), **D44** (Phase 3 exit
@@ -154,14 +168,23 @@ be run:
    `sys_atf_agent` row per distinct browser session is normal platform behaviour, so the live agent
    must be read rather than assumed.
 
-| Screenshot (absolute path) | Caption |
-| --- | --- |
-| `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-single-test-result.png` | **"Phase 3 — S1 single-test result read from the rendered page: ATF 01, Status Failure, failing step 3, all five step outcomes"** |
+**S1 screenshot — NOT RETRIEVABLE.** `phase3-single-test-result.png`, captioned *"Phase 3 — S1
+single-test result read from the rendered page: ATF 01, Status Failure, failing step 3, all five step
+outcomes"*, is absent from disk and is named here as a basename only, never as a path to open:
+`blitzy/screenshots/` is untracked by design under **INTERP-6**, so absolute paths into it stopped
+resolving the moment the working tree was re-created. The supporting captures
+`phase3-runner-tab-idle.png` (runner attached, "Waiting for a test to run" / "Connected"),
+`atf01_form_loaded.png`, `run_test_dialog_no_pick_a_browser.png`,
+`runner_poll_01_after_launch.png` and `atf_test_result_list_top.png` are absent for the same reason.
+The PNG binaries were correctly **not** committed, which is exactly what makes an absolute path into
+that directory unreliable after a rebuild.
 
-Supporting captures in the same directory: `phase3-runner-tab-idle.png` (runner attached, "Waiting for
-a test to run" / "Connected"), `atf01_form_loaded.png`, `run_test_dialog_no_pick_a_browser.png`,
-`runner_poll_01_after_launch.png`, `atf_test_result_list_top.png`. Per **INTERP-6** these are cited by
-path and caption; the PNG binaries are **not** committed.
+**Surviving evidence for ATF 01's verdict**, all platform-attested: `sys_atf_test_result`
+`c4c78d5e938f435009aa70d19dba10f9` with its five `sys_atf_test_result_step` rows (success, success,
+failure, skipped, skipped) and the verbatim assertion text quoted in §4 row 01; and the re-captured
+per-test list at
+`/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-CORRECTED-parent-query-20-rows.png`,
+which shows ATF 01 at Status **Failure** among the 20 rows of the suite run (§3).
 
 ---
 
@@ -208,22 +231,58 @@ test lines resolved.
 | `run_time` | **00:02:04** |
 | success / failure / error / skip | **14 / 6 / 0 / 0** (rolled-up counts identical) |
 | child `sys_atf_test_result` rows | **20** |
-| Page pager | `Showing rows 1 to 20 of 20` — no pagination; `Failed Tests in Suite (6)` tab corroborates |
+| Page pager | `1 to 20 of 20` — no pagination; `Failed Tests in Suite (6)` tab corroborates. *Quotation corrected 2026-09-05T04:50Z against the re-captured image: this platform renders the pager as a page-number input followed by `to 20 of 20`, with no "Showing" prefix and no trailing "rows"; the count itself was recorded correctly.* |
 
 **Steps executed: 180 of 180** across the 20 tests. **Unable to execute: 0** — every test produced a
 definitive verdict, so D44's 5-minute-per-test rule never triggered.
 
-| Screenshot (absolute path) | Caption |
-| --- | --- |
-| `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/phase3-atf-suite-results.png` | **"Phase 3 — ATF suite results screen showing the final pass/fail summary"** (D41) |
+**D41 suite screenshot — the original is NOT RETRIEVABLE and was re-captured.**
+`phase3-atf-suite-results.png`, captioned *"Phase 3 — ATF suite results screen showing the final
+pass/fail summary"*, is absent from disk (basename only here, not a path to open): the untracked
+`blitzy/screenshots/` directory carried no binary across the working-tree rebuild. The checkpoint was
+re-captured from the stored platform records on 2026-09-05T04:50Z, and these paths were verified on
+disk as readable PNGs with a valid signature and `IEND` terminator:
 
-Supporting captures in the same directory: `06_pick_a_browser_dialog.png` (current session
+| Checkpoint | Screenshot (absolute path, verified to resolve) | Caption |
+| --- | --- | --- |
+| ATF suite summary (D41) | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-suite-result-recaptured.png` | **"Phase 3 — ATF suite result TES0001002 (`sys_id 0b7d459a93cf435009aa70d19dba10be`), suite 'x_casemgmt Case Management POC': Status Failure, Duration 2 Minutes, rolled-up 14 success / 6 failure / 0 error / 0 skip, Test Results (20)"** |
+| Per-test breakdown | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-CORRECTED-parent-query-20-rows.png` | **"Phase 3 — the 20 test results of TES0001002: breadcrumb `All > Test suite result = TES0001002`, footer pager reading verbatim `1 to 20 of 20`, 20 rows tallying 14 Success / 6 Failure with the failures being ATF 01, 10, 15, 16, 17 and 18"** — matching the suite record's rolled-up figures and its "Failed Tests in Suite (6)" tab exactly. Row count confirmed by counting the Status-column indicators in the bitmap: 14 green, 6 red |
+| Per-test breakdown, companion | `/tmp/blitzy/blitzy-ArkCase/blitzy-7871c364-a98a-4b0b-9eda-3e6a8571a6d2_212d0c/blitzy/screenshots/qa-refix-phase3-atf-per-test-results-recaptured.png` | **"Phase 3 — the same list under the originally prescribed query: breadcrumb `All > test_suite_result=0b7d459a93cf435009aa70d19dba10be`, footer pager reading verbatim `1 to 20 of 41`"** — the breadcrumb echoes a condition the query did not apply, and the 20 visible rows demonstrably interleave three separate executions (ATF 01 appears three times, ATF 02–09 twice each, in start-time clusters `08:33:56–08:34:25`, `14:20:29` and `14:45:33–14:46:07` instance-local, with ATF 01 reading Success in the first cluster and Failure in the other two). Kept only to evidence the query defect below. Read the 20-row capture, not this one |
+
+> **Query correction — `sys_atf_test_result` has no column named `test_suite_result`.** The field
+> labelled "Test suite result" on that table has column name **`parent`**. A query keyed on
+> `test_suite_result` is therefore not an error the platform rejects: **the condition is silently
+> discarded and the list returns the whole table** — all **41** rows, being the 20 of suite result
+> TES0001002, the 20 of TES0001001 and one orphan (the §2 single-test S1 execution of ATF 01) — which
+> is why the companion capture's footer pager reads verbatim `1 to 20 of 41` while its breadcrumb still
+> displays the discarded condition. The correct query, which returns exactly **20** rows (14 Success,
+> 6 Failure: ATF 01, 10, 15, 16, 17, 18), is:
+>
+> ```
+> sys_atf_test_result?sysparm_query=parent%3D0b7d459a93cf435009aa70d19dba10be%5EORDERBYtest.name
+> ```
+>
+> Anything re-derived from a `test_suite_result` filter mixes two suite runs and must be re-taken.
+
+> **⚠ STALENESS WARNING — this suite result is not the current state of the application.** The 14/6
+> figures below were measured at `2026-09-02 21:45:31Z → 21:47:35Z`, **before** the
+> choice-materialization fix that landed in commit `f8454fb078`. **Five of the six failures (ATF 01,
+> 10, 15, 16, 17, 18 — all but one) share a single root cause: the `x_casemgmt_case` choice lists
+> resolved EMPTY at runtime**, which §5 documents. `sys_choice` reads **24** rows on the instance
+> today, so that cause is addressed and **a suite re-run is owed** before any of these verdicts may
+> be read as current. Corroborating that reading: the same 20-test suite passed **20/20** hours
+> earlier the same day as suite result **TES0001001** (`sys_id
+> 1768f7429307435009aa70d19dba10a4`), `08:33:54 → 08:36:27` instance-local, on an instance whose
+> choice rows were present.
+
+Supporting captures from the run — `06_pick_a_browser_dialog.png` (current session
 pre-selected), `09_progress_dialog_final_suite_failed.png` ("Failed at 100% / Suite failed"),
 `04_atf_test_runner_connected.png`, `08_runner_ui_batches_2.png`,
 `11_runner_final_connected_ui_batches_3.png`, `12_suite_result_summary_closeup.png`,
 `13_per_test_rows_atf17_to_atf07.png`, `14_per_test_rows_atf06_to_atf01_and_pager.png`,
-`10_suite_results_list_newest_first.png`, `05_suite_form_before_launch.png`. PNG binaries are **not**
-committed (INTERP-6).
+`10_suite_results_list_newest_first.png`, `05_suite_form_before_launch.png` — are all **NOT
+RETRIEVABLE**, named as basenames only. PNG binaries are correctly **not** committed (INTERP-6),
+which is the structural reason absolute paths into that directory stop resolving after a rebuild.
 
 ---
 
@@ -303,7 +362,7 @@ How that single absence produces each of the six failures:
    (`name=x_casemgmt_case`, `element=type`, `value`/`label` `General Inquiry`, `inactive=false`,
    `sequence 100`, scope `x_casemgmt`).
 2. **The package already behaved this way before this PR.** Its own
-   `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` records the "Package-alone state" as
+   [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) records the "Package-alone state" as
    *"scope 1, `sys_db_object` 3, `sys_dictionary` 25, **`sys_choice` 0** (Defect C), `sys_number` 3,
    roles 3, ACLs 26, **acl_role links 0** (Defect 9) …"*, and elsewhere that the choice lists
    *"were absent (persisted across 6 commit attempts and a full app-delete teardown + re-establish
@@ -380,10 +439,10 @@ outside this unit's scope. The consequences, stated plainly:
 | Question | Answer |
 | --- | --- |
 | Was any fix applied? | **No** |
-| Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload, and the re-verification pass after it elected the untouched fallback onto the deliverable path and retained the re-sequenced bytes at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml` |
-| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run on the `90ee0249…` bytes owed** — not performed by this phase, and not by the CR1 pass that made the change |
-| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It is owed on the retained rebuilt bytes for the reason in the row above, it has not been performed, and it is equally unperformed on the elected fallback that now ships |
-| What ships? | **The elected fallback.** The deliverable path holds the original unmodified package — 926 payload blocks, 3,781,097 bytes, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to `…FALLBACK.xml` — elected under OVERRIDE-2 / directive **D3** on the unmet-exit-condition path and labelled as **not** carrying this round's native-rebuild fix (0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role links. The S1–S6 gate is **NOT MET** for those elected bytes and for the retained rebuilt package `90ee0249…` alike, and **MET** for export 3's sequence only: electing settles the shipping decision, not the gate. **This phase presented nothing unverified** — while it ran, the deliverable was export 3's Phase-2-verified byte sequence, and **the ATF suite ran against the rebuilt content as committed on the instance**, not against the elected fallback. The delivery position is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d), [`PHASE2.md`](./PHASE2.md) §7.1, and `final.delivery_position` in [`run-state.json`](./run-state.json) |
+| Was the package XML changed? | **No, not by this phase** — `update-set/x_casemgmt_case_management_update_set.xml` was untouched here, as was `…FALLBACK.xml`. A later pass re-sequenced its `sys_update_xml` blocks into AAP §0.5.2 dependency order, changing no payload, and the re-verification pass after it elected the untouched fallback onto the deliverable path as the shipping *base* and retained the re-sequenced bytes at `…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. **Three commits after that — `f8454fb078`, `6efb13b141`, `8dfdbcb015` — did change payloads in both files**, adding 4 business rules, 1 client script, 3 field-level ACLs and 1 form layout and renaming the 7 `sys_choice` payloads; `…FALLBACK.xml` was subsequently restored to the elected bytes and the deliverable was left amended |
+| Is Phase 2's verified checksum stale? | **Yes — but not through anything this phase did.** Phase 2's verified checksum is `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`, the digest of export 3's bytes, and at the end of this phase the deliverable still hashed to exactly that (re-asserted in §7). The later pass re-sequenced the file's block order into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`. Under D36 the package changed after the S6 sum, which makes the recorded checksum **stale** and puts a full Phase 2 **S1–S6 re-run owed** — not performed by this phase, and not by the CR1 pass that made the change. *`90ee0249…` is the CR1 re-sequencing history and is kept as that; the re-run is owed on the retained rebuilt file's **current** bytes, `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B, after commit `f8454fb078` amended it — and equally on `9f3ea74c…`, the amended bytes now on the deliverable path.* |
+| Was Phase 2 re-run? | **Not by this phase, and not required by anything this phase did.** It is owed on the retained rebuilt bytes for the reason in the row above, it has not been performed, and it is equally unperformed on the elected base and on the amended bytes `9f3ea74c…` that ship from the deliverable path today |
+| What ships? | **The elected fallback base, as amended.** The deliverable path held the original unmodified package — 926 payload blocks, 3,781,097 bytes, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`, byte-identical to `…FALLBACK.xml` — at the election commit `3671901b5b`, which is the state this row records. **Today it holds those bytes as amended by three later commits: `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, 3,973,569 bytes, 935 payload blocks, measured and not gate-verified**, and it is no longer byte-identical to `…FALLBACK.xml` (the fallback was restored to the elected bytes on 2026-09-05T04:45Z while the deliverable kept its amendments — the correct state, not a defect). The base is elected under OVERRIDE-2 / directive **D3** on the unmet-exit-condition path and labelled as **not** carrying this round's native-rebuild fix (0 `sys_documentation` rows, 0 `sys_security_acl_role` rows, 25 hand-authored `sys_dictionary` rows), so an importer must run `scripts/post_import_remediation.js` for the physical schema and the 27 ACL-role links. The S1–S6 gate is **NOT MET** for those elected bytes and for the retained rebuilt package `90ee0249…` alike, and **MET** for export 3's sequence only: electing settles the shipping decision, not the gate. **This phase presented nothing unverified** — while it ran, the deliverable was export 3's Phase-2-verified byte sequence, and **the ATF suite ran against the rebuilt content as committed on the instance**, not against the elected fallback. The delivery position is [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d), [`PHASE2.md`](./PHASE2.md) §7.1, and `final.delivery_position` in [`run-state.json`](./run-state.json) |
 
 **D6 two-attempt cap: 0 of 2 attempts consumed.** No class (a) or actionable class (b) issue arose, so
 no fix-and-re-verify loop was entered; nothing was abandoned mid-loop and nothing hit the cap.
@@ -484,10 +543,10 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files at the time of this phase; 212 today) |
-| JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files at the time of this phase; **4 today** — the CR6 pass added `scripts/pre_delete_collateral_guard.js`, which passes the same gate) |
+| XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files at the time of this phase; **221 as measured 2026-09-05T04:45Z** — the “212 today” recorded here was overtaken by the three post-run commits and is superseded) |
+| JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files at the time of this phase; **4 as measured 2026-09-05T04:45Z** — the CR6 pass added [`scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js), which passes the same gate) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
-| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (The file was re-sequenced after this phase into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, which is retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, and the deliverable path now holds the **elected fallback** `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`; under D36 the re-sequencing makes the recorded checksum stale and the S1–S6 re-run on those bytes owed — §5.5) |
+| **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (That equality is a measurement taken while this phase ran and stands as such; the file was re-sequenced afterwards into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` and retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, whose bytes are `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B today. **The deliverable path holds `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` / 3,973,569 B / 935 blocks as of 2026-09-05T04:45Z** — the elected base `7292a6fe…` as amended by three later commits, not the untouched fallback. Under D36 every one of those changes leaves the recorded checksum stale and an S1–S6 re-run owed — §5.5) |
 | No binaries staged | `git status` | no PNG/video staged; `blitzy/screenshots/*.png` remain untracked |
 
 ---
@@ -515,19 +574,31 @@ Phase 3 is **informational only**. The byte sequence Phase 2 verified —
 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` — cleared Phase 2's gate on that
 sequence, and **this phase neither gates nor settles delivery** (D4/OVERRIDE-4). **This phase applied
 no fix and changed no artifact**, so nothing here made that checksum stale. It was made stale
-afterwards: the CR1 pass re-sequenced the deliverable's block order into
+afterwards, and five times over: the CR1 pass re-sequenced the deliverable's block order into
 `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`, for which the S1–S6 gate is **NOT
 MET** and the run is owed and unperformed. The re-verification pass then **elected the untouched
-fallback** as the shipping package under OVERRIDE-2 / directive D3, so the deliverable holds
-`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` — labelled as not carrying this
-round's fix — while the re-sequenced bytes are retained at
-`…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. The gate stays **NOT MET** for both (§5.5, and
+fallback** as the shipping *base* under OVERRIDE-2 / directive D3, which put
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` on the deliverable path at commit
+`3671901b5b` — labelled as not carrying this
+round's fix — while the re-sequenced bytes were retained at
+`…_update_set.REBUILT-DEPENDENCY-ORDERED.xml`. **Three further commits then amended both files
+without re-running the gate**, so as of 2026-09-05T04:45Z the deliverable path holds
+`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` (3,973,569 B / 935 blocks) and the
+retained rebuilt file holds `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`
+(4,062,067 B / 988 blocks), while `…FALLBACK.xml` was restored to the elected `7292a6fe…`. The gate
+stays **NOT MET** for every one of those sequences (§5.5, and
 [`FINAL-REPORT.md`](./FINAL-REPORT.md) part (d) for the position).
 
 ### Known issues handed to the FINAL REPORT (U5), by name
 
 1. **ATF 01, ATF 10, ATF 15, ATF 16, ATF 17, ATF 18** — six named failures, one shared root cause
-   (`sys_choice` rows absent for the three scoped tables), all class **(c)**, **0 fix attempts**, and
+   (`sys_choice` rows absent for the three scoped tables), all class **(c)**, **0 fix attempts**.
+   **STALE as of 2026-09-05T04:45Z:** these verdicts belong to suite result TES0001002
+   (`0b7d459a93cf435009aa70d19dba10be`, `2026-09-02 21:45:31Z`) and predate the
+   choice-materialization fix in commit `f8454fb078`; `sys_choice` reads **24** rows on the instance
+   today, so a suite re-run is owed before any of them may be read as current. The same suite passed
+   **20/20** hours earlier the same day as TES0001001 (`1768f7429307435009aa70d19dba10a4`,
+   `08:33:54 → 08:36:27` instance-local). And
    for each of ATF 01/15/16/17/18 the later steps were **skipped**, so their downstream assertions are
    **unverified rather than passing**. Awaiting a human decision between Option 1 (amend the package,
    then re-run Phase 2 for a **new** verified checksum before that package may ship) and Option 2
@@ -546,18 +617,34 @@ round's fix — while the re-sequenced bytes are retained at
      instance, previewed to **0 `type=error` and 0 `type=warning`**, committed at
      `2026-09-02T20:53:14Z`. It survives in git history; **no file on disk holds these bytes**, so it
      cannot be the package a reader ships today.
-   - **The elected fallback, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** —
-     what actually ships, at `update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to
-     `…FALLBACK.xml` (both confirmed by `sha256sum`). **No preview of any kind was ever run on these
-     bytes**, so it is unverified rather than verified, and it does not carry this round's native
-     rebuild — `scripts/post_import_remediation.js` is required with it.
-   - **The retained rebuild, `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7`** —
+   - **The elected base, `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** —
+     what the deliverable path held at the election commit `3671901b5b`, byte-identical to
+     `…FALLBACK.xml` at that moment (both confirmed by `sha256sum` then). **No preview of any kind was
+     ever run on these bytes**, so it is unverified rather than verified, and it does not carry this
+     round's native rebuild — `scripts/post_import_remediation.js` is required with it. *Today these
+     bytes live at `…FALLBACK.xml` alone, which was restored to them on 2026-09-05T04:45Z.*
+   - **What actually ships today: `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`**,
+     3,973,569 bytes, 935 payload blocks, at `update-set/x_casemgmt_case_management_update_set.xml` —
+     the elected base **as amended** by commits `f8454fb078`, `6efb13b141` and `8dfdbcb015` (+9
+     payloads: 4 business rules, 1 client script, 3 field-level ACLs, 1 form layout, and the 7
+     `sys_choice` payloads renamed to `sys_choice_x_casemgmt_*`). Also never previewed anywhere:
+     **measured, not gate-verified**, and it still requires
+     `scripts/post_import_remediation.js` — re-verified as carrying 0 `sys_security_acl_role` rows and
+     25 hand-authored `sys_dictionary` rows. This row was added on 2026-09-05T04:45Z; the amendment
+     above was written when only three sequences existed.
+   - **The retained rebuild, `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`**
+     (4,062,067 B; `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` at 4,062,436 B
+     when CR1 produced it) —
      at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, never
-     uploaded, previewed or committed; static corroboration only, and a full Phase-2 S1–S6 run on its
-     own exact bytes is owed before it may be promoted.
+     uploaded, previewed or committed under either identity; static corroboration only, and a full
+     Phase-2 S1–S6 run on its **current** exact bytes is owed before it may be promoted.
 
-   So Option 2 today reads: **ship the elected fallback labelled as unverified**, with §9.5's
-   post-commit remediation as the install procedure — not "accept the verified package".
+   So Option 2 today reads: **ship the elected base as amended (`9f3ea74c…`), labelled as measured
+   and not gate-verified**, with §9.5's post-commit remediation as the install procedure — not
+   "accept the verified package". Note also that Option 1's premise has partly been executed without
+   Phase 2 being re-run: commit `f8454fb078` **did** amend the package to fix the choice
+   materialization, so the six failures below are stale, and the new verified checksum Option 1 calls
+   for has never been produced.
 
 2. **`opened_date` empty on 8 of 10 seeded cases** — pre-existing, unchanged, and **not** exercised by
    the suite (ATF 19 passed on its own fixture). Carried forward as a known issue, not as a Phase 3
