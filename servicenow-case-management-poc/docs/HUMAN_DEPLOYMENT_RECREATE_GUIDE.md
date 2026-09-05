@@ -6,26 +6,32 @@
 
 > **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
 > The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> A follow-up remediation pass, prompted by an independent verification of that work, re-cut it
+> again: the SAME 935 blocks, with six payloads changed and none added or removed.
 > What to verify before an upload, and what to assert after it:
 >
 > | | Value |
 > | --- | --- |
 > | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
-> | Bytes | **3,944,374** (was 3,780,373) |
-> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | Bytes | **3,973,569** (was 3,944,374 at the QA-findings pass; 3,780,373 before it) |
+> | SHA-256 | **`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`** (was `4e28acae…` at the QA-findings pass; `a9204411…` before it) |
 > | `…FALLBACK.xml` | byte-identical to the above, as always |
 > | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
 >
 > Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
 > Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
-> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
-> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> value, and the Fix Script's embedded remediation body. Re-cut again by the follow-up pass: the portal
+> Script Include, the two data-contract integrity Business Rules, the agent read ACL, and two portal
+> widgets. The package's own header comment carries both record-by-record lists. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
 > remediation creates (was 27), **11** Business Rules (was 7).
 >
-> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
-> superseded revision and is left as written** — those passages state what was measured at a point in time, and
-> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
-> digest, it has been updated to the values above.
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set — and every
+> `4e28acae…` or `3,944,374` figure, which belongs to the intermediate QA-findings revision — is a dated record
+> of a superseded revision and is left as written** — those passages state what was measured at a point in
+> time, and rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or
+> check a digest, it has been updated to the values above; if you find one that has not been, the values above
+> win. The child count has been **935** since the QA-findings pass and the byte count and digest have moved
+> twice since that pass began, so trust this block over any figure further down.
 >
 > **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
 > deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988
@@ -69,7 +75,7 @@
 > gate could not be completed on any instance available to that run. **So Defects C-storage and 9 are manual
 > steps again:** the elected file carries **0 `sys_security_acl_role` rows** and the 25 hand-authored
 > `sys_dictionary` rows, so §5 below — including its two remediation passes that create the 36 role links — is
-> **required as written**, and the child count to assert on upload is **926**, not 988. **The choice rows are no
+> **required as written**, and the child count to assert on upload is **935**, not 988. **The choice rows are no
 > longer a post-commit step on either package.** Both carry seven platform-native choice composites — a
 > canonical `sys_choice_<table>_<field>` block per field holding one `x_casemgmt`-owned `sys_choice_set` with the
 > authored value rows nested inside, 24 values in all — and that exact seven-child delta was uploaded, previewed
@@ -89,7 +95,7 @@
 >
 > - **Defects E (auto-numbering) and 7 (REST `service_id`) genuinely need nothing.** They are carried by the
 >   package artifacts. Their sections are verification only.
-> - **Defects C (physical schema) and 9 (the 27 ACL role links) require manual steps every time.** **Nothing in
+> - **Defects C (physical schema) and 9 (the 36 ACL role links) require manual steps every time.** **Nothing in
 >   the package fires on its own** — it contains no auto-execute record of any kind. An earlier revision shipped
 >   a global Business Rule (`x_casemgmt Post-Import Bootstrap`) that dispatched the remediation on commit; it
 >   **fired and then failed** with `SUMMARY|verified=false|…|errors=121`, every error being
@@ -105,7 +111,7 @@
 >   work is *System Definition → **Scripts - Background*** with **"In scope" = Global**.
 > - **A second commit is required.** Forcing the table rebuild means deleting three `sys_db_object` rows, which
 >   cascades away all 29 ACLs, the seed rows, the demo users and the role grants; a second commit restores them.
->   The remediation then has to be run **again** to create the 27 ACL role links.
+>   The remediation then has to be run **again** to create the 36 ACL role links.
 > - **The demo data needs one script run, but no longer needs preparation.** An earlier revision of this bullet
 >   said the packaged seed rows had to be **deleted** first; that is no longer true. Every seed row now carries a
 >   pinned number in the 9,000,000 band, and `scripts/seed_demo_data.js` **adopts** the packaged row by that
@@ -185,7 +191,7 @@ After completing this guide, on the instance you targeted — the current valida
 | Target instance | **The current validation instance is `https://dev306625.service-now.com`, release Zurich Patch 10** (`glide-zurich-07-01-2025__patch10-05-22-2026_06-12-2026_2311`, read from `sys_properties.glide.war` over the Table API on 2026-09-03). The application is installed and committed there, and on 2026-09-02 the upload → preview → commit half of this procedure was executed on it — on export 3's byte sequence, not on either file now on disk (see the Deliverable row). **The full procedure as written was executed end to end on `https://dev379024.service-now.com`, release Australia Patch 3** — a host that is now **retired and is not used**, so its figures stand as dated evidence from it and never as current state. Those are the only two instances and the only two releases this procedure has been executed against, and only the Australia Patch 3 execution covered every step. It is *expected* to work on any PDI from Zurich onward, because it uses no release-specific API — but for the steps outside that measured half that is an expectation, not a measurement. On any other instance or release, treat every step as requiring revalidation, and in particular re-check the three Performance Analytics child table names (`pa_tabs`, `pa_widgets`, and whatever this release calls the dashboard-to-role link), which are exactly what the dashboard defect turns on. |
 | Admin account | `admin` role required (full `security_admin` elevation available) |
 | Tools | `curl`, `python3`, a text editor. (Or just a browser for the UI path.) |
-| Deliverable | **Updated 2026-09-03 — the delivery election is made and the choice payloads have been fixed:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is the **ELECTED** package — the untouched original, elected under checkpoint OVERRIDE-2 because the exact-byte gate could not be completed on any instance available to that run, and re-cut on 2026-09-03 with seven platform-native choice composites in place of its seven direct `sys_choice` children (919 of its 926 children unchanged). **`a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274` is the digest to check before you upload**, over a **3,780,373-byte, 926-block** file, and **926 is the child count to assert** in §4. The superseded digest, for recognising an older copy, is `7292a6fe…` over 3,781,097 bytes. **Read its status before you plan around it: the AAP §0.7.1 Update Set gate is binary and it is NOT MET on these bytes — no preview of the complete file was ever run on them — so the artifact is not verified by round trip; running §5 against it is what closes that gate.** The seven choice children are the exception and the only one: uploaded as their own delta on 2026-09-03, previewed to **0 problems of any type**, committed by the native commit action, `sys_choice` **0 → 24** with all seven fields rendering their exact option labels — so **§5a's choice-row work is no longer needed** and the choices come out of the commit. And know what it does not carry: measured on the file, **0 `sys_documentation` rows, 0 `sys_security_acl_role` rows and 25 hand-authored `sys_dictionary` rows**, so the 27 ACL role links are **not in the package** and §5's remediation passes must create them. **The rebuilt package is retained, not shipped**, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`: UTF-8, no BOM, **4,062,067 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` — the same file that was `90ee0249…` over 4,062,436 bytes before the 2026-09-03 choice-composite fix. It satisfies AAP §0.5.2 dependency ordering and carries the platform-captured schema records and all 27 role links, and it is the **available upgrade path** — run §5 against it asserting **988** children on a genuinely clean PDI and it can be promoted back to the deliverable path (§10.0 of [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Its 988 records are the records that were previewed and committed on 2026-09-02 — but that was measured on **export 3's byte sequence, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** (the same 988 records at the same byte count), because the file was afterwards re-sequenced into AAP §0.5.2 dependency order. The reordered file was verified statically (`xmllint --noout` clean, 988 blocks, every §0.5.2 dependency assertion passing, 981 of its 988 children byte-identical to the previewed bytes and the other 7 being the natively previewed-and-committed choice composites) rather than by a further upload or preview of the whole file, so **the upload → preview → commit trip on its complete bytes has never been run either.** The elected deliverable's own figures: UTF-8, no BOM, **3,780,373 bytes (≈3.61 MiB)**, **926 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274`. **Verify the digest before uploading** — this row has named four different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The revision before this one was 926 blocks / 3,781,097 bytes / `7292a6fe…`, and before that 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition), and the 2026-09-03 pass replaced the seven choice children. Note that **no update-set preview has been run on the complete file** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
+| Deliverable | **Updated 2026-09-03 — the delivery election is made and the choice payloads have been fixed:** `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` is the **ELECTED** package — the untouched original, elected under checkpoint OVERRIDE-2 because the exact-byte gate could not be completed on any instance available to that run, and re-cut on 2026-09-03 with seven platform-native choice composites in place of its seven direct `sys_choice` children (919 of its 926 children unchanged). **`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` is the digest to check before you upload**, over a **3,973,569-byte, 935-block** file, and **935 is the child count to assert** in §4. The superseded digest, for recognising an older copy, is `7292a6fe…` over 3,781,097 bytes. **Read its status before you plan around it: the AAP §0.7.1 Update Set gate is binary and it is NOT MET on these bytes — no preview of the complete file was ever run on them — so the artifact is not verified by round trip; running §5 against it is what closes that gate.** The seven choice children are the exception and the only one: uploaded as their own delta on 2026-09-03, previewed to **0 problems of any type**, committed by the native commit action, `sys_choice` **0 → 24** with all seven fields rendering their exact option labels — so **§5a's choice-row work is no longer needed** and the choices come out of the commit. And know what it does not carry: measured on the file, **0 `sys_documentation` rows, 0 `sys_security_acl_role` rows and 25 hand-authored `sys_dictionary` rows**, so the 36 ACL role links are **not in the package** and §5's remediation passes must create them. **The rebuilt package is retained, not shipped**, at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`: UTF-8, no BOM, **4,062,067 bytes (≈3.87 MiB)**, **988 `<sys_update_xml>` blocks**, SHA-256 `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` — the same file that was `90ee0249…` over 4,062,436 bytes before the 2026-09-03 choice-composite fix. It satisfies AAP §0.5.2 dependency ordering and carries the platform-captured schema records and all 27 role links, and it is the **available upgrade path** — run §5 against it asserting **988** children on a genuinely clean PDI and it can be promoted back to the deliverable path (§10.0 of [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md)). Its 988 records are the records that were previewed and committed on 2026-09-02 — but that was measured on **export 3's byte sequence, SHA-256 `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** (the same 988 records at the same byte count), because the file was afterwards re-sequenced into AAP §0.5.2 dependency order. The reordered file was verified statically (`xmllint --noout` clean, 988 blocks, every §0.5.2 dependency assertion passing, 981 of its 988 children byte-identical to the previewed bytes and the other 7 being the natively previewed-and-committed choice composites) rather than by a further upload or preview of the whole file, so **the upload → preview → commit trip on its complete bytes has never been run either.** The elected deliverable's own figures: UTF-8, no BOM, **3,973,569 bytes (≈3.79 MiB)**, **935 `<sys_update_xml>` blocks** behind 1 `<sys_remote_update_set>` descriptor, SHA-256 `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` — the QA-findings pass inserted 9 blocks and the follow-up remediation pass re-cut 7 payloads without changing the count. **Verify the digest before uploading** — this row has named four different revisions over the project's life and the wrong one will send you looking for defects that are already fixed. The revision before this one was 926 blocks / 3,781,097 bytes / `7292a6fe…`, and before that 925 blocks / 3,698,577 bytes / `e49a7654…`; the QA-findings pass re-synced 13 payloads (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added 1 block (the case form's Related Lists definition), and the 2026-09-03 pass replaced the seven choice children. Note that **no update-set preview has been run on the complete file** — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.3c. (Older revisions of this row said "~768 KB, 148 `sys_update_xml`"; that predates the ATF suite, which alone accounts for **761** of the 926 blocks.) |
 | PDI state | Awake (not hibernated) and **not** mid-upgrade |
 
 ### 1.1 Environment / secrets
@@ -505,8 +511,8 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > written**, defects C-storage and 9 included.
 >
 > **What ships, and what this section does for it.** The elected deliverable is the untouched original package
-> at `update-set/x_casemgmt_case_management_update_set.xml` — 926 blocks / 3,780,373 bytes / SHA-256
-> `a9204411593a4811f30540d30c8d56d73d8c34e2a288a3ac541596a15aaec274`, byte-identical to `…FALLBACK.xml` — and
+> at `update-set/x_casemgmt_case_management_update_set.xml` — 935 blocks / 3,973,569 bytes / SHA-256
+> `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, byte-identical to `…FALLBACK.xml` — and
 > **no preview of the complete file was ever run on those bytes** (its seven native choice composites were
 > previewed and committed on their own on 2026-09-03, and nothing else in the file was), which is why Gate 7 in
 > [`validation-gates.md`](./validation-gates.md) is recorded as **NOT MET** for it, the
@@ -555,7 +561,7 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > | **7** — REST `service_id` | ✅ Yes, fully | Nothing. §5d is verification only |
 > | **C** — physical tables and fields | ❌ **No** | §5a — mandatory |
 > | **C** — choice lists | ✅ Yes, since 2026-09-03 | Nothing. §5a's choice rows are redundant (idempotent if run) |
-> | **9** — 27 ACL role links + security-cache flush | ❌ **No** | §5f — mandatory |
+> | **9** — 36 ACL role links + security-cache flush | ❌ **No** | §5f — mandatory |
 >
 > **Why C and 9 are not automatic, stated plainly.** The package ships the remediation itself —
 > `scripts/post_import_remediation.js` and a Fix Script that carries it verbatim — but **not** an auto-execute
@@ -692,7 +698,7 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 >   "$SERVICENOW_INSTANCE_URL/api/now/table/syslog?sysparm_query=messageSTARTSWITHX_CASEMGMT_REMEDIATION%5EORDERBYDESCsys_created_on&sysparm_fields=sys_created_on,message&sysparm_limit=100"
 >
-> # Corroborating, no log reading needed: exactly 27 ACL role links must exist.
+> # Corroborating, no log reading needed: exactly 36 ACL role links must exist.
 > curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 >   "$SERVICENOW_INSTANCE_URL/api/now/table/sys_security_acl_role?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=100"
 > ```
@@ -1112,7 +1118,7 @@ it is the fastest way to know the install is sound.
 - **A browser-attached client runner is required here.** `sn_atf.headless.enabled` is `false` on this instance and
   could not be enabled, so open `/atf_test_runner.do?sysparm_nostack=true` in a second tab **before** launching
   the suite and select it under "Pick a Browser". Three of the tests drive a real form.
-- **Run steps 4-7 of the primary procedure first.** Without physical tables and the 27 ACL role links, the suite
+- **Run steps 4-7 of the primary procedure first.** Without physical tables and the 36 ACL role links, the suite
   fails wholesale and tells you nothing about the application.
 - **Expected result once steps 4-7 have been run: 20 Success / 0 Failure / 0 Error / 0 Skipped, with 180 of 180
   step results Success**, in roughly 4 minutes, leaving no test records behind. That rollup was reproduced twice

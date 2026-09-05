@@ -382,9 +382,15 @@
     // must be refused even where a choice row exists without its column,
     // which a sys_choice-derived allowlist would silently admit.
     // ------------------------------------------------------------------
+    // `table` is the reference target each branch points at, taken from the
+    // dictionary (../dictionary/x_casemgmt_case_party_person.xml ->
+    // sys_user, ../dictionary/x_casemgmt_case_party_organization.xml ->
+    // core_company). It is carried here so the branch that is REQUIRED for
+    // the chosen party_type can have its reference resolved, not merely
+    // counted as present - see the resolvability check below.
     var PARTY_TYPE_FIELDS = {
-        'Person': { element: 'person', label: 'Person' },
-        'Organization': { element: 'organization', label: 'Organization' }
+        'Person': { element: 'person', label: 'Person', table: 'sys_user' },
+        'Organization': { element: 'organization', label: 'Organization', table: 'core_company' }
     };
 
     var partyType = current.getValue('party_type');
@@ -427,6 +433,36 @@
     var requiredValue = current.getValue(required.element);
     if (requiredValue === null || requiredValue === undefined || String(requiredValue).trim() === '') {
         gs.addErrorMessage(required.label + ' is required when Party Type is ' + partyType + '.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 5b. THE REQUIRED BRANCH REFERENCE MUST RESOLVE.
+    //
+    // The check above proves the branch field is non-empty; it does not
+    // prove it points at a row that exists. Measured before this block:
+    //     POST {"case":"<valid>","party_type":"Person","role_label":"x",
+    //           "person":"deadbeefdeadbeefdeadbeefdeadbeef"}        -> 201
+    //     POST {... "party_type":"Organization",
+    //           "organization":"deadbeefdeadbeefdeadbeefdeadbeef"}  -> 201
+    // plus the same two as PATCH updates -> 200. Each stored an
+    // unresolvable reference, producing a party that satisfies AAP Section
+    // 0.5.7's exactly-one-of contract on paper while naming nobody: the
+    // Person/Organization cell renders blank on the form, in the case
+    // form's Parties related list and in every export, and the row cannot
+    // be re-saved from its own form because a conditionally-mandatory
+    // reference cannot be re-filled from a value that displays as blank.
+    //
+    // This closes the "referential" clause of AAP Section 0.5.7 for this
+    // table, alongside the parent `case` reference already checked above.
+    //
+    // Only the REQUIRED branch is resolved. The other branch must be empty
+    // (enforced below), and an empty value has no target to resolve.
+    // ------------------------------------------------------------------
+    if (!_referenceResolves(required.table, requiredValue)) {
+        gs.addErrorMessage(required.label + ' must reference a ' +
+            (partyType === 'Person' ? 'user' : 'company') + ' that exists.');
         current.setAbortAction(true);
         return;
     }
@@ -547,6 +583,77 @@
         gs.addErrorMessage(spec.label + ' must be empty when Party Type is ' + partyType + '.');
         current.setAbortAction(true);
         return;
+    }
+
+    /**
+     * Reports whether a supplied reference value points at a row that
+     * exists, and does so WITHOUT ever converting "I am not allowed to
+     * look" into "it is not there".
+     *
+     * That distinction is load-bearing on THIS table rather than merely
+     * prudent, because one of the two branches points at an out-of-box
+     * GLOBAL table: organization -> core_company. A scoped script's
+     * ability to read a table outside its own scope depends on that
+     * table's cross-scope access setting, and this application already
+     * documents a related effect from the other direction - for the three
+     * demo personas a direct read of core_company answers 404 and the
+     * platform silently omits the column (see ../docs/
+     * PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, the reference-target-access
+     * entry, disclosed as ADV-1). A naive `if (!gr.get(id))` here would
+     * read an access restriction as a missing row and would refuse EVERY
+     * Organization party carrying a perfectly valid company - converting a
+     * validation improvement into a total outage of a required AAP Section
+     * 0.5.7 branch. So this helper reports a missing row only when it can
+     * first demonstrate that it can read the table at all.
+     *
+     * Plain GlideRecord is deliberate, exactly as it is for the parent
+     * `case` lookup above: the question is EXISTENCE, never ACCESS.
+     * GlideRecordSecure would apply the caller's read ACLs and would tell
+     * an x_casemgmt_case_agent that a user or company they may not read
+     * "does not exist" - false, and it would mask the ACL that actually
+     * governs the operation. Access control belongs to the scoped ACLs of
+     * AAP Section 0.5.6 under ../acl/.
+     *
+     * The sys_id argument is always the value the CALLER supplied on the
+     * row being written, read at run time, so the AAP Section 0.7.2
+     * no-hardcoded-sys_id constraint holds.
+     *
+     * @param {string} table - the reference target table name.
+     * @param {string} sysId - the supplied reference value.
+     * @return {boolean} true when the value is empty (presence is a
+     *     separate contract, checked by the caller) or resolves, or when
+     *     resolvability cannot be judged; false only when the table is
+     *     demonstrably readable and the row is demonstrably absent.
+     */
+    function _referenceResolves(table, sysId) {
+        var value = (sysId === null || sysId === undefined) ? '' : String(sysId).trim();
+        if (value === '') {
+            return true;
+        }
+
+        var probe = new GlideRecord(table);
+        if (!probe.isValid()) {
+            gs.info('x_casemgmt_validate_case_party_integrity: cannot address ' +
+                table + ' from this scope; skipped the resolvability check ' +
+                'for reference value ' + value + '.');
+            return true;
+        }
+        if (probe.get(value)) {
+            return true;
+        }
+
+        var readable = new GlideRecord(table);
+        readable.setLimit(1);
+        readable.query();
+        if (!readable.hasNext()) {
+            gs.info('x_casemgmt_validate_case_party_integrity: ' + table +
+                ' returned no rows at all, so the absence of ' + value +
+                ' could not be distinguished from a read restriction; ' +
+                'skipped the resolvability check.');
+            return true;
+        }
+
+        return false;
     }
 })(current, previous);
 ]]></script>

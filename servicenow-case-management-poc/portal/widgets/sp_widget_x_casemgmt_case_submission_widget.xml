@@ -1240,6 +1240,34 @@
                        ng-attr-aria-invalid="{{(caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched) ? 'true' : 'false'}}" />
                 <p class="text-danger" id="x-casemgmt-requester-email-error" role="alert"
                    ng-if="caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched">Enter a valid email address, or leave the field empty. Email is optional, but an address that is not valid blocks Submit.</p>
+                <!--
+                    LIMIT NOTICE - Email was the one bounded field without one.
+
+                    Subject, Description and Your Name each announce that they
+                    have reached their limit, because maxlength stops the
+                    keystroke silently: the character simply does not appear
+                    and nothing tells the requester why. Email carries
+                    maxlength="100" exactly as those three carry theirs, so it
+                    clips in exactly the same silence - measured, a 101-
+                    character address was accepted by the control at 100
+                    characters with no feedback of any kind.
+                    That matters more here than on the other three rather than
+                    less: a truncated subject is still recognisably the
+                    requester's subject, but an address short of its last
+                    characters is not the requester's address at all, and its
+                    only purpose is to be replied to. The case would be
+                    unanswerable and the requester would have no way to know.
+
+                    Same element, role and wording pattern as the other three
+                    so the four fields behave identically. role="status" and
+                    not role="alert": reaching a limit is a state to report at
+                    the next opportunity, not an error interrupting the
+                    typist. No class, so the notice takes the theme's own body
+                    text colour - see the DEFAULT THEME note in the record
+                    description for why no styling is introduced here.
+                -->
+                <p role="status"
+                   ng-if="c.formData.requester_email.length >= 100">Email has reached its limit of 100 characters. Anything typed beyond this point is discarded.</p>
             </div>
 
             <!--

@@ -352,38 +352,51 @@
         }
     }
 
-    // CREATOR LIMB - closes the second half of QA finding F4 (HIGH).
+    // NO CREATOR LIMB - and this absence is deliberate. Do not re-add one.
     //
-    // AAP Section 0.5.6 grants case_agent "Create: yes" on this table, but
-    // a case an agent creates is born UNASSIGNED: assigned_group is
-    // manager-only per ../acl/x_casemgmt_case_assigned_group_field_acl.xml
-    // and nothing assigns assigned_agent on insert. The two limbs above
-    // therefore both evaluate false for the row the agent just authored,
-    // and the platform hid it from its own creator: after saving the form
-    // the agent was shown "Security constraints prevent access to
-    // requested page", and the row was absent from the agent's case list.
-    // A Create grant that yields a record its author cannot read is not a
-    // working grant, so this limb is the minimum needed to make the matrix
-    // cell operative.
+    // A revision of this ACL carried a fourth limb,
+    //     if (current.sys_created_by == gs.getUserName()) return true;
+    // added so that an agent who creates an UNASSIGNED case could still
+    // read the row they had just authored. It was removed, because it
+    // widened read access beyond the contract and the widening produced a
+    // worse defect than the one it was meant to close.
     //
-    // Scope of the extension, precisely: sys_created_by is written once by
-    // the platform during the insert and is read-only thereafter (no ACL
-    // in this application grants write on it, and it is not on any form
-    // layout), so this limb can only ever expose a record the SAME user
-    // created. It cannot reach a case created by anyone else - every
-    // seeded and portal-created case carries sys_created_by 'admin' or
-    // 'guest' - so AAP Section 0.7.3 Gate 3 ("case_agent cannot access
-    // unassigned cases") continues to hold for every case the agent did
-    // not author. It is a deliberate, documented extension of Section
-    // 0.5.6's "Assigned only" definition and is written up in
-    // ../docs/acl-matrix.md under "Assigned only - the two create-path
-    // limbs (QA finding F4)".
+    // Why it is outside the contract: AAP Section 0.5.6 does not leave
+    // "Assigned only" to interpretation, it DEFINES it - "cases where
+    // assigned_agent = current user OR assigned_group contains current
+    // user". That definition is exhaustive, and authorship is not one of
+    // its two limbs. The three limbs above are the definition; a fourth is
+    // a different rule wearing the same name.
     //
-    // gs.getUserName() (not gs.getUserID()) is correct here:
-    // sys_created_by stores the user_name string, not the sys_id.
-    if (current.sys_created_by == gs.getUserName()) {
-        return true;
-    }
+    // Why the widening was actively harmful, measured: READ gained the
+    // creator limb but WRITE could not be given one without extending
+    // Section 0.5.6's write cell the same way, so an agent-created
+    // unassigned case became READABLE BUT FROZEN - it opened with zero
+    // editable fields and no Update action, ordinary field PATCHes answered
+    // 403, and the agent could not even self-assign out of the state. That
+    // is a stranded row that looks like work in progress and can never be
+    // progressed, which is strictly worse for the agent than not seeing it
+    // at all.
+    //
+    // What the correct behaviour therefore is: an agent who supplies
+    // assigned_agent = themselves at insert satisfies limb one immediately,
+    // and that row is readable AND writable AND editable on its form -
+    // verified. An agent who inserts with no assignment at all creates a
+    // row they cannot read until a manager assigns it, and that is not a
+    // defect but Section 0.5.6's matrix operating as written: Section 0.7.4
+    // describes the lifecycle as cases "created, assigned, progressed ...
+    // and closed", with assignment a manager act - assigned_group is
+    // manager-only per ../acl/x_casemgmt_case_assigned_group_field_acl.xml.
+    // The create grant remains fully usable, which is what AAP Section
+    // 0.7.4 requires of it.
+    //
+    // The isNewRecord() limb above is a different matter and is retained:
+    // it exposes no stored row at all, only the defaults and the caller's
+    // own keystrokes on a form that has not been inserted yet, and without
+    // it the create grant cannot be exercised through the UI because the
+    // NEW form renders with zero fields.
+    //
+    // See ../docs/acl-matrix.md, "Assigned only - the create-path limb".
 
     return false;
 })();]]></script>

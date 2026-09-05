@@ -6,26 +6,32 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 
 > **CURRENT BYTES OF THE ELECTED DELIVERABLE — read this before comparing any digest in these documents.**
 > The 2026-09-04 QA-findings pass (18 findings, F1-F18) re-cut `update-set/x_casemgmt_case_management_update_set.xml`.
+> A follow-up remediation pass, prompted by an independent verification of that work, re-cut it
+> again: the SAME 935 blocks, with six payloads changed and none added or removed.
 > What to verify before an upload, and what to assert after it:
 >
 > | | Value |
 > | --- | --- |
 > | Blocks (`<sys_update_xml>` children) | **935** (was 926: 9 inserted) |
-> | Bytes | **3,944,374** (was 3,780,373) |
-> | SHA-256 | **`4e28acaed702b39c7d225d1dfd7f63c4da6c9696909c4011bafee29737734a63`** (was `a9204411…`) |
+> | Bytes | **3,973,569** (was 3,944,374 at the QA-findings pass; 3,780,373 before it) |
+> | SHA-256 | **`9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`** (was `4e28acae…` at the QA-findings pass; `a9204411…` before it) |
 > | `…FALLBACK.xml` | byte-identical to the above, as always |
 > | `…REBUILT-DEPENDENCY-ORDERED.xml` | **unchanged** at 988 blocks / 4,062,067 bytes / `e109e1d1…` — see the warning below |
 >
 > Inserted: 3 field-level `query_range` ACLs, 4 data-contract Business Rules, 1 Client Script, 1 Form Layout.
 > Re-synced in place: 3 ACLs, 3 reports, 3 portal widgets, 1 Script Include, 2 dictionary rows, 1 ATF step
-> value, and the Fix Script's embedded remediation body. The package's own header comment carries the
-> record-by-record list. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
+> value, and the Fix Script's embedded remediation body. Re-cut again by the follow-up pass: the portal
+> Script Include, the two data-contract integrity Business Rules, the agent read ACL, and two portal
+> widgets. The package's own header comment carries both record-by-record lists. Scoped-artifact counts move with it: **29** ACLs (was 26), **36** ACL role links the
 > remediation creates (was 27), **11** Business Rules (was 7).
 >
-> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set is a dated record of a
-> superseded revision and is left as written** — those passages state what was measured at a point in time, and
-> rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or check a
-> digest, it has been updated to the values above.
+> **Every `a9204411…`, `3,780,373` and "926" figure elsewhere in this documentation set — and every
+> `4e28acae…` or `3,944,374` figure, which belongs to the intermediate QA-findings revision — is a dated record
+> of a superseded revision and is left as written** — those passages state what was measured at a point in
+> time, and rewriting them would falsify the record. Where a *procedure* tells you to assert a child count or
+> check a digest, it has been updated to the values above; if you find one that has not been, the values above
+> win. The child count has been **935** since the QA-findings pass and the byte count and digest have moved
+> twice since that pass began, so trust this block over any figure further down.
 >
 > **WARNING — the retained rebuilt package now REGRESSES this pass.** `…REBUILT-DEPENDENCY-ORDERED.xml` was
 > deliberately left byte-untouched, because its only evidence is the byte-level provenance of 981 of its 988

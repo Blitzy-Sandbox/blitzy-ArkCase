@@ -358,6 +358,108 @@
             return;
         }
     }
+
+    // ------------------------------------------------------------------
+    // 6. THE ASSIGNEE REFERENCE MUST RESOLVE.
+    //
+    // The loop above proves assigned_to is non-empty; it does not prove it
+    // points at a user who exists. Those are different contracts and the
+    // second one was missing. Measured on this instance before this block:
+    //     POST {"case":"<valid>", "subject":"x", "due_date":"2026-05-01",
+    //           "assigned_to":"deadbeefdeadbeefdeadbeefdeadbeef"}  -> 201
+    //     PATCH {"assigned_to":"deadbeefdeadbeefdeadbeefdeadbeef"}  -> 200
+    // Both stored the unresolvable sys_id. The row then reads as an
+    // assigned task everywhere it is counted - the task-table aggregates,
+    // the case form's Tasks related list, the "all tasks closed" gate -
+    // while its Assigned To cell renders blank and the Agent Workspace
+    // "My overdue tasks" report can never match it for anybody, because
+    // that report keys on assigned_to = gs.getUserID(). It is a task
+    // nobody owns that still blocks case resolution.
+    //
+    // This closes the "referential" clause of AAP Section 0.5.7's contract
+    // for this table. The parent `case` reference was already checked
+    // above; this is the same check applied to the other reference column,
+    // which is the half QA re-testing found still open.
+    // ------------------------------------------------------------------
+    if (!_referenceResolves('sys_user', current.getValue('assigned_to'))) {
+        gs.addErrorMessage('Assigned To must reference a user that exists.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    /**
+     * Reports whether a supplied reference value points at a row that
+     * exists, and does so WITHOUT ever converting "I am not allowed to
+     * look" into "it is not there".
+     *
+     * The distinction is the whole point of this helper. A scoped script
+     * reading a table outside its own scope depends on that table's
+     * cross-scope access setting, and this application genuinely does
+     * reference an out-of-box global table from scope
+     * (x_casemgmt_case_party.organization -> core_company). If a
+     * cross-scope restriction made the target table unreadable here, a
+     * naive `if (!gr.get(id))` would read that as "the row is missing" and
+     * would refuse EVERY write that carries a perfectly valid reference -
+     * turning a validation improvement into a total outage of the
+     * Organization party branch. So the helper only reports a missing row
+     * when it can first demonstrate that it can read the table at all.
+     *
+     * Plain GlideRecord is deliberate, exactly as it is for the parent
+     * `case` lookup above: the question is EXISTENCE, never ACCESS.
+     * GlideRecordSecure would apply the caller's read ACLs and would tell
+     * an x_casemgmt_case_agent that a user or company they are not
+     * permitted to read "does not exist" - a false statement, and one that
+     * would mask the ACL actually governing the operation. Access control
+     * belongs to the scoped ACLs of AAP Section 0.5.6 under ../acl/.
+     *
+     * The sys_id argument is always the value the CALLER supplied on the
+     * row being written, read at run time, so the AAP Section 0.7.2
+     * no-hardcoded-sys_id constraint holds.
+     *
+     * @param {string} table - the reference target table name.
+     * @param {string} sysId - the supplied reference value.
+     * @return {boolean} true when the value is empty (presence is a
+     *     separate contract, checked by the callers) or resolves, or when
+     *     resolvability cannot be judged; false only when the table is
+     *     demonstrably readable and the row is demonstrably absent.
+     */
+    function _referenceResolves(table, sysId) {
+        var value = (sysId === null || sysId === undefined) ? '' : String(sysId).trim();
+        if (value === '') {
+            // Empty is not this check's business. Whether empty is legal is
+            // a mandatory-field question and is answered by the callers.
+            return true;
+        }
+
+        var probe = new GlideRecord(table);
+        if (!probe.isValid()) {
+            // The table is not addressable from this scope at all. Nothing
+            // can be concluded about the row, so do not refuse the write.
+            gs.info('x_casemgmt_validate_case_task_integrity: cannot address ' +
+                table + ' from this scope; skipped the resolvability check ' +
+                'for reference value ' + value + '.');
+            return true;
+        }
+        if (probe.get(value)) {
+            return true;
+        }
+
+        // The row did not come back. Before calling it absent, prove this
+        // scope can read the table at all - otherwise an access restriction
+        // masquerades as a missing row.
+        var readable = new GlideRecord(table);
+        readable.setLimit(1);
+        readable.query();
+        if (!readable.hasNext()) {
+            gs.info('x_casemgmt_validate_case_task_integrity: ' + table +
+                ' returned no rows at all, so the absence of ' + value +
+                ' could not be distinguished from a read restriction; ' +
+                'skipped the resolvability check.');
+            return true;
+        }
+
+        return false;
+    }
 })(current, previous);
 ]]></script>
         <sys_class_name>sys_script</sys_class_name>

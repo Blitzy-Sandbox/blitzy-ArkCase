@@ -966,11 +966,22 @@
                 the button's inner text alone does not convey to assistive
                 technology. Always present in the DOM so the button's
                 aria-describedby never dangles; polite so it never steals
-                focus. `help-block` is bundled Bootstrap 3. This widget's <css>
-                element does darken it - from the theme's #b1b1b1 (2.14:1) to
-                #737373 (4.74:1) - but that is its text COLOUR only; its
-                layout, spacing and typography are the theme's, untouched. See
-                the DEFAULT THEME note in the record description.
+                focus.
+
+                On its colour, because an earlier revision of this comment
+                described a mechanism that is no longer here: this paragraph
+                used to carry Bootstrap 3's `help-block` class, whose theme
+                colour is #b1b1b1 - 2.14:1 against the panel, a clear WCAG AA
+                failure on body text - and a `<css>` element in this widget
+                darkened it. Both are gone. The class was simply REMOVED, so
+                the paragraph now inherits the theme's own body text colour,
+                measured at 4.88:1 and passing. That is strictly better than
+                overriding the colour: it needs no custom CSS at all, which is
+                what AAP Section 0.4.4 requires of this portal ("default
+                theme. No custom CSS, no custom branding"), and it cannot
+                drift from the theme if the theme changes. This widget now
+                carries NO <css> element, and neither does the submission or
+                confirmation widget.
 
                 It is guidance shown BEFORE the press, not the answer to one:
                 the answer to a refused press is the role="alert" summary

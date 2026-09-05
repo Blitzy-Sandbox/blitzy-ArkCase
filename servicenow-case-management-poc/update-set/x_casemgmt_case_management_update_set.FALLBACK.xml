@@ -130,6 +130,90 @@
         rules, and resolves the three `query_range` operation
         references.
 
+    FOLLOW-UP REMEDIATION PASS - WHAT THIS REVISION CHANGED AGAIN
+    ............................................................
+    Block count UNCHANGED at 935: no block was inserted or removed, and
+    the nine inserted and fourteen re-synced records named above still
+    describe this file. An independent verification pass over the
+    revision above raised further items; five were judged to break a
+    stated requirement and were fixed at their root cause. A further
+    defect was found by this pass's own regression battery, which is
+    recorded below with them. SEVEN existing payloads were re-cut from
+    their sibling artifacts; no block was added or removed.
+
+      : sys_script_include x_casemgmt_CasePortalService - two changes.
+        (a) The anonymous submit path no longer trusts a length check to
+        predict what the column will store: after the insert it compares
+        every text field it wrote against the value read back, and if
+        any differs it deletes the row and answers HTTP 400 naming the
+        field and both lengths. A 255-UTF-16-unit Subject containing an
+        astral character (an emoji) was measured to persist at 245 with
+        ten characters gone, silently: the stored length depends on the
+        mix of characters, not on any length the caller can compute, so
+        the only exact test is to ask the platform what it stored.
+        (b) `type` is now REQUIRED on this path and must be one of the
+        two choices. AAP Sections 0.4.1 / 0.5.5 implement the lifecycle
+        as two Flow Designer flows filtered by case type, so a typeless
+        row matches NEITHER trigger and can never leave Draft; the
+        widget already renders "Type *" as required. The dictionary is
+        deliberately NOT made mandatory, because AAP Section 0.5.7
+        declares only subject, description and requester_name Mandatory
+        and that contract is authoritative.
+      : 2 x sys_script - validate_case_task_integrity and
+        validate_case_party_integrity now close AAP Section 0.5.7's
+        REFERENTIAL clause, which the previous revision left unenforced:
+        every non-empty reference on a write (case_task.assigned_to,
+        case_party.person, case_party.organization) must resolve to a
+        row that exists, or the write is refused atomically. The
+        existence probe uses plain GlideRecord rather than
+        GlideRecordSecure, and treats an unreadable or non-addressable
+        target as PRESENT, so an access restriction can never be
+        reported as a missing row - which matters because
+        case_party.organization points at the global core_company table
+        that the scoped roles cannot read.
+      : sys_security_acl x_casemgmt_case_read_agent_assigned - the
+        "I created this row" limb is REMOVED. AAP Section 0.5.6 does not
+        leave "Assigned only" to interpretation, it defines it as
+        assigned_agent = current user OR assigned_group contains current
+        user, and authorship is not one of those two limbs. The widening
+        was also actively harmful: read gained the limb but write could
+        not be given a matching one without extending the same section's
+        write cell, so an agent-created unassigned case became READABLE
+        BUT FROZEN - zero editable fields, no Update action, field
+        PATCHes answering 403, and no way to self-assign out of it. The
+        insert-path limb is retained; without it the New form renders
+        with zero fields and the create grant cannot be exercised
+        through the UI at all.
+      : sys_script_fix - the embedded post-import remediation body is
+        re-synced from ../scripts/post_import_remediation.js, which now
+        declares `unique: true` on the `number` column of ALL THREE
+        tables rather than the parent only. This closes the second half
+        of QA finding F16, which the earlier revision left open: the
+        dictionary's read_only attribute is enforced on UPDATE but NOT
+        on INSERT, so a `number` supplied in the body of a create call
+        was stored in place of the column's default. Measured as
+        POST /api/now/table/x_casemgmt_case_task {"number":
+        "TASK9000001"} answering 201 and leaving TWO rows on one
+        number, while the equivalent PATCH had already been answered
+        200-with-the-value-discarded. F16 names both vectors and only
+        the update one had been measured. The parent table always
+        carried unique=true, which is why it was never duplicable and
+        why the finding was raised against the child tables. The two
+        child ../dictionary/x_casemgmt_case_*_number.xml artifacts
+        carry the same change; they are not blocks of this package
+        (the installer creates those columns, which is why it is the
+        installer that had to change), so the package's block count is
+        unaffected.
+      : 2 x sp_widget - the submission widget gains the live character
+        limit notice its Email field was missing, so every bounded field
+        now discloses its own clipping (a 101-character address was
+        measured accepted at 100 with no feedback, and a truncated
+        address matters more than a truncated subject because its only
+        purpose is to be replied to); the lookup widget's header comment
+        is corrected to describe the markup it actually carries. Both
+        widgets' `css` fields remain EMPTY - no revision of this package
+        has ever shipped a `<css>` element, per AAP Section 0.4.4.
+
     NOT changed by this pass:
       : ...REBUILT-DEPENDENCY-ORDERED.xml is retained BYTE-UNTOUCHED.
         Its documented value is the byte-level provenance of 981 of its
@@ -3412,38 +3496,51 @@
         }
     }
 
-    // CREATOR LIMB - closes the second half of QA finding F4 (HIGH).
+    // NO CREATOR LIMB - and this absence is deliberate. Do not re-add one.
     //
-    // AAP Section 0.5.6 grants case_agent "Create: yes" on this table, but
-    // a case an agent creates is born UNASSIGNED: assigned_group is
-    // manager-only per ../acl/x_casemgmt_case_assigned_group_field_acl.xml
-    // and nothing assigns assigned_agent on insert. The two limbs above
-    // therefore both evaluate false for the row the agent just authored,
-    // and the platform hid it from its own creator: after saving the form
-    // the agent was shown "Security constraints prevent access to
-    // requested page", and the row was absent from the agent's case list.
-    // A Create grant that yields a record its author cannot read is not a
-    // working grant, so this limb is the minimum needed to make the matrix
-    // cell operative.
+    // A revision of this ACL carried a fourth limb,
+    //     if (current.sys_created_by == gs.getUserName()) return true;
+    // added so that an agent who creates an UNASSIGNED case could still
+    // read the row they had just authored. It was removed, because it
+    // widened read access beyond the contract and the widening produced a
+    // worse defect than the one it was meant to close.
     //
-    // Scope of the extension, precisely: sys_created_by is written once by
-    // the platform during the insert and is read-only thereafter (no ACL
-    // in this application grants write on it, and it is not on any form
-    // layout), so this limb can only ever expose a record the SAME user
-    // created. It cannot reach a case created by anyone else - every
-    // seeded and portal-created case carries sys_created_by 'admin' or
-    // 'guest' - so AAP Section 0.7.3 Gate 3 ("case_agent cannot access
-    // unassigned cases") continues to hold for every case the agent did
-    // not author. It is a deliberate, documented extension of Section
-    // 0.5.6's "Assigned only" definition and is written up in
-    // ../docs/acl-matrix.md under "Assigned only - the two create-path
-    // limbs (QA finding F4)".
+    // Why it is outside the contract: AAP Section 0.5.6 does not leave
+    // "Assigned only" to interpretation, it DEFINES it - "cases where
+    // assigned_agent = current user OR assigned_group contains current
+    // user". That definition is exhaustive, and authorship is not one of
+    // its two limbs. The three limbs above are the definition; a fourth is
+    // a different rule wearing the same name.
     //
-    // gs.getUserName() (not gs.getUserID()) is correct here:
-    // sys_created_by stores the user_name string, not the sys_id.
-    if (current.sys_created_by == gs.getUserName()) {
-        return true;
-    }
+    // Why the widening was actively harmful, measured: READ gained the
+    // creator limb but WRITE could not be given one without extending
+    // Section 0.5.6's write cell the same way, so an agent-created
+    // unassigned case became READABLE BUT FROZEN - it opened with zero
+    // editable fields and no Update action, ordinary field PATCHes answered
+    // 403, and the agent could not even self-assign out of the state. That
+    // is a stranded row that looks like work in progress and can never be
+    // progressed, which is strictly worse for the agent than not seeing it
+    // at all.
+    //
+    // What the correct behaviour therefore is: an agent who supplies
+    // assigned_agent = themselves at insert satisfies limb one immediately,
+    // and that row is readable AND writable AND editable on its form -
+    // verified. An agent who inserts with no assignment at all creates a
+    // row they cannot read until a manager assigns it, and that is not a
+    // defect but Section 0.5.6's matrix operating as written: Section 0.7.4
+    // describes the lifecycle as cases "created, assigned, progressed ...
+    // and closed", with assignment a manager act - assigned_group is
+    // manager-only per ../acl/x_casemgmt_case_assigned_group_field_acl.xml.
+    // The create grant remains fully usable, which is what AAP Section
+    // 0.7.4 requires of it.
+    //
+    // The isNewRecord() limb above is a different matter and is retained:
+    // it exposes no stored row at all, only the defaults and the caller's
+    // own keystrokes on a form that has not been inserted yet, and without
+    // it the create grant cannot be exercised through the UI because the
+    // NEW form renders with zero fields.
+    //
+    // See ../docs/acl-matrix.md, "Assigned only - the create-path limb".
 
     return false;
 })();]]]]><![CDATA[></script>
@@ -3471,7 +3568,7 @@
         <target_name>x_casemgmt_case_read_agent_assigned</target_name>
         <type>ACL</type>
         <update_domain>global</update_domain>
-        <update_guid>1e9dc2e1f7fa61cdfbaa10cbbb9ef219</update_guid>
+        <update_guid>987a17b6c9ee13c7f3a2116b83088b99</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -5751,6 +5848,104 @@ CasePortalService.prototype = {
             return { error: 'Submission failed.' };
         }
 
+        // ------------------------------------------------------------------
+        // ROUND-TRIP VERIFICATION - the value stored must equal the value
+        // submitted, or the submission is refused and the row removed.
+        //
+        // _validateSubmission() refuses anything longer than the declared
+        // limit, counted in the units JavaScript counts (str.length, i.e.
+        // UTF-16 code units). That is necessary and it is not sufficient,
+        // because the column's real capacity is not expressed in those
+        // units. Measured on this instance against x_casemgmt_case.subject,
+        // declared String(255):
+        //     255 ASCII characters                  -> stored 255, exact
+        //     one emoji + 253 ASCII (255 units)     -> stored 245 units,
+        //                                              ten characters of
+        //                                              the tail silently
+        //                                              gone
+        //     one emoji + 243 ASCII                 -> exact
+        // The boundary moves with the number of astral characters present
+        // and does not correspond to characters, UTF-16 units or UTF-8
+        // bytes in any way that survives being written down as a formula -
+        // it is an artefact of how the platform encodes the value on its
+        // way to a VARCHAR-backed column. Short values containing the same
+        // characters round-trip perfectly, so this is a capacity boundary
+        // and not character mangling.
+        //
+        // Rather than re-derive that boundary and hardcode a formula that a
+        // platform upgrade or a different column type would quietly
+        // invalidate, this check asks the only question that actually
+        // matters and asks it of the platform itself: is what you stored
+        // what I gave you? That is exact by construction, needs no model of
+        // the encoding, and cannot drift.
+        //
+        // It costs nothing extra: savedGr is the re-query this method
+        // already performs to read the auto-generated number.
+        //
+        // On mismatch the row is DELETED. A partial case is worse than no
+        // case on an anonymous intake path - the requester would be handed
+        // a case number for a case whose material content had been
+        // shortened, with no way to know, which is the whole defect this
+        // check exists to prevent. Deleting and refusing gives them an
+        // actionable error and one edit. The case number is consumed either
+        // way; the platform allocates numbers on form load as well, so
+        // gaps in the CASE sequence are already expected and carry no
+        // meaning.
+        //
+        // Only the four bounded string columns are compared. status is
+        // forced by this method, number and the audit columns are the
+        // platform's, and type is a choice value resolved against the live
+        // choice list before it is written.
+        // ------------------------------------------------------------------
+        var ROUND_TRIP_FIELDS = [
+            { name: 'subject',         label: 'Subject' },
+            { name: 'description',     label: 'Description' },
+            { name: 'requester_name',  label: 'Your name' },
+            { name: 'requester_email', label: 'Email' }
+        ];
+        var mismatches = {};
+        var mismatchCount = 0;
+        for (var r = 0; r < ROUND_TRIP_FIELDS.length; r++) {
+            var rtField = ROUND_TRIP_FIELDS[r];
+            if (!Object.prototype.hasOwnProperty.call(validated.values, rtField.name)) {
+                continue;
+            }
+            var submittedValue = String(validated.values[rtField.name]);
+            var storedValue = String(savedGr.getValue(rtField.name) || '');
+            if (storedValue === submittedValue) {
+                continue;
+            }
+            mismatchCount++;
+            // The message quotes both lengths so the caller can act without
+            // bisecting the payload, and describes the effect rather than
+            // the platform mechanism, which is not the caller's problem.
+            // Both numbers describe the caller's own input.
+            mismatches[rtField.name] = rtField.label + ' could not be stored exactly as submitted' +
+                ' (sent ' + submittedValue.length + ' characters, stored ' + storedValue.length +
+                '). Please shorten it and submit again.';
+        }
+
+        if (mismatchCount > 0) {
+            // Remove the row before returning, so a refused submission
+            // leaves nothing behind. deleteRecord() is checked: if the
+            // delete itself fails the row would survive as a partial case,
+            // which must be logged loudly rather than passed over.
+            var cleanupGr = new GlideRecord('x_casemgmt_case');
+            if (cleanupGr.get(newSysId) && !cleanupGr.deleteRecord()) {
+                gs.error('CasePortalService.submitCase: stored value did not match the submitted ' +
+                    'value AND the cleanup delete failed for sys_id=' + newSysId +
+                    '; a partial case row has been left behind and needs manual removal.');
+            } else {
+                gs.warn('CasePortalService.submitCase: refused a submission because ' +
+                    mismatchCount + ' field(s) did not round-trip exactly; the partial row was ' +
+                    'removed. Fields: ' + Object.keys(mismatches).join(', ') + '.');
+            }
+            return {
+                error: 'The submission could not be accepted because one or more fields are invalid.',
+                fields: mismatches
+            };
+        }
+
         // Return ONLY the auto-generated number - no other fields, no
         // sys_id, no audit fields. The portal confirmation widget
         // (../portal/widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml)
@@ -6092,10 +6287,48 @@ CasePortalService.prototype = {
             values.requester_email = email;
         }
 
-        // type - optional, but constrained to the choice list when present.
+        // ------------------------------------------------------------------
+        // type - REQUIRED on this path, and constrained to the choice list.
+        //
+        // It is required here even though the DICTIONARY leaves it optional
+        // (choice=3, the platform's "Dropdown with -- None --"), and the
+        // difference is deliberate rather than an oversight. Two reasons,
+        // and the first is decisive.
+        //
+        // 1. A typeless case cannot be worked. AAP Sections 0.4.1 and 0.5.5
+        //    implement the case lifecycle as TWO Flow Designer flows, one
+        //    per case type - ../flows/general_inquiry_state_machine.xml
+        //    triggered on type = General Inquiry and
+        //    ../flows/complaint_state_machine.xml on type = Complaint. A row
+        //    whose type is empty matches NEITHER trigger filter, so it can
+        //    never be advanced out of Draft by the mechanism the AAP
+        //    specifies for advancing it. Storing one produces a case that is
+        //    permanently stuck at birth: it counts in every aggregate, it
+        //    appears in the internal list, and no flow will ever pick it up.
+        //    Measured before this check: three anonymous submissions with
+        //    `type` omitted, empty and null each answered HTTP 201 and
+        //    created a guest-owned Draft case with type = ''.
+        //
+        // 2. The public form already states the requirement. The submission
+        //    widget renders the control as "Type *" with `required` and
+        //    aria-required=true, and its helper text reads "Every field
+        //    marked * is required. Complete all four before submitting."
+        //    (../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml).
+        //    An endpoint that accepts what its own form declares mandatory
+        //    is contradicting the contract it publishes, and every
+        //    non-browser caller sees the endpoint, not the form.
+        //
+        // The dictionary is deliberately NOT changed to mandatory: doing so
+        // would impose the constraint on every internal write path too,
+        // where AAP Section 0.5.7 declares only subject, description and
+        // requester_name Mandatory, and the AAP is authoritative on that
+        // table's constraints. So the requirement is applied exactly where
+        // the contradiction lives - the anonymous intake path this class
+        // owns - and nowhere else.
+        // ------------------------------------------------------------------
         var type = this._readString(payload, 'type');
         if (type === '') {
-            values.type = '';
+            fieldErrors.type = 'Type is required.';
         } else {
             var canonical = this._resolveCaseTypeChoice(type);
             if (canonical === null) {
@@ -6298,7 +6531,7 @@ CasePortalService.prototype = {
         <target_name>x_casemgmt.CasePortalService</target_name>
         <type>Script Include</type>
         <update_domain>global</update_domain>
-        <update_guid>9d7f289654a968e4d2c3ad30cec9d5fc</update_guid>
+        <update_guid>bc59bdfcbee1581cc01e63fc8bb2bed8</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -17977,6 +18210,108 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
             return;
         }
     }
+
+    // ------------------------------------------------------------------
+    // 6. THE ASSIGNEE REFERENCE MUST RESOLVE.
+    //
+    // The loop above proves assigned_to is non-empty; it does not prove it
+    // points at a user who exists. Those are different contracts and the
+    // second one was missing. Measured on this instance before this block:
+    //     POST {"case":"<valid>", "subject":"x", "due_date":"2026-05-01",
+    //           "assigned_to":"deadbeefdeadbeefdeadbeefdeadbeef"}  -> 201
+    //     PATCH {"assigned_to":"deadbeefdeadbeefdeadbeefdeadbeef"}  -> 200
+    // Both stored the unresolvable sys_id. The row then reads as an
+    // assigned task everywhere it is counted - the task-table aggregates,
+    // the case form's Tasks related list, the "all tasks closed" gate -
+    // while its Assigned To cell renders blank and the Agent Workspace
+    // "My overdue tasks" report can never match it for anybody, because
+    // that report keys on assigned_to = gs.getUserID(). It is a task
+    // nobody owns that still blocks case resolution.
+    //
+    // This closes the "referential" clause of AAP Section 0.5.7's contract
+    // for this table. The parent `case` reference was already checked
+    // above; this is the same check applied to the other reference column,
+    // which is the half QA re-testing found still open.
+    // ------------------------------------------------------------------
+    if (!_referenceResolves('sys_user', current.getValue('assigned_to'))) {
+        gs.addErrorMessage('Assigned To must reference a user that exists.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    /**
+     * Reports whether a supplied reference value points at a row that
+     * exists, and does so WITHOUT ever converting "I am not allowed to
+     * look" into "it is not there".
+     *
+     * The distinction is the whole point of this helper. A scoped script
+     * reading a table outside its own scope depends on that table's
+     * cross-scope access setting, and this application genuinely does
+     * reference an out-of-box global table from scope
+     * (x_casemgmt_case_party.organization -> core_company). If a
+     * cross-scope restriction made the target table unreadable here, a
+     * naive `if (!gr.get(id))` would read that as "the row is missing" and
+     * would refuse EVERY write that carries a perfectly valid reference -
+     * turning a validation improvement into a total outage of the
+     * Organization party branch. So the helper only reports a missing row
+     * when it can first demonstrate that it can read the table at all.
+     *
+     * Plain GlideRecord is deliberate, exactly as it is for the parent
+     * `case` lookup above: the question is EXISTENCE, never ACCESS.
+     * GlideRecordSecure would apply the caller's read ACLs and would tell
+     * an x_casemgmt_case_agent that a user or company they are not
+     * permitted to read "does not exist" - a false statement, and one that
+     * would mask the ACL actually governing the operation. Access control
+     * belongs to the scoped ACLs of AAP Section 0.5.6 under ../acl/.
+     *
+     * The sys_id argument is always the value the CALLER supplied on the
+     * row being written, read at run time, so the AAP Section 0.7.2
+     * no-hardcoded-sys_id constraint holds.
+     *
+     * @param {string} table - the reference target table name.
+     * @param {string} sysId - the supplied reference value.
+     * @return {boolean} true when the value is empty (presence is a
+     *     separate contract, checked by the callers) or resolves, or when
+     *     resolvability cannot be judged; false only when the table is
+     *     demonstrably readable and the row is demonstrably absent.
+     */
+    function _referenceResolves(table, sysId) {
+        var value = (sysId === null || sysId === undefined) ? '' : String(sysId).trim();
+        if (value === '') {
+            // Empty is not this check's business. Whether empty is legal is
+            // a mandatory-field question and is answered by the callers.
+            return true;
+        }
+
+        var probe = new GlideRecord(table);
+        if (!probe.isValid()) {
+            // The table is not addressable from this scope at all. Nothing
+            // can be concluded about the row, so do not refuse the write.
+            gs.info('x_casemgmt_validate_case_task_integrity: cannot address ' +
+                table + ' from this scope; skipped the resolvability check ' +
+                'for reference value ' + value + '.');
+            return true;
+        }
+        if (probe.get(value)) {
+            return true;
+        }
+
+        // The row did not come back. Before calling it absent, prove this
+        // scope can read the table at all - otherwise an access restriction
+        // masquerades as a missing row.
+        var readable = new GlideRecord(table);
+        readable.setLimit(1);
+        readable.query();
+        if (!readable.hasNext()) {
+            gs.info('x_casemgmt_validate_case_task_integrity: ' + table +
+                ' returned no rows at all, so the absence of ' + value +
+                ' could not be distinguished from a read restriction; ' +
+                'skipped the resolvability check.');
+            return true;
+        }
+
+        return false;
+    }
 })(current, previous);
 ]]]]><![CDATA[></script>
         <sys_class_name>sys_script</sys_class_name>
@@ -18007,7 +18342,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <target_name>x_casemgmt_validate_case_task_integrity</target_name>
         <type>Business Rule</type>
         <update_domain>global</update_domain>
-        <update_guid>518072ebb532e1664794c3470ad87e20</update_guid>
+        <update_guid>783aaa89017970323b9ef07e4daaf133</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -18149,9 +18484,15 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
     // must be refused even where a choice row exists without its column,
     // which a sys_choice-derived allowlist would silently admit.
     // ------------------------------------------------------------------
+    // `table` is the reference target each branch points at, taken from the
+    // dictionary (../dictionary/x_casemgmt_case_party_person.xml ->
+    // sys_user, ../dictionary/x_casemgmt_case_party_organization.xml ->
+    // core_company). It is carried here so the branch that is REQUIRED for
+    // the chosen party_type can have its reference resolved, not merely
+    // counted as present - see the resolvability check below.
     var PARTY_TYPE_FIELDS = {
-        'Person': { element: 'person', label: 'Person' },
-        'Organization': { element: 'organization', label: 'Organization' }
+        'Person': { element: 'person', label: 'Person', table: 'sys_user' },
+        'Organization': { element: 'organization', label: 'Organization', table: 'core_company' }
     };
 
     var partyType = current.getValue('party_type');
@@ -18194,6 +18535,36 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
     var requiredValue = current.getValue(required.element);
     if (requiredValue === null || requiredValue === undefined || String(requiredValue).trim() === '') {
         gs.addErrorMessage(required.label + ' is required when Party Type is ' + partyType + '.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // 5b. THE REQUIRED BRANCH REFERENCE MUST RESOLVE.
+    //
+    // The check above proves the branch field is non-empty; it does not
+    // prove it points at a row that exists. Measured before this block:
+    //     POST {"case":"<valid>","party_type":"Person","role_label":"x",
+    //           "person":"deadbeefdeadbeefdeadbeefdeadbeef"}        -> 201
+    //     POST {... "party_type":"Organization",
+    //           "organization":"deadbeefdeadbeefdeadbeefdeadbeef"}  -> 201
+    // plus the same two as PATCH updates -> 200. Each stored an
+    // unresolvable reference, producing a party that satisfies AAP Section
+    // 0.5.7's exactly-one-of contract on paper while naming nobody: the
+    // Person/Organization cell renders blank on the form, in the case
+    // form's Parties related list and in every export, and the row cannot
+    // be re-saved from its own form because a conditionally-mandatory
+    // reference cannot be re-filled from a value that displays as blank.
+    //
+    // This closes the "referential" clause of AAP Section 0.5.7 for this
+    // table, alongside the parent `case` reference already checked above.
+    //
+    // Only the REQUIRED branch is resolved. The other branch must be empty
+    // (enforced below), and an empty value has no target to resolve.
+    // ------------------------------------------------------------------
+    if (!_referenceResolves(required.table, requiredValue)) {
+        gs.addErrorMessage(required.label + ' must reference a ' +
+            (partyType === 'Person' ? 'user' : 'company') + ' that exists.');
         current.setAbortAction(true);
         return;
     }
@@ -18315,6 +18686,77 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         current.setAbortAction(true);
         return;
     }
+
+    /**
+     * Reports whether a supplied reference value points at a row that
+     * exists, and does so WITHOUT ever converting "I am not allowed to
+     * look" into "it is not there".
+     *
+     * That distinction is load-bearing on THIS table rather than merely
+     * prudent, because one of the two branches points at an out-of-box
+     * GLOBAL table: organization -> core_company. A scoped script's
+     * ability to read a table outside its own scope depends on that
+     * table's cross-scope access setting, and this application already
+     * documents a related effect from the other direction - for the three
+     * demo personas a direct read of core_company answers 404 and the
+     * platform silently omits the column (see ../docs/
+     * PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, the reference-target-access
+     * entry, disclosed as ADV-1). A naive `if (!gr.get(id))` here would
+     * read an access restriction as a missing row and would refuse EVERY
+     * Organization party carrying a perfectly valid company - converting a
+     * validation improvement into a total outage of a required AAP Section
+     * 0.5.7 branch. So this helper reports a missing row only when it can
+     * first demonstrate that it can read the table at all.
+     *
+     * Plain GlideRecord is deliberate, exactly as it is for the parent
+     * `case` lookup above: the question is EXISTENCE, never ACCESS.
+     * GlideRecordSecure would apply the caller's read ACLs and would tell
+     * an x_casemgmt_case_agent that a user or company they may not read
+     * "does not exist" - false, and it would mask the ACL that actually
+     * governs the operation. Access control belongs to the scoped ACLs of
+     * AAP Section 0.5.6 under ../acl/.
+     *
+     * The sys_id argument is always the value the CALLER supplied on the
+     * row being written, read at run time, so the AAP Section 0.7.2
+     * no-hardcoded-sys_id constraint holds.
+     *
+     * @param {string} table - the reference target table name.
+     * @param {string} sysId - the supplied reference value.
+     * @return {boolean} true when the value is empty (presence is a
+     *     separate contract, checked by the caller) or resolves, or when
+     *     resolvability cannot be judged; false only when the table is
+     *     demonstrably readable and the row is demonstrably absent.
+     */
+    function _referenceResolves(table, sysId) {
+        var value = (sysId === null || sysId === undefined) ? '' : String(sysId).trim();
+        if (value === '') {
+            return true;
+        }
+
+        var probe = new GlideRecord(table);
+        if (!probe.isValid()) {
+            gs.info('x_casemgmt_validate_case_party_integrity: cannot address ' +
+                table + ' from this scope; skipped the resolvability check ' +
+                'for reference value ' + value + '.');
+            return true;
+        }
+        if (probe.get(value)) {
+            return true;
+        }
+
+        var readable = new GlideRecord(table);
+        readable.setLimit(1);
+        readable.query();
+        if (!readable.hasNext()) {
+            gs.info('x_casemgmt_validate_case_party_integrity: ' + table +
+                ' returned no rows at all, so the absence of ' + value +
+                ' could not be distinguished from a read restriction; ' +
+                'skipped the resolvability check.');
+            return true;
+        }
+
+        return false;
+    }
 })(current, previous);
 ]]]]><![CDATA[></script>
         <sys_class_name>sys_script</sys_class_name>
@@ -18345,7 +18787,7 @@ outputs.error_message = r.ok ? '' : String(r.error);&#13;
         <target_name>x_casemgmt_validate_case_party_integrity</target_name>
         <type>Business Rule</type>
         <update_domain>global</update_domain>
-        <update_guid>9e430c7eabac887c1b71e74fb6311f39</update_guid>
+        <update_guid>1e48176611449679c123f9017d2035ff</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -22167,6 +22609,34 @@ function serverSetPending() {
                        ng-attr-aria-invalid="{{(caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched) ? 'true' : 'false'}}" />
                 <p class="text-danger" id="x-casemgmt-requester-email-error" role="alert"
                    ng-if="caseSubmitForm.requesterEmail.$invalid && caseSubmitForm.requesterEmail.$touched">Enter a valid email address, or leave the field empty. Email is optional, but an address that is not valid blocks Submit.</p>
+                <!--
+                    LIMIT NOTICE - Email was the one bounded field without one.
+
+                    Subject, Description and Your Name each announce that they
+                    have reached their limit, because maxlength stops the
+                    keystroke silently: the character simply does not appear
+                    and nothing tells the requester why. Email carries
+                    maxlength="100" exactly as those three carry theirs, so it
+                    clips in exactly the same silence - measured, a 101-
+                    character address was accepted by the control at 100
+                    characters with no feedback of any kind.
+                    That matters more here than on the other three rather than
+                    less: a truncated subject is still recognisably the
+                    requester's subject, but an address short of its last
+                    characters is not the requester's address at all, and its
+                    only purpose is to be replied to. The case would be
+                    unanswerable and the requester would have no way to know.
+
+                    Same element, role and wording pattern as the other three
+                    so the four fields behave identically. role="status" and
+                    not role="alert": reaching a limit is a state to report at
+                    the next opportunity, not an error interrupting the
+                    typist. No class, so the notice takes the theme's own body
+                    text colour - see the DEFAULT THEME note in the record
+                    description for why no styling is introduced here.
+                -->
+                <p role="status"
+                   ng-if="c.formData.requester_email.length >= 100">Email has reached its limit of 100 characters. Anything typed beyond this point is discarded.</p>
             </div>
 
             <!--
@@ -22346,7 +22816,7 @@ function serverSetPending() {
         <target_name>x_casemgmt_case_submission_widget</target_name>
         <type>Service Portal Widget</type>
         <update_domain>global</update_domain>
-        <update_guid>590b5c161cf1c194912e4a097a95731d</update_guid>
+        <update_guid>4e58c92d652e02ed538295ea63d09781</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -22976,11 +23446,22 @@ function serverSetPending() {
                 the button's inner text alone does not convey to assistive
                 technology. Always present in the DOM so the button's
                 aria-describedby never dangles; polite so it never steals
-                focus. `help-block` is bundled Bootstrap 3. This widget's <css>
-                element does darken it - from the theme's #b1b1b1 (2.14:1) to
-                #737373 (4.74:1) - but that is its text COLOUR only; its
-                layout, spacing and typography are the theme's, untouched. See
-                the DEFAULT THEME note in the record description.
+                focus.
+
+                On its colour, because an earlier revision of this comment
+                described a mechanism that is no longer here: this paragraph
+                used to carry Bootstrap 3's `help-block` class, whose theme
+                colour is #b1b1b1 - 2.14:1 against the panel, a clear WCAG AA
+                failure on body text - and a `<css>` element in this widget
+                darkened it. Both are gone. The class was simply REMOVED, so
+                the paragraph now inherits the theme's own body text colour,
+                measured at 4.88:1 and passing. That is strictly better than
+                overriding the colour: it needs no custom CSS at all, which is
+                what AAP Section 0.4.4 requires of this portal ("default
+                theme. No custom CSS, no custom branding"), and it cannot
+                drift from the theme if the theme changes. This widget now
+                carries NO <css> element, and neither does the submission or
+                confirmation widget.
 
                 It is guidance shown BEFORE the press, not the answer to one:
                 the answer to a refused press is the role="alert" summary
@@ -23154,7 +23635,7 @@ function serverSetPending() {
         <target_name>x_casemgmt_case_lookup_widget</target_name>
         <type>Service Portal Widget</type>
         <update_domain>global</update_domain>
-        <update_guid>4474d2b6ca2ef304bdec830b05e10bff</update_guid>
+        <update_guid>6453eb9110b7c82384a6600a69282390</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>
@@ -24203,7 +24684,7 @@ var TABLE_SPECS = [
         plural: 'Case Tasks',
         displayField: 'subject',
         fields: [
-            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
             { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false, referenceCascadeRule: 'cascade' },
             { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
             { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
@@ -24218,7 +24699,7 @@ var TABLE_SPECS = [
         plural: 'Case Parties',
         displayField: 'role_label',
         fields: [
-            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
             { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false, referenceCascadeRule: 'cascade' },
             { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false },
             { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
@@ -24301,6 +24782,20 @@ var DICTIONARY_ATTRIBUTES = [
     { column: 'mandatory', spec: 'mandatory', kind: 'bool' },
     { column: 'read_only', spec: 'readOnly', kind: 'bool' },
     { column: 'display', spec: 'display', kind: 'bool' },
+    // `unique` is declared by the `number` column of ALL THREE tables - QA finding
+    // F16's second half. read_only is enforced on UPDATE but not on INSERT, so a
+    // `number` supplied in the body of a create call was STORED instead of the
+    // column's default: measured as POST .../x_casemgmt_case_task {"number":
+    // "TASK9000001"} answering 201 and leaving two rows on one number, while the
+    // equivalent PATCH was already discarded. The parent table always carried
+    // unique=true, which is why only the child tables were duplicable and why F16
+    // was raised against them. Declaring it here means a column this script CREATES
+    // gets the unique index, and - because this reconciler compares in both
+    // directions - a column that arrives without it is repaired. A unique index
+    // cannot be built over a column that already holds repeats, so on an instance
+    // carrying duplicate child numbers this attribute is the one that will fail to
+    // apply until they are removed; the failure is logged per column rather than
+    // silently skipped.
     { column: 'unique', spec: 'unique', kind: 'bool' },
     { column: 'defaultsort', spec: 'defaultSort', kind: 'string' },
     { column: 'active', spec: 'active', kind: 'bool' },
@@ -27492,7 +27987,7 @@ postImportRemediation();
         <target_name>x_casemgmt Post-Import Remediation</target_name>
         <type>Fix Script</type>
         <update_domain>global</update_domain>
-        <update_guid>b576314fd8a756e757f1f673d1670d63</update_guid>
+        <update_guid>96e7df4a06f0d4325380639656057500</update_guid>
         <update_guid_history/>
         <view></view>
     </sys_update_xml>

@@ -434,6 +434,104 @@ CasePortalService.prototype = {
             return { error: 'Submission failed.' };
         }
 
+        // ------------------------------------------------------------------
+        // ROUND-TRIP VERIFICATION - the value stored must equal the value
+        // submitted, or the submission is refused and the row removed.
+        //
+        // _validateSubmission() refuses anything longer than the declared
+        // limit, counted in the units JavaScript counts (str.length, i.e.
+        // UTF-16 code units). That is necessary and it is not sufficient,
+        // because the column's real capacity is not expressed in those
+        // units. Measured on this instance against x_casemgmt_case.subject,
+        // declared String(255):
+        //     255 ASCII characters                  -> stored 255, exact
+        //     one emoji + 253 ASCII (255 units)     -> stored 245 units,
+        //                                              ten characters of
+        //                                              the tail silently
+        //                                              gone
+        //     one emoji + 243 ASCII                 -> exact
+        // The boundary moves with the number of astral characters present
+        // and does not correspond to characters, UTF-16 units or UTF-8
+        // bytes in any way that survives being written down as a formula -
+        // it is an artefact of how the platform encodes the value on its
+        // way to a VARCHAR-backed column. Short values containing the same
+        // characters round-trip perfectly, so this is a capacity boundary
+        // and not character mangling.
+        //
+        // Rather than re-derive that boundary and hardcode a formula that a
+        // platform upgrade or a different column type would quietly
+        // invalidate, this check asks the only question that actually
+        // matters and asks it of the platform itself: is what you stored
+        // what I gave you? That is exact by construction, needs no model of
+        // the encoding, and cannot drift.
+        //
+        // It costs nothing extra: savedGr is the re-query this method
+        // already performs to read the auto-generated number.
+        //
+        // On mismatch the row is DELETED. A partial case is worse than no
+        // case on an anonymous intake path - the requester would be handed
+        // a case number for a case whose material content had been
+        // shortened, with no way to know, which is the whole defect this
+        // check exists to prevent. Deleting and refusing gives them an
+        // actionable error and one edit. The case number is consumed either
+        // way; the platform allocates numbers on form load as well, so
+        // gaps in the CASE sequence are already expected and carry no
+        // meaning.
+        //
+        // Only the four bounded string columns are compared. status is
+        // forced by this method, number and the audit columns are the
+        // platform's, and type is a choice value resolved against the live
+        // choice list before it is written.
+        // ------------------------------------------------------------------
+        var ROUND_TRIP_FIELDS = [
+            { name: 'subject',         label: 'Subject' },
+            { name: 'description',     label: 'Description' },
+            { name: 'requester_name',  label: 'Your name' },
+            { name: 'requester_email', label: 'Email' }
+        ];
+        var mismatches = {};
+        var mismatchCount = 0;
+        for (var r = 0; r < ROUND_TRIP_FIELDS.length; r++) {
+            var rtField = ROUND_TRIP_FIELDS[r];
+            if (!Object.prototype.hasOwnProperty.call(validated.values, rtField.name)) {
+                continue;
+            }
+            var submittedValue = String(validated.values[rtField.name]);
+            var storedValue = String(savedGr.getValue(rtField.name) || '');
+            if (storedValue === submittedValue) {
+                continue;
+            }
+            mismatchCount++;
+            // The message quotes both lengths so the caller can act without
+            // bisecting the payload, and describes the effect rather than
+            // the platform mechanism, which is not the caller's problem.
+            // Both numbers describe the caller's own input.
+            mismatches[rtField.name] = rtField.label + ' could not be stored exactly as submitted' +
+                ' (sent ' + submittedValue.length + ' characters, stored ' + storedValue.length +
+                '). Please shorten it and submit again.';
+        }
+
+        if (mismatchCount > 0) {
+            // Remove the row before returning, so a refused submission
+            // leaves nothing behind. deleteRecord() is checked: if the
+            // delete itself fails the row would survive as a partial case,
+            // which must be logged loudly rather than passed over.
+            var cleanupGr = new GlideRecord('x_casemgmt_case');
+            if (cleanupGr.get(newSysId) && !cleanupGr.deleteRecord()) {
+                gs.error('CasePortalService.submitCase: stored value did not match the submitted ' +
+                    'value AND the cleanup delete failed for sys_id=' + newSysId +
+                    '; a partial case row has been left behind and needs manual removal.');
+            } else {
+                gs.warn('CasePortalService.submitCase: refused a submission because ' +
+                    mismatchCount + ' field(s) did not round-trip exactly; the partial row was ' +
+                    'removed. Fields: ' + Object.keys(mismatches).join(', ') + '.');
+            }
+            return {
+                error: 'The submission could not be accepted because one or more fields are invalid.',
+                fields: mismatches
+            };
+        }
+
         // Return ONLY the auto-generated number - no other fields, no
         // sys_id, no audit fields. The portal confirmation widget
         // (../portal/widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml)
@@ -775,10 +873,48 @@ CasePortalService.prototype = {
             values.requester_email = email;
         }
 
-        // type - optional, but constrained to the choice list when present.
+        // ------------------------------------------------------------------
+        // type - REQUIRED on this path, and constrained to the choice list.
+        //
+        // It is required here even though the DICTIONARY leaves it optional
+        // (choice=3, the platform's "Dropdown with -- None --"), and the
+        // difference is deliberate rather than an oversight. Two reasons,
+        // and the first is decisive.
+        //
+        // 1. A typeless case cannot be worked. AAP Sections 0.4.1 and 0.5.5
+        //    implement the case lifecycle as TWO Flow Designer flows, one
+        //    per case type - ../flows/general_inquiry_state_machine.xml
+        //    triggered on type = General Inquiry and
+        //    ../flows/complaint_state_machine.xml on type = Complaint. A row
+        //    whose type is empty matches NEITHER trigger filter, so it can
+        //    never be advanced out of Draft by the mechanism the AAP
+        //    specifies for advancing it. Storing one produces a case that is
+        //    permanently stuck at birth: it counts in every aggregate, it
+        //    appears in the internal list, and no flow will ever pick it up.
+        //    Measured before this check: three anonymous submissions with
+        //    `type` omitted, empty and null each answered HTTP 201 and
+        //    created a guest-owned Draft case with type = ''.
+        //
+        // 2. The public form already states the requirement. The submission
+        //    widget renders the control as "Type *" with `required` and
+        //    aria-required=true, and its helper text reads "Every field
+        //    marked * is required. Complete all four before submitting."
+        //    (../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml).
+        //    An endpoint that accepts what its own form declares mandatory
+        //    is contradicting the contract it publishes, and every
+        //    non-browser caller sees the endpoint, not the form.
+        //
+        // The dictionary is deliberately NOT changed to mandatory: doing so
+        // would impose the constraint on every internal write path too,
+        // where AAP Section 0.5.7 declares only subject, description and
+        // requester_name Mandatory, and the AAP is authoritative on that
+        // table's constraints. So the requirement is applied exactly where
+        // the contradiction lives - the anonymous intake path this class
+        // owns - and nowhere else.
+        // ------------------------------------------------------------------
         var type = this._readString(payload, 'type');
         if (type === '') {
-            values.type = '';
+            fieldErrors.type = 'Type is required.';
         } else {
             var canonical = this._resolveCaseTypeChoice(type);
             if (canonical === null) {

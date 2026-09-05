@@ -462,7 +462,7 @@ var TABLE_SPECS = [
         plural: 'Case Tasks',
         displayField: 'subject',
         fields: [
-            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
             { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false, referenceCascadeRule: 'cascade' },
             { element: 'subject', label: 'Subject', type: 'string', maxLength: '255', mandatory: true, choice: '0', readOnly: false, display: true },
             { element: 'type', label: 'Type', type: 'string', maxLength: '40', mandatory: false, choice: '3', readOnly: false, display: false },
@@ -477,7 +477,7 @@ var TABLE_SPECS = [
         plural: 'Case Parties',
         displayField: 'role_label',
         fields: [
-            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
+            { element: 'number', label: 'Number', type: 'string', maxLength: '40', mandatory: false, choice: '0', readOnly: true, unique: true, display: false, defaultValue: NUMBER_DEFAULT_VALUE },
             { element: 'case', label: 'Case', type: 'reference', maxLength: '32', reference: TABLE_CASE, mandatory: true, choice: '0', readOnly: false, display: false, referenceCascadeRule: 'cascade' },
             { element: 'party_type', label: 'Party Type', type: 'string', maxLength: '40', mandatory: true, choice: '3', readOnly: false, display: false },
             { element: 'person', label: 'Person', type: 'reference', maxLength: '32', reference: 'sys_user', mandatory: false, choice: '0', readOnly: false, display: false },
@@ -560,6 +560,20 @@ var DICTIONARY_ATTRIBUTES = [
     { column: 'mandatory', spec: 'mandatory', kind: 'bool' },
     { column: 'read_only', spec: 'readOnly', kind: 'bool' },
     { column: 'display', spec: 'display', kind: 'bool' },
+    // `unique` is declared by the `number` column of ALL THREE tables - QA finding
+    // F16's second half. read_only is enforced on UPDATE but not on INSERT, so a
+    // `number` supplied in the body of a create call was STORED instead of the
+    // column's default: measured as POST .../x_casemgmt_case_task {"number":
+    // "TASK9000001"} answering 201 and leaving two rows on one number, while the
+    // equivalent PATCH was already discarded. The parent table always carried
+    // unique=true, which is why only the child tables were duplicable and why F16
+    // was raised against them. Declaring it here means a column this script CREATES
+    // gets the unique index, and - because this reconciler compares in both
+    // directions - a column that arrives without it is repaired. A unique index
+    // cannot be built over a column that already holds repeats, so on an instance
+    // carrying duplicate child numbers this attribute is the one that will fail to
+    // apply until they are removed; the failure is logged per column rather than
+    // silently skipped.
     { column: 'unique', spec: 'unique', kind: 'bool' },
     { column: 'defaultsort', spec: 'defaultSort', kind: 'string' },
     { column: 'active', spec: 'active', kind: 'bool' },

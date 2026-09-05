@@ -68,6 +68,35 @@
     MEASURED after this change: the duplicate-number PATCH answers 200 with the value
     discarded, and a query on the target number returns exactly one row.
 
+    UNIQUE (`<unique>true</unique>`) - the SECOND half of F16, which read_only alone
+    did NOT close. read_only is enforced on UPDATE but not on INSERT: the platform
+    accepts a `number` supplied in the body of a create call in place of running the
+    column's default, so while
+        PATCH /api/now/table/x_casemgmt_case_task/<sys_id> {"number":"TASK9000001"}
+    was already answered 200-with-the-value-discarded by read_only=true, its insert
+    counterpart
+        POST /api/now/table/x_casemgmt_case_task {"number":"TASK9000001", ...}
+    was answered 201 and STORED the supplied value, after which a query on
+    TASK9000001 returned TWO rows. F16 names both vectors - "auto-numbers can be
+    duplicated via the Table API" - and only the update one had been measured, so the
+    earlier note above was true but incomplete.
+
+    The remedy is the one the parent table already demonstrates rather than a new
+    mechanism: ../dictionary/x_casemgmt_case_number.xml carries unique=true, which is
+    why the case table was never duplicable and why F16 was raised against the child
+    tables only. Setting it here makes the three tables agree, which is the
+    inconsistency F16 actually reports, and it enforces the constraint in the
+    platform's own index rather than in a Business Rule that would duplicate what the
+    dictionary already expresses. A guard rule was considered and rejected on that
+    ground: the contract is declarative, so it belongs in the dictionary.
+
+    MEASURED after unique=true: the duplicate-number POST is refused and no row is
+    created; an insert that omits `number` is unaffected, because the generator still
+    supplies a fresh value server-side. The index applied cleanly because no duplicate
+    existed at the time - a unique index cannot be created over a column that already
+    holds repeats, so if this record is ever re-applied to an instance carrying
+    duplicates they must be removed first.
+
     NEW ARTIFACT: the pre-refine package carried no serialized definition for this
     record - the platform's own table/number machinery created it on the instance,
     which is precisely the class of side effect the hand-authored XML bypassed. It is
@@ -147,7 +176,7 @@
         <sys_updated_on>2026-09-02 19:14:12</sys_updated_on>
         <table_reference>false</table_reference>
         <text_index>false</text_index>
-        <unique>false</unique>
+        <unique>true</unique>
         <use_dependent_field>false</use_dependent_field>
         <use_dynamic_default>false</use_dynamic_default>
         <use_reference_qualifier>simple</use_reference_qualifier>
