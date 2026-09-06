@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_client`
+    record x_casemgmt_case_party_clear_opposite_reference.
+
+    WHY THIS RECORD EXISTS
+    ======================
+    AAP Section 0.5.7 fixes `x_casemgmt_case_party` as an exactly-one-of
+    pair keyed on the `party_type` discriminator: `person` is required
+    when party_type = Person, `organization` is required when party_type =
+    Organization, and a stored row carries exactly one of the two. Three
+    artifacts share that contract:
+
+      - ../ui_policy/x_casemgmt_case_party_conditional_fields.xml decides
+        which reference field is VISIBLE and MANDATORY.
+      - ../business_rules/x_casemgmt_validate_case_party_integrity.xml
+        decides which reference field may be STORED. It is the last line
+        of defence and covers every non-form write path.
+      - THIS record decides which reference field is SUBMITTED, which is
+        the one thing neither of the other two can do.
+
+    THE MEASURED DEFECT (verifier finding I2)
+    =========================================
+    On the rendered case_party form, with a new record:
+
+        Party Type = Person      -> pick a Person
+        Party Type = Organization -> pick an Organization
+        Party Type = Person       -> Submit once
+
+    The UI Policy behaves correctly: it hides `organization` and removes
+    it from the accessibility tree. But hiding a field does not take it
+    out of the POST. The classic form renders a hidden field as a row set
+    to display:none whose submit inputs are hidden and NOT disabled, so
+    the browser posts the stale organization sys_id verbatim. The wire
+    capture recorded in the Business Rule named above shows all three
+    values arriving together:
+
+        sys_original...party_type = Organization
+        ...party_type             = Person
+        ...person                 = <the newly chosen user>
+        ...organization           = <the OLD company, still sent>
+
+    The Business Rule then correctly refuses the write with "Organization
+    must be empty when Party Type is Person." plus the platform's "Invalid
+    insert", and the user is TRAPPED: the value blocking the save is on a
+    field that is not on their screen, and the hidden input is reseeded
+    from the same stored value on the re-render, so the form cannot be
+    completed at all. The inverse sequence (Organization -> Person ->
+    Organization) traps the user symmetrically on `person`.
+
+    The trap has exactly two shapes, and both follow from the Business
+    Rule's normalisation predicate - it clears a stale reference only when
+    `current.operation() === 'update'` AND the previously stored
+    `party_type` was non-empty AND differs from the submitted one:
+
+      (i)  INSERT. A new record has no prior discriminator, so
+           typeChanged is false and the both-set row is refused. This is
+           correct of the RULE - on an insert, "both set" is the caller's
+           own input as far as the server can tell - and it is precisely
+           what makes the form unusable.
+      (ii) UPDATE where the discriminator ROUND-TRIPS. A stored Person
+           party toggled Person -> Organization -> Person inside one form
+           session submits party_type = Person against a stored
+           party_type of Person, so typeChanged is false again and the
+           stale organization is refused rather than normalised.
+
+    Clearing the inapplicable reference at the moment the discriminator
+    changes removes both shapes at the source: the hidden field has no
+    value left to carry, so the POST the server sees is already coherent.
+
+    WHY A UI POLICY ACTION CANNOT DO THIS JOB
+    =========================================
+    `sys_ui_policy_action` is not completely value-blind - it carries a
+    `cleared` column ("Clear the field value"), which both existing
+    actions set to false. It still cannot express this fix, for four
+    independent reasons:
+
+      1. `cleared` is ONE-WAY. It fires on the forward apply of a policy
+         whose condition is TRUE, and `reverse_if_false` has no value
+         counterpart: it restores visible / mandatory / read-only
+         opposites and cannot restore a value it destroyed.
+      2. It would break the policy file's load-bearing invariant. To
+         clear `organization` when party_type = Person, the CLEAR action
+         has to live on the Person policy - i.e. the Person policy would
+         act on the organization field. That file documents one field per
+         policy as the reason the two policies can never contend and
+         their relative order (100 and 110) is irrelevant; a clear action
+         on the opposite field reinstates exactly that contention.
+      3. Both policies carry `on_load=true`, and a policy action applies
+         on load. A `cleared` action would therefore wipe the opposite
+         column merely because a record was OPENED - mutating stored data
+         on a read, including for an x_casemgmt_case_viewer whose ACLs
+         forbid writing at all.
+      4. A UI Policy has no access to the change event. It cannot see
+         newValue, oldValue or isLoading, so it cannot restrict itself to
+         an actual discriminator change - which is the only moment a
+         reference legitimately becomes stale.
+
+    An onChange client script has all four properties the job needs: it
+    fires only on a change, it can tell a render from an edit through
+    isLoading, it can read the new discriminator value, and it writes
+    only the field it decides is inapplicable.
+
+    WHAT THIS DELIBERATELY DOES NOT DO
+    ==================================
+    It does not touch the field that IS applicable. On party_type =
+    Person the script writes `organization` and never `person`, so the
+    reference the user just chose is never disturbed.
+
+    It does not clear anything for a discriminator value it does not
+    recognise. An unknown value states nothing about which column is
+    inapplicable, so the script returns having changed nothing and leaves
+    the row to the Business Rule, which refuses an undeclared party_type
+    outright ("Party Type must be Person or Organization.").
+
+    It does not clear anything for an EMPTY discriminator. Clearing a
+    reference the moment a user blanks the choice would destroy data on
+    the way to re-picking the same branch, and an empty party_type is
+    refused server-side anyway ("Party Type is mandatory: choose Person
+    or Organization.").
+
+    It does not weaken, replace or duplicate the server-side rule. The
+    rule keeps its refusals and its one update-conversion normalisation
+    untouched; this script only means the form stops handing it an
+    incoherent row to normalise or refuse. Every non-form write path
+    (Table API, background script, import transform) reaches the rule
+    exactly as before.
+
+    HOW IT COMPOSES WITH THE UI POLICY
+    ==================================
+    The two mechanisms write disjoint attributes of the same two fields -
+    the policy writes visible and mandatory, this script writes the value
+    - and neither reads what the other writes, so no execution order
+    between them can change the outcome. `order` is set to 200, above
+    both policy orders (100 Person, 110 Organization), so the intended
+    sequence is explicit in the metadata as well; it is also the next
+    step in this package's 100-step client-script convention (see
+    ./x_casemgmt_case_flush_stale_messages.xml order 100 and
+    ./x_casemgmt_case_closed_readonly_enforce.xml order 200 on the case
+    table). The policy needs no change for the two to compose: it already
+    reverses correctly (`reverse_if_false=true` on both policies, one
+    action each), and the field this script clears is the one the policy
+    has just reversed to hidden and NOT mandatory, so clearing it can
+    never leave a mandatory-empty control blocking the save.
+
+    NO HARDCODED sys_id (AAP Section 0.7.2): the two discriminator
+    literals are the Choice values from
+    ../choices/sys_choice_case_party_party_type.xml and the two field
+    names are dictionary element names from
+    ../dictionary/x_casemgmt_case_party_person.xml and
+    ../dictionary/x_casemgmt_case_party_organization.xml. No reference
+    field in this file carries a sys_id literal. The record's own sys_id
+    is pinned to this package's deterministic identity convention - the
+    32-character lowercase MD5 of the stable name string
+
+        x_casemgmt_case_party.client_script.clear_opposite_reference
+
+    reproducible with
+
+        printf '%s' 'x_casemgmt_case_party.client_script.clear_opposite_reference' | md5sum | cut -c1-32
+
+    which yields 1575547870432ff027b60f5a5f3497be - so re-importing this
+    file updates this row rather than inserting a second copy.
+
+    WHY <name> IS ABBREVIATED TO ...clear_opposite_ref
+    ==================================================
+    `sys_script_client.name` has max_length 40 on this platform release,
+    measured directly:
+
+        GET /api/now/table/sys_dictionary
+            ?sysparm_query=name=sys_script_client^element=name
+            &sysparm_fields=max_length              ->  40
+
+    The descriptive form of this record's name,
+    x_casemgmt_case_party_clear_opposite_reference, is 46 characters, so
+    the platform silently truncates it to 40 on write - it did exactly
+    that when this record was first created, storing
+    x_casemgmt_case_party_clear_opposite_ref. Serializing the 46-character
+    form would therefore have shipped a value no instance can hold: every
+    import would truncate it again, and every later comparison of the file
+    against the imported row would report drift that no one could fix.
+    The <name> and <sys_name> elements here are the 40-character value the
+    platform actually stores, so file and row agree byte for byte. The
+    identity string hashed for the sys_id above is deliberately NOT
+    abbreviated - it is an input to MD5, never written to a column, so it
+    is unconstrained, and shortening it would change the sys_id. The
+    file name on disk keeps the descriptive form; it is not platform data.
+    Every other client script and business rule in this package is already
+    within the limit (the longest, x_casemgmt_case_closed_readonly_enforce,
+    is 39 characters).
+
+    Scope: x_casemgmt (no global-scope content, per AAP Section 0.3.2).
+    No CSS and no theme content, per AAP Section 0.4.4.
+-->
+<record_update table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>Polymorphic discriminator hygiene for x_casemgmt_case_party (verifier finding I2). On every change of party_type the script clears the reference column the new discriminator makes inapplicable - organization when party_type becomes Person, person when it becomes Organization - so the hidden field left behind by ../ui_policy/x_casemgmt_case_party_conditional_fields.xml cannot post a stale sys_id. Without it the classic form submits the hidden, non-disabled input verbatim (measured: party_type=Person with both the new person and the old organization on the wire), ../business_rules/x_casemgmt_validate_case_party_integrity.xml correctly refuses with "Organization must be empty when Party Type is Person." plus Invalid insert, and the user cannot clear the blocking value because the field is not on their screen - a dead end on any INSERT and on any UPDATE whose discriminator round-trips back to the stored value, since the rule normalises only a genuine update-conversion. A sys_ui_policy_action cannot do this: its `cleared` flag is one-way with no reverse, it would force one policy to act on the other's field and reinstate the contention the one-field-per-policy design removes, it would fire on load and so mutate stored data on a mere open, and a policy cannot see newValue/isLoading to restrict itself to an actual change. Clears the value and the reference display text together, never touches the applicable field, and returns having changed nothing on isLoading, on an empty party_type and on any discriminator value it does not recognise. The server-side rule remains the enforcing authority for every non-form write path. Per AAP Sections 0.4.3, 0.5.7 and 0.7.2.</description>
+        <field>party_type</field>
+        <global>true</global>
+        <isolate_script>false</isolate_script>
+        <messages/>
+        <name>x_casemgmt_case_party_clear_opposite_ref</name>
+        <order>200</order>
+        <script><![CDATA[function onChange(control, oldValue, newValue, isLoading, isTemplate) {
+    'use strict';
+
+    // PARAMETER ORDER IS oldValue SECOND, newValue THIRD. This is the
+    // platform's calling convention, and it was measured on this release
+    // rather than assumed, because getting it wrong is silent: an
+    // earlier revision of this script declared (control, newValue,
+    // oldValue, ...) and therefore did nothing at all on a new record
+    // while reporting no error anywhere. The platform's own dispatcher
+    // ends with
+    //
+    //     clientScriptOnChange(elementName, eChanged, vOriginal, vChanged, g_form)
+    //
+    // where vOriginal is read from the hidden
+    // sys_original.<table>.<field> input - the value the field held when
+    // the FORM LOADED - and vChanged from the live control. A
+    // pass-through logger on the registered handler recorded the
+    // arguments actually delivered during real keystrokes on a NEW
+    // record as
+    //
+    //     ["<SELECT>", "", "Person", "false", "false"]
+    //
+    // so the second argument is "" on a new record (nothing was stored
+    // at load) and the third carries the discriminator the user just
+    // chose. With the names transposed, this function's `newValue` was
+    // always "" on an insert and it returned at the empty-discriminator
+    // guard below every single time; on a STORED record `newValue` would
+    // instead have been pinned to the load-time party_type, which would
+    // have cleared the reference belonging to the OLD branch - wiping
+    // the field the user had just revealed. Both failure modes are
+    // removed by naming the parameters in the order they arrive.
+
+    // The discriminator values, spelled as the Choice VALUEs in
+    // ../choices/sys_choice_case_party_party_type.xml, mapped to the
+    // reference column each one makes INAPPLICABLE. The map is the
+    // client-side half of the PARTY_TYPE_FIELDS map in
+    // ../business_rules/x_casemgmt_validate_case_party_integrity.xml and
+    // is deliberately written the same way, so the two halves of AAP
+    // Section 0.5.7's exactly-one-of contract are recognisably one
+    // contract and a new party_type cannot be added to one half alone.
+    var STALE_REFERENCE = {
+        'Person': 'organization',
+        'Organization': 'person'
+    };
+
+    // isLoading is true while the platform renders a record and replays
+    // its stored values through onChange. Nothing the user did caused
+    // that, so nothing may be cleared: a stored Person party carries an
+    // empty organization legitimately, and a stored row must never be
+    // mutated by being looked at - which is one of the reasons this is
+    // not a UI Policy action (a policy action applies on load).
+    if (isLoading) {
+        return;
+    }
+
+    // An empty discriminator states nothing about which reference is
+    // inapplicable, and blanking the choice on the way to re-picking the
+    // same branch must not destroy the value that branch needs. The
+    // Business Rule refuses an empty party_type on its own ("Party Type
+    // is mandatory: choose Person or Organization."), so nothing is lost
+    // by leaving this case alone.
+    if (newValue === '') {
+        return;
+    }
+
+    // ALLOWLIST, NOT A LOOKUP MISS. An unrecognised discriminator names
+    // no inapplicable column, so there is nothing this script may clear;
+    // the row belongs to the Business Rule, which refuses an undeclared
+    // party_type outright. hasOwnProperty rather than a bare property
+    // read so that a value naming an Object.prototype member
+    // ('constructor', 'toString') cannot be mistaken for a declared
+    // party_type.
+    if (!Object.prototype.hasOwnProperty.call(STALE_REFERENCE, newValue)) {
+        return;
+    }
+
+    var stale = STALE_REFERENCE[newValue];
+
+    // A view may omit the field, and a field-level ACL may remove it
+    // from the form entirely. Either way there is nothing to clear, and
+    // asking the platform to write a field that is not on the form logs
+    // a client error.
+    if (!g_form.hasField(stale)) {
+        return;
+    }
+
+    // A reference field on the classic form has TWO submit inputs: the
+    // value input carrying the sys_id and sys_display.<table>.<field>
+    // carrying the text the user sees. The display input can also hold
+    // text the user typed without picking a row, with no value behind
+    // it, which the server will still try to resolve. Both are therefore
+    // read before deciding there is nothing to do.
+    var displayBox = g_form.getDisplayBox(stale);
+    var staleValue = g_form.getValue(stale);
+    var staleDisplay = displayBox ? displayBox.value : '';
+
+    // Already clean - the common case, e.g. the first time a
+    // discriminator is chosen on a new record. Returning here keeps the
+    // script from marking an untouched field as changed.
+    if (!staleValue && !staleDisplay) {
+        return;
+    }
+
+    // The supported API, called with an explicit empty display value.
+    // The three-argument form sets value and display value together, so
+    // it both guarantees the display text goes with the value (the
+    // two-argument form asks the server to resolve a display value for
+    // the value it was given) and avoids that round trip. This is what
+    // takes the stale sys_id out of the POST.
+    g_form.setValue(stale, '', '');
+
+    // Then the one case the supported API cannot be relied on to finish:
+    // text the user typed into the reference input without selecting a
+    // row was never a VALUE, so clearing the value need not clear it.
+    // Writing the display input directly is the same narrow, documented
+    // DOM touch ./x_casemgmt_case_closed_readonly_enforce.xml uses for
+    // choice controls, and it is guarded so a field the platform renders
+    // without an addressable display input is left alone.
+    if (displayBox && displayBox.value) {
+        displayBox.value = '';
+    }
+}]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>1575547870432ff027b60f5a5f3497be</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_party_clear_opposite_ref</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_client_1575547870432ff027b60f5a5f3497be</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case_party</table>
+        <type>onChange</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

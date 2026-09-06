@@ -106,6 +106,36 @@ With `virtual = false` the field immediately returned `18 Days` and `14 Days` on
 `post_import_remediation.js` now carries the same three attributes in its field spec and compares them on every
 run, so this cannot silently regress on an install.
 
+**A REST consumer sees this field as an epoch-offset datetime, not as a duration.** `glide_duration` is stored and
+transmitted as a datetime measured from the Unix epoch, and only the presentation layer renders it as a span. On
+`CASE9000006` the same field reads, measured on the live instance:
+
+| How it is read | Value |
+| --- | --- |
+| `GET /api/now/table/x_casemgmt_case?sysparm_fields=duration_to_close` | `1970-01-19 08:00:00` |
+| the same request with `sysparm_display_value=all` | `18 Days 8 Hours` |
+| the Manager View "Average Time to Close" widget | `16 Days 8 Hours 0 Minutes` (the average over Closed cases) |
+
+`1970-01-19 08:00:00` is 18 days and 8 hours after `1970-01-01 00:00:00`, so both readings carry the same fact. This
+is standard platform behaviour for the type rather than anything specific to this field, but it is recorded here
+because a caller reading the raw Table API would otherwise reasonably conclude the field held a corrupt date. A
+consumer that wants the human span must ask for the display value; one that wants to compute with it should treat
+the raw value as an offset from the epoch.
+
+**This field is an addition to the AAP Section 0.5.7 field set, and that is a deliberate, disclosed divergence.**
+Section 0.5.7 enumerates twelve columns for `x_casemgmt_case` and Section 0.7.1 requires the field set to match
+"no additions". This field is a thirteenth column in the dictionary (fourteenth counting `pending_reason`). It
+exists because AAP Section 0.4.4 separately *requires* the Manager View to show "Average Time to Close", computed
+as `closed_date - opened_date` over Closed cases, and Section 0.7.3 Validation Gate 6 requires every widget to
+display data — and, as set out above, the platform's report engine cannot aggregate that expression without a
+native column or a Function Field to aggregate over. The two requirements cannot both be met without it, so the
+divergence is the minimum needed to satisfy the more specific one: nothing is stored, no AAP-enumerated column is
+altered, and the value is derived at query time from two columns Section 0.5.7 does enumerate. **Removing the
+field would leave the AAP-mandated widget with nothing to average**, so it must not be removed without replacing
+the mechanism. A reader who requires strict Section 0.5.7 arity should treat this as a divergence to ratify rather
+than a defect to fix; the alternative — dropping the field and re-deriving the widget another way — is a design
+change, not a correction, and needs a human decision.
+
 The dictionary record file is [`../dictionary/x_casemgmt_case_duration_to_close.xml`](../dictionary/x_casemgmt_case_duration_to_close.xml). The field is consumed exclusively by [`../reports/x_casemgmt_avg_time_to_close.xml`](../reports/) and surfaced on [`../dashboards/pa_dashboards_x_casemgmt_manager_view.xml`](../dashboards/) Widget 4. See [`dashboards.md`](./dashboards.md) Widget 4 details for the full implementation rationale, including why a Function Field (not a Calculated Value field) is required for `sys_report` aggregation and how this satisfies AAP Section 0.7.2 Minimal-Change Clause (no new module, workflow, portal page, parent table, or external integration — only a query-time derivation from existing AAP-enumerated columns `opened_date` and `closed_date`).
 
 ### Choice values reference
@@ -193,7 +223,37 @@ The single-table polymorphism is implemented via a UI Policy that conditionally 
 | --- | --- | --- | --- |
 | Person | `person` | `organization` | `person` |
 | Organization | `organization` | `person` | `organization` |
-| (empty) | both visible (form-creation default) | none | (validated on save) |
+| (empty) | none | both `person` and `organization` | (validated on save) |
+
+The last row was previously documented as "both visible (form-creation default)", which was wrong. Both policies carry `reverse_if_false=true` and each acts on a single field, so when the discriminator is empty **both** conditions are false and **both** reference fields are hidden and non-mandatory — which is what the UI Policy record's own behaviour matrix (Case 3) states, and what the rendered form does. Nothing depended on the incorrect reading; it is corrected here so the two documents agree.
+
+### Clearing the inapplicable reference (onChange Client Script)
+
+The UI Policy decides which reference field is **shown**. It cannot decide which one is **submitted**, and that gap was a functional dead end on the form (verifier finding I2).
+
+**The defect, as measured on the rendered form.** On a new party record: set `Party Type = Person` and pick a Person; switch to `Organization` and pick an Organization; switch back to `Person` and Submit once. The UI Policy hides `organization` correctly and removes it from the accessibility tree — but a field hidden by a UI Policy stays in the DOM as a `display:none` row whose submit inputs are hidden and **not disabled**, so the classic form posts its stale value verbatim. The wire capture recorded in [`x_casemgmt_validate_case_party_integrity`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) shows all of it arriving together: `sys_original…party_type=Organization`, `…party_type=Person`, `…person=<the newly chosen user>`, `…organization=<the OLD company, still sent>`. The Business Rule then correctly refuses with `Organization must be empty when Party Type is Person.` plus the platform's `Invalid insert` — and the user is trapped, because the value blocking the save is on a field that is no longer on their screen and the hidden input is reseeded from the same value on the re-render. The inverse sequence (Organization → Person → Organization) traps them symmetrically on `person`.
+
+The trap has exactly two shapes, both following from the rule's normalisation predicate (see [The one normalisation](#the-one-normalisation-party-type-conversion) — it corrects a row only on an **update** that itself changes `party_type` to a *different* non-empty value):
+
+| Shape | Why the server-side normalisation does not reach it |
+| --- | --- |
+| **Insert** — any new party whose discriminator was toggled | A new record has no prior discriminator, so nothing "changed"; on an insert, "both set" is indistinguishable from the caller's own incoherent input, which the rule must keep refusing |
+| **Update whose discriminator round-trips** — a stored Person party toggled Person → Organization → Person in one form session | The submitted `party_type` equals the stored one, so again nothing "changed" and the stale reference is refused rather than normalised |
+
+**The fix.** [`../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml`](../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml) is an `onChange` Client Script on `party_type` (table `x_casemgmt_case_party`, `order 200`) that clears the reference the new discriminator makes inapplicable — `organization` when `party_type` becomes `Person`, `person` when it becomes `Organization` — so the hidden field has no value left to carry into the POST. It clears the value **and** the reference display text in one `g_form.setValue(field, '', '')` call (the two-argument form would ask the server to resolve a display value; the three-argument form sets both directly), then sweeps the display input for text the user typed without selecting a row. It never touches the field the discriminator makes applicable, and it returns having changed nothing while `isLoading` is true, on an empty `party_type`, and on any discriminator value it does not recognise.
+
+**Why a UI Policy action cannot do this job.** `sys_ui_policy_action` is not entirely value-blind — it carries a `cleared` column ("Clear the field value"), which both existing actions set to `false`. It still cannot express this fix:
+
+| Reason | Consequence |
+| --- | --- |
+| `cleared` is one-way | It applies on the forward evaluation of a true condition, and `reverse_if_false` has no value counterpart — it restores visible / mandatory / read-only opposites and cannot restore a destroyed value |
+| It crosses field ownership | Clearing `organization` when `party_type = Person` puts the action on the **Person** policy, so that policy would act on the organization field — destroying the one-field-per-policy invariant that is why the two policies can never contend and their orders (100, 110) are irrelevant |
+| It fires on load | Both policies are `on_load=true` and an action applies at render, so a `cleared` action would wipe the opposite column merely because a record was **opened** — mutating stored data on a read, including for an `x_casemgmt_case_viewer` whose ACLs forbid writing |
+| It cannot see the change | A UI Policy has no access to `newValue`, `oldValue` or `isLoading`, so it cannot confine itself to an actual discriminator change, which is the only moment a reference legitimately becomes stale |
+
+An `onChange` script has all four properties the job needs. The two mechanisms write **disjoint** attributes of the same two fields — the policy writes visible and mandatory, the script writes the value — and neither reads what the other writes, so no execution order between them changes the outcome; the field the script clears is the one the policy has just reversed to hidden and *not* mandatory, so a cleared value can never leave a mandatory-empty control blocking the save.
+
+The Client Script is form ergonomics, not enforcement. It removes no server-side check: [`x_casemgmt_validate_case_party_integrity`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) remains the authority for every write path and is unchanged.
 
 ### Reference resolution rules
 
@@ -251,9 +311,11 @@ All three rules read the value the row **would carry after** the write, so an up
 
 ### The one normalisation: party-type conversion
 
-`x_casemgmt_validate_case_party_integrity` has a single case where it **corrects** the row instead of refusing it. The UI Policy in [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) hides the inapplicable reference field but has no clear action, and the classic form posts hidden, non-disabled inputs verbatim. So converting a party from Organization to Person on the form submits `party_type=Person`, the newly chosen `person`, **and** the stale `organization` together. Refusing that write would make a legitimate conversion impossible through the only internal UI AAP Section 0.4.4 provides, and the caller could not comply with the refusal either — the field they are told to empty is not on their screen.
+`x_casemgmt_validate_case_party_integrity` has a single case where it **corrects** the row instead of refusing it. The UI Policy in [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) hides the inapplicable reference field but cannot clear it (why not: [Clearing the inapplicable reference](#clearing-the-inapplicable-reference-onchange-client-script)), and the classic form posts hidden, non-disabled inputs verbatim. So converting a party from Organization to Person on the form submits `party_type=Person`, the newly chosen `person`, **and** the stale `organization` together. Refusing that write would make a legitimate conversion impossible through the only internal UI AAP Section 0.4.4 provides, and the caller could not comply with the refusal either — the field they are told to empty is not on their screen.
 
 Therefore, when a write is an **update** that itself changes `party_type` to a different non-empty value and the newly applicable reference is populated, the rule clears the now-inapplicable reference, records a `gs.info` audit line naming the record and the cleared column, and lets the save proceed. An **insert** carrying both references, and an update that sets the wrong reference without changing `party_type`, are both still refused. The stored row satisfies the exactly-one-of invariant on every path.
+
+Since [`../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml`](../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml) empties the inapplicable reference as the discriminator changes, the form normally stops handing the rule a stale value at all — including on the two paths the normalisation deliberately does not cover (an insert, and an update whose discriminator round-trips back to the stored value), which is exactly where the form used to dead-end. The rule's behaviour is **unchanged**: it keeps both refusals and this one normalisation for every write path that has no form in front of it — the Table API, a background script, an Import Set transform.
 
 ## Platform Audit Fields
 
@@ -346,5 +408,6 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 - [`../dictionary/`](../dictionary/) — every dictionary entry for every field.
 - [`../choices/`](../choices/) — every choice list record.
 - [`../numbers/`](../numbers/) — auto-numbering records.
-- [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) — UI Policy for case_party (form layer).
+- [`../ui_policy/x_casemgmt_case_party_conditional_fields.xml`](../ui_policy/x_casemgmt_case_party_conditional_fields.xml) — UI Policy for case_party (form layer): which reference field is shown and required.
+- [`../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml`](../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml) — onChange Client Script on `party_type` (form layer): which reference field is submitted. Clears the reference the discriminator makes inapplicable so a hidden field cannot post a stale `sys_id`.
 - [`../business_rules/x_casemgmt_validate_case_mandatory_fields.xml`](../business_rules/x_casemgmt_validate_case_mandatory_fields.xml), [`../business_rules/x_casemgmt_validate_case_task_integrity.xml`](../business_rules/x_casemgmt_validate_case_task_integrity.xml), [`../business_rules/x_casemgmt_validate_case_party_integrity.xml`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) — the server-side enforcement of the Mandatory, referential and Conditional cells in the schema tables above.

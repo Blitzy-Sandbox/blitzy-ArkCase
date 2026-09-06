@@ -80,9 +80,49 @@
 
       `run_scripts` is FALSE on both policies and both script bodies are
       empty: there is no imperative logic left to maintain, and no dead
-      script is carried. Field values are never cleared (`cleared=false`
-      on both actions), so toggling `party_type` back and forth never
-      destroys data the user already entered.
+      script is carried. NEITHER POLICY EVER WRITES A VALUE
+      (`cleared=false` and `value_action=ignore` on both actions): they
+      decide visibility and required-ness only, so toggling `party_type`
+      back and forth never destroys the value of the field the
+      discriminator makes APPLICABLE.
+
+    COMPOSITION WITH THE onChange CLIENT SCRIPT (verifier finding I2):
+
+      These policies decide what is SHOWN. They cannot decide what is
+      SUBMITTED - a field hidden by a UI Policy stays in the DOM as a
+      display:none row whose submit inputs are hidden but not disabled,
+      so the classic form posts its stale value verbatim. Toggling
+      `party_type` back and forth therefore used to send BOTH references
+      at once and the server-side integrity rule refused the save, on a
+      field the user could no longer see. Clearing the now-inapplicable
+      reference is the job of
+
+        ../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml
+
+      an onChange script on `party_type` whose header carries the full
+      measurement and rationale.
+
+      NO CHANGE WAS NEEDED HERE for the two to compose, and none was
+      made: the two mechanisms write DISJOINT attributes of the same two
+      fields - the policies write visible and mandatory, the script
+      writes the value - and neither reads what the other writes, so no
+      execution order between them can change the outcome. The script
+      clears only the field these policies have just reversed to hidden
+      and NOT mandatory, so a cleared value can never leave a
+      mandatory-empty control blocking the save; and the script returns
+      immediately while `isLoading` is true, so form LOAD state remains
+      solely these policies' business (which is what `on_load=true`
+      above is for).
+
+      Turning `cleared` on here was considered and rejected: it is a
+      one-way action with no `reverse_if_false` counterpart, it would
+      force the Person policy to act on the `organization` field and so
+      destroy the one-field-per-policy invariant above, it applies on
+      LOAD as well and would therefore mutate a stored row merely
+      because someone opened it (including a read-only viewer), and a
+      policy cannot see `newValue`/`isLoading` and so cannot restrict
+      itself to an actual discriminator change. See
+      ../docs/data-model.md, "Clearing the inapplicable reference".
 
     REQUIRED FIELDS HANDLED BY POLICY (NOT at dictionary level):
       Per the parent dictionary entries

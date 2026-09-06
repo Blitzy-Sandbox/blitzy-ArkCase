@@ -226,6 +226,54 @@ QA finding F7 (LOW, non-blocking) records that **Delete is offered in the list m
 
 **Why no fix ships here.** Both the option and the silent abort live in global platform artifacts, and AAP Section 0.3.2 verbatim prohibits **"Global scope changes of any kind"** while Section 0.7.2 requires **"zero global-scope writes"**. No scoped remedy exists on this release either: `sys_ui_list_control` has no delete-omitting attribute (its only omit-flags are `omit_new_button`, `omit_edit_button`, `omit_links`, `omit_filters`, `omit_count`, `omit_drilldown_link`, `omit_if_empty`) and holds **no rows** for the three scoped tables; the scoped app's own six `sys_ui_action` rows are all `form_button` transitions with `list_choice=false`. A hypothetical scoped `list_choice` action named `Delete` on each table would also (a) depend on unverified table-vs-global action precedence, (b) risk suppressing the affordance for `x_casemgmt_case_manager`, whose Delete grant Section 0.5.6 requires, and (c) exceed AAP Section 0.3.1, which admits `ui_action/` artifacts "only those needed for state transitions". The finding is therefore **bounded by the AAP Section 0.3.2 exception**: reported, with enforcement re-verified, and not worked around. The remediation a platform owner would apply is to make the stock list client surface the `can_execute="false"` answer as a visible message (or to gate the global option on `canDelete()` at render time) — a global change outside this application's scope.
 
+### List counts and groupings are computed before the ACLs filter the rows (QA finding H3 / verifier finding I4)
+
+A row the agent may not read is still **counted**. The pager, the screen-reader announcement and the "Group By"
+tallies are produced by an aggregate query that the record-level ACLs do not constrain, so they describe the whole
+table while the list body correctly renders only the authorized subset.
+
+**Measured, as `x_casemgmt_demo_agent` on `x_casemgmt_case_list.do`.** Nine of the ten cases are in the agent's
+"Assigned only" scope; `CASE9000001` (Draft, no `assigned_group`, no `assigned_agent`) is not. The visible pager and
+the row set agree with each other and with the ACLs — "1 to 9 of 9", nine links, `CASE9000001` absent — while a
+hidden `aria-live` string on the same page reads verbatim:
+
+```
+Unfiltered Cases list showing 1 to 9 of 10 records
+```
+
+so a screen-reader user hears "of 10" where a sighted user reads "of 9". Grouping the same list by Status
+announces `Status: Draft (3)` on a scope that contains fewer Draft rows than that, and an authenticated Stats
+aggregate returned 13 against 11 rendered rows.
+
+**What is and is not disclosed.** Only cardinality. No field value, subject, number or reference of an
+unauthorized row appears anywhere in the list markup, and record access itself is denied on both routes tested:
+by filter, `?sysparm_query=number=CASE9000001` renders the column headers, the empty-state illustration and
+"No records to display" with no pager at all; by direct sys_id, `x_casemgmt_case.do?sys_id=f4b0e897…` serves the
+padlock page whose entire body text is `Security constraints prevent access to requested page`, with
+`window.g_form` absent — no form object is constructed and no field value is delivered. The Agent Workspace
+donut is *not* affected: its own report filter is user-scoped, so it announces "Pie chart with 5 slices" over a
+Total of 9. The leak is therefore the existence and count of rows, not their content.
+
+**Why no fix ships here.** ServiceNow evaluates record ACLs per row as the list is rendered, and evaluates the
+count and the group-by tallies as `GlideAggregate` queries beforehand; nothing in the ACL model reaches the
+latter. The remedy is a different mechanism entirely — a scoped `before query` business rule on each of the three
+tables that appends the "Assigned only" predicate to every incoming query, so the aggregate never sees the
+unauthorized rows. That is an **addition** rather than a correction: AAP Section 0.5.6 specifies authorization
+"through scoped table-level and field-level ACLs" and enumerates the matrix those ACLs must produce, Section 0.3.1
+admits `business_rules/` artifacts for the state machine and field defaulting, and the Section 0.7.2 Minimal-Change
+Clause prohibits adding what the prompt did not specify. A query business rule also changes the semantics of every
+read path at once — REST, reports, related lists, dashboards — including the manager's Read All and the viewer's
+Read All, which Section 0.5.6 requires to return all ten rows; getting that wrong would break two delivered matrix
+cells to tidy a count. So the finding is **bounded by the AAP Section 0.5.6 / 0.7.2 exception**: reported, with
+enforcement re-verified on both denial routes, and not worked around.
+
+**What a human would authorise to close it.** One `sys_script` per table, `when=before`, `action_query=true`,
+`sys_scope=x_casemgmt`, whose script adds the same predicate the read ACL already applies — for `x_casemgmt_case`,
+`assigned_agent = gs.getUserID()` OR `assigned_group` IN the caller's group memberships — guarded so it applies to
+neither `x_casemgmt_case_manager` nor `x_casemgmt_case_viewer` (both hold Read All) nor `admin`. Ratifying it means
+accepting three artifacts beyond the AAP's enumerated set and re-running the full role × CRUD matrix afterwards,
+because a query rule and an ACL that disagree produce a list that is authorized but incomplete.
+
 ## Mirror Patterns: case_task and case_party
 
 The role × CRUD matrix is mirrored on the `x_casemgmt_case_task` and `x_casemgmt_case_party` tables, with one additional rule: write/read access is governed by the parent case's "Assigned only" condition. Tasks and parties are children of a case; if the agent cannot access the parent case, they cannot access its child records.

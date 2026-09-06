@@ -344,6 +344,8 @@ Business rules complement the Flow Designer flows by providing pre-save guards t
 
 The execution chain on `x_casemgmt_case` is: **100** `block_terminal_closed` → **200** `block_draft_backtransition` → **250** `enforce_forward_transitions` → **300** `validate_assigned_agent_membership` → **400** `clear_pending_reason_on_inprogress` → **500** `set_closed_date`; plus `set_opened_date` on insert. The prohibitions are evaluated before the forward preconditions, so a Closed-case edit or an Any→Draft attempt is refused with its own verbatim message rather than being re-diagnosed as a precondition failure.
 
+One further rule on the table, `case_display_stored_state`, is **not** part of that chain: it is a `display` rule, ordered within its own phase (order 10) and never on a write. It enforces nothing and writes nothing — it publishes the row's stored `status` onto `g_scratchpad` so the form can be reconciled with the database after a refused save. See [Displayed status versus stored status after a refused save](#displayed-status-versus-stored-status-after-a-refused-save).
+
 ### set_opened_date
 
 - **When:** Before-Insert on `x_casemgmt_case`
@@ -375,6 +377,11 @@ The execution chain on `x_casemgmt_case` is: **100** `block_terminal_closed` →
 
 - **When:** Before-Update on `x_casemgmt_case` AND `previous.status == Pending AND current.status == In Progress`
 - **Action:** `current.pending_reason = '';`
+
+### case_display_stored_state
+
+- **When:** Display on `x_casemgmt_case` (order 10; `action_insert`, `action_update`, `action_delete` and `action_query` are all `false`, so it cannot run on a write)
+- **Action:** re-reads the row by its own `sys_id` with a fresh `GlideRecord` and publishes the stored value: `g_scratchpad.x_casemgmt_stored_status = <stored status>`. Publishes the empty string — "nothing to correct" — on a new record, on a row it cannot re-read, and on any failure. Enforces nothing, writes no record, calls no message API.
 
 ## Script Include: CaseTransitionValidator
 
@@ -505,11 +512,109 @@ For a complete pass/fail framework see [`validation-gates.md`](./validation-gate
 14. Repeat the entire procedure with a Complaint case
 15. Open `CASE9000006` (Closed, General Inquiry) and `CASE9000010` (Closed, Complaint) as `x_casemgmt_demo_manager` and confirm every field renders read-only — `type`, `status`, `priority`, `subject`, `description`, `requester_name`, `requester_email`, `assigned_group`, `assigned_agent` and `pending_reason` from [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml), and `number`, `opened_date`, `closed_date` and `duration_to_close` from their dictionary `read_only` flags. No transition button is present; the reference pickers on `assigned_group`/`assigned_agent` are inert. Then press Update: the save is accepted as a no-op and no error banner appears
 16. Confirm the policy is inert on a live case: open a `Draft`, an `Open`, an `In Progress`, a `Pending` and a `Resolved` case and confirm the same ten fields are editable exactly as their dictionary and field-level ACLs dictate — for a manager, for the assigned agent, and for the read-only viewer, whose form must stay read-only. The policy has no reverse actions, so it must not have changed any of those three states
+17. Confirm the refused save leaves the form describing the database: on an `Open` case set `Status` to `Draft`, press Update once, and confirm the verbatim `"Cases cannot be returned to Draft."` is on screen **and** the `Status` control reads `Open` without a reload, with the stored row unchanged. The full procedure, including the no-op path that must change nothing on an ordinary form load, is in [Displayed status versus stored status after a refused save](#displayed-status-versus-stored-status-after-a-refused-save)
+
+## Displayed Status Versus Stored Status After a Refused Save
+
+### What was wrong
+
+Every blocking rule above refuses the *write*. None of them controls what the *form* shows afterwards, and the
+platform re-renders an aborted submit with the values that were **posted**. Measured on an `Open` case: set
+`Status` = `Draft` and press `Update` once.
+
+- `block_draft_backtransition` (order 200) aborts correctly and the verbatim `"Cases cannot be returned to Draft."`
+  is displayed.
+- Nothing is persisted: the list and a fresh REST read both still say `Open`, and `sys_mod_count` is unchanged.
+- But the re-rendered form still shows `Status` = `Draft` until the user reloads.
+
+So the screen asserts two things at once — a banner saying the case did not move, and a status control saying it
+did. This is the **field-value** half of QA `Issue 17`; its action-set half is handled server-side by
+`CaseTransitionValidator.canShowAction()` through the `_storedRecord()` helper, and its read-only half by
+[`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml) and
+[`../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml`](../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml).
+
+### The mechanism
+
+A client script can read what is on the form but has no authoritative view of the database, so it cannot tell a
+value the user is legitimately editing from a value the server has already refused. That one missing fact is
+supplied through the platform's own channel for it, in two records:
+
+1. **[`../business_rules/x_casemgmt_case_display_stored_state.xml`](../business_rules/x_casemgmt_case_display_stored_state.xml)**
+   — a `display` Business Rule on `x_casemgmt_case`. It re-reads the row from the database by its own `sys_id`
+   (`current.getUniqueValue()`) with a fresh `GlideRecord`, exactly as `CaseTransitionValidator._storedRecord()`
+   does, and publishes `g_scratchpad.x_casemgmt_stored_status`. It deliberately **never reads a status off
+   `current`**.
+2. **BLOCK 1 of [`../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml`](../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml)**
+   — the existing `onLoad` script, extended rather than duplicated. It reads that string and, only when it differs
+   from `g_form.getValue('status')`, calls `g_form.setValue('status', <stored>)`. It runs ahead of the terminal-state
+   lockdown in the same script, so the lockdown's `status == Closed` test is made against the stored status and the
+   control is corrected before it is made inert.
+
+No `GlideAjax` processor and no extra round trip: one string travels with the form the platform was already
+rendering.
+
+### The open question, and why the mechanism is correct either way
+
+It is **not established** whether, on the abort re-render specifically, a `display` Business Rule is handed the
+**stored** row or the **posted** one in `current`. Nothing in the mechanism depends on the answer, because the
+stored value comes from a fresh primary-key read rather than from `current`:
+
+- if `current` is the posted record, the fresh read still returns the committed row, the client sees a real
+  divergence and corrects the field;
+- if `current` is already the stored record — or if a release ever served that read from a cache holding the posted
+  values — the published value equals what the form is showing, the client can prove no divergence, and it does
+  nothing.
+
+Both outcomes are correct. The mechanism either corrects a divergence it can demonstrate against the database, or
+it is a no-op; it can never invent a state.
+
+### The fail-safe property
+
+Every uncertain path on both sides is a **silent no-op that changes nothing**: no `g_scratchpad` (no display rule
+ran); the empty string, which is what the display rule publishes for a new record, for a row it cannot re-read —
+deleted, or denied by the read ACLs in [`../acl/`](../acl/), since scoped `GlideRecord` applies them — and for any
+exception; a scratchpad value outside the six-status enumeration of
+[`../choices/sys_choice_case_status.xml`](../choices/sys_choice_case_status.xml); `status` absent from the form or
+removed by a field-level ACL; the two values already equal; or any exception in the client block. The display rule
+publishes the empty string **before** attempting its read, so no later failure can leave a value from an earlier
+render in place, and a form load can never fail because of this rule.
+
+### The blocking message must survive, and nothing here touches it
+
+AAP Section 0.5.5 requires the blocking error to be surfaced **on the form**, so the banner written by the refused
+save has to survive the correction that follows it. `g_form.setValue()` does not touch the message area, and
+neither record calls `g_form.clearMessages()`, `gs.addErrorMessage()`, `gs.addInfoMessage()` or reloads the form —
+the only executable statement in the client block that touches the form at all is the single `setValue` call.
+
+One contact point was traced and is recorded here rather than left to be rediscovered:
+[`../client_scripts/x_casemgmt_case_flush_stale_messages.xml`](../client_scripts/x_casemgmt_case_flush_stale_messages.xml)
+(order 100, so its listeners are bound before the order-200 script runs) registers native `input`/`change`
+listeners on the four mandatory controls — `status` among them — that call `g_form.clearMessages()` when a message
+is on screen. Per the DOM specification a programmatic value assignment fires neither event, and jQuery's
+`trigger('change')` does not reach `addEventListener` handlers, so `setValue()` is **not expected** to trip them
+and the banner is expected to stand. That is an expectation to be confirmed by observation, not a proven fact. If a
+release ever did dispatch a trusted-looking change event, the remedy belongs in that script — ignore events whose
+`isTrusted` is `false` — because suppressing or re-writing a message from the correction block is forbidden either
+way.
+
+### How to confirm it at runtime
+
+1. Open an `Open` case (for example `CASE9000002`) as `x_casemgmt_demo_manager` or as `admin`.
+2. Set `Status` to `Draft` and press `Update` once.
+3. The banner reads `"Cases cannot be returned to Draft."`, character for character, and is still on screen.
+4. The `Status` control reads `Open` — the stored value — without a reload; the browser console carries the
+   `x_casemgmt_case_closed_readonly_enforce` line naming both values.
+5. A fresh read of the row (list, form reload or `GET /api/now/table/x_casemgmt_case/<sys_id>`) still shows `Open`
+   with `sys_mod_count` unchanged: the correction is presentational and wrote nothing.
+6. Repeat on a normal form load of any case in each of the six statuses: the status shown must be unchanged and no
+   console line must appear, which is the no-op path.
 
 ## Known Open Limitations — Terminal-State and Native List Presentation
 
-The items below are **OPEN**. Each was observed at runtime, each was traced, and none of them is closed by the
-records this application ships. They are recorded here — the state machine's own document, because the terminal
+The items below were each observed at runtime and each was traced. All of them are **OPEN** except **L1**, the
+redisplay half of QA `Issue 17`, which is retained as the observation record: the change it called for has since
+been made on both of its halves, and the note at the end of that entry says which records make it and what remains
+to be confirmed by observation. They are recorded here — the state machine's own document, because the terminal
 state is what the first two are about and because this document is the one in scope for the round that traced them
 — with the exact change each would need and the rule that puts that change out of reach. The application's general
 limitation register is [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); these
@@ -556,6 +661,19 @@ of each button's role-and-status logic in client script — i.e. the six server-
 browser, which AAP Section 0.7.2's declarative-mechanism constraint and the single-source-of-truth design of
 `CaseTransitionValidator` both refuse. Reloading the record shows the true state and the correct action set; the
 persisted row is never wrong.
+
+**Since traced, both halves of the underlying divergence have been addressed separately, and this entry stands as
+the record of what was observed rather than as a description of the current records.** The **action set** is now
+derived from the stored row: `CaseTransitionValidator.canShowAction()` and `canShowManagerAction()` resolve the case
+through the `_storedRecord()` helper — the fresh `GlideRecord` read this entry named as "the change that would close
+it" — so a rejected status no longer selects the buttons. The **field value** is corrected by the display
+Business Rule and `onLoad` block described in
+[Displayed status versus stored status after a refused save](#displayed-status-versus-stored-status-after-a-refused-save).
+The refusal recorded in the paragraph above is unchanged and still stands, because it is about restating the six
+buttons' **role-and-status logic** in the browser: publishing one stored **field value** on `g_scratchpad` and
+re-aligning that one field restates no authorization logic, adds no second source of truth for transition
+visibility, and is the supported platform channel for the purpose. Runtime confirmation of the field-value
+correction is owed against the procedure in that section.
 
 ### L2 — A Closed case still shows the platform's `Update` button
 
@@ -671,7 +789,11 @@ condition. `reverse_if_false` does not change this: with the reverse enabled the
 irreversible, because `status` is one of the frozen fields.
 
 **The change that would close it.** Nothing within the UI Policy mechanism. It would take a client-side guard that
-distinguishes the on-screen value from the persisted one — the same authoritative-read problem as L1.
+distinguishes the on-screen value from the persisted one — the same authoritative-read problem as L1. The persisted
+value is now available in the browser on load, published by
+[`../business_rules/x_casemgmt_case_display_stored_state.xml`](../business_rules/x_casemgmt_case_display_stored_state.xml),
+which supplies the operand but not the moment: this freeze happens on a choice change with no reload in between, so
+closing it would additionally need an `onChange` guard on `status`, and no record ships one.
 
 **Why it is open, and why the trade is the right way round.** The supported path into Closed is
 [`../ui_action/x_casemgmt_case_close.xml`](../ui_action/x_casemgmt_case_close.xml), a server-side action
@@ -698,7 +820,9 @@ The following constraints are mandatory and derived from AAP Sections 0.7.1 and 
 - [`../flows/complaint_state_machine.xml`](../flows/complaint_state_machine.xml) — Complaint flow
 - [`../flows/sub_flows/`](../flows/sub_flows/) — five subflows
 - [`../script_includes/x_casemgmt_CaseTransitionValidator.xml`](../script_includes/x_casemgmt_CaseTransitionValidator.xml) — reusable transition guards
-- [`../business_rules/`](../business_rules/) — six business rules
+- [`../business_rules/`](../business_rules/) — the write-side guards and side-effect rules
+- [`../business_rules/x_casemgmt_case_display_stored_state.xml`](../business_rules/x_casemgmt_case_display_stored_state.xml) — the `display` rule that publishes the stored `status` on `g_scratchpad`; enforces nothing
+- [`../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml`](../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml) — BLOCK 1 re-aligns the `status` control with the stored row after a refused save; BLOCK 2 is the terminal-state form lockdown
 - [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml) — the form-layer half of transition-matrix row 8: every writable field of a Closed case rendered read-only, over the unchanged `block_terminal_closed` guard
 - [`../ui_action/`](../ui_action/) — the six transition buttons whose visibility conditions this document tabulates
 

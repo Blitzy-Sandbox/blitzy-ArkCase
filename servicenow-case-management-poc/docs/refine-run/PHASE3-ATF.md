@@ -34,8 +34,14 @@
 > failures**, by re-keying the 7 `sys_choice` payloads to `sys_choice_x_casemgmt_*`. **That fix is
 > NOT in the shipped package.** The shipped elected fallback carries the 7 older
 > `sys_choice_<32-hex>` rows instead, so **the six failures recorded below are the expected
-> behaviour of the package that ships**, not a stale artefact of an old run. A suite re-run against
-> the shipped bytes would be expected to reproduce them. Every screenshot basename this report cites
+> behaviour of the package that ships** on a clean instance where
+> `scripts/post_import_remediation.js` has not been run: a commit of the shipped bytes alone would be
+> expected to reproduce them. **Read that as a statement about the PACKAGE only. Against the LIVE
+> INSTANCE the stored suite result is STALE** — `sys_choice` for the three scoped tables reads **24**
+> rows there and an anonymous portal `POST /api/x_casemgmt/case_submit` returns **HTTP 201**, so the
+> six recorded failures no longer describe current runtime behaviour, a re-run is **owed** and was
+> **deliberately not performed** in the pass that added this note. §3's staleness block states both
+> scopes in full and nothing in this file was re-run or re-recorded. Every screenshot basename this report cites
 > is absent from disk; three checkpoints were
 > re-captured live and are cited by verified path below. Read
 > [`FINAL-REPORT.md`](./FINAL-REPORT.md) § "Artifact identity and evidence — RESTATED
@@ -301,13 +307,41 @@ disk as readable PNGs with a valid signature and `IEND` terminator:
 >
 > Anything re-derived from a `test_suite_result` filter mixes two suite runs and must be re-taken.
 
-> **⚠ STALENESS WARNING — this suite result is not the current state of the application.** The 14/6
-> figures below were measured at `2026-09-02 21:45:31Z → 21:47:35Z`, **before** the
-> choice-materialization fix that landed in commit `f8454fb078`. **Five of the six failures (ATF 01,
-> 10, 15, 16, 17, 18 — all but one) share a single root cause: the `x_casemgmt_case` choice lists
-> resolved EMPTY at runtime**, which §5 documents. `sys_choice` reads **24** rows on the instance
-> today, so that cause is addressed and **a suite re-run is owed** before any of these verdicts may
-> be read as current. Corroborating that reading: the same 20-test suite passed **20/20** hours
+> **⚠ STALE RELATIVE TO CURRENT RUNTIME — this suite result is DEFINITIVE for the run that produced
+> it and NO LONGER DESCRIBES the live instance.** Read the two scopes separately; both are true and
+> they are not in tension.
+>
+> **1. Against the live instance: STALE.** The 14/6 figures below were measured at
+> `2026-09-02 21:45:31Z → 21:47:35Z`, **before** the choice-materialization fix that landed in commit
+> `f8454fb078`. **All six failures (ATF 01, 10, 15, 16, 17, 18) share a single root cause: the
+> `x_casemgmt_case` choice lists resolved EMPTY at runtime** — ATF 18's `400` included, because
+> `CasePortalService._resolveCaseTypeChoice()` fails closed on an empty choice list, which §5.1
+> derives from the Script Include's own source. **Two live measurements make that cause absent
+> today:** `sys_choice` for the three scoped tables reads **24** rows, and an **anonymous portal
+> `POST /api/x_casemgmt/case_submit` returns HTTP 201** with a `CASE…` number — which is precisely the
+> assertion ATF 18 recorded as `400`. **So the six recorded failures no longer describe current
+> behaviour on this instance, and no verdict below may be read as the instance's current state.**
+> Provenance of those two figures: they were measured by the QA gates that exercised this instance
+> after the fix, and they are recorded here with that source rather than re-measured — **this pass
+> makes no call to the PDI of any kind.**
+>
+> **2. A re-run is OWED, and was DELIBERATELY NOT PERFORMED here.** Nothing in this file was re-run
+> and **no ATF test, suite, step or result record was created, altered or deleted**: the stored
+> result is the historical record and is preserved intact, with its per-test detail, its failing
+> steps and its verbatim assertion text, exactly as measured. Re-running the suite requires the
+> session-bound client runner and would overwrite nothing but would add a second result to compare
+> against; it is named as owed and left to a human. Phase 3 is non-gating either way (D4 /
+> OVERRIDE-4), so nothing about delivery turns on it.
+>
+> **3. Against the package that SHIPS: still accurate, and this is the important half.** The shipped
+> elected fallback carries the 7 older `sys_choice_<32-hex>` rows and **not** the 7 name-keyed
+> `sys_choice_x_casemgmt_*` collections, so on a clean instance a bare commit of the shipping bytes
+> **without** `scripts/post_import_remediation.js` reproduces the same empty choice lists and would be
+> expected to reproduce these six failures. The live instance is a different population: its 24 rows
+> exist because the native rebuild's choice composites were committed to it. **The instance is fixed;
+> the shipping package is not.**
+>
+> Corroborating the staleness reading: the same 20-test suite passed **20/20** hours
 > earlier the same day as suite result **TES0001001** (`sys_id
 > 1768f7429307435009aa70d19dba10a4`), `08:33:54 → 08:36:27` instance-local, on an instance whose
 > choice rows were present.
@@ -355,14 +389,25 @@ failure is omitted or averaged over.** Classification is explained in §5.
 **Totals: 20 tests = 14 pass + 6 fail + 0 unable to execute.** Failures by name: **ATF 01, ATF 10,
 ATF 15, ATF 16, ATF 17, ATF 18**.
 
+> **These 20 rows are the definitive record of suite result TES0001002 and are preserved exactly as
+> measured. They are also STALE RELATIVE TO CURRENT RUNTIME:** the one cause behind all six failures
+> is absent from the live instance today (`sys_choice` = **24** rows; anonymous portal `POST` →
+> **HTTP 201**), so the six recorded failures no longer describe current behaviour there, a re-run is
+> **owed** and was **deliberately not performed**, and no ATF record was altered. They do still
+> describe the **shipped package** on a clean instance without
+> `scripts/post_import_remediation.js`. §3's staleness block states both scopes in full.
+
 ---
 
 ## 5. S4 — every failure classified, with evidence, and the action taken (D43, D5, D6)
 
 ### 5.1 One shared root cause behind all six failures
 
-The `sys_choice` rows for the three scoped tables **do not exist on the instance**, while the
-dictionary still declares the four `x_casemgmt_case` fields choice-typed:
+The `sys_choice` rows for the three scoped tables **did not exist on the instance when this phase
+ran** (`2026-09-02`), while the dictionary still declared the four `x_casemgmt_case` fields
+choice-typed. **The probe results below are that dated measurement and are preserved as such;
+`sys_choice` for the three tables reads 24 rows on the instance today**, so this root cause is
+absent from current runtime and present only in the package that ships — §3's staleness block:
 
 | Probe | Result |
 | --- | --- |
@@ -580,7 +625,7 @@ parties **8**, `U1BASE-*` fixtures **0**, scoped `sys_security_acl_role` links s
 
 | Gate | Command | Result |
 | --- | --- | --- |
-| XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files at the time of this phase; **221 as measured 2026-09-05T04:45Z** — the “212 today” recorded here was overtaken by the three post-run commits and is superseded) |
+| XML well-formedness | `find servicenow-case-management-poc -name '*.xml' -print0 \| xargs -0 -n1 xmllint --noout` | **no output** (175 files at the time of this phase; **221 as measured 2026-09-05T04:45Z**, and **224 as measured at commit `3ce969fa49`** — the “212 today” recorded here was overtaken by the three post-run commits and is superseded, as the 221 reading was in turn by the retained `…AMENDED-NOT-GATED.xml`, `client_scripts/x_casemgmt_case_closed_readonly_enforce.xml` and `ui_policy/x_casemgmt_case_closed_readonly.xml`. Later remediation passes keep adding artifacts, so re-derive with the command rather than trusting the literal) |
 | JS syntax | `find servicenow-case-management-poc -name '*.js' -print0 \| xargs -0 -n1 node --check` | **no output** (3 files at the time of this phase; **4 as measured 2026-09-05T04:45Z** — the CR6 pass added [`scripts/pre_delete_collateral_guard.js`](../../scripts/pre_delete_collateral_guard.js), which passes the same gate) |
 | `run-state.json` parses | `python3 -c "json.load(...)"` | **parses** |
 | **Package checksum unchanged by this phase** | `sha256sum update-set/x_casemgmt_case_management_update_set.xml` | **`eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae`** — **equal to `phase2.verified_checksum`**, asserted explicitly because this phase changed nothing in the package. (That equality is a measurement taken while this phase ran and stands as such; the file was re-sequenced afterwards into `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` and retained at `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml`, whose bytes are `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` / 4,062,067 B today. **The deliverable path holds `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7` / 3,781,097 B / 926 blocks after the 2026-09-05 identity correction** — the untouched elected package, with the amended `9f3ea74c…` / 935-block bytes retained, explicitly non-shipping, at `…AMENDED-NOT-GATED.xml`. Under D36 every one of those changes leaves the recorded checksum stale and an S1–S6 re-run owed — §5.5) |
@@ -632,17 +677,24 @@ stays **NOT MET** for every one of those sequences (§5.5, and
 
 1. **ATF 01, ATF 10, ATF 15, ATF 16, ATF 17, ATF 18** — six named failures, one shared root cause
    (`sys_choice` rows absent for the three scoped tables), all class **(c)**, **0 fix attempts**.
-   **CORRECTED 2026-09-05 — these six are NOT stale with respect to the package that ships.** The
+   **CORRECTED 2026-09-05 — two scopes, both true.** The
    verdicts belong to suite result TES0001002 (`0b7d459a93cf435009aa70d19dba10be`,
-   `2026-09-02 21:45:31Z`) and predate the choice-materialization fix in commit `f8454fb078`. They
-   are stale with respect to the **live instance**, where `sys_choice` reads **24** rows today, so a
-   suite re-run against the instance is owed before they may be read as the instance's current
-   state. But **the shipped package does not contain that fix**: the elected fallback carries the 7
+   `2026-09-02 21:45:31Z`) and predate the choice-materialization fix in commit `f8454fb078`.
+   **(i) Against the live instance they are STALE RELATIVE TO CURRENT RUNTIME:** `sys_choice` for the
+   three scoped tables reads **24** rows there and an anonymous portal
+   `POST /api/x_casemgmt/case_submit` returns **HTTP 201** — the very assertion ATF 18 recorded as
+   `400` — so **the six recorded failures no longer describe current behaviour** and none of these
+   verdicts may be read as the instance's current state. **A suite re-run is owed and was
+   deliberately not performed**; no ATF record was created, altered or deleted, and the 14/6 result
+   and its per-test detail stand intact as the historical record.
+   **(ii) Against the package that ships they remain accurate**, because **the shipped package does
+   not contain that fix**: the elected fallback carries the 7
    older `sys_choice_<32-hex>` payloads and not the 7 name-keyed
    `sys_choice_x_casemgmt_*` collections, and the absence of those collections is the single root
-   cause of all six failures. **So these six describe the behaviour of the bytes that ship**, and
+   cause of all six failures. **So these six describe the behaviour of the bytes that ship** on a
+   clean instance without the remediation script, and
    they are handed to the FINAL REPORT as known, named, shipped defects rather than as an outdated
-   result. The same suite passed
+   result. Phase 3 gates nothing either way (D4 / OVERRIDE-4). The same suite passed
    **20/20** hours earlier the same day as TES0001001 (`1768f7429307435009aa70d19dba10a4`,
    `08:33:54 → 08:36:27` instance-local). And
    for each of ATF 01/15/16/17/18 the later steps were **skipped**, so their downstream assertions are
