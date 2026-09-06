@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `closed_date` field on the `x_casemgmt_case` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_dictionary_x_casemgmt_case_closed_date
+      Update record type       : Dictionary
+      Update record target     : Case.Closed Date
+      Captured (instance time) : 2026-09-02 19:14:08
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (d1daac5e938b435009aa70d19dba10c6), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `closed_date` DateTime field on the `x_casemgmt_case` custom
+    table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field         Type        Constraints
+        closed_date   DateTime    Auto-set on Close transition
+
+    Per AAP Section 0.5.5 (State-Machine Transition Map verbatim):
+        From       To       Required condition                                   Blocking-error behavior on failure
+        Resolved   Closed   Caller has x_casemgmt_case_manager role; auto-set     Surface form-level error
+                            closed_date
+
+    `closed_date` is the system-managed timestamp recording the moment a case
+    transitioned from Resolved to Closed. The value is the basis for the
+    "Average Time to Close" single-score widget on the Manager View dashboard:
+
+        ../reports/x_casemgmt_avg_time_to_close.xml computes
+            AVG(closed_date - opened_date) over Closed cases
+            (per AAP Section 0.4.1 Manager View Dashboard widget inventory)
+
+    This dictionary entry ONLY declares that the `closed_date` field exists
+    on the parent table. The auto-population logic
+    (`closed_date = gs.nowDateTime()` on the Resolved -> Closed transition)
+    has exactly ONE writer in the delivered implementation:
+
+        ../business_rules/x_casemgmt_set_closed_date.xml
+           A before-update business rule on `x_casemgmt_case`, order 500,
+           that fires when previous.status == "Resolved" AND
+           current.status == "Closed". Being a before-update rule on the
+           write path, it stamps the timestamp on EVERY Closed transition -
+           the form, direct updates via the Table API, GlideRecord scripts,
+           bulk imports, and any future server-side automation.
+
+    ../flows/sub_flows/validate_closed_transition.xml does NOT write this
+    column. That subflow is a guard: invoked from
+    ../flows/general_inquiry_state_machine.xml and
+    ../flows/complaint_state_machine.xml (and, synchronously, from the
+    order-250 business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml),
+    it evaluates the "Caller has x_casemgmt_case_manager role" precondition
+    of AAP Section 0.5.5 and RETURNS A VERDICT ({ok, error}). When the
+    verdict is ok the save proceeds and the order-500 rule stamps the
+    timestamp; when it is not, the order-250 rule aborts the save, so
+    closed_date is never stamped. Ordering is what makes this work: the
+    guard at 250 runs before the stamp at 500 in the same before-update
+    pass.
+
+    The single writer respects the read_only=true dictionary attribute
+    because read_only governs USER-INITIATED writes through forms /
+    Table API / import sources - server-side scripts using
+    GlideRecord.setValue() bypass the read_only check by design.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 171-173:
+            @Column(name = "cm_case_closed")
+            @Temporal(TemporalType.TIMESTAMP)
+            private Date closed;
+        ArkCase's `closed` was a JPA Date column on the `acm_case_file`
+        entity, mapped to the physical column `cm_case_closed`, stored as
+        a full TIMESTAMP (date + time, millisecond precision). Unlike the
+        sibling `created` column (which had `nullable=false,
+        insertable=true, updatable=false`), the `closed` column had no
+        explicit JPA constraints - it was nullable (a case in any non-
+        terminal status legitimately had `closed = NULL`) and updatable
+        (the platform set the value at close time). The ServiceNow
+        target captures these JPA semantics in the following dictionary
+        attributes:
+          * @Temporal(TemporalType.TIMESTAMP) -> internal_type=glide_date_time
+            (DateTime, NOT glide_date - AAP Section 0.5.7 explicitly
+            specifies DateTime, not Date; the DateTime type preserves
+            hour/minute/second precision needed for the "Average Time to
+            Close" report's duration arithmetic)
+          * implicit JPA nullable=true -> mandatory=false at the
+            dictionary level (a case in Draft, Open, In Progress,
+            Pending, or Resolved status legitimately has empty
+            closed_date)
+          * implicit JPA updatable=true PLUS the auto-set business
+            rule -> read_only=true at the dictionary level (the field
+            IS updatable - but only by server-side scripts, never by
+            user-initiated writes)
+          * @Column(name="cm_case_closed") -> conventional ServiceNow
+            column naming (lowercase snake_case `closed_date`); the
+            physical column name in the underlying ServiceNow database
+            is auto-generated by the platform from <element>
+      - The field name is `closed_date` (lowercase, snake_case; NOT
+        `closed`, NOT `closedDate`, NOT `case_closed_date`) per AAP
+        Section 0.5.7 verbatim. This is an INTENTIONAL rename from
+        ArkCase: the source-side `closed` was a single-word column
+        with implicit Date typing, whereas `closed_date` is a
+        domain-meaningful synonym that explicitly signals the value
+        is a TIMESTAMP and pairs symmetrically with the sibling
+        `opened_date` field (../dictionary/x_casemgmt_case_opened_date.xml).
+        The pair (opened_date, closed_date) is the canonical input
+        to the duration-arithmetic report and reads naturally on
+        the case form, the Manager View dashboard, and the
+        case-listing view.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope through the
+        scope-record id the platform serialized into both elements (the
+        rebuild resolved the scope by query, so this is NOT a `source`
+        attribute lookup). NO global-scope writes - the OOB tables `task`,
+        `incident`, `sys_user`, etc. are never modified.
+      - No cross-reference sys_id was hand-authored here, and the ids that
+        ARE present are the platform's own. The rebuild resolved the scope
+        by query (sys_scope?scope=x_casemgmt) and let ServiceNow serialize
+        every reference, so what it wrote is literal, not a by-name token:
+        `<sys_package>` carries display_value="x_casemgmt Case Management"
+        and source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af, and `<sys_scope>` carries
+        display_value only over that same scope-record id, with no
+        `source` attribute at all. Both text nodes are that id. This is
+        ServiceNow's native serialization of a reference field and is
+        AUTHORIZED by the refine PR's native-capture directive, which
+        supersedes the hand-authored origin for this path (see
+        docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value d1daac5e938b435009aa70d19dba10c6 is
+        the identity the platform assigned this record when it created it:
+        this record's own primary key, NOT a reference to any other
+        record, and NOT derived from the field identifier
+        `x_casemgmt_case.closed_date`. Re-running the rebuild would yield
+        a different id, so this file is NOT reproducible byte-for-byte by
+        regeneration; the no-hard-coded-sys_id rule is satisfied BY
+        PROVENANCE (nothing here was composed by hand) rather than by the
+        absence of literal ids. Re-import matches the existing row on this
+        id and idempotently updates the same dictionary row rather than
+        creating a duplicate, which is why the captured value must be
+        preserved verbatim.
+      - The concrete scope identifier `casemgmt` is used per AAP convention;
+        ServiceNow Update Set imports use a standard XML parser, so the
+        scope id must be concrete in the XML before export. The identifier appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=false at the dictionary level. This is INTENTIONAL and
+        critical for two reasons:
+          1) Cases in any non-Closed status (Draft, Open, In Progress,
+             Pending, Resolved) legitimately have an EMPTY closed_date.
+             Setting mandatory=true would cause every insert and update
+             that does not pre-populate the column to fail with
+             "Mandatory field not populated" - which would block ALL
+             case creation paths (the scripted REST submission endpoint
+             ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+             creates new cases in Draft status with no closed_date;
+             internal-form-driven creation through App Engine Studio
+             likewise begins in Draft).
+          2) The closed_date semantic is "this case has reached the
+             Closed terminal state and the closure event happened at
+             this timestamp" - the absence of a value is itself
+             meaningful (the case has not yet been closed). A mandatory
+             constraint at the dictionary level would conflict with the
+             state-machine-driven population pattern: closed_date is
+             populated by the Resolved -> Closed transition, NOT by
+             creation. Per AAP Section 0.5.5, every case starts at
+             status=Draft (not Closed), so closed_date is empty for
+             every freshly-inserted case by domain definition.
+      - read_only=true at the dictionary level. CRITICAL SECURITY
+        CONTROL (per agent prompt Phase 10 Key Insights item 2):
+        without this, a `case_manager` could backdate or alter the
+        closed_date through the standard form, distorting the
+        ../reports/x_casemgmt_avg_time_to_close.xml single-score
+        (AVG(closed_date - opened_date) over Closed cases) and
+        producing misleading SLA / time-to-close analytics on the
+        Manager View dashboard. The system manages this field
+        exclusively via the two server-side writers listed above
+        (../business_rules/x_casemgmt_set_closed_date.xml and
+        ../flows/sub_flows/validate_closed_transition.xml). The
+        read_only constraint also enforces the AAP Section 0.7.1
+        rule that "blocking errors must be surfaced on the form" -
+        any user attempt to manually edit closed_date will be
+        rejected at the form layer with the platform's standard
+        read-only error rendering, before any business rule fires.
+        Read-only-from-the-user-perspective also aligns with the
+        ArkCase semantic where the `closed` field was set by the
+        platform's case-closure pipeline (ChangeCaseFileStateService
+        in the source-side codebase) rather than by direct user
+        edit.
+      - default_value is EMPTY (no implicit default) per the agent
+        prompt's Phase 4 verbatim. Cases on insert have no closure
+        timestamp by definition (every case begins at status=Draft
+        per AAP Section 0.5.5), so an explicit empty default
+        correctly represents the "case has not yet been closed"
+        state. ServiceNow's static dictionary default_value attribute
+        supports literal values only - a runtime-evaluated default
+        like `gs.nowDateTime()` cannot be encoded as a static
+        dictionary default and must instead be applied by the
+        before-update business rule on the Resolved -> Closed
+        transition. Authoring an empty default keeps the
+        responsibility for population unambiguously in the business
+        rule + flow subflow, avoiding the risk that a stale literal
+        date (e.g., a historical `2025-01-01 00:00:00` baked into
+        the dictionary) would leak into seed data or production
+        cases on a future PDI.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and the
+        agent prompt's Phase 4. The standard `sys_updated_on` audit
+        column on every ServiceNow row already captures the timestamp
+        at which any field on the case row was last updated -
+        including the moment closed_date was populated by the
+        Resolved -> Closed transition. Auditing closed_date
+        redundantly with `sys_updated_on` would duplicate audit-trail
+        rows in the sys_audit table without adding investigative
+        value, since read_only=true already prevents post-population
+        modification by users.
+      - active=true: the field is part of the live schema from
+        Update Set commit forward. There is no transitional / staged
+        / inactive phase for the case schema in the POC.
+      - display=false, as the captured payload below carries. The
+        dictionary `display` attribute nominates a table's SINGLE
+        display (label) field - the value ServiceNow shows for a
+        reference to the record - and for `x_casemgmt_case` that field
+        is `number` (../dictionary/x_casemgmt_case_number.xml), so
+        every other column on the table carries false. It does not
+        govern form or list rendering: internal users (manager, agent,
+        viewer) see the closed_date timestamp on the case form for
+        Closed cases through the form layout, and the Manager View
+        dashboard's Closed-cases-by-priority and avg-time-to-close
+        widgets reference the column directly. Note: closed_date is
+        NOT exposed by the public
+        portal lookup widget - per AAP Section 0.7.4 the lookup page
+        returns ONLY status, subject, opened_date (closed_date is
+        considered an internal field and is excluded from the
+        anonymous response payload by
+        ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml).
+      - max_length=40: standard ServiceNow ceiling for date/datetime
+        fields. ServiceNow stores DateTime values in a canonical
+        `YYYY-MM-DD HH:mm:ss` format (19 chars) with optional timezone
+        offset suffix (+5 chars) - 40 chars provides ample headroom
+        for any current or future canonical encoding without schema
+        migration.
+      - choice=0: free-form DateTime input (no choice list). The
+        platform's standard date/time picker widget renders for input
+        on the form (though read_only=true makes the picker
+        non-interactive); the report builder uses native DateTime
+        comparison and arithmetic operators on the column for the
+        avg-time-to-close calculation.
+      - No reference target: this is a DateTime field, not a Reference
+        field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - text_index=false: DateTime fields are not full-text-indexed.
+        The platform's standard DateTime comparison operators on
+        GlideRecord.addQuery() (e.g.,
+        `addQuery('closed_date', '>', javascript:gs.beginningOfThisYear())`)
+        and the report builder's date-difference aggregator operate
+        directly on the column without needing a full-text index.
+      - unique=false: cases legitimately share closure timestamps
+        when bulk-closed, when seed data is loaded with synthetic
+        timestamps, or when independent state-machine transitions
+        complete within the same second. Uniqueness is enforced by
+        the `number` field (CASE0000001 format,
+        ../dictionary/x_casemgmt_case_number.xml), not by closed_date.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation. The avg-time-to-close report computes
+        `closed_date - opened_date` at query time using the report
+        builder's date-difference aggregator; the difference is NOT
+        stored as a derived column on the case table.
+      - No PII: the field stores only a UTC timestamp; no real names,
+        email addresses, or organizational identifiers are derived
+        from or stored in this column.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_casemgmt_case.xml`
+        (parent table), since `<name>x_casemgmt_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `closed_date` column:
+          * ../business_rules/x_casemgmt_set_closed_date.xml (the sole
+            writer: before-update business rule, order 500, that populates
+            this field with `gs.nowDateTime()` on the Resolved -> Closed
+            transition; the rule references the column by element name and
+            would fail to resolve against the table if this dictionary
+            entry is absent)
+          * ../flows/sub_flows/validate_closed_transition.xml (Flow
+            Designer guard subflow for the Resolved -> Closed transition.
+            It writes nothing; it returns a verdict that the order-250
+            business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml
+            turns into an abort. Listed here because it reads the case
+            record and must resolve against the same table)
+          * ../reports/x_casemgmt_avg_time_to_close.xml (single-score:
+            AVG(`closed_date - opened_date`) over Closed cases - per
+            AAP Section 0.4.1 Manager View Dashboard widget inventory;
+            requires the column to exist on the case table for the
+            duration-arithmetic aggregator to resolve)
+          * ../seed-data/cases/x_casemgmt_case_demo_06.xml,
+            ../seed-data/cases/x_casemgmt_case_demo_10.xml (the two
+            demo cases in Closed status per AAP Section 0.4.1
+            Refactored Structure Planning - General Inquiry Closed
+            and Complaint Closed respectively - populate this field
+            with explicit synthetic timestamps so the
+            avg-time-to-close single-score displays a non-zero
+            duration on a fresh PDI immediately after Update Set
+            commit; the read_only=true dictionary attribute does
+            NOT block these seed inserts because XML record
+            imports use the platform's bulk-load path which is
+            exempt from form-layer read-only enforcement)
+      - This record is INDEPENDENT of (does not depend on, and is
+        not depended on by) the sibling `opened_date` dictionary
+        entry (../dictionary/x_casemgmt_case_opened_date.xml). Both
+        fields are columns on the same parent table and load in
+        parallel during Update Set apply.
+-->
+<record_update>
+    <sys_dictionary action="INSERT_OR_UPDATE" element="closed_date" table="x_casemgmt_case">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Closed Date</column_label>
+        <comments>DateTime stamped on the Resolved-&gt;Closed transition by exactly one writer: the order-500 before-update business rule ../business_rules/x_casemgmt_set_closed_date.xml. The guard subflow ../flows/sub_flows/validate_closed_transition.xml writes nothing - it returns a verdict that the order-250 business rule ../business_rules/x_casemgmt_enforce_forward_transitions.xml turns into an abort. Read-only from user perspective. Used by ../reports/x_casemgmt_avg_time_to_close.xml. Replaces ArkCase CaseFile.closed (Date with @Temporal(TIMESTAMP)).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>closed_date</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type display_value="">glide_date_time</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_casemgmt_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>true</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:14:07</sys_created_on>
+        <sys_id>d1daac5e938b435009aa70d19dba10c6</sys_id>
+        <sys_name>Closed Date</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_closed_date</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:14:07</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

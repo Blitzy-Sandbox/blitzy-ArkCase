@@ -1,0 +1,1144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the ATF test
+    `ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)`
+    its 10 ordered `sys_atf_step` children and the 33 `sys_variable_value`
+    rows that carry those steps' input values, inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (Refine-PR Section 3, directives D3.1a / D3.2 / D3.4):
+        Section 3 asks for an ATF suite covering the data model and ACL RBAC
+        matrix, the state-machine transition matrix and the anonymous portal
+        contracts, and insists the tests be proven to RUN - "not just that the
+        sys_atf_test header records exist". Every record below was authored
+        natively on the instance and then serialized by the platform's OWN
+        serializer (GlideRecordXMLSerializer), never composed by hand. The
+        ATF's step configuration is genuinely multi-table - a step's input
+        VALUES live in `sys_variable_value`, not on the step row - which is the
+        Defect-F-shaped risk Section 3 warns about. It was measured rather than
+        assumed: the platform's payload loader IGNORES `sys_variable_value`
+        children embedded inside a `sys_atf_step` document (a step re-applied
+        that way came back with ZERO inputs and its test then failed), but the
+        same rows applied as their OWN records restore every input and the
+        re-imported test passes. Each input therefore ships here as a separate
+        `<record_update table="sys_variable_value">` document ordered directly
+        after its parent step, and the step keeps its `delete_multiple`
+        directive so a re-import clears stale inputs first. That makes the set
+        idempotent and self-sufficient.
+
+    RUNTIME EVIDENCE: see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`
+    (ATF section) for this test's captured verdict, its result-row id and the
+    negative-control evidence proving the suite can fail as well as pass.
+
+    PREREQUISITE FOR RUNNING: the instance property `sn_atf.runner.enabled`
+    must be `true`. It is an instance test-harness setting and is deliberately
+    NOT captured into the Update Set.
+
+    XML ROOT. This file uses `<unload>` as its root, the same convention as
+    `../dashboards/*.xml`, because it carries more than one record. Every record
+    element keeps its own `action="INSERT_OR_UPDATE"`, so the document is a
+    drop-in payload for the platform's own loader as well as being valid XML for
+    `xmllint` in no-output mode.
+
+    IDENTIFIERS. Every `<sys_id>` here is deterministic - derived from
+    md5('x_casemgmt.atf.' + <stable key>) - so a rebuild converges rather than
+    duplicating. Scope is bound by name: `<sys_package>` carries the literal
+    `x_casemgmt`. The only foreign sys_id literals are the ones a step's own
+    configuration genuinely requires and cannot express by name:
+      - `<step_config>`   the platform's own out-of-box `sys_atf_step_config`
+                          row (stable across instances), carrying a
+                          `display_value` so the intent stays readable;
+      - `<variable>`      the platform's own `atf_input_variable` definition
+                          for each step input, likewise with a `display_value`;
+      - `<user>` inputs   the ATF `Impersonate` step declares `user` as a
+                          `sys_user` REFERENCE, so the demo identity must be a
+                          sys_id. Those three ids belong to this package's own
+                          seed data (`../seed-data/users/*.xml`), which pins
+                          them deterministically, so they remain valid after a
+                          clean import.
+    No other sys_id literal appears. Users, groups, roles, tables and cases are
+    resolved by user_name / name / number everywhere else.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <sys_atf_test action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <copied_from />
+        <description>Manager row of the ACL matrix: create YES, read ALL, write ALL, delete YES. Every operation runs with ACL enforcement on, as the impersonated x_casemgmt_demo_manager.</description>
+        <enable_parameterized_testing>false</enable_parameterized_testing>
+        <fail_on_server_error>false</fail_on_server_error>
+        <name>ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)</name>
+        <parameters />
+        <sys_variable_value action="delete_multiple" query="document_key=64dd92fb6ce07b6b62d2978edd0231f2" />
+        <remember />
+        <sn_atf_tg_generated>false</sn_atf_tg_generated>
+        <sys_class_name>sys_atf_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>64dd92fb6ce07b6b62d2978edd0231f2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_64dd92fb6ce07b6b62d2978edd0231f2</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test_origin>manual</test_origin>
+    </sys_atf_test>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=0c49d5628dca1cfa5a6de8db29fabe6e" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>One assigned and one unassigned synthetic case</notes>
+        <order>1</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0c49d5628dca1cfa5a6de8db29fabe6e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_0c49d5628dca1cfa5a6de8db29fabe6e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>0c49d5628dca1cfa5a6de8db29fabe6e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e609efad5a803801bd39d9050436ae96</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    // Identities are resolved by user_name / name - never by sys_id literal.
+    function userId(userName) {
+        var u = new GlideRecord('sys_user');
+        u.addQuery('user_name', userName); u.setLimit(1); u.query();
+        return u.next() ? u.getUniqueValue() : '';
+    }
+    function groupId(groupName) {
+        var g = new GlideRecord('sys_user_group');
+        g.addQuery('name', groupName); g.setLimit(1); g.query();
+        return g.next() ? g.getUniqueValue() : '';
+    }
+    var MGR_ID = userId('x_casemgmt_demo_manager');
+    var AGT_ID = userId('x_casemgmt_demo_agent');
+    var VWR_ID = userId('x_casemgmt_demo_viewer');
+    var GRP_ID = groupId('x_casemgmt_demo_team');
+    var FIX = [
+        {
+            "label": "mine",
+            "table": "x_casemgmt_case",
+            "sys_id": "6fab7dd278e415c8e5bdea665c89d8a5",
+            "prefix": "ATF-RBAC-02",
+            "fields": {
+                "subject": "ATF-RBAC-02 manager fixture",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "unassigned",
+            "table": "x_casemgmt_case",
+            "sys_id": "93eeda729062207211ec3270cbf1545e",
+            "prefix": "ATF-RBAC-02",
+            "fields": {
+                "subject": "ATF-RBAC-02 unassigned fixture",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium"
+            }
+        }
+    ];
+
+    // A field value written as "@user:&lt;user_name&gt;" or "@group:&lt;name&gt;" is resolved
+    // here, at run time, so no identity sys_id is baked into the test definition.
+    function resolveToken(v) {
+        if (typeof v !== 'string' || v.charAt(0) !== '@') { return v; }
+        var sep = v.indexOf(':');
+        var kind = v.substring(1, sep), key = v.substring(sep + 1);
+        return kind === 'user' ? userId(key) : groupId(key);
+    }
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); }
+    }
+    for (var f = 0; f &lt; FIX.length; f++) {
+        var gr = new GlideRecord(FIX[f].table);
+        gr.initialize();
+        gr.setNewGuidValue(FIX[f].sys_id);
+        for (var fld in FIX[f].fields) gr.setValue(fld, resolveToken(FIX[f].fields[fld]));
+        var newId = gr.insert();
+        chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
+    }
+    stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>0c49d5628dca1cfa5a6de8db29fabe6e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8250d1fdd592d6879163cb99e58c239d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=3320541f3fcd32465d23d33a4d7a09f0" />
+        <copied_from />
+        <description>Impersonate the user:  with user Id: null</description>
+        <display_name>Impersonate</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_071ee5b253331200040729cac2dc348d^id=3320541f3fcd32465d23d33a4d7a09f0" />
+        <mugshots_cache_json />
+        <notes>Become x_casemgmt_demo_manager</notes>
+        <order>2</order>
+        <snapshot />
+        <step_config display_value="Impersonate">071ee5b253331200040729cac2dc348d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3320541f3fcd32465d23d33a4d7a09f0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Impersonate</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_3320541f3fcd32465d23d33a4d7a09f0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>3320541f3fcd32465d23d33a4d7a09f0</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>efb69ec7a485853039275b98b30fd1e1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>ca171e30808ed474ab30ffb2d478a379</value>
+        <variable display_value="User">586e2c4253e0220002c6435723dc3415</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=e4005397e09bc3d6cf34a646693310a4" />
+        <copied_from />
+        <description>Insert a record into '' with the following values:
+
+Confirm the record was successfully inserted</description>
+        <display_name>Record Insert</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_14872288df60220062fe6c7a4df26319^id=e4005397e09bc3d6cf34a646693310a4" />
+        <mugshots_cache_json />
+        <notes>Manager CREATE on x_casemgmt_case must succeed with ACLs enforced</notes>
+        <order>3</order>
+        <snapshot />
+        <step_config display_value="Record Insert">14872288df60220062fe6c7a4df26319</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e4005397e09bc3d6cf34a646693310a4</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Insert</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_e4005397e09bc3d6cf34a646693310a4</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4005397e09bc3d6cf34a646693310a4</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8894fc2c779d195e0b24d096e4bf5aac</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">e6e3c7535320220002c6435723dc3496</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4005397e09bc3d6cf34a646693310a4</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8d4eecc5c98e5fcc6ad15d7600ac4c48</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>subject=ATF-RBAC-02 manager create^description=Synthetic ATF fixture record. No PII.^requester_name=ATF Synthetic Requester^requester_email=atf-fixture@example.invalid^type=General Inquiry^status=Draft^priority=Medium^EQ</value>
+        <variable display_value="Field values">dd54cf535320220002c6435723dc34fd</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4005397e09bc3d6cf34a646693310a4</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>53327376fd19ca57e6ea4c041002549b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">90144b535320220002c6435723dc3488</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e4005397e09bc3d6cf34a646693310a4</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e2588d3658fd6ba192569ad9ce0710d7</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>record_successfully_inserted</value>
+        <variable display_value="Assert type">9024a37f671003007ba405225685efe5</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=7d177e62c16ec400e506b52888b79324" />
+        <copied_from />
+        <description>Set field values</description>
+        <display_name>Record Query</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_2d82e3c7531400109e02ddeeff7b12a7^id=7d177e62c16ec400e506b52888b79324" />
+        <mugshots_cache_json />
+        <notes>Manager READ of an assigned case</notes>
+        <order>4</order>
+        <snapshot />
+        <step_config display_value="Record Query">2d82e3c7531400109e02ddeeff7b12a7</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7d177e62c16ec400e506b52888b79324</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Query</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_7d177e62c16ec400e506b52888b79324</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>7d177e62c16ec400e506b52888b79324</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9855fef244a2d7c7d3396e57dee08670</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">02fb0027531000109e02ddeeff7b120b</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>7d177e62c16ec400e506b52888b79324</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>4f97283cca5f96a1394d4b6edc00b6b1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>sys_id=6fab7dd278e415c8e5bdea665c89d8a5^EQ</value>
+        <variable display_value="Conditions">915990ab531000109e02ddeeff7b12f8</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>7d177e62c16ec400e506b52888b79324</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b8b42f01fa0c5481112e2f7c3f189915</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">78b8d86b531000109e02ddeeff7b12f3</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>7d177e62c16ec400e506b52888b79324</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3c9945b40f36b76e98a37a689e1d614a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>records_match_query</value>
+        <variable display_value="Assert type">b86c0427531000109e02ddeeff7b1227</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=5bfdf2fb803a11506ebb8ada2c352633" />
+        <copied_from />
+        <description>Set field values</description>
+        <display_name>Record Query</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_2d82e3c7531400109e02ddeeff7b12a7^id=5bfdf2fb803a11506ebb8ada2c352633" />
+        <mugshots_cache_json />
+        <notes>Manager READ ALL: a case assigned to nobody is still visible</notes>
+        <order>5</order>
+        <snapshot />
+        <step_config display_value="Record Query">2d82e3c7531400109e02ddeeff7b12a7</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5bfdf2fb803a11506ebb8ada2c352633</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Query</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_5bfdf2fb803a11506ebb8ada2c352633</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5bfdf2fb803a11506ebb8ada2c352633</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8e5987251ebe01e81a34a0a92d976d27</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">78b8d86b531000109e02ddeeff7b12f3</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5bfdf2fb803a11506ebb8ada2c352633</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>01b7500a603f5c3c6c78300a52cf9520</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>sys_id=93eeda729062207211ec3270cbf1545e^EQ</value>
+        <variable display_value="Conditions">915990ab531000109e02ddeeff7b12f8</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5bfdf2fb803a11506ebb8ada2c352633</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8f0ee950e3586928632e0701c84888dc</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">02fb0027531000109e02ddeeff7b120b</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5bfdf2fb803a11506ebb8ada2c352633</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3dcb293b82ec3d3f5e5b679ef5e71259</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>records_match_query</value>
+        <variable display_value="Assert type">b86c0427531000109e02ddeeff7b1227</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=394dc8b443d6abce16ec0529f25efe4b" />
+        <copied_from />
+        <description>Update a record in '' with the following values:
+
+Confirm the record was successfully updated</description>
+        <display_name>Record Update</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_17a72288df60220062fe6c7a4df26397^id=394dc8b443d6abce16ec0529f25efe4b" />
+        <mugshots_cache_json />
+        <notes>Manager WRITE ALL: writing a case assigned to nobody must succeed</notes>
+        <order>6</order>
+        <snapshot />
+        <step_config display_value="Record Update">17a72288df60220062fe6c7a4df26397</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>394dc8b443d6abce16ec0529f25efe4b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Update</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_394dc8b443d6abce16ec0529f25efe4b</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>394dc8b443d6abce16ec0529f25efe4b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c7b871b0038000e98b8fcfe6ab84be9b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>93eeda729062207211ec3270cbf1545e</value>
+        <variable display_value="Record">501c8f535320220002c6435723dc34da</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>394dc8b443d6abce16ec0529f25efe4b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a573eeb6f39ac64e90a418f25468f910</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">53fb0f535320220002c6435723dc34ec</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>394dc8b443d6abce16ec0529f25efe4b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f571c250432aaf8c6d2e65dcb88eace9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>record_successfully_updated</value>
+        <variable display_value="Assert type">334b7bb7675003007ba405225685ef72</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>394dc8b443d6abce16ec0529f25efe4b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>1153436e4803331dc9cc203d70be45a5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">46dbcb535320220002c6435723dc3409</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>394dc8b443d6abce16ec0529f25efe4b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>db28d287d1bc1b846aa1b98c50a17936</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>priority=High^EQ</value>
+        <variable display_value="Field values">bc4c43935320220002c6435723dc34a2</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=e8e7f974a7f4f5470318d37ff7085051" />
+        <copied_from />
+        <description>Validate record from table '' matches the following condition:
+</description>
+        <display_name>Record Validation</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_1f39a288df60220062fe6c7a4df2639d^id=e8e7f974a7f4f5470318d37ff7085051" />
+        <mugshots_cache_json />
+        <notes>The written value is persisted</notes>
+        <order>7</order>
+        <snapshot />
+        <step_config display_value="Record Validation">1f39a288df60220062fe6c7a4df2639d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e8e7f974a7f4f5470318d37ff7085051</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Validation</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_e8e7f974a7f4f5470318d37ff7085051</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e8e7f974a7f4f5470318d37ff7085051</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>63285be78f1f8a1d37ac910ef045cef9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>0</value>
+        <variable display_value="Enforce security">cbddfa135320220002c6435723dc3415</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e8e7f974a7f4f5470318d37ff7085051</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6b3de182666e090062d75f64a29f7c8c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">6aad5a575360220002c6435723dc34b0</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e8e7f974a7f4f5470318d37ff7085051</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c13986214b74af53d83298134e6a18a8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>record_validated</value>
+        <variable display_value="Assert type">67400008676003007ba405225685efa4</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e8e7f974a7f4f5470318d37ff7085051</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7f09c005cb6c7742a62fb7e5e9231c5e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>93eeda729062207211ec3270cbf1545e</value>
+        <variable display_value="Record">52ed1e5b5360220002c6435723dc3421</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e8e7f974a7f4f5470318d37ff7085051</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a49e56555dec65dacbefa364645b7b1d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>priority=High^EQ</value>
+        <variable display_value="Field values">ff6e125353a0220002c6435723dc3442</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=a1c14fa283b0aefe08da98ae10ac316f" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>GlideRecordSecure capability matrix for the manager role</notes>
+        <order>8</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a1c14fa283b0aefe08da98ae10ac316f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_a1c14fa283b0aefe08da98ae10ac316f</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>a1c14fa283b0aefe08da98ae10ac316f</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a22ac5cff305f48751653920eeffff5c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+
+    chk('impersonated user', 'x_casemgmt_demo_manager', gs.getUserName());
+    chkTrue('manager holds x_casemgmt_case_manager', gs.hasRole('x_casemgmt_case_manager'));
+    var probe = new GlideRecordSecure('x_casemgmt_case');
+    chkTrue('manager can read the unassigned case', probe.get('93eeda729062207211ec3270cbf1545e'));
+    chkTrue('manager canCreate', probe.canCreate());
+    chkTrue('manager canRead', probe.canRead());
+    chkTrue('manager canWrite', probe.canWrite());
+    chkTrue('manager canDelete', probe.canDelete());
+    // GlideRecordSecure.getRowCount() is NOT ACL-filtered - it reports the raw
+    // database count - so ANY threshold assertion on it can pass while the role
+    // sees nothing at all. Measured on this instance with 11 cases: the demo agent
+    // (assigned-only) reported getRowCount()=11 while iteration yielded 9. The
+    // visible set is therefore built by ITERATION and compared id-for-id against an
+    // authoritative set read through a plain GlideRecord, which bypasses ACLs by
+    // design and is the only trustworthy statement of what rows exist.
+    function idsOf(gr) {
+        var o = [];
+        while (gr.next()) { o.push(gr.getUniqueValue()); }
+        o.sort();
+        return o;
+    }
+    var authoritative = new GlideRecord('x_casemgmt_case');
+    authoritative.query();
+    var everyId = idsOf(authoritative);
+    var secureAll = new GlideRecordSecure('x_casemgmt_case');
+    secureAll.query();
+    var visibleId = idsOf(secureAll);
+    chk('manager sees EVERY case (read all, exact set equality)',
+        everyId.join(','), visibleId.join(','));
+    chk('manager visible-case count equals the stored row count',
+        String(everyId.length), String(visibleId.length));
+    chkTrue('the ASSIGNED fixture is inside the manager visible set',
+        visibleId.indexOf('6fab7dd278e415c8e5bdea665c89d8a5') &gt; -1);
+    chkTrue('the UNASSIGNED fixture is inside the manager visible set',
+        visibleId.indexOf('93eeda729062207211ec3270cbf1545e') &gt; -1);
+    chkTrue('the comparison is not being made over an almost-empty table (AAP 0.7.4 seeds 10+)',
+        everyId.length &gt;= 10);
+    stepResult.setOutputMessage('manager capability matrix: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'manager capability matrix', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>a1c14fa283b0aefe08da98ae10ac316f</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>330989d33b8c9d8c3afc6920fde153f1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=aaa44453d77e2f7ddaf65aaaa83a8f0e" />
+        <copied_from />
+        <description>Delete record '' and confirm record was deleted</description>
+        <display_name>Record Delete</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_8df72288df60220062fe6c7a4df2636d^id=aaa44453d77e2f7ddaf65aaaa83a8f0e" />
+        <mugshots_cache_json />
+        <notes>Manager DELETE on x_casemgmt_case must succeed</notes>
+        <order>9</order>
+        <snapshot />
+        <step_config display_value="Record Delete">8df72288df60220062fe6c7a4df2636d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>aaa44453d77e2f7ddaf65aaaa83a8f0e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Delete</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_aaa44453d77e2f7ddaf65aaaa83a8f0e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>aaa44453d77e2f7ddaf65aaaa83a8f0e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>182e6b22ad2e7bcba144da820f62f2c3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>record_successfully_deleted</value>
+        <variable display_value="Assert type">c7e483f3671003007ba405225685effb</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>aaa44453d77e2f7ddaf65aaaa83a8f0e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b04654b51b640ec8a883f2c8d8ae0d2e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">d13d0b935320220002c6435723dc34c8</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>aaa44453d77e2f7ddaf65aaaa83a8f0e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a0de43a21766e43e2f6031419e782b9a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>6fab7dd278e415c8e5bdea665c89d8a5</value>
+        <variable display_value="Record">8f7d0f935320220002c6435723dc3471</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>aaa44453d77e2f7ddaf65aaaa83a8f0e</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>41af8eb671409a88d07c9fb03321d3e8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case</value>
+        <variable display_value="Table">3d6d8b935320220002c6435723dc349c</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=e90c61d173abe3dab56bf756d7bc021a" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Remove this test's synthetic fixtures</notes>
+        <order>10</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e90c61d173abe3dab56bf756d7bc021a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_e90c61d173abe3dab56bf756d7bc021a</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e90c61d173abe3dab56bf756d7bc021a</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3ce3a2b8af6fe280714ea4d5535b395a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>e90c61d173abe3dab56bf756d7bc021a</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>98f58118f894082f113055ea738d6bc6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    var FIX = [
+        {
+            "label": "mine",
+            "table": "x_casemgmt_case",
+            "sys_id": "6fab7dd278e415c8e5bdea665c89d8a5",
+            "prefix": "ATF-RBAC-02",
+            "fields": {
+                "subject": "ATF-RBAC-02 manager fixture",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "unassigned",
+            "table": "x_casemgmt_case",
+            "sys_id": "93eeda729062207211ec3270cbf1545e",
+            "prefix": "ATF-RBAC-02",
+            "fields": {
+                "subject": "ATF-RBAC-02 unassigned fixture",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium"
+            }
+        }
+    ];
+
+    // CLEANUP IS ASSERTED, NOT ASSUMED.
+    //
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology. It therefore passed even when every
+    // delete had
+    // silently failed, so fixtures could survive and contaminate later steps, later
+    // tests in the suite, and later runs (a stale pinned sys_id or a stale prefix row
+    // makes another test assert against the wrong record). What follows checks the
+    // outcome of each delete and then RE-QUERIES for residue, so a surviving row fails
+    // this step and is named in the failure message.
+    //
+    // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
+    // `subject` column to match on) is swept by pinned sys_id only - the same guard the
+    // delete loop uses - because that is the only key such a row is ever created with.
+    var removed = 0, failedDeletes = [];
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        }
+    }
+    for (var p = 0; p &lt; FIX.length; p++) {
+        if (!FIX[p].prefix) continue;
+        var extra = new GlideRecord(FIX[p].table);
+        extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
+        extra.query();
+        while (extra.next()) {
+            var extraId = extra.getUniqueValue();
+            extra.setWorkflow(false);
+            if (extra.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[p].table + ':' + extraId);
+        }
+    }
+    chk('every delete reported success', '', failedDeletes.join(' | '));
+
+    // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
+    // fixture that has one. Any row still present here is a real leak.
+    var residue = [];
+    for (var q = 0; q &lt; FIX.length; q++) {
+        var byId = new GlideRecord(FIX[q].table);
+        if (byId.get(FIX[q].sys_id))
+            residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
+        if (!FIX[q].prefix) continue;
+        var byPrefix = new GlideRecord(FIX[q].table);
+        byPrefix.addQuery('subject', 'STARTSWITH', FIX[q].prefix);
+        byPrefix.query();
+        while (byPrefix.next())
+            residue.push(FIX[q].table + ' ' + byPrefix.getUniqueValue() +
+                ' [' + byPrefix.getValue('subject') + '] survived');
+    }
+    chk('no fixture residue remains after cleanup', '', residue.join(' | '));
+
+    // setOutputMessage OVERWRITES rather than appends, so every reported
+    // line is accumulated and emitted once, at the end of the step.
+    var notes = [];
+    notes.push('fixtures removed=' + removed +
+        ' | deletes reporting failure=' + failedDeletes.length +
+        ' | residue rows=' + residue.length);
+    notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
+    return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+</unload>

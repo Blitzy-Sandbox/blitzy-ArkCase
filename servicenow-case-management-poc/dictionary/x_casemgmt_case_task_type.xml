@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `type` field on the `x_casemgmt_case_task` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_dictionary_x_casemgmt_case_task_type
+      Update record type       : Dictionary
+      Update record target     : Case Task.Type
+      Captured (instance time) : 2026-09-02 19:14:14
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (7eda609e938b435009aa70d19dba10ae), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `type` Choice field on the `x_casemgmt_case_task` custom table
+    inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_task:
+
+        Field   Type     Constraints
+        type    Choice   Investigation, Review, Follow-up, Other
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning):
+        choices/sys_choice_case_task_type.xml -> Investigation, Review,
+        Follow-up, Other
+
+    THIS DICTIONARY ENTRY ONLY DECLARES THAT THE `type` CHOICE FIELD EXISTS
+    ON THE PARENT TABLE. The choice values themselves (Investigation, Review,
+    Follow-up, Other) are authored as separate sys_choice records in
+    ../choices/sys_choice_case_task_type.xml. This separation is a deliberate
+    consequence of the ServiceNow Choice-field design pattern: a sys_dictionary
+    row declares the column shape; sibling sys_choice rows declare the allowed
+    string-label values keyed by `name` + `element` lookup against this entry.
+    New task types can later be added by appending sys_choice rows WITHOUT
+    altering this dictionary entry.
+
+    OPERATIONAL ROLE OF THE `type` FIELD ON CASE_TASK ROWS:
+      - Categorizes the task by activity-class so that internal users can
+        triage at-a-glance: an "Investigation" task implies fact-finding
+        work; a "Review" task implies a documentation/sign-off step; a
+        "Follow-up" task implies a callback or correspondence with a
+        requester; and "Other" is the deliberate escape valve for tasks
+        that resist neat categorization.
+      - Surfaces on the auto-generated x_casemgmt_case_task list view per
+        AAP Section 0.4.4 ("Internal user UI" requires "ServiceNow's
+        automatic native list and form views for the three custom tables").
+      - Surfaces on the auto-generated form layout when a user opens an
+        individual task record.
+      - Surfaces in the parent case's Related List of tasks (rendered via
+        the `case` reference field declared in
+        ../dictionary/x_casemgmt_case_task_case.xml). The Type column
+        appears beside Subject so that an internal user reviewing a case
+        sees what KIND of work each child task represents without opening
+        each task individually.
+      - The synthetic seed data per AAP Section 0.7.4 minimum-data
+        thresholds (at least one open and one closed task on selected
+        demo cases per AAP Section 0.3.1) populates this field across
+        the four supported labels to exercise downstream filters and to
+        ensure the choice list itself round-trips cleanly through the
+        Update Set re-import.
+      - The Agent Workspace dashboard's "My overdue tasks" list report
+        (AAP Section 0.5.1: list filtered by
+        `due_date < javascript:gs.daysAgoStart(0) AND status != Closed AND
+        assigned_to = javascript:gs.getUserID()`) does NOT aggregate by
+        this field in the POC; type is purely a categorical descriptor
+        on the task row, not a discriminator for any flow trigger or
+        report grouping. This is INTENTIONALLY different from
+        x_casemgmt_case.type, which IS the discriminator that selects
+        which Flow Designer state-machine flow handles a case
+        (general_inquiry_state_machine.xml vs complaint_state_machine.xml
+        per AAP Section 0.5.5). x_casemgmt_case_task has only ONE
+        task-status workflow shared across all task types, so
+        case_task.type does not need to be a flow-routing discriminator.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-task-plugin/src/main/java/
+        com/armedia/acm/plugins/task/model/AcmTask.java line 85:
+            private String type;
+        ArkCase's task `type` was a free-form String field on the
+        AcmTask domain object (the source-side analog of this
+        ServiceNow table). The field carried NO Bean Validation
+        constraints (no @Size, no @NotNull, no @Pattern), so any
+        caller could assign any string and the JPA / Activiti layer
+        enforced no enumeration. The ServiceNow target replaces the
+        free-form String with a controlled Choice vocabulary of
+        four labels (Investigation, Review, Follow-up, Other)
+        through the `<choice>3</choice>` setting plus the sibling
+        sys_choice records. This prevents typos, enables consistent
+        list-view filtering, and keeps the task-categorization
+        semantics deterministic across internal forms, the Table API,
+        and the seed scripts. AAP Section 0.1.2 codifies this kind
+        of free-form-String -> Choice tightening as the ServiceNow-
+        side equivalent of ArkCase's bean-validation enforcement.
+      - The field name is `type` (lowercase, 4 chars; NOT `task_type`,
+        NOT `taskType`, NOT `type_label`) per AAP Section 0.5.7
+        verbatim. The intentional naming symmetry with x_casemgmt_case
+        .type means cross-table reports can render a unified "Type"
+        column header without per-table label aliasing, mirroring the
+        same naming-symmetry rationale that established `subject` on
+        both x_casemgmt_case and x_casemgmt_case_task.
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_casemgmt_case_task` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        the same scope through the platform's own serialization of that
+        scope reference (the next two bullets state exactly what the
+        capture wrote). NO global-scope writes - the OOB tables
+        `task`, `incident`, `sys_user`, etc. are never modified by this
+        dictionary entry or any other artifact in the Update Set.
+      - No cross-reference sys_id was hand-authored here, and the ids
+        that ARE present are the platform's own. The rebuild resolved
+        the scope by query (`sys_scope?scope=x_casemgmt`) and let
+        ServiceNow serialize every reference, so what it wrote is
+        LITERAL, not a by-name token: `<sys_package>` carries
+        display_value="x_casemgmt Case Management" and
+        source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af, and `<sys_scope>` carries
+        display_value only over that same scope-record id, with no
+        `source` attribute. Both text nodes are that id. This is
+        ServiceNow's native serialization of a reference field and is
+        AUTHORIZED by the refine PR's native-capture directive, which
+        supersedes the hand-authored origin for this path
+        (docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value
+        7eda609e938b435009aa70d19dba10ae is the identity the platform
+        assigned this record when it created it: this record's own
+        primary key, NOT a reference to any other record, and NOT
+        derived from the field identifier `<name>.<element>`. Re-running
+        the rebuild would yield a different id, so this file is NOT
+        reproducible byte-for-byte by regeneration; the
+        no-hard-coded-sys_id rule is satisfied by PROVENANCE (nothing
+        here was composed by hand) rather than by the absence of literal
+        ids. Re-import matches the existing sys_dictionary row on this
+        id, which is why the captured value must be preserved verbatim:
+        altering it would make a commit insert a duplicate row instead
+        of updating the existing one.
+      - The concrete scope identifier `casemgmt` is used per AAP convention;
+        ServiceNow Update Set imports use a standard XML parser, so the
+        scope id must be concrete in the XML before export. The identifier appears in `<name>`, `<sys_scope>`,
+        `<sys_package>`, and `<sys_update_name>` consistently.
+      - mandatory=false at the dictionary level per AAP Section 0.5.7
+        verbatim ("type | Choice | Investigation, Review, Follow-up,
+        Other" - no Mandatory marker) and AAP Section 0.7.1
+        strict-literal "no additions, no renames, no type relaxations"
+        rule. The AAP authoritative text takes precedence over the
+        earlier functional argument that "every task has a type."
+        Although the four-label vocabulary is deliberately rich enough
+        to categorize any conceivable task (with "Other" serving as
+        the deliberate non-empty default-of-last-resort), AAP Section
+        0.5.7 does not require a dictionary-level mandatory constraint
+        to enforce that classification. Internal-form callers, Table
+        API consumers, and the synthetic demo tasks per
+        ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml continue to
+        populate this field explicitly with one of the four supported
+        labels at insert time. The contrast with case_task.subject
+        (which IS marked Mandatory in AAP Section 0.5.7 and therefore
+        carries mandatory=true in
+        ../dictionary/x_casemgmt_case_task_subject.xml) is intentional:
+        AAP authoritative text differentiates the two fields and the
+        dictionary entries reflect that exactly. If a future requirement
+        makes type strictly mandatory, AAP Section 0.5.7 will be
+        updated first and this dictionary entry will follow.
+      - read_only=false: an internal user (case_manager or assigned
+        case_agent within the AAP Section 0.5.6 "Assigned only"
+        condition) editing the task record may correct an erroneous
+        type assignment (e.g., a task initially classified as
+        "Investigation" later proves to be a "Review" step). The
+        read_only=false setting permits the write through the standard
+        form, the Table API, and the seed scripts. Internal-user
+        write authorization is governed by the table-level ACLs in
+        ../acl/ - this dictionary entry deliberately does NOT carry
+        per-role write_roles since the table-level ACLs apply
+        uniformly across all editable fields on x_casemgmt_case_task.
+      - default_value is EMPTY (no implicit default) per the agent
+        prompt's Phase 4 verbatim ("user picks"). Defaulting silently
+        to "Investigation" or "Other" would silently mask submissions
+        that failed the mandatory-enforcement intent and skew any
+        future "tasks by type" report. The user MUST explicitly
+        choose, either through the internal form or via an explicit
+        setValue() in seed scripts.
+      - audit=false per AAP Section 0.3.1 minimal-change clause and
+        the agent prompt's Phase 4. Task type is descriptive metadata,
+        not a regulated lifecycle attribute. The additional sys_audit
+        row per update would be unnecessary overhead for a POC.
+      - max_length=40 per the agent prompt's Phase 3 verbatim. The
+        longest defined label is "Investigation" (13 characters); the
+        40-character ceiling accommodates extensible future labels
+        (e.g., "Compliance Review", "External Verification") without
+        a schema migration. The same 40-character ceiling is used on
+        every Choice field in this Update Set (case.type, case.status,
+        case.priority, case.pending_reason, case_task.status,
+        case_party.party_type) for consistency.
+      - choice=3 = "Choice list, no description column" per the agent
+        prompt's Phase 3 verbatim. This is the standard Choice-field
+        configuration when a sibling sys_choice record set defines
+        the allowed values; the form renderer presents the field as
+        a select dropdown sourced from the matching sys_choice rows.
+        choice=0 (free-form String) would defeat the purpose of
+        constraining the field to a controlled vocabulary; choice=1
+        (Choice list with description) would impose a description
+        column that AAP Section 0.5.7 does not specify; choice=2
+        (Suggestion list) would let users input arbitrary strings
+        adjacent to the suggested ones, contradicting the intent.
+      - unique=false: multiple tasks with the same type are explicitly
+        permitted, both within a single case (a complex case may have
+        three "Investigation" tasks decomposed into sub-areas) and
+        across cases (every case may have an "Investigation" task).
+        Uniqueness is not a meaningful concept for a categorical
+        Choice field.
+      - text_index=false per the agent prompt's Phase 6 verbatim. A
+        Choice field with four labels does not benefit from a text
+        index; users navigate type via the Choice dropdown and
+        list-view filters, not free-form full-text search.
+      - spell_check=false per the agent prompt's Phase 6 verbatim.
+        A controlled Choice vocabulary is by definition correctly
+        spelled; spell_check on a Choice field would produce false
+        positives on label tokens that the platform dictionary does
+        not recognize (e.g., "Follow-up" hyphenation patterns).
+      - No reference target: this is a String-backed Choice field,
+        not a Reference field. All `<reference*>` elements are empty
+        and `<table_reference>false</table_reference>`. The field
+        does NOT reference an external lookup table; the choice
+        values live as sys_choice rows keyed by element name.
+      - No PII: the field stores only categorical labels chosen from
+        a controlled vocabulary; no real names, email addresses,
+        organizational identifiers, or any source-side ArkCase
+        production data are derived from or stored in this column
+        at any point in the build (per AAP Section 0.3.2 synthetic-
+        data-only constraint).
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case_task.xml (parent table; the
+            `<name>x_casemgmt_case_task</name>` element below references
+            the table by name, and the table must exist before any of
+            its dictionary entries can be attached)
+          * ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+            application record, and the sole scope authority in this
+            package - the standalone sys_scope artifact was removed as
+            Defect A; the captured <sys_scope> / <sys_package> text
+            nodes carry that record's own id,
+            82b99028936f74320d74d6f88357a5af, so it must exist before
+            this dictionary entry loads)
+      - This record MUST load BEFORE:
+          * ../choices/sys_choice_case_task_type.xml (the choice values
+            Investigation, Review, Follow-up, Other - with the literal
+            "Follow-up" hyphen per AAP Section 0.5.7 verbatim - which
+            reference this dictionary entry by `name` + `element` lookup
+            against the strings `x_casemgmt_case_task` and `type`)
+          * ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml (synthetic
+            demo tasks per AAP Section 0.7.4 must populate this mandatory
+            field with one of the four supported labels. The seed data
+            references this column by `element=type` and would fail to
+            insert if this sys_dictionary record were absent)
+          * ../scripts/seed_demo_data.js (the idempotent server-side seed
+            script writes synthetic task type labels via
+            GlideRecord.setValue('type', ...))
+
+    Record identity (platform-assigned; no derivation recipe applies):
+    The <sys_id> below, 7eda609e938b435009aa70d19dba10ae, is the identity
+    the platform assigned this sys_dictionary row when the native rebuild
+    created the `type` field - the same way every other record in the
+    rebuild got its id. It is not computed from the field identifier
+    <name>.<element> or from any other input, so nothing reproduces it
+    and a repeat rebuild would produce a different value. Preserve it
+    verbatim: re-import matches the existing row on this id.
+
+    Critical naming note carried forward to ../choices/sys_choice_case_task_type.xml:
+        The third label is "Follow-up" (with literal hyphen between
+        "Follow" and "up"), NOT "Follow up" (with space) and NOT
+        "Followup" (with no separator). AAP Section 0.5.7 verbatim
+        spells the label "Follow-up". The Update Set re-import
+        gate per AAP Section 0.7.3 will detect any deviation as a
+        preview error because the sys_choice rows must reference
+        this dictionary entry exactly.
+-->
+<record_update>
+    <sys_dictionary action="INSERT_OR_UPDATE" element="type" table="x_casemgmt_case_task">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice>3</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Type</column_label>
+        <comments>Optional Choice categorizing the task per AAP Section 0.5.7 verbatim (no Mandatory marker). Values: Investigation, Review, Follow-up, Other. Authored as separate sys_choice rows in ../choices/sys_choice_case_task_type.xml. Surfaces in the case_task list view, the parent case's task related list, and the auto-generated form. Replaces ArkCase AcmTask.type (free-form String, no validator). Internal forms, Table API, and seed tasks all populate this field explicitly with one of the supported labels.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>type</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type display_value="String">string</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_casemgmt_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:14:14</sys_created_on>
+        <sys_id>7eda609e938b435009aa70d19dba10ae</sys_id>
+        <sys_name>Type</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_task_type</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:14:14</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

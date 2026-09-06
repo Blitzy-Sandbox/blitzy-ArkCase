@@ -1,0 +1,567 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the ATF test
+    `ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message`
+    its 6 ordered `sys_atf_step` children and the 15 `sys_variable_value`
+    rows that carry those steps' input values, inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (Refine-PR Section 3, directives D3.1c / D3.2 / D3.4):
+        Section 3 asks for an ATF suite covering the data model and ACL RBAC
+        matrix, the state-machine transition matrix and the anonymous portal
+        contracts, and insists the tests be proven to RUN - "not just that the
+        sys_atf_test header records exist". Every record below was authored
+        natively on the instance and then serialized by the platform's OWN
+        serializer (GlideRecordXMLSerializer), never composed by hand. The
+        ATF's step configuration is genuinely multi-table - a step's input
+        VALUES live in `sys_variable_value`, not on the step row - which is the
+        Defect-F-shaped risk Section 3 warns about. It was measured rather than
+        assumed: the platform's payload loader IGNORES `sys_variable_value`
+        children embedded inside a `sys_atf_step` document (a step re-applied
+        that way came back with ZERO inputs and its test then failed), but the
+        same rows applied as their OWN records restore every input and the
+        re-imported test passes. Each input therefore ships here as a separate
+        `<record_update table="sys_variable_value">` document ordered directly
+        after its parent step, and the step keeps its `delete_multiple`
+        directive so a re-import clears stale inputs first. That makes the set
+        idempotent and self-sufficient.
+
+    RUNTIME EVIDENCE: see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`
+    (ATF section) for this test's captured verdict, its result-row id and the
+    negative-control evidence proving the suite can fail as well as pass.
+
+    PREREQUISITE FOR RUNNING: the instance property `sn_atf.runner.enabled`
+    must be `true`. It is an instance test-harness setting and is deliberately
+    NOT captured into the Update Set.
+
+    XML ROOT. This file uses `<unload>` as its root, the same convention as
+    `../dashboards/*.xml`, because it carries more than one record. Every record
+    element keeps its own `action="INSERT_OR_UPDATE"`, so the document is a
+    drop-in payload for the platform's own loader as well as being valid XML for
+    `xmllint` in no-output mode.
+
+    IDENTIFIERS. Every `<sys_id>` here is deterministic - derived from
+    md5('x_casemgmt.atf.' + <stable key>) - so a rebuild converges rather than
+    duplicating. Scope is bound by name: `<sys_package>` carries the literal
+    `x_casemgmt`. The only foreign sys_id literals are the ones a step's own
+    configuration genuinely requires and cannot express by name:
+      - `<step_config>`   the platform's own out-of-box `sys_atf_step_config`
+                          row (stable across instances), carrying a
+                          `display_value` so the intent stays readable;
+      - `<variable>`      the platform's own `atf_input_variable` definition
+                          for each step input, likewise with a `display_value`;
+      - `<user>` inputs   the ATF `Impersonate` step declares `user` as a
+                          `sys_user` REFERENCE, so the demo identity must be a
+                          sys_id. Those three ids belong to this package's own
+                          seed data (`../seed-data/users/*.xml`), which pins
+                          them deterministically, so they remain valid after a
+                          clean import.
+    No other sys_id literal appears. Users, groups, roles, tables and cases are
+    resolved by user_name / name / number everywhere else.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <sys_atf_test action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <copied_from />
+        <description>GET /api/x_casemgmt/case_status_lookup?number=CASE9999999 must answer HTTP 404 with exactly "No case found with that number.", both through the inbound-REST step type and through a genuinely anonymous call with no credentials.</description>
+        <enable_parameterized_testing>false</enable_parameterized_testing>
+        <fail_on_server_error>false</fail_on_server_error>
+        <name>ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message</name>
+        <parameters />
+        <sys_variable_value action="delete_multiple" query="document_key=7ab5876adb5664a2e51acd22c663ab76" />
+        <remember />
+        <sn_atf_tg_generated>false</sn_atf_tg_generated>
+        <sys_class_name>sys_atf_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7ab5876adb5664a2e51acd22c663ab76</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_7ab5876adb5664a2e51acd22c663ab76</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test_origin>manual</test_origin>
+    </sys_atf_test>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=6f848d4da76256133f870cf81dcfdefa" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Confirm the probe number really is unknown before asserting the 404</notes>
+        <order>1</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6f848d4da76256133f870cf81dcfdefa</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_6f848d4da76256133f870cf81dcfdefa</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>6f848d4da76256133f870cf81dcfdefa</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bd3549fb11b169edc4a5d313bbc6337b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>6f848d4da76256133f870cf81dcfdefa</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e67079ed8150b96a3783cd33b90e87e5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+
+    var gr = new GlideRecord('x_casemgmt_case');
+    gr.addQuery('number', 'CASE9999999');
+    gr.query();
+    chk('CASE9999999 does not exist', '0', String(gr.getRowCount()));
+    stepResult.setOutputMessage('no case may carry the probe number: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'no case may carry the probe number', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=5268562f28517c00ef2c02044e59d7b3" />
+        <copied_from />
+        <description>Send a 'GET' request to ''</description>
+        <display_name>Send REST Request - Inbound</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_e00571a10b3222000b7da95e93673a8f^id=5268562f28517c00ef2c02044e59d7b3" />
+        <mugshots_cache_json />
+        <notes>Look up an unknown case number through the inbound-REST step type</notes>
+        <order>2</order>
+        <snapshot />
+        <step_config display_value="Send REST Request - Inbound">e00571a10b3222000b7da95e93673a8f</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5268562f28517c00ef2c02044e59d7b3</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Send REST Request - Inbound</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_5268562f28517c00ef2c02044e59d7b3</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5268562f28517c00ef2c02044e59d7b3</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>95cbe960843ac33a3ce1554429789326</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>get</value>
+        <variable display_value="Method">59877da10b3222000b7da95e93673a56</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5268562f28517c00ef2c02044e59d7b3</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5ed30dd953004906bec9023f791fec90</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>/api/x_casemgmt/case_status_lookup</value>
+        <variable display_value="Path">50bff9250b3222000b7da95e93673a9b</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5268562f28517c00ef2c02044e59d7b3</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0136c58251aa11439accc61810da2041</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>{"Content-Type":"application/json","Accept":"application/json"}</value>
+        <variable display_value="Headers">cec002650b3222000b7da95e93673aae</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>5268562f28517c00ef2c02044e59d7b3</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>33731bd1d5abedb698ab6d62b5a5d9e0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>{"number":"CASE9999999"}</value>
+        <variable display_value="Query Parameters">58408e250b3222000b7da95e93673a5c</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=cc65b7e986728779657f470fdf0c6cd2" />
+        <copied_from />
+        <description>Assert a response status code is ''</description>
+        <display_name>Assert Status Code</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_2f4fa7309f132200ef4afa7dc67fcf0f^id=cc65b7e986728779657f470fdf0c6cd2" />
+        <mugshots_cache_json />
+        <notes>An unknown case number must answer HTTP 404</notes>
+        <order>3</order>
+        <snapshot />
+        <step_config display_value="Assert Status Code">2f4fa7309f132200ef4afa7dc67fcf0f</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>cc65b7e986728779657f470fdf0c6cd2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Assert Status Code</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_cc65b7e986728779657f470fdf0c6cd2</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>cc65b7e986728779657f470fdf0c6cd2</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8038165ce7a8a4e9680413394cfb16c9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>404</value>
+        <variable display_value="Status code">9f5f67709f132200ef4afa7dc67fcf94</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>cc65b7e986728779657f470fdf0c6cd2</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>438e4bcfee675d91d68f665782532010</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>equals</value>
+        <variable display_value="Operation">1d94cb1f3b8032000774229c93efc419</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=20fb5a445b26a8bef430d44b8765aadf" />
+        <copied_from />
+        <description>Assert a response payload contains ''</description>
+        <display_name>Assert Response Payload</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_d53e40d59f132200ef4afa7dc67fcfc7^id=20fb5a445b26a8bef430d44b8765aadf" />
+        <mugshots_cache_json />
+        <notes>The raw payload carries the verbatim not-found message</notes>
+        <order>4</order>
+        <snapshot />
+        <step_config display_value="Assert Response Payload">d53e40d59f132200ef4afa7dc67fcfc7</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>20fb5a445b26a8bef430d44b8765aadf</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Assert Response Payload</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_20fb5a445b26a8bef430d44b8765aadf</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>20fb5a445b26a8bef430d44b8765aadf</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>dcee9d77d83e70cd17192dfc3ef2081e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>contains</value>
+        <variable display_value="Operation">ccae44d59f132200ef4afa7dc67fcf1e</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>20fb5a445b26a8bef430d44b8765aadf</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d4c4b7e55b46d12839349490559f55e5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>No case found with that number.</value>
+        <variable display_value="Response body">f0eec4d59f132200ef4afa7dc67fcf6d</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=bfc2624a5e23e5bb765faf1d75132ed2" />
+        <copied_from />
+        <description>Assert a response payload element '' is not empty</description>
+        <display_name>Assert JSON Response Payload Element</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_afc114199f132200ef4afa7dc67fcf64^id=bfc2624a5e23e5bb765faf1d75132ed2" />
+        <mugshots_cache_json />
+        <notes>The error element is verbatim</notes>
+        <order>5</order>
+        <snapshot />
+        <step_config display_value="Assert JSON Response Payload Element">afc114199f132200ef4afa7dc67fcf64</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bfc2624a5e23e5bb765faf1d75132ed2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Assert JSON Response Payload Element</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_bfc2624a5e23e5bb765faf1d75132ed2</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>bfc2624a5e23e5bb765faf1d75132ed2</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a7b5b9379365f21e631906384fa7a48b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>No case found with that number.</value>
+        <variable display_value="Value">7b139c199f132200ef4afa7dc67fcfb3</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>bfc2624a5e23e5bb765faf1d75132ed2</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5000c11d70c5c600d8116072b96e5e6d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>/result/error</value>
+        <variable display_value="Element path">5a9258199f132200ef4afa7dc67fcfb4</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>bfc2624a5e23e5bb765faf1d75132ed2</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>bde680cddfab94f145ec7daeb645419e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>equals</value>
+        <variable display_value="Operation">2db298199f132200ef4afa7dc67fcfbc</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=06ce956d311e524e0606f3c64ccb499f" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>The anonymous path returns the same verbatim 404, including for a missing parameter</notes>
+        <order>6</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>06ce956d311e524e0606f3c64ccb499f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_06ce956d311e524e0606f3c64ccb499f</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>06ce956d311e524e0606f3c64ccb499f</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9eee5d0d3059742f6742916bb023f3a7</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>06ce956d311e524e0606f3c64ccb499f</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>deaa9222b64d4d9c39a4c0c963a2a0a2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+
+    function anonCall(method, path, body) {
+        var r = new sn_ws.RESTMessageV2();
+        r.setHttpMethod(method);
+        r.setEndpoint(String(gs.getProperty('glide.servlet.uri')).replace(/\/$/, '') + path);
+        r.setRequestHeader('Accept', 'application/json');
+        if (body) {
+            r.setRequestHeader('Content-Type', 'application/json');
+            r.setRequestBody(body);
+        }
+        var resp = r.execute();
+        return { status: String(resp.getStatusCode()), body: String(resp.getBody() || '') };
+    }
+
+    var res = anonCall('get', '/api/x_casemgmt/case_status_lookup?number=CASE9999999', null);
+    chk('anonymous lookup status', '404', res.status);
+    var body = JSON.parse(res.body).result;
+    chk('the error message is verbatim', 'No case found with that number.', String(body.error));
+    chk('the 404 body carries only the error key', 'error', Object.keys(body).sort().join(','));
+    var empty = anonCall('get', '/api/x_casemgmt/case_status_lookup', null);
+    chk('a missing number parameter also answers 404', '404', empty.status);
+    chk('the empty-parameter message is verbatim', 'No case found with that number.', String(JSON.parse(empty.body).result.error));
+    // setOutputMessage OVERWRITES rather than appends. Emitted separately, the
+    // evidence line below was written and then silently discarded, so the run output
+    // never showed the value these assertions were made against.
+    var notes = [];
+    notes.push('anonymous 404 body: ' + res.body);
+    notes.push('genuinely anonymous 404 with no credentials: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
+    return assertEqual({ name: 'genuinely anonymous 404 with no credentials', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+</unload>

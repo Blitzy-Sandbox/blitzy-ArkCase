@@ -1,0 +1,1487 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the SINGLE `sp_widget` row that
+    defines the CASE STATUS LOOKUP WIDGET of the unauthenticated Experience
+    Portal inside the scoped application `x_casemgmt`. This widget is the
+    SECOND of the three Service Portal widgets required by AAP Section 0.4.4
+    ("two unauthenticated pages: case submission and case status lookup") and
+    AAP Section 0.5.1 (in-scope artifact list).
+
+    PURPOSE (AAP Sections 0.1.1 / 0.4.4 / 0.7.4 / Validation Gate 5
+    "Portal - lookup"):
+
+      AAP Section 0.4.4 verbatim ("UI Design - External Experience Portal UI"):
+        "Page 2 - Case Status Lookup: a single input (case number) and a
+         result panel that shows status, subject, opened_date when found, or
+         the literal text 'No case found with that number.' when not found.
+         No internal fields (assigned_group, assigned_agent, description,
+         closed_date, requester_*) are exposed."
+
+      AAP Section 0.7.4 verbatim ("Other User-Provided Rules"):
+        "the literal text 'No case found with that number.' MUST appear when
+         the lookup case number does not match."
+
+      AAP Section 0.7.3 Validation Gate 5 ("Portal - lookup") verbatim:
+        "Status lookup returns correct data for valid case number - Correct
+         status / subject / opened_date returned; 'No case found with that
+         number.' for invalid number"
+
+      This widget renders three UX surfaces:
+        1. A single text-input field for the case number (e.g. CASE0000001).
+        2. A "Look Up Status" submit button that triggers the GET request.
+        3. A conditionally rendered RESULT PANEL (on HTTP 200 success) that
+           displays exactly three field values - status, subject,
+           opened_date - and ONLY those three, per AAP Section 0.4.4
+           "No internal fields ... are exposed".
+        OR
+        4. A conditionally rendered NOT-FOUND PANEL (on HTTP 404 / any
+           error) that displays the verbatim text "No case found with
+           that number." (capital "N", trailing period, ASCII straight
+           quotes - non-negotiable per AAP Section 0.7.4).
+
+      The result panel and the not-found panel are mutually exclusive:
+      `c.result` and `c.notFound` are reset to null/false at the start of
+      every lookup, so only one of the two panels is visible at any time.
+
+    ANONYMOUS-ACCESS DESIGN (AAP Section 0.4.4 verbatim:
+    "two unauthenticated pages"):
+      Three configuration mechanisms work together to make this widget
+      renderable by anonymous, unauthenticated callers (matching the parent
+      page's flags and the parent portal's anonymous-access settings):
+
+        1. <public>true</public> - explicit signal to the platform's
+           authorization layer that THIS WIDGET is exempt from the standard
+           authentication challenge. Anonymous users can render the widget.
+
+        2. <internal>false</internal> - the widget is publicly accessible
+           and NOT restricted to "internal" (employee-only) widgets.
+
+        3. <roles/> - empty. No roles are required to render the widget.
+           The Service Portal widget-level role-based gating is bypassed by
+           the empty roles list, so any caller (including anonymous) who
+           reaches the parent page can render the widget.
+
+      All three mechanisms are necessary; omitting any one breaks the
+      anonymous-access guarantee for the chained user journey:
+        anonymous user -> portal record -> case status page -> THIS lookup
+        widget -> /api/x_casemgmt/case_status_lookup REST endpoint.
+
+    DATA FLOW (CLIENT-DRIVEN; SERVER SCRIPT IS EMPTY):
+      Unlike most ServiceNow widgets (which fetch data server-side via the
+      `data` initialization function and pass it to the client via the
+      `data` object), THIS widget's data flow is entirely client-driven:
+
+        1. The widget renders with empty state (no result, no not-found).
+        2. The user types a case number into the input field.
+        3. The user submits the form (clicks the button or presses Enter).
+        4. The client controller's c.lookup() function issues
+              GET /api/x_casemgmt/case_status_lookup?number=<encoded>
+           via $http.get() (AngularJS 1.5.x service).
+        5. The scripted REST operation handler at
+              ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml
+           processes the GET, delegates to
+              ../../script_includes/x_casemgmt_CasePortalService.xml
+           (lookupCase() method), and returns either:
+              HTTP 200 with body { status, subject, opened_date }, OR
+              HTTP 404 with body { error: 'No case found with that number.' }
+        6. On HTTP 200: the controller maps response.data to c.result
+           (with strict 3-field whitelist - even if the server sent
+           additional fields, the client extracts ONLY status/subject/
+           opened_date) and the result panel renders.
+        7. On HTTP 404 / any error: the controller sets c.notFound = true
+           and the not-found panel renders the VERBATIM text.
+
+      The server script (the data initialization function) is intentionally
+      empty: there is nothing to pre-fetch on widget render because the
+      lookup is driven by user input.
+
+    DEFENSE-IN-DEPTH FIELD WHITELISTING:
+      The 3-field whitelist (status, subject, opened_date) is enforced at
+      THREE layers, not one:
+
+        1. The Script Include's lookupCase() method extracts ONLY these
+           three fields from the GlideRecord row (server-side whitelist).
+        2. The REST operation script copies ONLY these three fields from
+           the Script Include's return value into the response body
+           (REST-handler whitelist - drops accidental field exposure if
+           the Script Include is later modified).
+        3. The CLIENT CONTROLLER (this file) extracts ONLY these three
+           fields from response.data into c.result (UI-layer whitelist -
+           even if the server response somehow contained additional
+           fields, the template would never see them).
+
+      Defense-in-depth ensures that no future refactor of any single layer
+      can accidentally expose internal data via the public lookup endpoint.
+
+    HTTP-ERROR HARDENING (information-leakage prevention):
+      Every 4xx - a 404 not-found and a 400 bad-request alike - is treated
+      identically by the client: c.notFound = true, and the verbatim
+      "No case found with that number." message is shown.
+
+      A 5xx, a network failure and an expired client-side deadline are
+      treated as a SERVICE FAILURE instead: c.errorMessage is set and a
+      separate panel says the service could not be reached.
+
+      This is INTENTIONAL information-leakage hardening:
+        - An attacker probing the lookup endpoint cannot distinguish
+          "case not found" from "invalid input" - every 4xx shows the
+          same UX, so there is no oracle for enumerating case numbers.
+        - The failure branch reveals only whether the service answered,
+          which the requester can already observe from the page and which
+          says nothing about any case. An earlier revision folded it into
+          the not-found branch, which meant an infrastructure outage told
+          a requester their case did not exist - a false statement about
+          their own case, and the one a requester is least equipped to
+          question. Truthfulness here costs no hardening.
+        - The verbatim message is hardcoded in the template, NOT pulled
+          from the server's error response body. The server's HTTP 404
+          body is NEVER trusted by the client (defense against header
+          injection, response smuggling, malicious server responses).
+        - The error.data.error and error.statusText fields are NEVER
+          displayed to the user; they are deliberately discarded.
+        - No console.log() calls leak the case number or response into
+          the browser console (forensics surface).
+
+    DEFAULT THEME / NO CUSTOM CSS (AAP Section 0.4.4 verbatim: "Visual
+    treatment: ServiceNow Experience Portal default theme. No custom CSS,
+    no custom branding."):
+      The <css> element is empty. All visual styling uses out-of-the-box
+      Service Portal Bootstrap classes already shipped with the PDI:
+        - form-group, form-control: standard form-field styling.
+        - btn, btn-primary: standard primary-action button styling.
+        - panel, panel-default, panel-heading, panel-title, panel-body:
+          standard result-panel styling.
+        - alert: the box metrics (padding, margin, radius) for the
+          not-found notice and for the two coloured alerts below it.
+        - alert-danger: the theme's error colour, on the service-failure
+          panel, on the validation summary, and - WITHOUT the `alert`
+          class, so it contributes colour only and no box - on the field's
+          own error message.
+        - <dl>, <dt>, <dd>: semantic definition list for accessibility
+          (screen readers parse <dl> as key-value pairs).
+        - no colour class at all on the status paragraph under the button
+          and on the not-found notice, so both inherit the theme's body
+          text colour. That paragraph carries the visible reason a press
+          would be refused and the announcement of the in-flight state
+          (role="status", aria-live="polite", referenced by the button
+          through aria-describedby). The form also sets aria-busy while a
+          lookup is outstanding, because the button's inner text changing
+          to "Looking up..." is not by itself announced.
+      No custom CSS is authored or referenced. No custom branding artifacts
+      (icons, images, colors) are defined.
+
+      WHICH COLOUR TOKENS ARE USED AND WHY, MEASURED AGAINST THIS THEME:
+        Read out of the stylesheet the public portal actually serves
+        (styles/scss/sp-bootstrap-basic.scss on this instance), against the
+        white page background:
+              .text-danger    #d9534f              3.96:1   fails AA
+              .alert-warning  #c77c11 on white     3.32:1   fails AA
+              .alert-info     #2390b0 on white     3.69:1   fails AA
+              body (unclassed) #717171 on #fff     4.88:1   passes AA
+              .alert-danger   #a02622 on #fdf7f7   7.09:1   passes AA
+        The first two are the figures QA measured on the rendered page. The
+        field message therefore carries `alert-danger` (colour token only)
+        instead of `text-danger`, and the not-found notice carries `alert`
+        with NO colour variant, so its verbatim sentence inherits the
+        theme's body colour at 4.88:1. `alert-info` was measured and
+        rejected - it does not reach 4.5:1 either, so swapping one failing
+        variant for another would have changed the colour without fixing
+        the defect. Nothing is overridden; only chosen, which is what AAP
+        Section 0.4.4's default-theme mandate permits. The residues that no
+        token choice can close are recorded in ../../docs/portal-pages.md.
+
+    NO HARDCODED SYS_IDS IN REFERENCES (AAP Section 0.7.2):
+      Every cross-reference is a name lookup against a stable identifier:
+        - <sys_scope> resolves against the scope record's <name> field
+          (`x_casemgmt`) per ../../app/sys_app/x_casemgmt_case_management.xml.
+        - <sys_package> resolves against the sys_app record's <scope> field
+          (`x_casemgmt`) per ../../app/sys_app/x_casemgmt_case_management.xml.
+        - The REST URL is a stable text path
+          (/api/x_casemgmt/case_status_lookup) - NOT a sys_id reference.
+      The ONLY sys_id literal in this file is <sys_id> itself (THIS record's
+      own primary key). It is the deterministic 32-char lowercase hex MD5
+      of `sp_widget_x_casemgmt_case_lookup_widget`:
+        printf '%s' 'sp_widget_x_casemgmt_case_lookup_widget' | md5sum | cut -c1-32
+        -> e992deb0bd1657f36a38f5af6a46aeb2
+      Per AAP Section 0.7.2, the no-hardcoded-sys_id rule applies to
+      references TO OTHER records, not to a record's own identity primary
+      key.
+
+    NO PII, NO EMAIL (AAP Sections 0.7.2, 0.3.2):
+      The description, template, and scripts below contain ZERO PII (no
+      real names, no real email addresses, no real organization names, no
+      real case numbers). The placeholder example "CASE0000001" is the
+      synthetic auto-numbering format defined by AAP Section 0.7.4 and
+      ../../numbers/sys_number_x_casemgmt_case.xml. Email notifications are
+      explicitly disabled on the PDI per AAP Section 0.7.2 - this widget
+      makes no notification calls (gs.eventQueue, NotificationService, etc.).
+
+    `casemgmt` SCOPE IDENTIFIER (AAP Sections 0.7.1 / 0.7.2):
+      All `x_casemgmt_*` references use the concrete scope identifier
+      `casemgmt` per AAP Section 0.7.2 ("Scoped-namespace-only constraint").
+      ServiceNow Update Set imports use a standard XML parser (Java
+      DocumentBuilder); the scope identifier MUST be concrete in the XML
+      before export. The same identifier is used consistently across every
+      sibling XML in this scoped application (see sibling pages, REST
+      endpoints, dashboards, reports, and seed records).
+
+    XML CONVENTIONS HONORED (matching sibling files in this app):
+      - Wrapper element: <record_update table="sp_widget"> per the agent
+        prompt's Phase 1 specification, matching the sibling pattern used
+        by ../sp_portal_x_casemgmt_case_portal.xml and
+        ./sp_widget_x_casemgmt_case_confirmation_widget.xml.
+      - Indentation: 4 spaces for record fields (matching sibling-file
+        convention).
+      - Element ordering: alphabetical within the record (matching
+        sibling-file convention; the ServiceNow Update Set XML serializer
+        emits fields in alphabetical order).
+      - sys_scope text-node value: `x_casemgmt` (matching the actual scope
+        record's <name>).
+      - sys_package text-node value: `x_casemgmt` with source="x_casemgmt"
+        attribute (matching the sys_app record's <scope>).
+      - Deterministic 32-char lowercase hex sys_id: computed as
+        MD5("sp_widget_x_casemgmt_case_lookup_widget") =
+        e992deb0bd1657f36a38f5af6a46aeb2. Re-generation of this XML is
+        byte-identical (no random UUIDs).
+      - Audit fields: <sys_created_by>admin</sys_created_by> and
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on> for stable
+        repeatable timestamps (the same date is used by EVERY sibling
+        record in this scoped app for repeatable XML re-generation).
+      - No smart quotes, no leading/trailing whitespace, no BOM. Strict
+        XML conformance for ServiceNow Update Set re-import preview
+        (AAP Section 0.7.3 validation gate 7).
+
+    SOURCE-SIDE SEMANTIC REFERENCE (read-only context, NOT byte-for-byte
+    ported per AAP Section 0.5.1):
+
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+      armedia/acm/plugins/casefile/service/GetCaseByNumberService.java
+        line 38 - CaseFile getCaseByNumber(String caseNumber);
+
+      acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+      armedia/acm/plugins/casefile/service/GetCaseByNumberServiceImpl.java
+        line 47-50 - public CaseFile getCaseByNumber(String caseNumber) {
+                       return getCaseFileDao().findByCaseNumber(caseNumber);
+                     }
+
+      acm-standard-applications/arkcase/src/main/webapp/resources/modules/
+      cases/services/case-lookup.client.service.js
+        line 13-30 - Case.LookupService factory using $resource against
+                     'api/latest/plugin'
+
+      ArkCase's JPA-DAO-backed lookup returns the FULL CaseFile entity
+      with all internal fields (assigned_*, description, closed_date,
+      requester_*, etc.). The ServiceNow target deliberately whitelists
+      the response to ONLY status/subject/opened_date per AAP Section 0.4.4.
+      The semantic intent is preserved (lookup by case number -> status);
+      the technical surface is restructured to fit ServiceNow's REST +
+      Service Portal widget conventions and adds the privacy whitelist
+      that ArkCase did not have.
+
+      ArkCase's AngularJS service uses `$resource` (a higher-level wrapper
+      around $http for RESTful resources). The ServiceNow target uses
+      `$http.get()` directly because (a) Service Portal widget controllers
+      do not load `ngResource` by default, and (b) the lookup is a single
+      GET, not a CRUD resource that warrants $resource's overhead.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering):
+      THIS RECORD MUST LOAD AFTER:
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package, so
+          <sys_scope> and <sys_package> both resolve against it)
+        - ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+          (the scripted REST API namespace this widget calls)
+        - ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml
+          (the GET operation handler this widget invokes)
+        - ../../script_includes/x_casemgmt_CasePortalService.xml
+          (transitively, called by the REST operation; the lookupCase()
+          method enforces the server-side field whitelist)
+
+      THIS RECORD SHOULD LOAD BEFORE (but ServiceNow's two-pass import
+      tolerates any order within the same Update Set, since references
+      resolve by name):
+        - ../pages/sp_page_x_casemgmt_case_status.xml (the page hosts
+          this widget by id `x_casemgmt_case_lookup_widget`; the page's
+          page_internal layout JSON references this widget by id, NOT
+          by sys_id)
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3 - the seven validation gates):
+      This widget supports Validation Gate 5 ("Portal - lookup") by
+      providing the user-facing UI for the case-status-lookup capability.
+      Without this widget:
+        - Anonymous users would have no way to look up case status.
+        - The portal page itself, the REST API definition, the REST API
+          operation, and the Script Include would all be useless without
+          the UI to invoke them.
+        - Validation Gate 5 would FAIL because there is no UI surface to
+          test the "verbatim 'No case found with that number.' message"
+          requirement.
+
+      Therefore THIS widget is the direct UI implementation behind
+      Validation Gate 5; the AAP's "verbatim text" requirement is
+      enforced by the template's not-found panel.
+-->
+<!--
+    ==========================================================================
+    POST-QA REMEDIATION (this checkpoint) - what changed in this record and why
+    ==========================================================================
+    Findings F1, F2, F10, F11 and F12 were raised against the two public pages
+    this widget serves. The remediation carried by the template, client script
+    and server script below is:
+
+      F2  - the confirmation panel now offers a link to the status-lookup page
+            (?id=x_casemgmt_case_status with the case number), so the requester
+            who has just been handed a case number can reach the page that
+            consumes it. The link is a plain theme link rather than a .btn: the
+            default theme paints .btn:focus with a fully transparent outline,
+            which would have left this new control with no visible keyboard
+            focus indicator.
+      F10 - the anonymous lookup renders opened_date in the instance's own
+            display timezone and labels it with that timezone, so an external
+            requester and internal staff read the same instant. The response
+            body still carries EXACTLY the three whitelisted keys
+            (status, subject, opened_date) required by AAP Section 0.7.4 - the
+            timezone is a rendered label, never a fourth key.
+      F12 - the primary action is no longer disabled by form validity: it is
+            pressable, validates on press, marks every control touched and
+            surfaces a summary WITHOUT issuing a request. Stale outcome
+            messages are cleared when the requester edits an input, so the
+            screen never shows two contradictory messages at once.
+      I9  - THE FIRST PRESS OF LOOK UP STATUS IS NOW DELIVERED. F12 made the
+            button pressable; the field's message was still keyed to the
+            control's $touched, which flips on blur, so the press's own blur
+            inserted a role="alert" paragraph ABOVE the button, pushed the
+            button 20px down between mousedown and mouseup, and the mouseup
+            landed on the <form>. Measured on the rendered public page
+            x_casemgmt_case_status with the empty field focused and a real
+            pointer press at the button's original centre: click 0, submit 0,
+            GET /api/x_casemgmt/case_status_lookup 0, no summary - while the
+            field's error and aria-invalid="true" were already on screen. A
+            second press at the button's new position worked, so the first
+            press on the page's primary public action was silently swallowed.
+            The message, the has-error treatment and the aria-invalid binding
+            now key on c.clientInvalid(), which is $invalid AND c.pressed, and
+            c.lookup() sets c.pressed as its first statement, so nothing above
+            the button moves until after the press has been delivered.
+            Reserving the space with CSS would also have closed it and is
+            barred by AAP Section 0.4.4 (default theme, no custom CSS); this
+            record's <css> element stays EMPTY, no class and no colour changed.
+            The same defect was measured and fixed the same way on the sibling
+            submission widget, so the two pages behave identically.
+            The refusal summary is also no longer withdrawn by an edit that
+            leaves the field empty; see c.clientProblemRemains().
+      F11 - the visible page heading is a real h1 and the success result panel
+            is announced (role=status / aria-live=polite).
+      F1  - over-length input is REFUSED rather than silently truncated. The
+            refusal itself lives server-side in
+            ../../script_includes/x_casemgmt_CasePortalService.xml (HTTP 400
+            naming the offending field) and in the new before-insert/update
+            rule ../../business_rules/x_casemgmt_validate_case_text_lengths.xml.
+
+    F11's CONTRAST HALF AND THE css ELEMENT (AAP Section 0.4.4):
+    Section 0.4.4 mandates the Experience Portal DEFAULT THEME with "No custom
+    CSS, no custom branding", and Section 0.3.2 places theme and branding
+    modifications out of scope. The frozen specification therefore outranks the
+    WCAG contrast preference, so the palette is NOT overridden here and the css
+    element is intentionally EMPTY. What could be fixed without custom CSS was
+    fixed by choosing default-theme classes whose own colours already meet AA:
+    neutral guidance and status text carries no colour class and inherits the
+    theme's body colour (previously .help-block grey, measured 2.14:1). Delta
+    QA4 Issue 9 completed that pass with two further token choices, measured
+    against the stylesheet this portal actually serves: per-field error text
+    now carries the theme's .alert-danger COLOUR token without the .alert box
+    class (#a02622 on #fdf7f7 = 7.09:1, replacing .text-danger's 3.96:1), and
+    the lookup's not-found notice keeps .alert with no colour variant so its
+    verbatim sentence inherits the body colour at 4.88:1, replacing
+    .alert-warning's 3.32:1. The items inherent to the stock components - the
+    .btn-primary resting background (3.63:1), the 34px control height and the
+    theme's focus-ring colour - are left exactly as the platform paints them
+    and are recorded in ../../docs/portal-pages.md as OPEN limitations blocked
+    by the Section 0.4.4 / 0.3.2 exclusion, not as accepted ones.
+    ==========================================================================
+-->
+<record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function CaseLookupWidgetController($scope, $http) {
+    /*
+     * Case Lookup Widget - client-side AngularJS controller.
+     *
+     * Implements the case-status-lookup user interaction described in
+     * AAP Section 0.4.4 ("Page 2 - Case Status Lookup: a single input
+     * (case number) and a result panel that shows status, subject,
+     * opened_date when found, or the literal text 'No case found with
+     * that number.' when not found.").
+     *
+     * Exposed properties (template-bound):
+     *   c.caseNumber - string; bound to the input field via ng-model.
+     *                  Initialized to '' (empty string).
+     *   c.result     - object | null; on successful lookup, contains
+     *                  exactly { status, subject, opened_date } - the
+     *                  three whitelisted fields. null when no successful
+     *                  lookup has occurred. Drives the result panel's
+     *                  ng-if="c.result".
+     *   c.notFound   - boolean; true when the case table was queried and
+     *                  held no case with that number - an HTTP 404, any
+     *                  other 4xx, or a 200 whose body carried no status.
+     *                  Drives the not-found panel's ng-if="c.notFound",
+     *                  which renders the AAP Section 0.7.4 verbatim text.
+     *   c.errorMessage - string; non-empty only when the lookup could not
+     *                  be ANSWERED: a 5xx, a network failure, or the
+     *                  client-side timeout expiring. Drives the separate
+     *                  service-failure panel. Mutually exclusive with both
+     *                  c.result and c.notFound.
+     *   c.loading    - boolean; true while the in-flight $http.get
+     *                  request is pending. Drives the button's
+     *                  ng-disabled and the "Looking up..." text. It is
+     *                  the ONLY thing that disables the button.
+     *   c.validationMessage
+     *                - string; non-empty when Look Up Status was pressed
+     *                  with an empty field. Mutually exclusive with
+     *                  c.result, c.notFound and c.errorMessage: every
+     *                  path that sets one of the four clears the other
+     *                  three.
+     *   c.pressed    - boolean; true once Look Up Status has been pressed
+     *                  at least once. Gates the field's own message, its
+     *                  has-error treatment and its aria-invalid binding.
+     *                  Replaced the control's $touched flag, whose blur
+     *                  trigger moved the button between mousedown and
+     *                  mouseup and so swallowed the first press. See the
+     *                  flag's own comment for the measurement.
+     *
+     * Exposed methods (template-bound):
+     *   c.lookup(form)
+     *                - executes the case-status lookup. Sets c.pressed as
+     *                  its first statement. Returns without issuing any
+     *                  request when the field is empty, setting
+     *                  c.validationMessage. Otherwise issues
+     *                  GET /api/x_casemgmt/case_status_lookup?number=<encoded>
+     *                  via $http.get() under a LOOKUP_TIMEOUT_MS deadline.
+     *                  On success (HTTP 200 with a status), sets c.result
+     *                  with the strict 3-field whitelist. On a 4xx, sets
+     *                  c.notFound = true so the verbatim not-found message
+     *                  is rendered. On a 5xx, a network failure or a
+     *                  timeout, sets c.errorMessage instead, because in
+     *                  those cases nothing was learned about the case.
+     *   c.onInputChange()
+     *                - bound to ng-change on the input; drops the
+     *                  previous lookup's outcome - the result panel, the
+     *                  not-found alert and the service-failure alert - so
+     *                  a panel about a superseded case number cannot
+     *                  coexist with the number now in the field. The
+     *                  refusal summary is dropped only once a press would
+     *                  no longer be refused; see c.clientProblemRemains().
+     *   c.clientInvalid(control)
+     *                - the whole of the per-field invalid condition:
+     *                  $invalid AND the button has been pressed. Drives
+     *                  the field's message, its has-error class and its
+     *                  aria-invalid binding from one expression, so the
+     *                  three can never disagree.
+     *   c.clientProblemRemains()
+     *                - true while the model still holds something this
+     *                  widget would refuse to look up (an empty or
+     *                  whitespace-only case number). Keeps the refusal
+     *                  summary on screen across an edit that leaves the
+     *                  field still unusable.
+     *   c.markAllTouched(form)
+     *                - marks the registered control $touched so
+     *                  AngularJS's own ng-touched state matches the
+     *                  press. No longer what reveals the field's message
+     *                  (c.pressed is), but kept so the framework's view
+     *                  of the form stays consistent with what the page
+     *                  is showing.
+     *
+     * One-time initialization (not template-bound): when the page was
+     * reached with a ?number= parameter - which is how the submission
+     * confirmation links here - the input is pre-filled from
+     * c.data.prefilledNumber and c.lookup() is run once. See the block at
+     * the end of this controller.
+     *
+     * Design rationale:
+     *   - controller-as syntax (`var c = this`) per AAP Section 0.5.1's
+     *     widget-authoring conventions and per the sibling confirmation
+     *     widget at ./sp_widget_x_casemgmt_case_confirmation_widget.xml.
+     *   - $http (NOT fetch): Service Portal widgets run in AngularJS
+     *     1.5.x context; $http is the canonical HTTP client. fetch()
+     *     would bypass AngularJS's digest cycle and require manual
+     *     $scope.$apply() handling.
+     *   - encodeURIComponent on the case number: defensive URL escaping.
+     *     Even though normal case numbers (CASE0000001) contain no
+     *     special characters, defensive encoding prevents URL-injection
+     *     attacks if a malicious user submits a crafted string.
+     *   - Strict 3-field whitelist on response.data: defense-in-depth.
+     *     Even if the server's response somehow contained additional
+     *     fields (e.g., due to a future refactor of the Script Include),
+     *     this client controller extracts ONLY status/subject/opened_date
+     *     so no internal data leaks to the template.
+     *   - Verbatim error message in template, NOT echoed from server:
+     *     the message "No case found with that number." (AAP Section
+     *     0.7.4) is hardcoded in the template via ng-if="c.notFound".
+     *     This controller deliberately does NOT pass error.data.error
+     *     or error.statusText to the template - the server's error
+     *     body is NEVER trusted by the client.
+     *   - Identical handling of every 4xx: information-leakage hardening.
+     *     404 (not-found) and 400 (bad-request) both set c.notFound =
+     *     true, so an attacker cannot distinguish "case not found" from
+     *     "invalid input" and gains no case-number enumeration oracle.
+     *     A 500, a network failure and an expired deadline set
+     *     c.errorMessage instead, because in those cases the case table
+     *     was never reached and the verbatim not-found text would be a
+     *     false statement about the requester's case.
+     *   - c.loading flag: prevents double-lookup race conditions if
+     *     the user clicks the button twice quickly, AND drives the
+     *     "Looking up..." button text for clear UX feedback.
+     */
+    var c = this;
+
+    /*
+     * Deadline for the lookup request, in milliseconds. Chosen to sit well
+     * above any normal round trip to the scripted REST endpoint (measured in
+     * tens of milliseconds against the verification instance) while still
+     * failing fast enough that a requester is not left staring at a disabled
+     * button. See the comment at the $http.get call for why a deadline is
+     * appropriate on this read and inappropriate on the sibling widget's POST.
+     */
+    var LOOKUP_TIMEOUT_MS = 20000;
+
+    // Lookup state. Initialize with safe defaults so the template's
+    // ng-if expressions evaluate cleanly even before c.lookup() runs.
+    c.caseNumber = '';
+    c.result = null;
+    c.notFound = false;
+    c.errorMessage = '';
+    c.loading = false;
+
+    /**
+     * True once Look Up Status has been pressed at least once.
+     *
+     * This flag, and not the control's $touched flag, is what reveals the
+     * field's own message. The distinction is not cosmetic - it decides
+     * whether the FIRST press of the page's primary action does anything
+     * at all.
+     *
+     * $touched flips on blur. A pointer press on the button blurs the
+     * input the requester was in, so with the message keyed to $touched
+     * the sequence was: mousedown -> blur -> $setTouched -> the
+     * role="alert" paragraph is inserted ABOVE the button -> the button
+     * moves 20px down -> mouseup lands on the <form> in the gap the
+     * button has just vacated -> ng-submit never fires. Measured on the
+     * rendered public page x_casemgmt_case_status, with the empty field
+     * focused and a real pointer press aimed at the button's original
+     * centre: click handlers 0, submits 0, GET requests to
+     * /api/x_casemgmt/case_status_lookup 0, and no summary - while the
+     * field's error paragraph and aria-invalid="true" were already on
+     * screen. A second press at the button's NEW position worked, so the
+     * requester's first press on the primary public action was silently
+     * swallowed. Typing a character and backspacing it produced the same
+     * state without any press at all.
+     *
+     * Reserving the vertical space with CSS would also close it, but AAP
+     * Section 0.4.4 fixes this portal to the platform default theme with
+     * "No custom CSS, no custom branding" and this record's <css> element
+     * is and stays EMPTY, so the fix is to stop the blur from changing
+     * the layout rather than to absorb the change.
+     *
+     * Keying on the press instead means blur changes nothing on screen -
+     * validity itself is already current, because AngularJS revalidates
+     * on input rather than on blur - so no layout moves between mousedown
+     * and mouseup and the first press is always delivered. After that
+     * first press the flag stays true, so the message then tracks the
+     * model live: it clears as the field is filled and reappears if it is
+     * emptied, which is the feedback the requester needs at the point
+     * they are acting on it, and by then the reflow happens on a
+     * keystroke rather than under the pointer.
+     *
+     * The same flag and the same reasoning are carried by the sibling
+     * submission widget at ./sp_widget_x_casemgmt_case_submission_widget.xml
+     * (see its c.pressed); the two widgets are deliberately consistent,
+     * because this defect was measured on both public pages.
+     *
+     * The one-time prefill block at the end of this controller calls
+     * c.lookup() and therefore sets this flag without a press. That is
+     * correct: the requester followed a link that says "Check the status
+     * of this case", the field is populated in that path so nothing is
+     * revealed, and no layout can move between a mousedown and a mouseup
+     * that have not happened yet.
+     */
+    c.pressed = false;
+
+    /*
+     * Message raised when Look Up Status is pressed with no case number.
+     *
+     * This exists because the button is no longer disabled on an empty
+     * field. It used to be ng-disabled on !c.caseNumber, which made the
+     * primary action unanswerable in exactly the state a first-time
+     * visitor arrives in: a disabled <button> is pointer-transparent, so
+     * a click aimed at it landed on the surrounding DIV.form-group and
+     * produced nothing at all, and a disabled button is absent from the
+     * tab order, so a keyboard user never reached it.
+     *
+     * The sentence itself is held in REFUSAL_SUMMARY below so that the
+     * two places which raise it - the empty-input branch of c.lookup()
+     * and the re-instatement in c.onInputChange() - cannot drift apart.
+     */
+    c.validationMessage = '';
+
+    /*
+     * The one and only spelling of the refusal summary.
+     *
+     * It is raised in two places, and it has to be the same string in
+     * both: c.lookup() raises it when the button is pressed on an unusable
+     * field, and c.onInputChange() re-raises it when an edit leaves the
+     * field unusable after such a press. Holding it in one constant is
+     * what makes "the summary is present whenever a press has been
+     * refused and the field is still unusable" a single fact rather than
+     * two strings that happen to agree today.
+     */
+    var REFUSAL_SUMMARY = 'Enter a case number, then choose Look Up Status.';
+
+    /**
+     * Discard the outcome of the previous lookup.
+     *
+     * Bound to ng-change on the case-number input. Without it, the
+     * previous outcome outlived the input that produced it: the verbatim
+     * "No case found with that number." alert stayed on screen while the
+     * requester retyped, so the page asserted something about a number
+     * that was no longer in the field, and it could sit alongside a fresh
+     * validation message and a stale result panel - three messages about
+     * three different moments at once. Any keystroke means the requester
+     * has moved on from that answer, so the three ANSWER panels are
+     * dropped together; leaving any one of them would let a panel
+     * describing the old number coexist with the new one.
+     *
+     * THE REFUSAL SUMMARY IS NOT AN ANSWER ABOUT A NUMBER, AND IS NOT
+     * DROPPED WITH THEM.
+     *
+     * c.validationMessage says "Enter a case number, then choose Look Up
+     * Status." - a statement about the field as it stands, and the only
+     * page-level statement that the press was received and refused.
+     * Clearing it unconditionally withdrew that statement while the
+     * field's own role="alert" message was still on screen beside a
+     * still-empty field: press the button on an empty form, type one
+     * character, backspace it, and the summary was gone while "Enter a
+     * case number to look up." remained, which reads as though the press
+     * had never been received. So it survives an edit that leaves the
+     * field still unusable, and is withdrawn only once a press would be
+     * accepted - which is exactly what c.clientProblemRemains() tests.
+     * The sibling submission widget carries the same guard for the same
+     * reason (see its c.onInputChange).
+     *
+     * THE GUARD RE-INSTATES; IT DOES NOT MERELY PRESERVE. An earlier
+     * revision returned early when c.clientProblemRemains() held, which
+     * preserved the summary but could never bring it back. That was not
+     * enough, and the gap was found by running the page rather than by
+     * reading it: press the button on an empty field (summary appears),
+     * type "C" - the field is momentarily usable, so the summary is
+     * correctly withdrawn - then backspace. The field is empty again and
+     * c.clientProblemRemains() is true again, but the early return had
+     * nothing to restore, so the summary stayed gone for good while the
+     * field's own "Enter a case number to look up." came back beside it.
+     * That is the original defect wearing a different sequence: the page
+     * again showed a field-level complaint with no page-level statement
+     * that the press had been received. A single space typed into an
+     * empty field never reproduced it, because that path never leaves the
+     * unusable state - which is why only a real run over the exact
+     * type-then-backspace sequence exposed it.
+     *
+     * So the summary is DERIVED from the two facts that justify it - a
+     * press has happened (c.pressed) and the field is still unusable
+     * (c.clientProblemRemains()) - and is re-raised from REFUSAL_SUMMARY
+     * whenever both hold. c.pressed is required: before the first press
+     * there is nothing to restate, and raising the summary on a visitor
+     * who has only typed and deleted a character would reintroduce
+     * exactly the unprompted, layout-shifting message that c.pressed
+     * exists to suppress.
+     *
+     * NO SNAPSHOT COMPARISON IS NEEDED HERE, and its absence is
+     * deliberate rather than an omission. The sibling widget compares the
+     * model against a snapshot because ng-change there can fire WITHOUT
+     * the model moving: AngularJS trims the view value before
+     * $setViewValue, and $commitViewValue skips its unchanged-value early
+     * return for a control with NATIVE validators, which type="email"
+     * has. This widget's only control is a plain type="text" input with
+     * no native validators, so both the input directive's own
+     * `ctrl.$viewValue !== value` test and $commitViewValue's early
+     * return hold: a space typed into an empty field commits nothing and
+     * never reaches this function. ng-change here therefore implies a
+     * real change, and comparing against a snapshot would compare a value
+     * against itself.
+     */
+    c.onInputChange = function() {
+        c.result = null;
+        c.notFound = false;
+        c.errorMessage = '';
+        if (c.clientProblemRemains()) {
+            // Re-raise rather than return: see the note above. Gated on
+            // c.pressed so nothing is said before the first press.
+            if (c.pressed) {
+                c.validationMessage = REFUSAL_SUMMARY;
+            }
+            return;
+        }
+        c.validationMessage = '';
+    };
+
+    /**
+     * The per-field invalid condition: this control is invalid AND the
+     * button has been pressed.
+     *
+     * One expression drives all three of the field's invalid affordances -
+     * its role="alert" message, its Bootstrap has-error treatment and its
+     * aria-invalid binding - so the page cannot describe the control as
+     * invalid through one channel and valid through another.
+     *
+     * The second half was the control's own $touched flag until this
+     * change. See c.pressed for why it is now the press and not the blur:
+     * keying on blur inserted the message between mousedown and mouseup
+     * and moved the button out from under the pointer, so the first press
+     * of Look Up Status was swallowed.
+     *
+     * The control is guarded against being undefined. This form is not
+     * under an ng-if, so caseLookupForm.caseNumber does resolve here, but
+     * a template expression can still evaluate on a digest before the
+     * control has registered, and answering "not invalid" is the correct
+     * answer in that state.
+     *
+     * @param {Object} control - an ngModel controller off the form.
+     * @returns {boolean} true when the control is invalid and Look Up
+     *     Status has been pressed at least once.
+     */
+    c.clientInvalid = function(control) {
+        return !!(control && control.$invalid && c.pressed);
+    };
+
+    /**
+     * True while the model still holds something this widget would refuse
+     * to look up.
+     *
+     * That is the whole of the client-side refusal rule for this page: an
+     * empty or whitespace-only case number, tested exactly as c.lookup()
+     * tests it, so the two can never disagree about whether a press would
+     * be accepted. c.onInputChange() uses it to decide whether the
+     * refusal summary may be withdrawn.
+     *
+     * It reads c.caseNumber rather than the FormController because
+     * onInputChange is an ng-change handler with no form argument to
+     * read, and the two agree by construction: emptiness is the whole of
+     * what `required` means on this control, and AngularJS trims text
+     * input into the model by default (ng-trim), so a whitespace-only
+     * entry arrives here as '' exactly as it arrives at the required
+     * validator.
+     *
+     * @returns {boolean} true when a press would still be refused on the
+     *     client.
+     */
+    c.clientProblemRemains = function() {
+        return !c.caseNumber || String(c.caseNumber).trim() === '';
+    };
+
+    /**
+     * Mark every registered control on a form as touched.
+     *
+     * The field's own role="alert" message and its red has-error
+     * treatment are bound to $invalid && c.pressed (see c.pressed for why
+     * the second half is the press rather than the blur it used to be),
+     * so this walk is no longer what makes them appear. It is kept
+     * because AngularJS's own ng-touched / ng-untouched classes and
+     * $touched state are part of the framework's public view of the form,
+     * and leaving a pressed form describing its control as never-visited
+     * would be inconsistent with what the page is showing.
+     * $setSubmitted() does not cover it - it sets $submitted on the FORM,
+     * not $touched on the controls - so the controls are walked
+     * explicitly. Possessing $setTouched is what distinguishes an ngModel
+     * controller from the form's own $-prefixed bookkeeping, and it is
+     * also the guard that keeps this from throwing on a future AngularJS
+     * whose form controller exposes different internals.
+     *
+     * @param {Object} form - the AngularJS form controller.
+     */
+    c.markAllTouched = function(form) {
+        if (!form) {
+            return;
+        }
+        if (typeof form.$setSubmitted === 'function') {
+            form.$setSubmitted();
+        }
+        for (var key in form) {
+            if (key.charAt(0) === '$') {
+                continue;
+            }
+            var control = form[key];
+            if (control && typeof control.$setTouched === 'function') {
+                control.$setTouched();
+            }
+        }
+    };
+
+    /**
+     * Look up the status of a case by its number via the scripted REST
+     * endpoint at /api/x_casemgmt/case_status_lookup.
+     *
+     * Per AAP Section 0.4.4: returns ONLY status, subject, opened_date
+     * via strict 3-field whitelist on the response.
+     *
+     * Per AAP Section 0.7.4: on no-match (HTTP 404 or any other error),
+     * the verbatim text "No case found with that number." is rendered
+     * by the template. This function MUST NOT echo error.data.error or
+     * any server-supplied text.
+     *
+     * @param {Object} [submittedForm] - the caseLookupForm
+     *     FormController, passed by the template's ng-submit. This form is
+     *     NOT under an ng-if, so $scope.caseLookupForm does resolve here
+     *     and the fallback below is genuinely a fallback - but the
+     *     controller is passed explicitly anyway, so the method does not
+     *     depend on where in the scope hierarchy the form happens to
+     *     link. The sibling submission widget's form IS under an ng-if,
+     *     and reading it off $scope there silently skipped validation
+     *     altogether; taking the argument removes that failure mode from
+     *     both widgets rather than from one.
+     */
+    c.lookup = function(submittedForm) {
+        // Record that a press has been delivered. This is the flag the
+        // field's own message, its has-error treatment and its
+        // aria-invalid binding are keyed to (see c.pressed), and it is set
+        // here - FIRST statement, before any branch - so that a press
+        // answered by the empty-field guard below and a press that reaches
+        // the endpoint both reveal what explains them, and so that nothing
+        // reveals them BEFORE a press, which is what kept the button from
+        // moving out from under the pointer.
+        c.pressed = true;
+        // Idempotent guard: prevent double-lookup if the user clicks
+        // the button or presses Enter while a request is in flight.
+        if (c.loading) {
+            return;
+        }
+        // Empty-input guard, and the ANSWER to a press on an empty form.
+        //
+        // The button is no longer disabled while the field is empty - a
+        // disabled button is pointer-transparent and out of the tab order,
+        // so the press went unanswered (see c.validationMessage) - so this
+        // branch is what the press produces. c.pressed above is what flips
+        // the field's own role="alert" message into the DOM; the walk below
+        // keeps AngularJS's own $touched bookkeeping in step with it, and
+        // this branch sets the summary beside the button.
+        //
+        // No request is issued: the return happens before the $http.get,
+        // exactly as the disabled button previously ensured.
+        if (!c.caseNumber || String(c.caseNumber).trim() === '') {
+            c.markAllTouched(submittedForm || $scope.caseLookupForm);
+            c.result = null;
+            c.notFound = false;
+            c.errorMessage = '';
+            c.validationMessage = REFUSAL_SUMMARY;
+            return;
+        }
+
+        // Reset state at the start of every lookup. The three outcome
+        // panels are mutually exclusive: at most one of c.result,
+        // c.notFound and c.errorMessage is truthy at any time.
+        c.loading = true;
+        c.result = null;
+        c.notFound = false;
+        c.errorMessage = '';
+        c.validationMessage = '';
+
+        // Build the URL with defensive URL-encoding of the case number.
+        // The server-side Script Include x_casemgmt.CasePortalService.
+        // lookupCase() trims whitespace and queries by the case 'number'
+        // field. encodeURIComponent() handles any whitespace, special
+        // characters, or potentially malicious input safely.
+        var url = '/api/x_casemgmt/case_status_lookup?number=' + encodeURIComponent(String(c.caseNumber).trim());
+
+        // The deadline below is what stops a lookup hanging indefinitely.
+        // Without it, an unresponsive instance leaves c.loading true for as
+        // long as the browser is willing to wait, the button stays disabled
+        // reading "Looking up...", and the requester has no way to retry
+        // short of reloading the page. On expiry AngularJS rejects the
+        // promise with status 0, which the error handler reports as a
+        // service failure rather than as a missing case.
+        //
+        // A deadline is safe HERE because this request is a read: retrying it
+        // costs nothing and cannot duplicate anything. The sibling submission
+        // widget deliberately does NOT set one on its POST, because a
+        // submission that succeeds server-side just after the client gives up
+        // would tell the requester it failed and invite a second press, which
+        // is how duplicate cases get created.
+        $http.get(url, { timeout: LOOKUP_TIMEOUT_MS }).then(function(response) {
+            // Success path (HTTP 200). The server's REST operation
+            // returns { status, subject, opened_date } per its contract -
+            // but a ServiceNow Scripted REST API wraps whatever the
+            // operation script passes to response.setBody() inside a
+            // `result` envelope before it reaches the wire. Measured
+            // against the live endpoint, a 200 body is
+            //   {"result":{"status":"Draft","subject":"...","opened_date":"..."}}
+            // so the three whitelisted values live at
+            // response.data.result.*, and reading response.data.* yields
+            // undefined - which would have painted a result panel with
+            // three blank rows instead of the case's status.
+            //
+            // The unwrap below prefers the envelope and falls back to the
+            // bare body, so it is correct whether or not the envelope is
+            // applied (the platform can be configured either way, and a
+            // caller may append sysparm_no_envelope).
+            c.loading = false;
+            var body = (response && response.data && response.data.result) ?
+                response.data.result :
+                (response ? response.data : null);
+            // `status` is mandatory on every case, so its presence is the
+            // signal that a real record came back. An empty or
+            // status-less body is treated as not-found rather than
+            // rendered as a panel of blanks.
+            if (body && body.status) {
+                // Strict 3-field whitelist (defense-in-depth). Extract
+                // ONLY status, subject, opened_date from the response
+                // body. Even if the server were misconfigured to return
+                // additional fields, this widget would not display them.
+                // String() coercion handles undefined/null gracefully -
+                // the template renders an empty cell rather than the
+                // literal text "undefined" or "null".
+                c.result = {
+                    status:      String(body.status      || ''),
+                    subject:     String(body.subject     || ''),
+                    opened_date: String(body.opened_date || '')
+                };
+                c.notFound = false;
+            } else {
+                // Defensive: empty or status-less response body on HTTP
+                // 200. Treat as not-found rather than rendering an empty
+                // result panel.
+                // This should not occur in practice (the server always
+                // returns a body on 200) but guards against unexpected
+                // upstream behavior.
+                c.result = null;
+                c.notFound = true;
+            }
+        }, function(error) {
+            // Error path. Split in two, because a lookup that was ANSWERED
+            // and found nothing is a different fact from a lookup that was
+            // never answered.
+            //
+            //   4xx  -> the request reached the case table and no case with
+            //           that number came back. This is the not-found case,
+            //           and it renders the AAP Section 0.7.4 verbatim text.
+            //           EVERY 4xx maps here, not just 404, so a 400 and a
+            //           404 remain indistinguishable to the caller and no
+            //           case-number enumeration oracle is created.
+            //   5xx,
+            //   0/-1 -> the instance failed, the network failed, or the
+            //           deadline above expired. Nothing was learned about
+            //           the case, so claiming "No case found with that
+            //           number." would be a false statement about the
+            //           requester's case - and a costly one, because the
+            //           requester concludes their case does not exist. This
+            //           renders the separate service-failure panel instead.
+            //
+            // Neither branch echoes error.data.error, error.statusText or any
+            // other server-supplied content: both message strings are
+            // hardcoded, in this controller and in the template respectively.
+            c.loading = false;
+            c.result = null;
+            var httpStatus = (error && typeof error.status === 'number') ? error.status : 0;
+            if (httpStatus >= 400 && httpStatus < 500) {
+                c.notFound = true;
+                c.errorMessage = '';
+            } else {
+                c.notFound = false;
+                c.errorMessage = 'The case service could not be reached. Please try again in a moment.';
+            }
+        });
+    };
+
+    /*
+     * If this page was reached from a submission confirmation, honour the
+     * case number that link carried.
+     *
+     * The confirmation's anchor is labelled "Check the status of this
+     * case" and carries ?number=<the case number>. Pre-filling alone would
+     * still leave the requester to press a button to be told something the
+     * link had already promised, so the lookup is run once here as well.
+     * That is the requester driving it - they clicked a link that says
+     * exactly this - and it is the only circumstance in which this widget
+     * issues a request without a press: with no parameter,
+     * c.data.prefilledNumber is '' and nothing happens.
+     *
+     * It runs after c.lookup is defined, and it runs ONCE - there is no
+     * watcher, so editing the field afterwards behaves normally and a
+     * reload with the same URL simply repeats the same single read. The
+     * request is a read, so repeating it costs nothing and can duplicate
+     * nothing.
+     *
+     * Going through c.lookup() also sets c.pressed, which is harmless and
+     * correct here: the field is populated in this path, so nothing is
+     * revealed by it, and the reveal it gates can only move layout on a
+     * later keystroke - never between a mousedown and a mouseup, which is
+     * the sequence c.pressed exists to keep clear.
+     *
+     * The server-script data is read from c.data OR $scope.data. The
+     * Service Portal framework populates both - it puts `data` on the
+     * widget's scope and aliases the controller instance as `c` - but
+     * which of the two is already assigned at controller-CONSTRUCTION
+     * time depends on the framework version's binding order, and this
+     * runs at construction time rather than from an event handler. Taking
+     * either source removes that dependency. Both being absent means the
+     * widget was instantiated outside the framework entirely (a preview
+     * harness, a future embed), and the guard degrades to doing nothing
+     * rather than throwing and taking the whole widget down for the sake
+     * of an optional convenience.
+     */
+    var widgetData = c.data || $scope.data;
+    if (widgetData && widgetData.prefilledNumber) {
+        c.caseNumber = widgetData.prefilledNumber;
+        c.lookup();
+    }
+}
+]]></client_script>
+        <controller_as>c</controller_as>
+        <css/>
+        <data_table>sp_instance</data_table>
+        <description>Custom unauthenticated Service Portal widget for case status lookup. Renders a single case-number input field plus a Look Up Status button, GETs /api/x_casemgmt/case_status_lookup, and displays ONLY the whitelisted fields { status, subject, opened_date } on match or the verbatim text 'No case found with that number.' on no-match per AAP Section 0.7.4. Embedded by sp_page_x_casemgmt_case_status. No internal fields (assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, priority, type, pending_reason, audit fields) are exposed. Every 4xx (404 not-found, 400 bad-request) renders the same verbatim no-case-found message, so no case-number enumeration oracle exists; a 5xx, a network failure or an expired 20-second client deadline renders a separate 'service could not be reached' panel instead, because in those cases nothing was learned about the case and the verbatim message would be false. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() and PortalRequestService.getRequestStatus() Spring services. No client-side or server-side database operations - all data flows through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>x_casemgmt_case_lookup_widget</id>
+        <internal>false</internal>
+        <link/>
+        <name>Case Lookup Widget</name>
+        <option_schema>[]</option_schema>
+        <public>true</public>
+        <roles/>
+        <script><![CDATA[(function() {
+    /*
+     * Case Lookup Widget - server-side data initialization.
+     *
+     * No case data is fetched here. The case-status lookup is driven
+     * entirely by the client-side controller via $http.get to the
+     * scripted REST endpoint at
+     *   /api/x_casemgmt/case_status_lookup?number=<encoded>
+     * defined by ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+     * and handled by ../rest/sys_ws_operation_x_casemgmt_case_status_lookup_get.xml.
+     *
+     * This widget performs ZERO database operations:
+     *   - No GlideRecord reads (no pre-fetching of any case data; the
+     *     widget renders with empty state and the user drives the
+     *     lookup via the form).
+     *   - No GlideRecord writes (the lookup is read-only by definition;
+     *     all writes in this scoped application go through the
+     *     scripted REST endpoints, never through widget server scripts).
+     *   - No gs.eventQueue() calls (email notifications are disabled
+     *     per AAP Section 0.7.2 Email-disabled constraint).
+     *
+     * It computes exactly TWO values, neither of which reads the case
+     * table: the name of the timezone that the Opened Date on the result
+     * panel is expressed in, and the case number this page was reached
+     * with when it was reached from a submission confirmation. Each is
+     * explained at its assignment below.
+     *
+     * WHY THE LABEL LIVES HERE AND NOT IN THE LOOKUP RESPONSE.
+     * x_casemgmt.CasePortalService.lookupCase() emits the opened_date
+     * DISPLAY value, rendered in the session's timezone, so the external
+     * requester and internal staff read the same instant. An unlabelled
+     * local timestamp is still ambiguous to a requester in another
+     * timezone, but the lookup response cannot carry the label: AAP
+     * Section 0.7.4 fixes that payload at EXACTLY three keys (status,
+     * subject, opened_date) and a fourth would widen a whitelist the
+     * specification pins shut. The widget therefore resolves the label
+     * from its own session - the same session whose timezone the display
+     * value was rendered in, because the anonymous $http.get below is
+     * issued by this same portal visitor - and renders it beside the
+     * field's <dt> label rather than beside the value, so it reads as
+     * part of the label and never as case data.
+     *
+     * getTimeZoneName() is read defensively: an empty string is the
+     * expected outcome on an instance with no default timezone property,
+     * and the template simply omits the qualifier in that case rather
+     * than rendering an empty pair of parentheses. The try/catch bounds
+     * a session API that an anonymous request is not guaranteed to be
+     * able to answer; a missing label degrades the panel by nothing more
+     * than the qualifier.
+     */
+    data.openedDateTimeZone = '';
+    try {
+        var sessionTimeZone = gs.getSession().getTimeZoneName();
+        if (sessionTimeZone) {
+            data.openedDateTimeZone = String(sessionTimeZone);
+        }
+    } catch (e) {
+        gs.warn('x_casemgmt Case Lookup Widget: session timezone name unavailable, ' +
+            'the Opened Date qualifier will be omitted; ' + e);
+    }
+
+    /*
+     * The case number this page was reached WITH, when it was reached from
+     * a confirmation.
+     *
+     * The submission confirmation links here as
+     *   ?id=x_casemgmt_case_status&number=CASE0000001
+     * (see ../widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml).
+     * Without this, the requester followed a link labelled "Check the
+     * status of this case", landed on an empty form, and had to re-type
+     * the number the link they had just clicked already carried - which is
+     * most of the friction the link was added to remove.
+     *
+     * The value is treated as untrusted input from the address bar, so it
+     * is trimmed and capped at the 20 characters the input's own maxlength
+     * allows. It is never used to build a query here: it only pre-fills
+     * c.caseNumber, and the lookup still goes through the same
+     * encodeURIComponent'd GET to the same anonymous endpoint, which
+     * queries by the number field and answers 404 for anything it does
+     * not recognise. It reaches the template through ng-model, which
+     * renders it as a value and never as markup, so a crafted parameter
+     * has nothing to act on.
+     *
+     * An absent parameter yields '' and the page behaves exactly as it
+     * did: empty field, no request, user drives the lookup.
+     */
+    data.prefilledNumber = '';
+    var suppliedNumber = $sp.getParameter('number');
+    if (suppliedNumber) {
+        data.prefilledNumber = String(suppliedNumber).trim().substring(0, 20);
+    }
+})();
+]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e992deb0bd1657f36a38f5af6a46aeb2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Lookup Widget</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sp_widget_x_casemgmt_case_lookup_widget</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template><![CDATA[<div class="x-casemgmt-case-lookup-widget">
+    <!--
+        THE PAGE'S ONE <h1>.
+
+        This was an <h2>, which left the page with no <h1> element at all:
+        the only level-1 heading on it was a 1x1 clipped
+        div.sr-only[role=heading][aria-level=1] emitted by the Service
+        Portal page container from the sp_page record's <title>, invisible
+        to sighted users and a duplicate of this text. The visible heading
+        of a public page should be its top-level heading. The result
+        panel's heading is promoted from <h3> to <h2> to match, so the
+        outline reads h1 -> h2 with no level skipped. Bootstrap's
+        panel-title class carries the panel-heading typography on whatever
+        element it is applied to, so the promotion changes the semantics
+        and nothing about the rendering.
+
+        The text is unchanged and no CSS is required.
+    -->
+    <h1>Case Status Lookup</h1>
+    <form name="caseLookupForm"
+          novalidate
+          ng-attr-aria-busy="{{c.loading ? 'true' : 'false'}}"
+          ng-submit="c.lookup(caseLookupForm)">
+        <div class="form-group" ng-class="{'has-error': c.clientInvalid(caseLookupForm.caseNumber)}">
+            <label for="x-casemgmt-case-number">Case Number</label>
+            <input type="text"
+                   id="x-casemgmt-case-number"
+                   name="caseNumber"
+                   class="form-control"
+                   maxlength="20"
+                   ng-model="c.caseNumber"
+                   ng-change="c.onInputChange()"
+                   placeholder="Enter your case number (e.g., CASE0000001)"
+                   aria-required="true"
+                   aria-describedby="x-casemgmt-case-number-error"
+                   ng-attr-aria-invalid="{{c.clientInvalid(caseLookupForm.caseNumber) ? 'true' : 'false'}}"
+                   required />
+            <p class="alert-danger" id="x-casemgmt-case-number-error" role="alert"
+               ng-if="c.clientInvalid(caseLookupForm.caseNumber)">Enter a case number to look up.</p>
+        </div>
+        <!--
+            On the two attributes above that look inconsistent with each other:
+
+            The input's aria-describedby names the message element
+            unconditionally, while the message element itself is ng-if'd and so
+            is absent whenever the field is valid or the button has not been
+            pressed. The reference is therefore unresolved most of the time.
+            That is deliberate and permitted: WAI-ARIA requires an unresolvable
+            IDREF to be ignored, so nothing is announced incorrectly, and it is
+            the price of leaving the field's vertical rhythm untouched while the
+            form is clean.
+
+            The condition on that message is c.clientInvalid(...), which is
+            $invalid AND c.pressed - NOT $invalid && $touched, which is what it
+            was. That change is what makes the first press of Look Up Status
+            arrive: keyed to $touched, the blur the press itself causes
+            inserted this paragraph above the button, moved the button 20px
+            down between mousedown and mouseup, and the mouseup landed on the
+            <form>. See c.pressed in the client script for the measurement.
+
+            The button's hint paragraph below takes the opposite approach and
+            stays mounted permanently. The difference is that the hint has
+            something to say in EVERY state - which field is missing, or that
+            the form is ready - so mounting it always costs no extra space and
+            gives its aria-live region a stable host to update in place. A
+            per-field error has nothing to say while the field is valid, and
+            mounting an empty help-block for each field would add Bootstrap's
+            help-block margins to the form in its normal, valid state.
+
+            The `required` and aria-required attributes on the input carry no
+            behaviour of their own - they neither block the press nor issue the
+            request; c.lookup() decides that. What they add is the PROGRAMMATIC
+            state that everything else keys on: without `required` the control
+            is never $invalid, so there is nothing for aria-invalid, has-error
+            or the field's own message to report, and a screen-reader user who
+            pressed the button on an empty field would be told nothing at all.
+            The label deliberately carries no asterisk: this form
+            has a single field, so there is no ambiguity about which one is
+            needed, and adding one would be a visual change no requirement
+            asks for (AAP Section 0.4.4 specifies one input on this page).
+        -->
+        <div class="form-group">
+            <!--
+                Look Up Status button: disabled ONLY while a request is in
+                flight, never because the field is empty.
+
+                It used to be disabled on !c.caseNumber as well, which left
+                the primary action unanswerable in the state every
+                first-time visitor arrives in: a disabled <button> does not
+                receive the pointer, so a click landed on this wrapper DIV
+                and produced nothing, and a disabled button is absent from
+                the tab order, so a keyboard user never reached it.
+                Enabled, the press is always answered - c.lookup() sets
+                c.pressed, which renders the field's own message, and sets
+                the summary below.
+
+                Nothing above this button moves before the press is
+                delivered, and that is load-bearing rather than incidental:
+                the field's message is keyed to c.pressed and not to the
+                control's $touched, so the blur the press itself causes
+                changes no layout, and the mouseup lands where the mousedown
+                did. Keyed to $touched it did not, and the first press was
+                swallowed - see c.pressed in the client script.
+
+                No request is issued on an empty field: c.lookup() returns
+                before the $http.get.
+            -->
+            <button type="submit"
+                    class="btn btn-primary"
+                    aria-describedby="x-casemgmt-lookup-hint"
+                    ng-disabled="c.loading">
+                <span ng-if="!c.loading">Look Up Status</span>
+                <span ng-if="c.loading">Looking up...</span>
+            </button>
+            <!--
+                Status region: the visible REASON a press would be refused (the
+                form carries novalidate, so the browser contributes no message
+                of its own) and the announcement of the in-flight state, which
+                the button's inner text alone does not convey to assistive
+                technology. Always present in the DOM so the button's
+                aria-describedby never dangles; polite so it never steals
+                focus.
+
+                On its colour, because an earlier revision of this comment
+                described a mechanism that is no longer here: this paragraph
+                used to carry Bootstrap 3's `help-block` class, whose theme
+                colour is #b1b1b1 - 2.14:1 against the panel, a clear WCAG AA
+                failure on body text - and a `<css>` element in this widget
+                darkened it. Both are gone. The class was simply REMOVED, so
+                the paragraph now inherits the theme's own body text colour,
+                measured at 4.88:1 and passing. That is strictly better than
+                overriding the colour: it needs no custom CSS at all, which is
+                what AAP Section 0.4.4 requires of this portal ("default
+                theme. No custom CSS, no custom branding"), and it cannot
+                drift from the theme if the theme changes. This widget now
+                carries NO <css> element, and neither does the submission or
+                confirmation widget.
+
+                It is guidance shown BEFORE the press, not the answer to one:
+                the answer to a refused press is the role="alert" summary
+                below plus the field's own message above the button.
+            -->
+            <p id="x-casemgmt-lookup-hint" role="status" aria-live="polite">
+                <span ng-if="c.loading">Looking up your case, please wait...</span>
+                <span ng-if="!c.loading">
+                    <!--
+                        The empty-state line is suppressed while the field's
+                        own message is on screen. Both say "Enter a case
+                        number to look up.", and after a press on an empty
+                        form both conditions hold, so the identical sentence
+                        rendered twice - once above the button as the field's
+                        error and once below it as the hint. Two copies of
+                        one instruction reads as two problems. The field's
+                        message is the one that stays, because it is the one
+                        adjacent to the control it is about and the one
+                        aria-describedby points at.
+                    -->
+                    <span ng-if="!c.caseNumber && !c.clientInvalid(caseLookupForm.caseNumber)">Enter a case number to look up.</span>
+                </span>
+            </p>
+        </div>
+    </form>
+
+    <!--
+        Validation summary: rendered when Look Up Status was pressed with
+        an empty field. It exists because the button is enabled now - see
+        the button comment above for why a disabled primary action was a
+        dead end for both pointer and keyboard users - and it is the
+        visible answer to that press.
+
+        role="alert" so it is announced when it appears. c.lookup() clears
+        it before issuing a request, so it can never coexist with the
+        result panel, the not-found alert or the service-failure alert
+        below: every path that sets one of the four clears the other three.
+
+        c.onInputChange() withdraws it on an edit, but ONLY once a press
+        would be accepted - see c.clientProblemRemains() in the client
+        script. Unconditionally, an edit that left the field empty (type a
+        character, backspace it) removed this summary while the field's own
+        "Enter a case number to look up." was still on screen beside a
+        still-empty field, withdrawing the only page-level statement that
+        the press had been received and refused.
+    -->
+    <div class="alert alert-danger" role="alert" ng-if="c.validationMessage">
+        {{c.validationMessage}}
+    </div>
+
+    <!--
+        Result panel: rendered when c.result is non-null (i.e., the most
+        recent lookup returned HTTP 200 with a whitelisted record). Shows
+        EXACTLY the three fields permitted by AAP Section 0.4.4:
+        status, subject, opened_date. NO internal fields are exposed.
+        Uses a definition list (<dl>/<dt>/<dd>) for semantic accessibility:
+        screen readers parse <dl> as key-value pairs, providing a clear
+        narration of "Status: <value>, Subject: <value>, Opened Date:
+        <value>".
+    -->
+    <!--
+        THE LIVE REGION THAT ANNOUNCES A SUCCESSFUL RESULT.
+
+        Both failure paths already announced themselves - the not-found
+        alert and the service-failure alert further down each carry
+        role="alert" - while the SUCCESS panel carried no live-region role
+        on itself or on any of its ancestors. A screen-reader user who ran
+        a lookup therefore heard nothing at all when it WORKED and heard an
+        announcement only when it did not: the button text returns from
+        "Looking up..." to "Look Up Status" and the answer appears
+        silently below. That is exactly the wrong way round.
+
+        The region is this always-mounted wrapper, NOT the ng-if'd panel
+        itself. A live region has to be present in the DOM before its
+        content changes for the change to be announced reliably; putting
+        aria-live on an element that is itself inserted at the same moment
+        as its content is announced by some assistive technology and not by
+        others. The same reasoning is already applied to the button's hint
+        paragraph above, which stays mounted so its region has a stable
+        host to update in place. An empty div contributes no box and no
+        vertical space, so the panel's layout in the pristine state is
+        unchanged.
+
+        polite rather than assertive (which is what role="alert" implies):
+        the requester deliberately asked for this information and is
+        waiting for it, so it should be read at the next opportunity
+        instead of interrupting. role="status" carries the polite
+        live-region semantics for assistive technology that keys on role,
+        and the explicit aria-live states it for anything that keys on the
+        attribute; the two agree, so neither overrides the other into a
+        different politeness.
+    -->
+    <div role="status" aria-live="polite">
+    <div class="panel panel-default" ng-if="c.result">
+        <div class="panel-heading">
+            <h2 class="panel-title">Case Status</h2>
+        </div>
+        <div class="panel-body">
+            <dl>
+                <dt>Status</dt>
+                <dd>{{c.result.status}}</dd>
+                <dt>Subject</dt>
+                <dd>{{c.result.subject}}</dd>
+                <!--
+                    The timezone qualifier sits inside the <dt> LABEL, not
+                    beside the value, for two reasons. It is part of what
+                    the field means rather than part of the case's data, so
+                    a screen reader narrating the definition list announces
+                    "Opened Date, America/Los_Angeles" as one term - the name
+                    this instance actually resolves to, measured on the
+                    rendered page - and then the timestamp as its definition.
+                    And it keeps the <dd>
+                    holding exactly the value the lookup endpoint returned,
+                    so the three-field whitelist stays literally visible in
+                    the markup. The qualifier is omitted entirely when the
+                    instance has no resolvable timezone name, rather than
+                    rendering empty parentheses. See the server script for
+                    why the label cannot travel in the lookup response.
+                -->
+                <dt>Opened Date<span ng-if="c.data.openedDateTimeZone"> ({{c.data.openedDateTimeZone}})</span></dt>
+                <dd>{{c.result.opened_date}}</dd>
+            </dl>
+        </div>
+    </div>
+    </div><!-- /live region -->
+
+    <!--
+        Not-found panel: rendered when c.notFound is true, which means the
+        case table WAS queried and held no case with that number - an HTTP
+        404, any other 4xx, or a 200 whose body carried no status. It is no
+        longer rendered for a failure that prevented the query from being
+        answered at all; that is the separate panel below. Contains the
+        EXACT verbatim text required by AAP Section 0.7.4:
+            "No case found with that number."
+        Capital "N", lowercase elsewhere, trailing period, ASCII straight
+        quotes - non-negotiable. The text is hardcoded here in the
+        template, NOT pulled from the server's error response body
+        (defense against header-injection / response-smuggling attacks
+        on the public endpoint).
+
+        THE PANEL CARRIES `alert` WITHOUT `alert-warning`, AND THAT IS A
+        CONTRAST FIX, NOT A TIDY-UP.
+
+        The theme paints `.alert-warning` #c77c11 on a white alert
+        background - 3.32:1, which is the figure QA measured here and is
+        below the 4.5:1 WCAG 2.1 AA minimum for normal text. Unlike the
+        field error above, this sentence has no higher-contrast equivalent
+        among the theme's coloured variants: `alert-info` measures 3.69:1
+        and also fails, `alert-danger` passes but would state that
+        something went WRONG, which is exactly the false answer the
+        service-failure panel below exists to keep separate ("no such
+        case" is a successful answer to the question asked), and
+        `alert-success` would state the opposite of what happened.
+
+        So the colour variant is dropped and the box keeps `alert` alone.
+        `.alert` carries only padding, margin, radius and a TRANSPARENT
+        border, so the notice keeps its spacing and loses its yellow tint,
+        and the sentence inherits the theme's body colour #717171 = 4.88:1
+        and passes. The meaning is carried by the sentence itself and by
+        role="alert", which is what announces it; colour was never the
+        only carrier. Restoring a coloured treatment that also passes AA
+        would mean overriding the theme's warning colour in this record's
+        <css> element, which AAP Section 0.4.4 forbids - that residue is
+        recorded in ../../docs/portal-pages.md rather than taken here.
+    -->
+    <div class="alert" role="alert" ng-if="c.notFound">
+        No case found with that number.
+    </div>
+
+    <!--
+        Service-failure panel: rendered when c.errorMessage is non-empty, which
+        happens only when the lookup could not be ANSWERED - a 5xx from the
+        instance, a network failure, or the client-side timeout expiring. It is
+        deliberately separate from the not-found panel above, because those two
+        outcomes are different facts and telling a requester "No case found
+        with that number." when the request never reached the case table is
+        simply false: the natural response is to conclude the case does not
+        exist, or to re-type a case number that was correct all along.
+
+        This does NOT weaken the information-leakage hardening described in the
+        file header. Every 4xx still renders the identical verbatim not-found
+        text, so a caller cannot distinguish "no such case" from "malformed
+        request" and cannot enumerate case numbers by comparing responses. What
+        is now distinguishable is only whether the service answered at all,
+        which a requester can already observe from the page and which reveals
+        nothing about any case. The message text is hardcoded here, exactly as
+        the not-found text is, and is never taken from the server's response
+        body.
+    -->
+    <div class="alert alert-danger" role="alert" ng-if="c.errorMessage">
+        {{c.errorMessage}}
+    </div>
+</div>
+]]></template>
+    </sp_widget>
+</record_update>

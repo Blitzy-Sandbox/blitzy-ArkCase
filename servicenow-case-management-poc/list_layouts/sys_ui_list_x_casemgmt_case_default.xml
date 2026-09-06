@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow List Layout record-definition for the DEFAULT VIEW of the
+    `x_casemgmt_case` table in the scoped application `x_casemgmt`.
+
+    WHY THIS FILE EXISTS
+      AAP Section 0.4.4 requires the build to "configure form/list layouts
+      on the three tables" and to "surface fields in the order shown in the
+      data-model tables (subject, type, status, priority, description,
+      requester_name, requester_email, opened_date, closed_date,
+      assigned_group, assigned_agent)".
+
+      Until this file was added, the package carried NO list-layout record
+      at all, and the Default-view list layout that existed on the
+      verification instance had been created outside the package. It held
+      ten columns - number, assigned_agent, assigned_group, closed_date,
+      description, opened_date, pending_reason, priority, requester_email,
+      requester_name - i.e. everything EXCEPT the three columns an operator
+      most needs: `status`, `subject` and `type`. A case list that shows a
+      case number, a description and two empty assignment columns but not
+      the case's subject or its status is not usable, and the omission was
+      invisible to the package because no artifact described the layout.
+
+      This record makes the layout part of the shipped application, in the
+      AAP field order, with `number` first because it is the table's display
+      value and therefore the column that carries the record link.
+
+    COLUMN ORDER PRODUCED (position -> element)
+        0  number             (auto-number, record link, CASE0000001 format)
+        1  subject            AAP 0.4.4 order starts here
+        2  type
+        3  status
+        4  priority
+        5  description
+        6  requester_name
+        7  requester_email
+        8  opened_date
+        9  closed_date
+       10  assigned_group
+       11  assigned_agent
+       12  pending_reason     (the app's own Pending-state reason field,
+                               kept last; it was already present in the
+                               pre-existing layout and is retained so the
+                               Pending state remains readable from the list)
+
+      `duration_to_close` (glide_duration) is intentionally NOT a column:
+      it was only ever present in one administrator's PERSONALIZED list
+      (see the note on sys_user below), never in the base layout, and it is
+      not part of the AAP data model in Section 0.5.7.
+
+    THE OTHER TWO TABLES NEED NO SUCH FILE
+      Measured on the verification instance, the Default-view layouts for
+      the sibling tables are already complete against their AAP field sets,
+      so authoring records for them would change nothing:
+        x_casemgmt_case_task  -> number, assigned_to, case, due_date,
+                                 status, subject, type   (7 columns = all
+                                 six AAP fields + number)
+        x_casemgmt_case_party -> number, case, organization, party_type,
+                                 person, role_label      (6 columns = all
+                                 five AAP fields + number)
+      Only the case table was missing columns, so only the case table gets
+      a record here. This honours the AAP's MINIMAL CHANGE CLAUSE.
+
+    SERIALIZATION SHAPE (why this file looks different from its siblings)
+      A List Layout is not a plain record. `sys_ui_list_element` does NOT
+      extend Application File (sys_metadata) - it has no `sys_scope` and no
+      `sys_update_name` - so an element cannot be carried as an Update Set
+      record of its own. The platform therefore serializes the whole layout
+      as ONE update of type "List Layout": a `<record_update>` document
+      whose root child is a `<sys_ui_list ... version="2">` CONTAINER that
+      holds every `<sys_ui_list_element>` first and the actual
+      `<sys_ui_list>` record last.
+
+      This file reproduces that shape exactly as the platform emits it. It
+      was copied from a live example on the verification instance
+      (sys_update_xml `sys_ui_list_x_casemgmt_case_RPTee04fa982b136ad35c6fe1512826f6ab`,
+      type "List Layout"), which is the platform's own output for this table,
+      so the import path is the one the platform itself produces.
+
+      Consequences worth knowing when reading this file:
+        - The DEFAULT view is identified by an EMPTY view attribute on the
+          container, while the record itself stores the literal string
+          "Default view" in its view reference column and every element
+          carries view="Default view" inside its list_id display hint. That
+          asymmetry is the platform's own convention, not a typo: it was
+          verified against the platform-authored payloads
+          sys_ui_list_sys_hub_flow_null and sys_ui_list_sys_atf_test_suite_null
+          held in sys_update_version on the verification instance, and
+          against the out-of-box base layouts for the problem and
+          change_request tables, all of which store "Default view" in that
+          reference column even though no sys_ui_view row of that name
+          exists anywhere on the instance. A NAMED view instead carries the
+          view's name in the container attribute and the view's sys_id in
+          the record.
+        - Each element's `<list_id>` points at the layout record defined at
+          the bottom of this same document, so the document is
+          self-contained: nothing outside this payload has to exist first.
+        - `<sys_update_name>sys_ui_list_x_casemgmt_case_null</sys_update_name>`
+          is the platform's own naming for a layout on a null (default)
+          view, and it is the key the import engine matches on. That is what
+          makes this record UPDATE an existing default-view layout on the
+          target instance rather than adding a second one.
+
+    THE `sys_user` FIELD MUST STAY EMPTY - AND WHY IT MATTERS
+      `sys_ui_list.sys_user` distinguishes a BASE layout (empty - applies to
+      everyone) from a PERSONALIZED layout (a user's own column choice,
+      which silently overrides the base layout for that user only).
+
+      On the verification instance there were TWO Default-view layout rows
+      for `x_casemgmt_case`: the base one, and a personalized one belonging
+      to the administrator (sys_user populated, eleven columns) that had
+      been created by clicking the list's column-picker. While a
+      personalized row exists, the list toolbar reads "Update Personalized
+      List" and the base layout is NOT what that user sees - so a fix to the
+      base layout alone would look like it had no effect.
+
+      This record is the BASE layout: `<sys_user/>` is empty. A verifier who
+      finds a personalized Default-view row for this table should delete it
+      so that the shipped layout is the one in force. Personalized rows are
+      per-user state, are not carried by an Update Set, and are never part
+      of this application.
+
+    NO DATA IS AFFECTED
+      A list layout only decides which columns render. It creates no
+      records, changes no field values, and enforces no security: column
+      visibility is still subject to the field-level ACLs in ../acl/.
+
+    IDENTIFIERS
+      List record sys_id 35145a169322cb10830ef82bdd03d6e7 is pinned to the
+      Default-view layout row that already exists on the verification
+      instance, so this record updates that row instead of racing it. The
+      import engine matches on `sys_update_name` first (see above), so the
+      pinned value is a convenience, not a dependency.
+
+      Every element sys_id is a recomputable MD5 of a canonical string,
+      `md5("x_casemgmt_case.list.default." + element)`:
+        number           b902b461a7d845af3a7855ef54517782
+        subject          3e23d89436716d4009cd8b28bbc276ed
+        type             04a55bfb47d0896e92ed9064bea4f167
+        status           3465363256d9f1c2464c8db6741c0bec
+        priority         8541f38dd188ff731dacc94054eeaea8
+        description      f3a5942f6916ddf2143095d296b401c6
+        requester_name   3e84f9082bcd5ad3289d6251f1eeb3a1
+        requester_email  5fae7d329ff3285af41106995327159a
+        opened_date      e2ce9e08a0e6445dabd7a86538c1eaf0
+        closed_date      b802a30d601e89f561e8c00c846ab532
+        assigned_group   c90e9971cdc99482c6db90b7a91fe83c
+        assigned_agent   af1e7c283ec90b7f2e546b7caa660e65
+        pending_reason   17b3bd08c5d712240692208a65c328dc
+      Recomputable via:
+        printf '%s' 'x_casemgmt_case.list.default.status' | md5sum | cut -c1-32
+      so regenerating this file is byte-deterministic.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering)
+      MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scope authority)
+        - ../tables/x_casemgmt_case.xml (the table being listed)
+        - ../dictionary/x_casemgmt_case_*.xml (every column named below
+          must exist as a dictionary entry before it can be a list column)
+      MUST LOAD BEFORE:
+        - ../seed-data/cases/x_casemgmt_case_demo_*.xml (so the demo cases
+          are readable in the list immediately after commit)
+
+    AAP COMPLIANCE
+      - AAP 0.4.4 list layout configured on the case table, in the AAP
+        field order, with status/subject/type present.
+      - AAP 0.7.2 scoped-namespace exclusivity: the record carries the
+        scoped application's sys_scope/sys_package; no global list layout
+        is touched.
+      - AAP 0.7.2 minimal change: only the one table whose layout was
+        deficient is described here.
+      - No PII: column names only.
+-->
+<record_update>
+    <sys_ui_list parent="" relationship="" sys_domain="global" table="x_casemgmt_case" version="2" view="">
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>number</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>0</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>b902b461a7d845af3a7855ef54517782</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>subject</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>1</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>3e23d89436716d4009cd8b28bbc276ed</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>type</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>2</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>04a55bfb47d0896e92ed9064bea4f167</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>status</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>3</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>3465363256d9f1c2464c8db6741c0bec</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>priority</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>4</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>8541f38dd188ff731dacc94054eeaea8</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>description</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>5</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>f3a5942f6916ddf2143095d296b401c6</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>requester_name</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>6</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>3e84f9082bcd5ad3289d6251f1eeb3a1</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>requester_email</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>7</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>5fae7d329ff3285af41106995327159a</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>opened_date</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>8</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>e2ce9e08a0e6445dabd7a86538c1eaf0</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>closed_date</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>9</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>b802a30d601e89f561e8c00c846ab532</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>assigned_group</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>10</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>c90e9971cdc99482c6db90b7a91fe83c</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>assigned_agent</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>11</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>af1e7c283ec90b7f2e546b7caa660e65</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list_element action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element>pending_reason</element>
+            <list_id display_value="x_casemgmt_case" element="NULL" name="x_casemgmt_case" parent="NULL" relationship="NULL" sys_domain="global" view="Default view">35145a169322cb10830ef82bdd03d6e7</list_id>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <position>12</position>
+            <sum>false</sum>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_id>17b3bd08c5d712240692208a65c328dc</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        </sys_ui_list_element>
+        <sys_ui_list action="INSERT_OR_UPDATE">
+            <average_value>false</average_value>
+            <element/>
+            <max_value>false</max_value>
+            <min_value>false</min_value>
+            <name>x_casemgmt_case</name>
+            <parent/>
+            <position/>
+            <relationship/>
+            <sum>false</sum>
+            <sys_class_name>sys_ui_list</sys_class_name>
+            <sys_created_by>admin</sys_created_by>
+            <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+            <sys_domain>global</sys_domain>
+            <sys_domain_path>/</sys_domain_path>
+            <sys_id>35145a169322cb10830ef82bdd03d6e7</sys_id>
+            <sys_mod_count>0</sys_mod_count>
+            <sys_name>x_casemgmt_case</sys_name>
+            <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+            <sys_policy/>
+            <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+            <sys_update_name>sys_ui_list_x_casemgmt_case_null</sys_update_name>
+            <sys_updated_by>admin</sys_updated_by>
+            <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+            <sys_user/>
+            <view>Default view</view>
+            <view_name/>
+        </sys_ui_list>
+    </sys_ui_list>
+</record_update>

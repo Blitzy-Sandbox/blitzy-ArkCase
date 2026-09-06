@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `type` field on the `x_casemgmt_case` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_dictionary_x_casemgmt_case_type
+      Update record type       : Dictionary
+      Update record target     : Case.Type
+      Captured (instance time) : 2026-09-02 19:14:04
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (28da6c5e938b435009aa70d19dba10a7), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `type` Choice field on the `x_casemgmt_case` custom table
+    inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim):
+        Field   Type            Constraints
+        type    Choice          General Inquiry, Complaint - extensible
+
+    Per AAP Section 0.4.4 the case-submission portal page populates this field
+    as one of the five user-supplied inputs (subject, type, description,
+    requester_name, requester_email).
+
+    Per AAP Section 0.5.5 the value of this field is the discriminator that
+    selects which Flow Designer state-machine flow handles a case's lifecycle
+    transitions:
+       - ../flows/general_inquiry_state_machine.xml triggers on type=General Inquiry
+       - ../flows/complaint_state_machine.xml      triggers on type=Complaint
+    Each flow's OnUpdate trigger filter compares against the choice LABEL
+    string, so the labels declared in ../choices/sys_choice_case_type.xml
+    MUST match the trigger filter strings literally.
+
+    This dictionary entry ONLY declares that the `type` Choice field exists on
+    the parent table. The choice values themselves (General Inquiry, Complaint)
+    are authored as separate sys_choice records in
+    ../choices/sys_choice_case_type.xml. This separation is intentional and
+    matches AAP Section 0.5.7's "extensible" qualifier - new case types can
+    later be added by appending sys_choice rows (and authoring a new state-
+    machine flow per type) WITHOUT altering this dictionary entry.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+        com/armedia/acm/plugins/casefile/model/CaseFile.java line 134-135:
+            @Column(name = "cm_case_type")
+            private String caseType;
+        ArkCase's `caseType` was a free-form String column on the
+        `acm_case_file` JPA entity - any caller could write any string and
+        the JPA layer enforced no enumeration. This was acceptable in
+        ArkCase only because the case-type discriminator was effectively
+        the JPA SINGLE_TABLE inheritance class-name (`cm_class_name`),
+        not the `cm_case_type` column. The ServiceNow target inverts that
+        coupling: the dedicated `type` Choice field IS the type
+        discriminator, and ServiceNow scoped applications do not use JPA
+        single-table-inheritance class-name discriminators. Constraining
+        the field to a Choice rather than a free-form String prevents
+        typos, enforces flow-routing correctness, and makes the Manager
+        View dashboard's "All cases by type" donut chart (per
+        ../reports/x_casemgmt_all_cases_by_type.xml) deterministic.
+      - The field name is `type` (lowercase, 4 chars; NOT `case_type`,
+        NOT `caseType`) per AAP Section 0.5.7 verbatim. This matches
+        the conventional ServiceNow Choice-field naming convention
+        across the platform (incident.category, sc_request.priority,
+        change_request.type, etc.).
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2, 0.7.4):
+      - Scope-namespace exclusivity: `<name>` resolves to `x_casemgmt_case`
+        within the scoped application, and `<sys_scope>` / `<sys_package>`
+        bind THIS dictionary record to the same scope through the scope
+        record id the platform serialized into both elements. NO
+        global-scope writes - the OOB tables `task`, `incident`,
+        `sys_user`, etc. are never modified.
+      - No cross-reference sys_id was hand-authored here, and the ids that
+        ARE present are the platform's own. The Phase 1 rebuild resolved
+        the scope by query (`sys_scope?scope=x_casemgmt`) and let
+        ServiceNow serialize every reference, so what it wrote is literal,
+        not a by-name token: `<sys_package>` carries
+        display_value="x_casemgmt Case Management" and source="x_casemgmt"
+        over the text node 82b99028936f74320d74d6f88357a5af, and
+        `<sys_scope>` carries display_value only over that same
+        scope-record id, with no source attribute at all. Both text nodes
+        are that id. This is ServiceNow's native serialization of a
+        reference field and is AUTHORIZED by the refine PR's
+        native-capture directive, which supersedes the hand-authored
+        origin for this path (docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value 28da6c5e938b435009aa70d19dba10a7
+        is the identity the platform assigned this record when it created
+        it: this record's own primary key, not a reference to any other
+        record, and NOT derived from the field identifier
+        `x_casemgmt_case.type`. Re-running the rebuild would yield a
+        different id, so this file is NOT reproducible byte-for-byte by
+        regeneration; the no-hard-coded-sys_id rule is satisfied by
+        PROVENANCE (nothing here was composed by hand) rather than by the
+        absence of literal ids. Re-import matches the existing row on this
+        id, so the captured value must be preserved verbatim - that is
+        what keeps a re-import from creating a duplicate sys_dictionary
+        row on a fresh PDI.
+      - The concrete scope identifier `casemgmt` is used per AAP convention;
+        ServiceNow Update Set imports use a standard XML parser, so the
+        scope id must be concrete in the XML before export.
+      - mandatory=false at the dictionary level per AAP Section 0.5.7
+        verbatim ("type | Choice | General Inquiry, Complaint -
+        extensible" - no Mandatory marker) and AAP Section 0.7.1
+        strict-literal "no additions, no renames, no type relaxations"
+        rule. The AAP authoritative text takes precedence over the
+        functional argument that the per-case-type flows in AAP
+        Section 0.5.5 require this discriminator: if a case is
+        inserted without a `type`, neither flow's OnUpdate trigger
+        will match and the case will simply have no automated
+        lifecycle - which is acceptable POC behavior since manual
+        status writes are still possible. Internal-form callers,
+        Table API consumers, the scripted REST submission endpoint
+        per ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml,
+        and the synthetic seed cases per
+        ../seed-data/cases/x_casemgmt_case_demo_*.xml all continue
+        to populate this field explicitly with one of the two
+        supported labels (General Inquiry or Complaint), so the
+        absence of a dictionary-level mandatory constraint does not
+        in practice produce empty `type` values. If a future
+        requirement makes type strictly mandatory, AAP Section 0.5.7
+        will be updated first and this dictionary entry will follow.
+      - read_only=false: an internal user (case_manager) editing the case
+        record may correct an erroneous type assignment. The corresponding
+        flow filter changes are picked up by the platform on the next
+        OnUpdate trigger evaluation - no schema migration required.
+      - default_value is EMPTY (no implicit default) per AAP Section 0.5.7
+        and the agent prompt's Phase 4 verbatim. Defaulting silently to
+        either "General Inquiry" or "Complaint" would skew the Manager
+        View "All cases by type" donut analytics by inflating whichever
+        type happened to be the default. The user MUST explicitly choose,
+        either through the internal form, the external portal page,
+        or the scripted REST request payload.
+      - audit=false: the field tracks a categorical attribute, not a
+        regulated identifier. Per AAP Section 0.7.2 this POC is scoped
+        to functional capability, not full audit-trail compliance.
+      - max_length 40 is generous: the longest defined label is
+        "General Inquiry" (15 chars). The 40-char headroom accommodates
+        future extensible labels (e.g., "Internal Investigation",
+        "Third-Party Inquiry") without a schema migration.
+      - choice 3 = "Choice list, no description column" - the standard
+        Choice-field configuration when a sibling sys_choice record set
+        defines the allowed values.
+      - No reference target: this is a String-backed Choice field, not a
+        Reference field. All `<reference*>` elements are empty and
+        `<table_reference>false</table_reference>`.
+      - No PII: the field stores only categorical labels chosen from a
+        controlled vocabulary; no real names, email addresses, or
+        organizational identifiers are derived from or stored in this
+        column.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER `../tables/x_casemgmt_case.xml`
+        (parent table), since `<name>x_casemgmt_case</name>` references
+        the table by name.
+      - This record MUST load BEFORE the consumers that read or write
+        the `type` column:
+          * ../choices/sys_choice_case_type.xml (the choice values
+            General Inquiry and Complaint, which reference this
+            dictionary entry by `name` + `element` lookup)
+          * ../flows/general_inquiry_state_machine.xml (OnUpdate trigger
+            filtered by `type=General Inquiry`)
+          * ../flows/complaint_state_machine.xml (OnUpdate trigger
+            filtered by `type=Complaint`)
+          * ../reports/x_casemgmt_all_cases_by_type.xml (donut chart
+            grouped by this field)
+          * ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+            (writes this field on portal-originated case submissions)
+          * ../seed-data/cases/x_casemgmt_case_demo_*.xml (synthetic demo
+            cases that must populate this field to satisfy AAP Section
+            0.7.4 minimum-data thresholds: "both case types represented")
+-->
+<record_update>
+    <sys_dictionary action="INSERT_OR_UPDATE" element="type" table="x_casemgmt_case">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice>3</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Type</column_label>
+        <comments>Optional Choice categorizing the case per AAP Section 0.5.7 verbatim (no Mandatory marker). Values: General Inquiry, Complaint (extensible). Drives which Flow Designer flow handles state transitions: ../flows/general_inquiry_state_machine.xml or ../flows/complaint_state_machine.xml. Used by ../reports/x_casemgmt_all_cases_by_type.xml. Replaces ArkCase CaseFile.caseType (free-form String). Internal forms, the Table API, the scripted REST submission endpoint, and seed cases all populate this field explicitly with one of the supported labels.</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>type</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type display_value="String">string</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_casemgmt_case</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:14:04</sys_created_on>
+        <sys_id>28da6c5e938b435009aa70d19dba10a7</sys_id>
+        <sys_name>Type</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_type</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:14:04</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

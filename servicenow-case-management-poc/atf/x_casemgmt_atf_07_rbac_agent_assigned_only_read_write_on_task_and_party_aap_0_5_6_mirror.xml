@@ -1,0 +1,1135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the ATF test
+    `ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)`
+    its 6 ordered `sys_atf_step` children and the 15 `sys_variable_value`
+    rows that carry those steps' input values, inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (Refine-PR Section 3, directives D3.1a / D3.2 / D3.4):
+        Section 3 asks for an ATF suite covering the data model and ACL RBAC
+        matrix, the state-machine transition matrix and the anonymous portal
+        contracts, and insists the tests be proven to RUN - "not just that the
+        sys_atf_test header records exist". Every record below was authored
+        natively on the instance and then serialized by the platform's OWN
+        serializer (GlideRecordXMLSerializer), never composed by hand. The
+        ATF's step configuration is genuinely multi-table - a step's input
+        VALUES live in `sys_variable_value`, not on the step row - which is the
+        Defect-F-shaped risk Section 3 warns about. It was measured rather than
+        assumed: the platform's payload loader IGNORES `sys_variable_value`
+        children embedded inside a `sys_atf_step` document (a step re-applied
+        that way came back with ZERO inputs and its test then failed), but the
+        same rows applied as their OWN records restore every input and the
+        re-imported test passes. Each input therefore ships here as a separate
+        `<record_update table="sys_variable_value">` document ordered directly
+        after its parent step, and the step keeps its `delete_multiple`
+        directive so a re-import clears stale inputs first. That makes the set
+        idempotent and self-sufficient.
+
+    RUNTIME EVIDENCE: see `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`
+    (ATF section) for this test's captured verdict, its result-row id and the
+    negative-control evidence proving the suite can fail as well as pass.
+
+    PREREQUISITE FOR RUNNING: the instance property `sn_atf.runner.enabled`
+    must be `true`. It is an instance test-harness setting and is deliberately
+    NOT captured into the Update Set.
+
+    XML ROOT. This file uses `<unload>` as its root, the same convention as
+    `../dashboards/*.xml`, because it carries more than one record. Every record
+    element keeps its own `action="INSERT_OR_UPDATE"`, so the document is a
+    drop-in payload for the platform's own loader as well as being valid XML for
+    `xmllint` in no-output mode.
+
+    IDENTIFIERS. Every `<sys_id>` here is deterministic - derived from
+    md5('x_casemgmt.atf.' + <stable key>) - so a rebuild converges rather than
+    duplicating. Scope is bound by name: `<sys_package>` carries the literal
+    `x_casemgmt`. The only foreign sys_id literals are the ones a step's own
+    configuration genuinely requires and cannot express by name:
+      - `<step_config>`   the platform's own out-of-box `sys_atf_step_config`
+                          row (stable across instances), carrying a
+                          `display_value` so the intent stays readable;
+      - `<variable>`      the platform's own `atf_input_variable` definition
+                          for each step input, likewise with a `display_value`;
+      - `<user>` inputs   the ATF `Impersonate` step declares `user` as a
+                          `sys_user` REFERENCE, so the demo identity must be a
+                          sys_id. Those three ids belong to this package's own
+                          seed data (`../seed-data/users/*.xml`), which pins
+                          them deterministically, so they remain valid after a
+                          clean import.
+    No other sys_id literal appears. Users, groups, roles, tables and cases are
+    resolved by user_name / name / number everywhere else.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <sys_atf_test action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <copied_from />
+        <description>The agent row of the ACL matrix on the child tables (AAP 0.5.6): an agent may read and write a task or party whose PARENT case is assigned to that agent, may create, and may never delete. "Assigned only" is a disjunction - assigned_agent = current user OR assigned_group contains current user - so five parent fixtures isolate it: both branches at once, direct-only, group-only, unassigned, and a group the agent is not a member of. Each parent carries one task and one party child, and every child is asserted for read, write and delete, so neither OR branch can pass on the strength of the other and a fail-open ACL cannot hide. This test previously ran RED because the four scripted child-table ACLs dereferenced the reserved word "case" as current.case, which the script engine refuses to compile ("missing name after . operator"), denying every row; those ACLs now read the parent through current.getElement('case') and the test is green.</description>
+        <enable_parameterized_testing>false</enable_parameterized_testing>
+        <fail_on_server_error>false</fail_on_server_error>
+        <name>ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)</name>
+        <parameters />
+        <sys_variable_value action="delete_multiple" query="document_key=e76510c28032c3279ae68fe31b6aa61d" />
+        <remember />
+        <sn_atf_tg_generated>false</sn_atf_tg_generated>
+        <sys_class_name>sys_atf_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e76510c28032c3279ae68fe31b6aa61d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_e76510c28032c3279ae68fe31b6aa61d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test_origin>manual</test_origin>
+    </sys_atf_test>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=d3b39dda41536d859e5d65633e0af619" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Five parent cases - both-branch, direct-only, group-only, unassigned and nonmember-group - each with one child task and one child party</notes>
+        <order>1</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d3b39dda41536d859e5d65633e0af619</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_d3b39dda41536d859e5d65633e0af619</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d3b39dda41536d859e5d65633e0af619</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b893c21c9aaa2684e4adb6450b3d6f32</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    // Identities are resolved by user_name / name - never by sys_id literal.
+    function userId(userName) {
+        var u = new GlideRecord('sys_user');
+        u.addQuery('user_name', userName); u.setLimit(1); u.query();
+        return u.next() ? u.getUniqueValue() : '';
+    }
+    function groupId(groupName) {
+        var g = new GlideRecord('sys_user_group');
+        g.addQuery('name', groupName); g.setLimit(1); g.query();
+        return g.next() ? g.getUniqueValue() : '';
+    }
+    var MGR_ID = userId('x_casemgmt_demo_manager');
+    var AGT_ID = userId('x_casemgmt_demo_agent');
+    var VWR_ID = userId('x_casemgmt_demo_viewer');
+    var GRP_ID = groupId('x_casemgmt_demo_team');
+    // A group the demo agent is definitively NOT a member of, resolved at run time by
+    // elimination rather than by name, so the test needs no second seeded group and no
+    // hardcoded group name. AAP 0.5.6 defines "Assigned only" as
+    //     assigned_agent = current user OR assigned_group contains current user
+    // and proving the "only" half requires a parent whose group does NOT contain the
+    // agent. The chosen group is asserted below to be a genuine non-membership.
+    function nonMemberGroupId(userName) {
+        var uid = userId(userName);
+        var mine = {}, m = new GlideRecord('sys_user_grmember');
+        m.addQuery('user', uid);
+        m.query();
+        while (m.next()) { mine[m.getValue('group')] = 1; }
+        var g = new GlideRecord('sys_user_group');
+        g.addQuery('active', true);
+        g.orderBy('name');
+        g.query();
+        while (g.next()) {
+            if (!mine[g.getUniqueValue()]) { return g.getUniqueValue(); }
+        }
+        return '';
+    }
+    var OTHER_GRP_ID = nonMemberGroupId('x_casemgmt_demo_agent');
+
+    var FIX = [
+        {
+            "label": "parent-both",
+            "table": "x_casemgmt_case",
+            "sys_id": "ee66fab2aae0daab57a18a04fa5fc3bd",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent case",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "task",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "ed02fff340bf0037625492f0cb259810",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "ee66fab2aae0daab57a18a04fa5fc3bd",
+                "subject": "ATF-RBAC-07 task",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "41b752e01dd8d0f75ef3230a70b55d2c",
+            "prefix": null,
+            "fields": {
+                "case": "ee66fab2aae0daab57a18a04fa5fc3bd",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-direct",
+            "table": "x_casemgmt_case",
+            "sys_id": "bad75eb1c21c932236a5cd1a275fc83f",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned DIRECTLY to the agent, no group",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "task-direct",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "74896b49d2174d3fbf07b0f3c0e13cfb",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "bad75eb1c21c932236a5cd1a275fc83f",
+                "subject": "ATF-RBAC-07 task on the direct parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-direct",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "e1655540ada67a5667dea0cc155f2d04",
+            "prefix": null,
+            "fields": {
+                "case": "bad75eb1c21c932236a5cd1a275fc83f",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-group",
+            "table": "x_casemgmt_case",
+            "sys_id": "f7fb08a92f84b635e1118fbf871a97c5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned to the agent GROUP only, no agent",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team"
+            }
+        },
+        {
+            "label": "task-group",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "f3573645a8f769471a11daeeb63a75b1",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "f7fb08a92f84b635e1118fbf871a97c5",
+                "subject": "ATF-RBAC-07 task on the group parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-group",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "d97f9690087d07b7e9a2633a357fbd28",
+            "prefix": null,
+            "fields": {
+                "case": "f7fb08a92f84b635e1118fbf871a97c5",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-unassigned",
+            "table": "x_casemgmt_case",
+            "sys_id": "c12db6ba96650309f874e2245ad94102",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned to NOBODY",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium"
+            }
+        },
+        {
+            "label": "task-unassigned",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "255261c44d7e569393eb5b378f093cf5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "c12db6ba96650309f874e2245ad94102",
+                "subject": "ATF-RBAC-07 task on the unassigned parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-unassigned",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "84d0b2cec80ea74f5d3b34003cfb2629",
+            "prefix": null,
+            "fields": {
+                "case": "c12db6ba96650309f874e2245ad94102",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-othergroup",
+            "table": "x_casemgmt_case",
+            "sys_id": "8e8ba999d36f28846a3a63a1889b0794",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent assigned to a group the agent is NOT in",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@nonmembergroup:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "task-othergroup",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "d0d522c65c706fd4e973124487d5a306",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "8e8ba999d36f28846a3a63a1889b0794",
+                "subject": "ATF-RBAC-07 task on the othergroup parent",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party-othergroup",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "1549f71e383e795314639032274605b9",
+            "prefix": null,
+            "fields": {
+                "case": "8e8ba999d36f28846a3a63a1889b0794",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        }
+    ];
+
+    // A field value written as "@user:&lt;user_name&gt;" or "@group:&lt;name&gt;" is resolved
+    // here, at run time, so no identity sys_id is baked into the test definition.
+    function resolveToken(v) {
+        if (typeof v !== 'string' || v.charAt(0) !== '@') { return v; }
+        var sep = v.indexOf(':');
+        var kind = v.substring(1, sep), key = v.substring(sep + 1);
+        if (kind === 'nonmembergroup') { return nonMemberGroupId(key); }
+        return kind === 'user' ? userId(key) : groupId(key);
+    }
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) { old.setWorkflow(false); old.deleteRecord(); }
+    }
+    for (var f = 0; f &lt; FIX.length; f++) {
+        var gr = new GlideRecord(FIX[f].table);
+        gr.initialize();
+        gr.setNewGuidValue(FIX[f].sys_id);
+        for (var fld in FIX[f].fields) gr.setValue(fld, resolveToken(FIX[f].fields[fld]));
+        var newId = gr.insert();
+        chk('fixture ' + FIX[f].label + ' created', FIX[f].sys_id, newId);
+    }
+    chkTrue('a group the demo agent is NOT a member of was found for the negative branch',
+        String(OTHER_GRP_ID).length === 32);
+    var memberProbe = new GlideRecord('sys_user_grmember');
+    memberProbe.addQuery('user', userId('x_casemgmt_demo_agent'));
+    memberProbe.addQuery('group', OTHER_GRP_ID);
+    memberProbe.query();
+    chk('the agent really is NOT a member of that group', '0', String(memberProbe.getRowCount()));
+    var teamProbe = new GlideRecord('sys_user_grmember');
+    teamProbe.addQuery('user', userId('x_casemgmt_demo_agent'));
+    teamProbe.addQuery('group', GRP_ID);
+    teamProbe.query();
+    chk('the demo agent IS a member of x_casemgmt_demo_team, so the positive group branch is real',
+        '1', String(teamProbe.getRowCount()));
+    stepResult.setOutputMessage('fixture setup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'fixture setup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>d3b39dda41536d859e5d65633e0af619</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c8243663c9654c86b52b7ac79b81dbf0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=ae169339d6a737ab7e05a8ce741b5685" />
+        <copied_from />
+        <description>Impersonate the user:  with user Id: null</description>
+        <display_name>Impersonate</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_071ee5b253331200040729cac2dc348d^id=ae169339d6a737ab7e05a8ce741b5685" />
+        <mugshots_cache_json />
+        <notes>Become the demo agent</notes>
+        <order>2</order>
+        <snapshot />
+        <step_config display_value="Impersonate">071ee5b253331200040729cac2dc348d</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ae169339d6a737ab7e05a8ce741b5685</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Impersonate</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_ae169339d6a737ab7e05a8ce741b5685</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ae169339d6a737ab7e05a8ce741b5685</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>11e2366b20c18fa96344f1fc86013606</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>0ca8070bf940abded1aaa84ab389087f</value>
+        <variable display_value="User">586e2c4253e0220002c6435723dc3415</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=1ff9b0dd8bcf320baed72fe347a420bd" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Assert the AAP 0.5.6 child-table narrowing: each OR branch allows read/write independently, and the unassigned and nonmember-group parents deny read, write and delete</notes>
+        <order>3</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>1ff9b0dd8bcf320baed72fe347a420bd</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_1ff9b0dd8bcf320baed72fe347a420bd</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>1ff9b0dd8bcf320baed72fe347a420bd</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3ec4bf178e345626ac34220917b89320</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>1ff9b0dd8bcf320baed72fe347a420bd</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9957831b39b5982f401a806fed5c9bfb</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+
+    chk('impersonated user', 'x_casemgmt_demo_agent', gs.getUserName());
+    var parentId = 'ee66fab2aae0daab57a18a04fa5fc3bd';
+    var parent = new GlideRecordSecure('x_casemgmt_case');
+    chkTrue('agent can read the parent case', parent.get(parentId));
+    var tk = new GlideRecordSecure('x_casemgmt_case_task');
+    chkTrue('agent can read a task on its assigned parent case', tk.get('ed02fff340bf0037625492f0cb259810'));
+    if (tk.isValidRecord()) {
+        chkTrue('agent canWrite that task', tk.canWrite());
+        chk('agent canDelete that task', 'false', String(tk.canDelete()));
+        chkTrue('agent canCreate tasks', tk.canCreate());
+    }
+    var pt = new GlideRecordSecure('x_casemgmt_case_party');
+    chkTrue('agent can read a party on its assigned parent case', pt.get('41b752e01dd8d0f75ef3230a70b55d2c'));
+    if (pt.isValidRecord()) {
+        chkTrue('agent canWrite that party', pt.canWrite());
+        chk('agent canDelete that party', 'false', String(pt.canDelete()));
+        chkTrue('agent canCreate parties', pt.canCreate());
+    }
+
+    // ------------------------------------------------------------------------
+    // AAP 0.5.6 "Assigned only" is a DISJUNCTION on the parent case:
+    //     assigned_agent = current user OR assigned_group contains current user
+    // The fixture above satisfies BOTH halves at once, so on its own it cannot show
+    // that either half works independently, and it cannot show the "only" at all.
+    // The four parents below isolate each branch:
+    //     direct      assigned_agent = the agent, assigned_group EMPTY   -> ALLOW
+    //     group       assigned_group = the agent's team, no agent        -> ALLOW
+    //     unassigned  neither field populated                            -> DENY
+    //     othergroup  a group the agent is NOT a member of               -> DENY
+    // Each carries its own task and party child, and each is asserted for read AND
+    // write AND delete, so a fail-open ACL cannot hide behind the both-branch case.
+    function childProbe(table, sysId) {
+        var secure = new GlideRecordSecure(table);
+        var visible = secure.get(sysId);
+        // A plain GlideRecord loads the row without applying the read ACL (measured),
+        // which is the only way to ask the platform for its per-record write and delete
+        // decisions on a row the identity may not see.
+        var plain = new GlideRecord(table);
+        var exists = plain.get(sysId);
+        return {
+            visible: visible, exists: exists,
+            canRead: exists ? plain.canRead() : null,
+            canWrite: exists ? plain.canWrite() : null,
+            canDelete: exists ? plain.canDelete() : null
+        };
+    }
+    var ALLOW = [
+        ['direct-assigned', 'x_casemgmt_case_task', '74896b49d2174d3fbf07b0f3c0e13cfb'],
+        ['direct-assigned', 'x_casemgmt_case_party', 'e1655540ada67a5667dea0cc155f2d04'],
+        ['group-assigned', 'x_casemgmt_case_task', 'f3573645a8f769471a11daeeb63a75b1'],
+        ['group-assigned', 'x_casemgmt_case_party', 'd97f9690087d07b7e9a2633a357fbd28']
+    ];
+    var DENY = [
+        ['unassigned-parent', 'x_casemgmt_case_task', '255261c44d7e569393eb5b378f093cf5'],
+        ['unassigned-parent', 'x_casemgmt_case_party', '84d0b2cec80ea74f5d3b34003cfb2629'],
+        ['nonmember-group-parent', 'x_casemgmt_case_task', 'd0d522c65c706fd4e973124487d5a306'],
+        ['nonmember-group-parent', 'x_casemgmt_case_party', '1549f71e383e795314639032274605b9']
+    ];
+    var a, p;
+    for (a = 0; a &lt; ALLOW.length; a++) {
+        var okCase = ALLOW[a], okName = okCase[0] + ' ' + okCase[1];
+        p = childProbe(okCase[1], okCase[2]);
+        chkTrue('fixture exists: ' + okName, p.exists);
+        chkTrue('ALLOW read (' + okName + ')', p.visible);
+        chkTrue('ALLOW canRead (' + okName + ')', p.canRead);
+        chkTrue('ALLOW canWrite (' + okName + ')', p.canWrite);
+        chk('DENY canDelete - the agent never deletes (' + okName + ')', 'false', String(p.canDelete));
+    }
+    for (var dn = 0; dn &lt; DENY.length; dn++) {
+        var noCase = DENY[dn], noName = noCase[0] + ' ' + noCase[1];
+        p = childProbe(noCase[1], noCase[2]);
+        chkTrue('fixture exists: ' + noName, p.exists);
+        chk('DENY read (' + noName + ')', 'false', String(p.visible));
+        chk('DENY canRead (' + noName + ')', 'false', String(p.canRead));
+        chk('DENY canWrite (' + noName + ')', 'false', String(p.canWrite));
+        chk('DENY canDelete (' + noName + ')', 'false', String(p.canDelete));
+    }
+    // Set-level narrowing: the allowed children must be inside the agent's visible
+    // sets and the denied children must be outside them. GlideRecordSecure.getRowCount()
+    // is NOT ACL-filtered, so the sets are built by iteration.
+    function visibleIds(table) {
+        var o = {}, g = new GlideRecordSecure(table);
+        g.query();
+        while (g.next()) { o[g.getUniqueValue()] = 1; }
+        return o;
+    }
+    var visTask = visibleIds('x_casemgmt_case_task'), visParty = visibleIds('x_casemgmt_case_party');
+    chkTrue('the direct-assigned task is in the visible task set', !!visTask['74896b49d2174d3fbf07b0f3c0e13cfb']);
+    chkTrue('the group-assigned task is in the visible task set', !!visTask['f3573645a8f769471a11daeeb63a75b1']);
+    chk('the unassigned-parent task is NOT in the visible task set', 'false',
+        String(!!visTask['255261c44d7e569393eb5b378f093cf5']));
+    chk('the nonmember-group task is NOT in the visible task set', 'false',
+        String(!!visTask['d0d522c65c706fd4e973124487d5a306']));
+    chkTrue('the direct-assigned party is in the visible party set', !!visParty['e1655540ada67a5667dea0cc155f2d04']);
+    chkTrue('the group-assigned party is in the visible party set', !!visParty['d97f9690087d07b7e9a2633a357fbd28']);
+    chk('the unassigned-parent party is NOT in the visible party set', 'false',
+        String(!!visParty['84d0b2cec80ea74f5d3b34003cfb2629']));
+    chk('the nonmember-group party is NOT in the visible party set', 'false',
+        String(!!visParty['1549f71e383e795314639032274605b9']));
+    stepResult.setOutputMessage('agent assigned-only narrowing on the child tables: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    return assertEqual({ name: 'agent assigned-only narrowing on the child tables', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=cd3bfcbb74d91ccd561d89721deb372b" />
+        <copied_from />
+        <description>Set field values</description>
+        <display_name>Record Query</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_2d82e3c7531400109e02ddeeff7b12a7^id=cd3bfcbb74d91ccd561d89721deb372b" />
+        <mugshots_cache_json />
+        <notes>Agent READ of a task on its assigned parent case must return the row</notes>
+        <order>4</order>
+        <snapshot />
+        <step_config display_value="Record Query">2d82e3c7531400109e02ddeeff7b12a7</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>cd3bfcbb74d91ccd561d89721deb372b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Query</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_cd3bfcbb74d91ccd561d89721deb372b</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case_task</table>
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>cd3bfcbb74d91ccd561d89721deb372b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>60b116a2fc33ac7a29f9a155a0578f7a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>sys_id=ed02fff340bf0037625492f0cb259810^EQ</value>
+        <variable display_value="Conditions">915990ab531000109e02ddeeff7b12f8</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>cd3bfcbb74d91ccd561d89721deb372b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5d1d2041aef449247894d65e4524b35c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">02fb0027531000109e02ddeeff7b120b</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>cd3bfcbb74d91ccd561d89721deb372b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0b53663dd059885739cb83562569b56e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>records_match_query</value>
+        <variable display_value="Assert type">b86c0427531000109e02ddeeff7b1227</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>cd3bfcbb74d91ccd561d89721deb372b</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>61b704baeebae83fc1e9bc03de1bf66c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case_task</value>
+        <variable display_value="Table">78b8d86b531000109e02ddeeff7b12f3</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=9e7b2aa356f009730e750b0b3abd695a" />
+        <copied_from />
+        <description>Set field values</description>
+        <display_name>Record Query</display_name>
+        <inputs />
+        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_2d82e3c7531400109e02ddeeff7b12a7^id=9e7b2aa356f009730e750b0b3abd695a" />
+        <mugshots_cache_json />
+        <notes>Agent READ of a party on its assigned parent case must return the row</notes>
+        <order>5</order>
+        <snapshot />
+        <step_config display_value="Record Query">2d82e3c7531400109e02ddeeff7b12a7</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9e7b2aa356f009730e750b0b3abd695a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Record Query</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_9e7b2aa356f009730e750b0b3abd695a</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case_party</table>
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>9e7b2aa356f009730e750b0b3abd695a</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d7ff74993c0be79cfc91482dada9597e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>sys_id=41b752e01dd8d0f75ef3230a70b55d2c^EQ</value>
+        <variable display_value="Conditions">915990ab531000109e02ddeeff7b12f8</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>9e7b2aa356f009730e750b0b3abd695a</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>933e6515396e3f4cf37311c7c0ec1ac0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>1</value>
+        <variable display_value="Enforce security">02fb0027531000109e02ddeeff7b120b</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>9e7b2aa356f009730e750b0b3abd695a</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>cfbf57eb3e56c00a710ae6f2f3091cdb</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>records_match_query</value>
+        <variable display_value="Assert type">b86c0427531000109e02ddeeff7b1227</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>9e7b2aa356f009730e750b0b3abd695a</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>71e462e724576f524b4ea2971e20d54d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>x_casemgmt_case_party</value>
+        <variable display_value="Table">78b8d86b531000109e02ddeeff7b12f3</variable>
+    </sys_variable_value>
+    <sys_atf_step action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <callable_outputs />
+        <sys_variable_value action="delete_multiple" query="document_key=2a4529e14198dc1db4da6b8e4050553c" />
+        <copied_from />
+        <description>Run Server Side Validation Script</description>
+        <display_name>Run Server Side Script</display_name>
+        <inputs />
+        <mugshots_cache_json />
+        <notes>Remove this test's synthetic fixtures</notes>
+        <order>6</order>
+        <snapshot />
+        <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
+        <sys_class_name>sys_atf_step</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2a4529e14198dc1db4da6b8e4050553c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Run Server Side Script</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_step_2a4529e14198dc1db4da6b8e4050553c</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table />
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <timeout />
+        <warning_message />
+    </sys_atf_step>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>2a4529e14198dc1db4da6b8e4050553c</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>065526014c7537b30f0d8e53f2e54e65</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>// x_casemgmt ATF - server-side assertion block.
+// Aggregates every individual check and reports them through ONE assertion so
+// that a failure message names precisely which expectation broke.
+(function(outputs, steps, params, stepResult, assertEqual) {
+    var fails = [], checks = 0;
+    function chk(name, expected, actual) {
+        checks++;
+        if (String(expected) !== String(actual))
+            fails.push(name + ' expected[' + expected + '] actual[' + actual + ']');
+    }
+    function chkTrue(name, actual) { chk(name, 'true', String(actual)); }
+    function dict(table, element) {
+        var d = new GlideRecord('sys_dictionary');
+        d.addQuery('name', table); d.addQuery('element', element); d.setLimit(1); d.query();
+        return d.next() ? d : null;
+    }
+    function choices(table, element) {
+        var out = [], c = new GlideRecord('sys_choice');
+        c.addQuery('name', table); c.addQuery('element', element); c.orderBy('sequence'); c.query();
+        while (c.next()) out.push(c.getValue('value'));
+        return out;
+    }
+    var FIX = [
+        {
+            "label": "parent",
+            "table": "x_casemgmt_case",
+            "sys_id": "ee66fab2aae0daab57a18a04fa5fc3bd",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "subject": "ATF-RBAC-07 parent case",
+                "description": "Synthetic ATF fixture record. No PII.",
+                "requester_name": "ATF Synthetic Requester",
+                "requester_email": "atf-fixture@example.invalid",
+                "type": "General Inquiry",
+                "status": "Draft",
+                "priority": "Medium",
+                "assigned_group": "@group:x_casemgmt_demo_team",
+                "assigned_agent": "@user:x_casemgmt_demo_agent"
+            }
+        },
+        {
+            "label": "task",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "ed02fff340bf0037625492f0cb259810",
+            "prefix": "ATF-RBAC-07",
+            "fields": {
+                "case": "ee66fab2aae0daab57a18a04fa5fc3bd",
+                "subject": "ATF-RBAC-07 task",
+                "type": "Review",
+                "status": "Open",
+                "assigned_to": "@user:x_casemgmt_demo_agent",
+                "due_date": "2026-12-31"
+            }
+        },
+        {
+            "label": "party",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "41b752e01dd8d0f75ef3230a70b55d2c",
+            "prefix": null,
+            "fields": {
+                "case": "ee66fab2aae0daab57a18a04fa5fc3bd",
+                "party_type": "Person",
+                "person": "@user:x_casemgmt_demo_agent",
+                "role_label": "Witness"
+            }
+        },
+        {
+            "label": "parent-direct",
+            "table": "x_casemgmt_case",
+            "sys_id": "bad75eb1c21c932236a5cd1a275fc83f",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-direct",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "74896b49d2174d3fbf07b0f3c0e13cfb",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-direct",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "e1655540ada67a5667dea0cc155f2d04",
+            "prefix": null,
+            "fields": {}
+        },
+        {
+            "label": "parent-group",
+            "table": "x_casemgmt_case",
+            "sys_id": "f7fb08a92f84b635e1118fbf871a97c5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-group",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "f3573645a8f769471a11daeeb63a75b1",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-group",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "d97f9690087d07b7e9a2633a357fbd28",
+            "prefix": null,
+            "fields": {}
+        },
+        {
+            "label": "parent-unassigned",
+            "table": "x_casemgmt_case",
+            "sys_id": "c12db6ba96650309f874e2245ad94102",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-unassigned",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "255261c44d7e569393eb5b378f093cf5",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-unassigned",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "84d0b2cec80ea74f5d3b34003cfb2629",
+            "prefix": null,
+            "fields": {}
+        },
+        {
+            "label": "parent-othergroup",
+            "table": "x_casemgmt_case",
+            "sys_id": "8e8ba999d36f28846a3a63a1889b0794",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "task-othergroup",
+            "table": "x_casemgmt_case_task",
+            "sys_id": "d0d522c65c706fd4e973124487d5a306",
+            "prefix": "ATF-RBAC-07",
+            "fields": {}
+        },
+        {
+            "label": "party-othergroup",
+            "table": "x_casemgmt_case_party",
+            "sys_id": "1549f71e383e795314639032274605b9",
+            "prefix": null,
+            "fields": {}
+        }
+    ];
+
+    // CLEANUP IS ASSERTED, NOT ASSUMED.
+    //
+    // This step used to end with a "cleanup ran" check that compared the literal
+    // string true against itself - a tautology. It therefore passed even when every
+    // delete had
+    // silently failed, so fixtures could survive and contaminate later steps, later
+    // tests in the suite, and later runs (a stale pinned sys_id or a stale prefix row
+    // makes another test assert against the wrong record). What follows checks the
+    // outcome of each delete and then RE-QUERIES for residue, so a surviving row fails
+    // this step and is named in the failure message.
+    //
+    // Note on coverage: a fixture carrying no `prefix` (case_party rows, which have no
+    // `subject` column to match on) is swept by pinned sys_id only - the same guard the
+    // delete loop uses - because that is the only key such a row is ever created with.
+    var removed = 0, failedDeletes = [];
+    for (var d = FIX.length - 1; d &gt;= 0; d--) {
+        var old = new GlideRecord(FIX[d].table);
+        if (old.get(FIX[d].sys_id)) {
+            old.setWorkflow(false);
+            if (old.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[d].table + ':' + FIX[d].sys_id);
+        }
+    }
+    for (var p = 0; p &lt; FIX.length; p++) {
+        if (!FIX[p].prefix) continue;
+        var extra = new GlideRecord(FIX[p].table);
+        extra.addQuery('subject', 'STARTSWITH', FIX[p].prefix);
+        extra.query();
+        while (extra.next()) {
+            var extraId = extra.getUniqueValue();
+            extra.setWorkflow(false);
+            if (extra.deleteRecord()) removed++;
+            else failedDeletes.push(FIX[p].table + ':' + extraId);
+        }
+    }
+    chk('every delete reported success', '', failedDeletes.join(' | '));
+
+    // Residue re-query: by pinned sys_id for every fixture, and by prefix for every
+    // fixture that has one. Any row still present here is a real leak.
+    var residue = [];
+    for (var q = 0; q &lt; FIX.length; q++) {
+        var byId = new GlideRecord(FIX[q].table);
+        if (byId.get(FIX[q].sys_id))
+            residue.push(FIX[q].table + ' sys_id ' + FIX[q].sys_id + ' survived');
+        if (!FIX[q].prefix) continue;
+        var byPrefix = new GlideRecord(FIX[q].table);
+        byPrefix.addQuery('subject', 'STARTSWITH', FIX[q].prefix);
+        byPrefix.query();
+        while (byPrefix.next())
+            residue.push(FIX[q].table + ' ' + byPrefix.getUniqueValue() +
+                ' [' + byPrefix.getValue('subject') + '] survived');
+    }
+    chk('no fixture residue remains after cleanup', '', residue.join(' | '));
+
+    // setOutputMessage OVERWRITES rather than appends, so every reported
+    // line is accumulated and emitted once, at the end of the step.
+    var notes = [];
+    notes.push('fixtures removed=' + removed +
+        ' | deletes reporting failure=' + failedDeletes.length +
+        ' | residue rows=' + residue.length);
+    notes.push('fixture cleanup: checks=' + checks + ' failures=' + fails.length +
+        (fails.length ? ' :: ' + fails.join(' | ') : ''));
+    stepResult.setOutputMessage(notes.join('\n'));
+    return assertEqual({ name: 'fixture cleanup', shouldbe: '', value: fails.join(' | ') });
+})(outputs, steps, params, stepResult, assertEqual);
+</value>
+        <variable display_value="Test script">989d9e235324220002c6435723dc3484</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>2a4529e14198dc1db4da6b8e4050553c</document_key>
+        <order />
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f158fc79ab810525a2a375b06e0de597</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>3.1</value>
+        <variable display_value="Jasmine version">42f2564b73031300440211d8faf6a777</variable>
+    </sys_variable_value>
+</unload>
