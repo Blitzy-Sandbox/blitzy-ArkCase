@@ -1221,4 +1221,281 @@ point in this step, so there is nothing else to clean up.
 
 ## Step 7 — ATF suite and transition harness
 
+Both suites were re-run against the package the Step 5c commit installed, and **every number in this
+section was measured in this run**. Nothing is carried forward from the last recorded ATF result, which
+predates the choice-list fix: the stale baseline was `TES0001005` = 17 Success / 3 Failure / 0 Error /
+0 Skip, and that is *not* what this package scores. The result below replaces it.
+
+### 1. What was tested, and the two identifiers re-measured rather than inherited
+
+Step 5c passed (§Step 5-6 §4: `state=committed`, `commit_date` `2026-09-08 21:27:27`, preview 0 errors and
+0 warnings), so a testable final package exists and both suites ran. Neither identifier was taken from a
+prior section:
+
+| What | How it was obtained | Value |
+| --- | --- | --- |
+| Scope | `sys_scope?sysparm_query=scope=x_casemgmt` re-queried → exactly **one** record, 32-hex | `82b99028936f74320d74d6f88357a5af` |
+| ATF suite | located **by name**, `sys_atf_test_suite?name=x_casemgmt Case Management POC` → exactly one record, `active=true`, in that scope | `8e8c6de584ba8f081439ad5ee09ad1a1`, "x_casemgmt Case Management POC" |
+
+Both values coincide with the pre-refine ones, and the reason is worth stating because it was expected to
+be otherwise: the package carries these records' **own** `sys_id`s, so the commit recreated them under the
+same identity — the same mechanism §Step 5-6 §4 already recorded for the scope record. The suite was still
+located by name, not by a remembered id; the id above is that lookup's result. A cross-check
+(`sys_atf_test_suite?sys_scope.scope=x_casemgmt`) returns the same single record and no other.
+
+Inventory the commit recreated, confirmed by query before running anything: **`sys_atf_test` 20 ·
+`sys_atf_test_suite` 1 · `sys_atf_step` 180 · `sys_atf_test_suite_test` 20**. Preflight: `GET
+/api/now/table/sys_user?sysparm_limit=1` returned HTTP 200 with a **JSON** body (live, not hibernating),
+no 401/403, and `sys_upgrade_history?upgrade_finishedISEMPTY` was empty. Zero hibernation events occurred
+during this step.
+
+### 2. How the suite was driven — a real browser, because it cannot be anything else
+
+`sn_atf.headless.enabled` reads **`false`** on this instance (re-checked here, alongside
+`sn_atf.runner.enabled=true`), so the suite cannot run headlessly. It was driven in a real authenticated
+Chrome 151.0.7922.71 session over the Chrome DevTools Protocol — a private browser instance on its own
+debugging port and profile, so the host's shared browser was never involved:
+
+1. `/login.do` — the real login form filled and submitted, landing on an authenticated session; the
+   classic form documents then rendered under that session.
+2. `/sys_atf_test_suite.do?sys_id=8e8c6de5…` — form header "Test Suite", Name "x_casemgmt Case Management
+   POC", related list **"Test Suite Tests (20)"** listing ATF 01 … ATF 20 at execution order 100 … 2000.
+3. The form's own **Run Test Suite** UI action (`onclick=pickABrowser()`) was clicked.
+4. The **"Pick a Browser"** dialog rendered verbatim — *"The test you have selected includes client-side
+   steps. Choose a browser to run this test."* — with the radio labelled **"Start a new test runner"**
+   (`pickABrowser=newBrowser`) confirmed selected, and the dialog's own Run Test Suite clicked once at
+   **2026-09-08 22:09:17 UTC**.
+5. A runner tab opened at `/atf_test_runner.do?sys_atf_agent=bb4c885093174b1009aa70d19dba100e…` and was
+   **kept open** for the whole run and afterwards. While waiting, the heartbeat was the read-only API
+   probe, never a navigation, so the runner page was never lost.
+
+### 3. The fresh suite result
+
+| Field | Value |
+| --- | --- |
+| Suite result | **`TES0001006`**, `sys_id` `027c049093174b1009aa70d19dba109e` |
+| Created | **2026-09-08 22:09:18 UTC** — **42 minutes after** the Step 5c commit at 21:27:27, so this run is unambiguously against the committed final package |
+| Status | `failure` |
+| Counts | **Success 4 · Failure 16 · Error 0 · Skipped 0** |
+| Duration | 34 seconds |
+| Suite record screen | "Test Results (20)", "Failed Tests in Suite (16)" |
+
+The immediately preceding suite result on this instance was `TES0001005` at 2026-09-08 **16:27:45** — five
+hours *before* the commit, which is precisely why it could not speak for this package. **This section's
+result is 4 / 16, freshly measured; the 17 / 3 figure is superseded and is not restated as current
+anywhere.**
+
+**Step reconciliation — 180 of 180 accounted for, and no test skipped.** `sys_atf_test_result` rows for
+this parent = **20**, so all twenty member tests ran. `sys_atf_test_result_step` rows = **180 exactly**:
+**64 success + 16 failure + 100 skipped**. The 100 skipped are the remaining steps *within* the sixteen
+failed tests ("This step did not execute due to a failure in a previous step") — ATF's normal
+abort-after-first-failure behaviour. No test was skipped, and the suite's own Skipped count is 0.
+
+**Per-test outcome, all twenty:**
+
+| Test | Result | Test | Result |
+| --- | --- | --- | --- |
+| ATF 01 - Data model: case, task and party schema | **Success** | ATF 11 - Task-closure gate blocks In Progress to Resolved | Failure |
+| ATF 02 - RBAC: case_manager has full CRUD | Failure | ATF 12 - Resolved to Closed requires the manager role | Failure |
+| ATF 03 - RBAC: case_agent create, assigned-only | Failure | ATF 13 - Prohibited transition: any status back to Draft | Failure |
+| ATF 04 - RBAC: case_viewer is read-only | Failure | ATF 14 - Prohibited transition: Closed is terminal | Failure |
+| ATF 05 - Field-level ACLs on assigned_group/agent | Failure | ATF 15 - Form: resolve with an open task is blocked | Failure |
+| ATF 06 - RBAC mirror on task and party | Failure | ATF 16 - Form: return to Draft is blocked | Failure |
+| ATF 07 - RBAC: agent assigned-only on task/party | Failure | ATF 17 - Form: Closed is terminal on the form | Failure |
+| ATF 08 - Draft to Open requires assigned_group | Failure | ATF 18 - Portal: anonymous submit returns 201 | **Success** |
+| ATF 09 - Open to In Progress requires an agent in group | Failure | ATF 19 - Portal: lookup returns only the whitelist | **Success** |
+| ATF 10 - In Progress to Pending sets pending_reason | Failure | ATF 20 - Portal: unknown number returns 404 | **Success** |
+
+**What the four passes establish, since they are the tests this re-run existed to settle.** `ATF 01` is the
+schema-and-choice-set test that failed in every recent package-alone run on absent `sys_choice` rows; it
+**passes here**, so the choice-list fix genuinely travelled inside this package and materialised through
+the single commit. `ATF 19` passes **including its character-for-character `opened_date` comparison**, and
+`ATF 18` / `ATF 20` pass on the anonymous portal contract (201 with a number; 404 with the verbatim
+message).
+
+### 4. The 13-assertion transition harness
+
+`scripts/transition_logic_regression_assertions.js` was run **unmodified** (verified: clean `git status`,
+sha256 `ce0f9322592e24b9a07b8ddd57a5d3dbe763c190963e762db7116828157c90dd`) through `/sys.scripts.do` in a
+UI session (login POST → HTTP 302; a fresh 72-character `sysparm_ck` scraped per action), with
+**`sys_scope` set to the scope `sys_id` re-queried in §1** — a global run would fail every assertion,
+`CaseTransitionValidator` being package-private. The response was HTTP 200 and contained the required
+marker **`Script completed in scope x_casemgmt`**, with no evaluator error. It ran at 22:17:15 → 22:17:27
+UTC, after the suite had reached its terminal state, so nothing else was touching the instance.
+
+Result read from `syslog` (`messageSTARTSWITHU1ASSERT`, newest first), row `sys_created_on`
+**2026-09-08 22:17:27**, source `x_casemgmt` — newer than the pre-run high-water mark of 16:23:58, so it
+belongs to this run:
+
+```
+U1ASSERT|TOTAL=13 PASSED=13 FAILED=0 |CLEANUP tasks=4 cases=7 remainingCases=10
+```
+
+**PASS.** All thirteen assertions passed with their verbatim expected strings matched: A1/A2
+`canTransitionToOpen` (blocks empty `assigned_group` — *"Required field assigned_group is empty."* —
+and allows it populated); A3/A4/A5 `canTransitionToInProgress` (blocks an empty agent and a
+non-member — *"Assigned agent must be set and must be a member of the assigned group."* — allows a
+member); A6/A7 `canTransitionToResolved` (blocks with one Open child task — *"All tasks must be closed
+before resolving this case."* — allows once all are Closed); A8/A9 `canTransitionToClosed` (allows a
+manager-role caller, `callerHasManagerRole=true`; blocks one without it — *"Only case managers can close
+cases."*); A10/A11 `validateNoBacktransition` (*"Cases cannot be returned to Draft."* and *"Closed cases
+are terminal and cannot be modified."*); A12 `isAgentInGroup`; A13 `getOpenTaskCountForCase` (expected 2,
+actual 2). **The harness contributes no entries to the failure list below.**
+
+That matters for reading §5: the transition-logic layer is entirely healthy on this package, and
+`CaseTransitionValidator` resolves the manager role correctly, which places the sixteen ATF failures
+somewhere other than the state machine.
+
+### 5. Every failure, itemized by name, with its classification
+
+Sixteen failures, all from the ATF suite. **Each was checked against this project's recorded
+known/accepted issues on test name, step *and* message — not on resemblance — and none of them matches, so
+there are no (a) classifications in this run.** What was checked, and why each accepted symptom is absent:
+
+| Registered accepted issue | Recorded where | Status in this run |
+| --- | --- | --- |
+| `ATF 17` — *"Unable to set field 'status' to value 'In Progress'. Field 'status' is not editable"*, the form lock on Closed cases | `ATF_MANUAL_TEST_PLAN.md` § *Scenario B — State-machine transition matrix* (the `Set Field Values` step that sets `status`, and the expected banner *"Closed cases are terminal and cannot be modified."*) | **Did not occur.** ATF 17 never reached that step — order 4 is `skipped`; it failed earlier, at order 3, with an unrelated message |
+| `ATF 18` / `ATF 19` — `opened_date` asserted character-for-character, failing on a 7-hour offset | `ATF_MANUAL_TEST_PLAN.md` **§6.1** *Where the shipped suite deviates from the recipe above* (the control *stored `17:19:27` vs displayed `10:19:27`*), `docs/portal-pages.md` § *Lookup Behavior* (the endpoint returns the **display** value, not the raw stored one), and §Step 3-4 of this report (`America/Los_Angeles`, seven hours) | **Did not occur.** Both tests **passed**, ATF 19 including the exact comparison |
+| `core_company` unreadable to all three scoped roles, making `case_party.organization` unusable for a persona | `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` **ADV-1** (§0.9) and its restatement **N8** (§5.1) | **Not reached.** ATF 06 / ATF 07 failed at the persona layer before any `organization` read; no failure message names `core_company` |
+| The choice-row class — `ATF 01`/`10`/`15`/`16`/`17`/`18` failing because `sys_choice` is empty after a bare commit | `ATF_MANUAL_TEST_PLAN.md` § *Status of this document* (the verdict rows: 14 / 6 from the package alone) and **§7** step 6 (**20 / 20** once the 24 rows exist) | **Not available as a citation.** The 24 rows are present and ATF 01 passes; this run's failures carry entirely different messages |
+
+All sixteen are therefore classification **(b) — a symptom not previously recorded**. They share one root
+cause, established in §6.
+
+| # | Failure, by name | `atf/` file | First failing step | Exact message |
+| --- | --- | --- | --- | --- |
+| 1 | ATF 02 - RBAC: `x_casemgmt_case_manager` has full CRUD (AAP 0.5.6) | `x_casemgmt_atf_02_rbac_x_casemgmt_case_manager_has_full_crud_aap_0_5_6.xml` | 3 · Record Insert | `Unable to insert record into table 'x_casemgmt_case'. Details: ACL Exception Insert Failed due to security constraints` |
+| 2 | ATF 03 - RBAC: `x_casemgmt_case_agent` create, ASSIGNED-ONLY read/write, no delete | `x_casemgmt_atf_03_rbac_x_casemgmt_case_agent_create_assigned_only_read_write_no_delete.xml` | 3 · Record Insert | the same ACL Exception on `x_casemgmt_case` |
+| 3 | ATF 04 - RBAC: `x_casemgmt_case_viewer` is read-only across all cases | `x_casemgmt_atf_04_rbac_x_casemgmt_case_viewer_is_read_only_across_all_cases.xml` | 3 · Record Query | `No records matching query: Sys ID = cd17696587e11cb376a2964c217ff87f` |
+| 4 | ATF 05 - Field-level ACLs on `assigned_group` and `assigned_agent` | `x_casemgmt_atf_05_field_level_acls_on_assigned_group_and_assigned_agent.xml` | 3 · Record Update | `Unable to find record '174bb5a31631f5fb4f95c14083aa1afd' in table 'x_casemgmt_case'` |
+| 5 | ATF 06 - RBAC mirror on `x_casemgmt_case_task` and `x_casemgmt_case_party` (manager, viewer) | `x_casemgmt_atf_06_rbac_mirror_on_x_casemgmt_case_task_and_x_casemgmt_case_party_manager.xml` | 3 · Record Insert | `Unable to insert record into table 'x_casemgmt_case_task'. Details: ACL Exception Insert Failed due to security constraints` |
+| 6 | ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror) | `x_casemgmt_atf_07_rbac_agent_assigned_only_read_write_on_task_and_party_aap_0_5_6_mirror.xml` | 3 · Run Server Side Script | `agent assigned-only narrowing on the child tables: checks=52 failures=19 :: agent can read the parent case expected[true] actual[false] \| agent can read a task on its assigned parent case expected[true] actual[false] \| agent can read a party on its assigned parent case expected[true] actual[false] \| ALLOW read (direct-assigned x_casemgmt_case_task) expected[true] actual[false] …` |
+| 7 | ATF 08 - Transition Draft to Open requires `assigned_group` | `x_casemgmt_atf_08_transition_draft_to_open_requires_assigned_group.xml` | 3 · Record Update | `Unable to find record '83f3e6d3ff140821649d17368601a963' in table 'x_casemgmt_case'` |
+| 8 | ATF 09 - Transition Open to In Progress requires an `assigned_agent` in the `assigned_group` | `x_casemgmt_atf_09_transition_open_to_in_progress_requires_an_assigned_agent_in_the_assig.xml` | 3 · Record Update | `Unable to find record 'd2b5064109ff252741f8c4c4d370b398' in table 'x_casemgmt_case'` |
+| 9 | ATF 10 - In Progress to Pending sets `pending_reason`, Pending to In Progress clears it | `x_casemgmt_atf_10_in_progress_to_pending_sets_pending_reason_pending_to_in_progress_clea.xml` | 3 · Record Update | `Unable to find record '0e87e901adab05218fcbf7d5a84bc2c2' in table 'x_casemgmt_case'` |
+| 10 | ATF 11 - Task-closure gate blocks In Progress to Resolved with the verbatim message | `x_casemgmt_atf_11_task_closure_gate_blocks_in_progress_to_resolved_with_the_verbatim_mes.xml` | **4** · Record Update | `Unable to find record '8eb58da796d8386b3ecc5493644a5911' in table 'x_casemgmt_case'` |
+| 11 | ATF 12 - Resolved to Closed requires the manager role and auto-sets `closed_date` | `x_casemgmt_atf_12_resolved_to_closed_requires_the_manager_role_and_auto_sets_closed_date.xml` | 3 · Record Update | `Unable to find record '3b8f2498cffba6dd162a3d5c0e7d06e3' in table 'x_casemgmt_case'` |
+| 12 | ATF 13 - Prohibited transition: any status back to Draft | `x_casemgmt_atf_13_prohibited_transition_any_status_back_to_draft.xml` | 3 · Record Update | `Unable to find record '2c5e1c1b024c34d83ce0524539985203' in table 'x_casemgmt_case'` |
+| 13 | ATF 14 - Prohibited transition: Closed is terminal | `x_casemgmt_atf_14_prohibited_transition_closed_is_terminal.xml` | 3 · Record Update | `Unable to find record '3ed0fd4998aa5a461d089e574c504954' in table 'x_casemgmt_case'` |
+| 14 | ATF 15 - Form: resolving a case with an open task is blocked on the form | `x_casemgmt_atf_15_form_resolving_a_case_with_an_open_task_is_blocked_on_the_form.xml` | 3 · Open an Existing Record | `This step failed because the client error 'Uncaught ReferenceError: g_form is not defined' was detected on the page being tested.` |
+| 15 | ATF 16 - Form: returning a case to Draft is blocked on the form | `x_casemgmt_atf_16_form_returning_a_case_to_draft_is_blocked_on_the_form.xml` | 3 · Open an Existing Record | the same `g_form is not defined` client error |
+| 16 | ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form | `x_casemgmt_atf_17_form_a_closed_case_cannot_be_moved_out_of_the_terminal_state_on_the_fo.xml` | 3 · Open an Existing Record | the same `g_form is not defined` client error |
+
+### 6. One root cause behind all sixteen, and what may not be done about it here
+
+**The three demo personas hold no role grants after the single Step 5c commit, so every test that
+impersonates one fails at its first persona-context step.** Four independent measurements:
+
+1. **The grants are absent.** `sys_user_has_role` filtered on `user.user_name STARTSWITH x_casemgmt_demo`
+   returns **0 rows** — the personas hold no roles at all. The three scoped **roles** themselves
+   transported and exist, and so did the **27** ACL role links; it is only the three *grants* that are
+   missing. `docs/acl-matrix.md` § *Measured evidence (read-only Table API as `admin`)* records the
+   expected state as "Exactly **3** grant rows".
+2. **The failure lands exactly at the impersonation boundary.** In every failing test, step 1 (fixture
+   setup, run as admin) **succeeded** and step 2 `Impersonate` **succeeded** — its output reads
+   `Impersonated Demo Manager` — and the failure is always the *next* step, the first one performed as the
+   persona. Nothing fails before impersonation; nothing that avoids impersonation fails at all.
+3. **A persona cannot read a case that exists** — measured by ATF 04's own step 3, a `Record Query` by
+   `sys_id` as the impersonated viewer, returning no records. That is what unifies the
+   `Unable to find record '<sys_id>'` family with the ACL exceptions: ATF's native `Record Update` and
+   `Record Query` steps must *locate* a row before acting on it, so an unreadable row surfaces as "unable
+   to find" rather than as a denial — the mechanism `ATF_MANUAL_TEST_PLAN.md` **§6.1** already records for
+   the historical `TES0001013` ATF 03 failure. It equally explains ATF 15 / 16 / 17: a form opened by a
+   user who cannot read the record renders no form, so `g_form` never exists.
+4. **The browser is not the cause of the `g_form` error.** In the *same* Chrome session, as **admin**, the
+   same table's form (`x_casemgmt_case`, CASE9000003) rendered with `typeof g_form === "object"`,
+   `g_form.getValue('number') = "CASE9000003"` and `g_form.getValue('status') = "In Progress"`. The client
+   error appears only under the role-less persona.
+
+Why the grants are absent is **already documented, and accepted**: §Step 5-6 §7 of this report proves at
+record level that Role Management V2 owns `sys_user_has_role` on this release, that the update-set loader's
+permission check therefore answers false and the platform logs "permission denied: no thrown error", and
+that the three payloads were refused when stamped `Global` *and* when stamped `x_casemgmt` — so **no update
+set can deliver these grants on this release**. Its native remedy is the role form's *Edit Members*, which
+is what Step 4 did and what the Step 5b teardown then removed. The **cause** is thus a known limitation;
+the **symptom** — sixteen ATF failures — is new, which is why every row above is classified (b) rather
+than (a). It also explains the stale 17 / 3 baseline: `TES0001005` ran on the pre-teardown instance, where
+Step 4's native grants were still in place.
+
+**What was deliberately not done.** Granting those three roles would have turned all sixteen failures
+green in minutes. That is exactly the live patch this step forbids, so it was not done — no role grant, no
+ACL change, no configuration change, no edit to any record, and no edit to the package or the canonical
+file. **Per the failure path, a fix for a (b) classification requires restarting from Step 5a in full —
+fresh export, teardown, reimport, commit, re-run ATF — and never a live patch. That restart was not
+performed here, and per this project's policy ATF failures do not block shipping the Step 6 file.** The
+finding is escalated instead, with one caveat for whoever takes it: a Step 5a restart alone cannot close
+it, because §7 establishes that no update set on this release can carry `sys_user_has_role`. The real
+options are a documented post-commit native grant step or an explicitly accepted limitation — a decision
+outside this step's authority.
+
+### 7. Nothing persisted: the instance is as this step found it
+
+The census taken before the runs and again after both of them is **identical on every counter** — a
+literal `diff` of the two captures reports no difference:
+
+| Counter | Before and after |
+| --- | --- |
+| Rows | case **10** / task **10** / party **8** |
+| `sys_choice` (3 tables) | **24** |
+| `sys_db_object` / `sys_dictionary` / `sys_documentation` | **3** / **48** / **48** |
+| `sys_number` / `sys_user_role` | **3** / **3** |
+| `sys_security_acl` (scoped) / `sys_security_acl_role` | **26** / **27** (manager 14 / agent 10 / viewer 3) |
+| `sys_user_has_role` | **0** (unchanged — the §6 finding, not something this step altered) |
+| Flows / business rules / script includes / reports | **7** (all active) / **7** / **2** / **8** |
+| Demo users | **3** |
+| ATF definitions | **20** tests / **1** suite / **180** steps / **20** suite-tests |
+
+ATF's own fixture activity rolled back completely: **20 of 20** tests produced a `sys_rollback_context` and
+**all 20 read `state=rolled_back`**. No residue survived either run — `x_casemgmt_case` with
+`subject STARTSWITH ATF-PORTAL` → **0** rows, `subject STARTSWITH ATF` → **0** rows, and the harness's own
+`CLEANUP tasks=4 cases=7 remainingCases=10` line was confirmed by query (10 / 10 / 8 immediately
+afterwards). **No metadata was captured by anything in this step**: `sys_update_xml` rows created after
+22:05 UTC = **0**. The only lasting traces of this step are the ATF result rows and the `U1ASSERT` syslog
+line quoted above — the evidence itself.
+
+Two disclosures so nothing reads as covered that is not. First, an empty Local update set named "Default"
+(`5e2b48dc93d34b1009aa70d19dba108a`, `is_default=true`, created 2026-09-08 22:03:35) exists for the scope
+with **0 children**; it is platform bookkeeping for an interactive scoped session, holds no captured
+change, and falls inside the Local-update-set sweep the teardown step already performs. Second, the
+committed Retrieved set `8ebb770493534b1009aa70d19dba102a` and Local set `bce2c05c93934b1009aa70d19dba1042`
+from Step 5c were left exactly as they were. **The FALLBACK package was not interacted with in any way** —
+its file was not opened, read, checksummed, archived or deleted, and its own instance record was excluded
+from every count and comparison in this section.
+
+### 8. Evidence artifacts
+
+Screenshots from the browser session (agent scratch, not repository files):
+
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-01-login.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-02-post-login.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-03-suite-record.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-04-pick-a-browser.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-atf-suite-result.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-06-admin-case-form-g_form-present.png`
+
+One failure-detail screenshot per failing test, sixteen files, all in
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/`:
+
+- `u4-atf-failure-detail-atf02.png` (ATF 02) · `u4-atf-failure-detail-atf03.png` (ATF 03) ·
+  `u4-atf-failure-detail-atf04.png` (ATF 04) · `u4-atf-failure-detail-atf05.png` (ATF 05)
+- `u4-atf-failure-detail-atf06.png` (ATF 06) · `u4-atf-failure-detail-atf07.png` (ATF 07) ·
+  `u4-atf-failure-detail-atf08.png` (ATF 08) · `u4-atf-failure-detail-atf09.png` (ATF 09)
+- `u4-atf-failure-detail-atf10.png` (ATF 10) · `u4-atf-failure-detail-atf11.png` (ATF 11) ·
+  `u4-atf-failure-detail-atf12.png` (ATF 12) · `u4-atf-failure-detail-atf13.png` (ATF 13)
+- `u4-atf-failure-detail-atf14.png` (ATF 14) · `u4-atf-failure-detail-atf15.png` (ATF 15) ·
+  `u4-atf-failure-detail-atf16.png` (ATF 16) · `u4-atf-failure-detail-atf17.png` (ATF 17)
+
+Because the instance is torn down after this step, these artifacts and the numbers in this section are the
+durable record; the ATF result rows themselves do not survive the teardown.
+
+### 9. Hand-off
+
+**The instance is left standing**, in the same post-commit state Step 5c produced and this step measured
+twice without altering it, so the teardown step can run against it. For that step: scope `sys_id`
+`82b99028936f74320d74d6f88357a5af` (re-measured here); the ATF suite, its 20 tests, 180 steps and 20
+suite-tests are all still present; the `Default` Local set noted in §7 is an extra record for the
+Local/Retrieved sweep. No probe artifact, throwaway user, test table or configuration change was created
+at any point in this step.
+
+
 ## Step 8 + Exit Condition
