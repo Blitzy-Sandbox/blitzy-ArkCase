@@ -867,6 +867,358 @@ candidate package — they are not the post-commit remediation the "single clean
 
 ## Step 5-6 — Gated reimport and canonical replacement
 
+This step is the gate. Everything Steps 1-4 built was exported as a candidate package, the instance was
+emptied to a proven zero-state, that exact candidate was re-imported and committed **once**, and only
+after all of it passed was the canonical file in the repository replaced. Every number below was measured
+freshly against this specific export; nothing is carried over from an earlier section's verification.
+
+### 1. Acceptance targets, measured before anything was touched
+
+Measured by direct query on the post-Step-4 instance, and used as the pass/fail targets for the
+post-commit checks in §4:
+
+| What | Target measured |
+| --- | --- |
+| Table endpoints | `x_casemgmt_case` / `_case_task` / `_case_party` → HTTP 200 |
+| Rows | 10 case / 10 task / 8 party |
+| `sys_dictionary` / `sys_documentation` | case 21/21, task 14/14, party 13/13 |
+| `sys_db_object` | 3 |
+| `sys_choice` (3 tables) | 24, per field 2/6/4/3/4/3/2 |
+| `sys_number` | 3 (one per table; the out-of-box global `task` counter is separate and was preserved) |
+| `sys_user_role` | 3 |
+| `sys_security_acl` (scoped) | 26 |
+| `sys_security_acl_role` (scoped) | 27 — per role manager 14 / agent 10 / viewer 3; per table case 11 / task 8 / party 8 |
+| `sys_user_has_role` | 3 |
+| Flows | 7, all active and published |
+| ATF | 20 tests / 1 suite / 180 steps / 20 suite-tests |
+| Scope | `sys_scope` for `x_casemgmt` = exactly one record, `sys_id` `82b99028936f74320d74d6f88357a5af` |
+
+The scope `sys_id` was re-queried, not taken from any prior report. A read-only enumeration by the
+repository's own `scripts/pre_delete_collateral_guard.js` (run unmodified, its only side effect being
+syslog rows) independently corroborated the per-table figures: scoped role links 11/8/8 = 27, scoped
+ACLs 10/8/8 = 26, one `sys_number` per table, and zero links held by any role outside the scoped three.
+
+### 2. Step 5a — producing the candidate package
+
+**Why a new export was necessary.** A payload inventory of the two packages already in the repository
+showed both are **hand-authored**, not platform exports: they carry `<unload
+unload_date="2025-01-01 00:00:00">`, hand-written comment banners inside payload blocks, and no
+`<payload_hash>` on their children. Neither could serve as the candidate; the export had to come from
+the platform itself.
+
+**Mechanism.** The platform's own application-publish path — the `Publish to Update Set...` related link
+(`sys_ui_action` `1baf2f72bf1130001875647fcf0739a5`, action `app_publish_to_update_set`) on the scoped
+application's `sys_app` form — was used in a real authenticated browser session, driven over the Chrome
+DevTools Protocol. The dialog's own defaults were accepted (version `1.0.0`, *Include demo data*
+checked) and the platform reported "Successfully published … Succeeded in 10 Seconds". This path
+packages every application file regardless of what any Update Set happened to capture, which is why it
+was chosen over exporting a current Update Set. Screenshots:
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/shots/u3-5a-export-publish-dialog.png`
+and `…/shots/u3-5a-export-publish.png`.
+
+**Two things the publish alone did not carry, and how they were captured — package production, not a fix
+cycle.** Verifying the package *before* the teardown is part of producing it, so neither of these
+consumed the two-cycle fix budget:
+
+1. *27 stray DELETE payloads.* The first publish produced 519 children — 492 `INSERT_OR_UPDATE` plus
+   **27 DELETE** rows, one per `sys_security_acl_role` record that Step 4 had re-authored. Those deletes
+   would have removed the very links the package must deliver. The 27 `sys_metadata_delete` rows were
+   cleared at the source and the application re-published, yielding **492 children, all
+   `INSERT_OR_UPDATE`, zero DELETE** — verified by read-back.
+2. *39 data rows.* Demo data is not registered application data, so no rows came with the publish. They
+   were added through the platform's own capture API (`GlideUpdateManager2().saveRecord`), never by
+   editing XML: 10 case, 10 task, 8 party, 1 group, 3 users, 2 companies, 1 group membership, 3 role
+   grants — 492 → 530 children, with a read-back after every class. (A completed Update Set silently
+   refuses capture; the set had to be reopened to *in progress* first. Every reference was resolved by
+   query from the data itself, so no `sys_id` was carried in by hand.)
+
+**Export and off-instance verification.** The Local set was converted with the platform's own
+`new UpdateSetExport().exportUpdateSet(...)` and the bytes downloaded through `export_update_set.do`.
+The first candidate (530 blocks, sha256 `cc6433bf…`) is the one that failed the gate; §6 records what was
+fixed and re-exported. The **shipped candidate** verified off-instance as:
+
+| Property | Value |
+| --- | --- |
+| Bytes | 3,114,377 |
+| Payload blocks | **522** (`grep -o '<sys_update_xml action=' \| wc -l`) |
+| Descriptors | exactly 1 `<sys_remote_update_set>`, name `x_casemgmt_case_management v1.0.0 (gate candidate)`, `application_scope` `x_casemgmt`, `state` `loaded` |
+| Stray `<sys_id>` after `</payload>` | 0 |
+| `xmllint --noout` | PASS |
+| **SHA-256** | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` |
+
+Payload inventory — every required class present: 3 `sys_db_object`; the full dictionary set
+(`sys_dictionary` 30 / `sys_documentation` 30, i.e. 21+14+13 across the three tables plus the shared
+rows); **7 `sys_choice_set` composites carrying exactly 24 values at 2/6/4/3/4/3/2**; 3 `sys_number`;
+3 `sys_user_role`; 26 `sys_security_acl`; **27 `sys_security_acl_role`**; 3 `sys_user_has_role`; 7
+`sys_hub_flow`; 7 business rules; 2 script includes; 6 UI actions; UI policies; 8 `sys_report`; 2
+`pa_dashboards` + 2 `pa_tabs` + 2 `sys_grid_canvas` + 3 `pa_dashboards_permissions`; 1 portal + 2 pages
++ 3 widgets; 2 scripted REST definitions; **20 ATF tests + 1 suite + 180 steps + 20 suite-tests**; and
+10 case / 10 task / 8 party rows with 3 users, 1 group, 1 membership, 2 companies. All 522 blocks carry
+`<payload_hash>`, the signature of a genuine platform export. The 7 flow payloads (49.6-67.3 KB each)
+**embed** their `sys_hub_flow_snapshot`, `sys_hub_action_instance` and `sys_variable_value` content,
+which is why this package needs no standalone `sys_variable_value` blocks where the hand-authored
+package used 540.
+
+Standing constraints on the shipped bytes: 15 distinct email addresses, **all** `@example.invalid` (no
+PII); 523 payload `application` stamps, **all** the scope `sys_id`, with **zero** `global` stamps (scope
+exclusivity); no global-scope artifacts. Two properties are inherent to any platform export and are
+reported rather than hand-corrected, since hand-editing the package is forbidden: reference fields carry
+resolved `sys_id`s (the no-hardcoded-`sys_id` rule governs authored artifacts — scripts, ACL conditions
+and the seed script, all of which resolve by query), and block order is the platform's canonical
+name-order rather than the dependency order §0.5.2 describes. The gate itself settles whether that
+ordering is sufficient: this package previewed to zero problems and committed on a genuinely empty
+instance.
+
+### 3. Step 5b — teardown to a proven zero-state
+
+**The guard, re-verified fresh.** A prior successful teardown grants nothing here, so the check was run
+again from scratch. Raw:
+
+```
+[{"sys_id":"82b99028936f74320d74d6f88357a5af","scope":"x_casemgmt","name":"x_casemgmt Case Management","version":"1.0.0"}]
+```
+
+→ exactly **one** record, `sys_id` matches `^[0-9a-f]{32}$` → **GUARD PASS**. Had the query returned
+zero records, an empty value or a malformed `sys_id`, nothing would have been deleted.
+
+**Ledger recorded before deletion.** App-owned Local sets: `30c75744931f0b1009aa70d19dba10e8` (complete,
+"native rebuild", 988 children), `3d4d5f04931f0b1009aa70d19dba10b2` (in progress, "Default",
+`is_default=true`, 96 children), `8aeaf38093534b1009aa70d19dba10ff` (complete, "gate candidate", 530
+children). Retrieved sets: `0b3b7452934f435009aa70d19dba100d` (committed, 988 children),
+`8ebb770493534b1009aa70d19dba102a` (loaded, 530 children). Three unrelated scopes' "Default" sets were
+identified and left alone. The FALLBACK package's own record was excluded structurally, by `sys_id`, from
+every sweep and every count, and was never read.
+
+**Removal.** `deleteApplication` with `sysparm_delete_all=true`, which returned progress worker
+`530d33c493534b1009aa70d19dba1082`; its trail shows the tables being dropped, the flow actions deleted
+and the roles deleted, finishing with the platform's expected partial verdict ("manually delete any files
+that remain"). The residue was then measured and removed explicitly: 494 orphan `sys_metadata` rows (488
+`sys_metadata_delete`, 5 flow snapshots, 1 action-type snapshot), 1,636 `sys_update_version` rows, all
+five update-set records with their 988 + 530 + 988 + 507 + 530 children, and the synthetic base rows
+(3 demo users, 1 group, 2 memberships, 2 companies).
+
+The mechanism that made the purge exact is worth recording: **`sys_update_version.application` carries
+the scope `sys_id`**, which reaches the 431 of 530 child names that contain no `x_casemgmt` token at all
+(names like `sys_atf_step_<sys_id>`). A name-pattern purge cannot find those, which is why earlier
+attempts in this project left "newer local update" residue behind.
+
+**All ten zero-state checks, raw:**
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `sys_scope` for `x_casemgmt` | 0 — body `[]` |
+| 2 | `x_casemgmt_case` endpoint | **HTTP 400** `"Invalid table x_casemgmt_case"` |
+| 3 | `x_casemgmt_case_task` endpoint | **HTTP 400** `"Invalid table x_casemgmt_case_task"` |
+| 4 | `x_casemgmt_case_party` endpoint | **HTTP 400** `"Invalid table x_casemgmt_case_party"` |
+| 5 | `sys_user_role` for the three roles | 0 |
+| 6 | `sys_choice` for the three tables | 0 |
+| 7 | `sys_number` for the three tables | 0 |
+| 8 | `sys_remote_update_set` `nameLIKEx_casemgmt` (FALLBACK's own record excluded) | 0 |
+| 9 | `sys_update_set` `nameLIKEx_casemgmt`, and app-owned sets | 0 and 0 |
+| 10 | scoped `sys_security_acl_role` / `sys_user_has_role` / `sys_dictionary` / `sys_db_object` / `sys_documentation` | 0 / 0 / 0 / 0 / 0 |
+
+Beyond the ten, also proven zero: `sys_update_version` by application and by name, `sys_metadata`,
+`sys_metadata_delete`, orphan `sys_update_xml`, and the demo base rows. The collision preconditions were
+cleared too — the candidate's descriptor `sys_id` returned 0 records, and 120 sampled child `sys_id`s
+from the export returned 0. The FALLBACK record was confirmed still present and untouched by an
+id-only existence probe. **Nothing else ran between this teardown and the commit in §4** — no scripts,
+no data loads, no configuration changes. (The full ten-check sequence was executed twice: once before
+the first gate attempt, and again from the top before the passing attempt.)
+
+### 4. Step 5c — the gated reimport
+
+| Stage | Evidence |
+| --- | --- |
+| Collision proof | descriptor `sys_id` → 0 records; `nameLIKEx_casemgmt` → 0 records |
+| Checksum before upload | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` — re-computed immediately before the upload, matching the verified candidate |
+| Upload | `/upload.do` → `/sys_upload.do` multipart → HTTP 200 (empty body, as expected) |
+| Record located | **by descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`, never by the name-ordered locator |
+| Load | `state=loaded`, **522 children = 522 payload blocks exactly** — no duplicate append |
+| Preview | tracker `7e92001c93934b1009aa70d19dba1089`, genuine `previewing → previewed`, 21:26:14 → 21:26:30 UTC |
+
+**Both gate counts, quoted raw:**
+
+```
+type=error   → {"result":{"stats":{"count":"0"}}}
+type=warning → {"result":{"stats":{"count":"0"}}}
+full problem list → {"result":[]}
+```
+
+Zero problem rows carry a `status`, so no count was made to read zero by marking anything
+`skip_collision`, `ignored` or `skipped`. A single `type=warning` row would have failed this gate exactly
+as an error does.
+
+**The commit — one commit, native UI button only.** The form was first inspected *without clicking* to
+confirm `state=previewed` and to locate the platform's own **Commit Update Set** button
+(`sys_ui_action` `c38b2cab0a0a0b5000470398d9e60c36`); screenshot `…/shots/u3-5c-precommit-form.png`. The
+button was then clicked **exactly once, at 2026-09-08 21:27:27 UTC**. Only the platform's own progress
+modal appeared — no confirmation dialog fired, so nothing was clicked through. The modal ended "Failed at
+100% — The update set commit completed but some updates failed to commit"; screenshot
+`…/shots/u3-5c-commit-result.png`. The record reads `state=committed`, `commit_date`
+`2026-09-08 21:27:27`. There was no second commit, no remediation script and no live-instance patching.
+
+**What that "some updates failed" covers, exhaustively.** `syslog` for skipped records after the commit
+returns **exactly three rows**, all `sys_user_has_role` ("permission denied: no thrown error", 21:27:58).
+Nothing else was skipped — see §7.
+
+**Post-commit verification, every line by direct query:**
+
+| Check | Result |
+| --- | --- |
+| 3 tables | HTTP 200 / 200 / 200 |
+| Rows | 10 case / 10 task / 8 party |
+| Scope | `82b99028936f74320d74d6f88357a5af`, v1.0.0 (the package carries the scope record's own `sys_id`, so the id survives the teardown) |
+| `sys_dictionary` / `sys_documentation` | case **21/21**, task **14/14**, party **13/13** — matching §1 field for field |
+| `sys_db_object` | 3 |
+| `sys_security_acl_role` | **27** — per role **manager 14 / agent 10 / viewer 3**; per table **case 11 / task 8 / party 8** |
+| `sys_security_acl` (scoped) | 26 |
+| `sys_user_role` | 3 |
+| `sys_choice` | **24** via 7 composites — per field **2 / 6 / 4 / 3 / 4 / 3 / 2** |
+| `sys_number` | 3 |
+| Flows | 7, all active **and** published |
+| ATF | 20 tests / 1 suite / 180 steps / 20 suite-tests |
+| Reports / dashboards / portal / REST | 8 reports; 2 dashboards; 1 portal + 2 public pages + 3 widgets; 2 anonymous REST endpoints |
+| Business rules / script includes / UI actions / UI policies | 7 / 2 / 6 / 2 |
+| Demo base rows | 3 users, 1 group, 1 membership, 2 companies |
+
+**Choices rendering in the UI, not just present in a table.** A real case record (CASE9000003, "Demo case
+03: In Progress (General Inquiry)") was opened in a browser and its dropdowns enumerated: `status`
+[Draft, Open, In Progress, Pending, Resolved, Closed]; `type` [-- None --, General Inquiry, Complaint];
+`priority` [Low, Medium, High, Critical]; `pending_reason` [-- None --, Awaiting Info, Awaiting Third
+Party, Other]. Screenshot `…/shots/u3-5c-postcommit-choices.png`. The remaining three lists read
+[Investigation, Review, Follow-up, Other], [Open, In Progress, Closed] and [Person, Organization].
+
+**Linkage.** Zero tasks and zero parties have an empty `case`, and every reference **resolves** by
+dot-walk (`case.numberISEMPTY` = 0 for both child tables). All 3 Organization parties resolve to a real
+`core_company` (`organization.nameISEMPTY` = 0; e.g. party "Respondent" → *Synthetic Org Beta* on
+CASE9000005) and all 5 Person parties resolve to a real user. Cases CASE9000001-CASE9000010 span all six
+statuses and both types. Read-only runtime spot-checks (deliberately no POST, which would have created an
+eleventh case): the portal and its submit page both HTTP 200, and the anonymous lookup endpoint returned
+`{"result":{"status":"Open","subject":"Demo case 02: Open (General Inquiry)","opened_date":"2026-09-08 18:58:04"}}`.
+
+### 5. The verification caveat this gate cannot escape
+
+**This was a same-instance reset-and-reimport, not an independent second instance.** There is one PDI for
+this project, so the package could not be imported onto genuinely different hardware. What was done
+instead is the closest achievable proxy: the scope and everything it created were torn down and proven
+absent by the ten checks in §3, and the candidate was then imported and committed onto that emptied
+instance with nothing running in between.
+
+A reader should treat the residual risk as real rather than eliminated. Anything an instance carries
+*outside* the records this teardown deleted — platform-level caches, table or index metadata, upgrade
+history, plugin state, `sys_properties` values, or any artifact that a scope teardown is not designed to
+reset — was **not** re-created by this exercise and was not tested by it. A package that depends on such
+residue would still pass this gate and could still fail on a truly fresh instance. The evidence above
+establishes that the package installs cleanly onto an emptied *x_casemgmt* namespace on this instance; it
+does not establish an independent clean-instance install, and "not verified on an independent fresh PDI"
+is a known, accepted limitation of this verification rather than a defect in the package.
+
+### 6. The one failure cycle, and the three fixes it produced (cycle 1 of 2)
+
+The **first** gate attempt failed on the preview problem count: `type=error` **47**, `type=warning` 0.
+Nothing was committed. Diagnosis root-caused it to three distinct mechanisms, each to a specific record:
+
+1. **38 × "Update scope id 'global' is different than update set scope id …".** The 39 data rows had been
+   captured from a global-scope session, so 38 children carried an `application` value of `global`
+   (10 case, 10 task, 8 party, 3 users, 3 grants, 2 companies, 1 group, 1 membership).
+   *Fix, at the source:* re-stamp those children with the scope and purge 8 stale `sys_update_version`
+   rows keyed on the package's own child names. Re-preview: 47 → **9**.
+2. **8 × "Could not find a record in `sys_portal` for column `portal_widget`"**, all on
+   `sys_grid_canvas_pane` payloads. The unresolvable field is `portal_widget`, which points at a
+   `sys_portal` widget-instance row; all 8 targets were confirmed absent, and `sys_portal` rows carry no
+   `sys_scope`, so they are not application files and **no publish can ever include them**. Corroborated
+   by the fact that no package in this project's history has carried panes, canvases or `sys_portal`
+   rows. *Fix:* drop the 8 untransportable pane payloads (530 → 522 children). Re-preview: 9 → **1**.
+3. **1 × "Found a local update that is newer than this one"** on `sys_app_82b99028…`. Pulled with display
+   values, the problem named its own culprit: `sys_update_xml` `535df78893534b1009aa70d19dba10ee`,
+   `action=DELETE`, created 21:03:18 — **during my own teardown**, and captured into the *global* "Default"
+   set because the teardown ran from a global session. *Fix:* purge `sys_update_xml` by
+   `application = <scope>` regardless of which set owns the row (29 rows: 27 Access Roles, 1 Custom
+   Application DELETE, 1 Table), plus 12 `sys_update_version` rows findable only by `record_name`. The
+   FALLBACK package's 926 children and the candidate's own were skipped by `sys_id` and left intact.
+
+A probe preview then read **error 0, warning 0**, validating all three fixes. **Classification:
+NON-CRITICAL** against every condition — each root cause was identified to a specific record or platform
+mechanism; every fix is a capture/config correction *at the source*; none touched the natively created
+schema, dictionary, ACL or role-link output that Steps 1-4 had already verified; and no fix required a
+second commit, a live-instance patch, or an edit to the rebuild output. Per the failure path, the run
+therefore **restarted from Step 5a in full** — fresh export, fresh teardown with all ten checks re-proven,
+fresh reimport, fresh post-commit checks — so the fixes were proven through the same complete gate rather
+than assumed correct.
+
+**Cycle count: 1 of 2 used, 1 remaining. There was no third failure.** One further correction was caught
+before shipping and is *not* a cycle: the re-export carried the record's own `state=previewed`, meaning a
+recipient could have committed it without ever previewing. The record's state was normalised to `loaded`
+and the package re-exported, which produced the shipped bytes. Likewise, the pre-teardown re-capture work
+in §2 was package production, not a fix cycle.
+
+Note also what did **not** happen: the anticipated failure for this project was `sys_choice` landing at 0
+after the commit, which is what the pre-refine path could only fix with a remediation script plus a
+second commit. It did not recur — the seven app-owned `sys_choice_set` composites carried all 24 values
+through the single commit, with zero choice-script activity in `syslog` afterwards.
+
+### 7. Two residual deltas, reported rather than papered over
+
+Neither is a gate item; both are stated here so nobody downstream reads them as covered.
+
+- **`sys_user_has_role` = 0 (3 grants not transported).** Root cause, proven at record level: Role
+  Management V2 owns this table on this release (`glide.role_management.use.inh_count=true`, with
+  `inherited` / `inh_count` / `inh_map` marked read-only in the dictionary), so the update-set loader's
+  permission check answers false and the platform logs "permission denied: no thrown error" instead of
+  raising an error. The three payloads were refused when stamped `Global` *and* refused again when stamped
+  `x_casemgmt`, which disproves any capture-side explanation. **No update set can deliver these grants on
+  this release**; the native remedy is the role form's *Edit Members*, which is exactly what Step 4 did.
+  The gate's own requirements name the three **roles** (`sys_user_role` = 3 ✓) and the 27 **role links**
+  (`sys_security_acl_role` = 27 ✓), both of which transported.
+- **`sys_grid_canvas_pane` = 0.** The documented consequence of fix (2) above. Both dashboards, both tab
+  records, both grid canvases, all 8 reports and all 3 dashboard-permission rows transported and are
+  present; the pane rows that bind a canvas cell to a `sys_portal` widget instance cannot be carried by
+  any update set, because `sys_portal` rows are not application files.
+
+### 8. Step 6 — canonical replacement and cleanup
+
+`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` now holds the
+**exact bytes that were uploaded and committed** in §4 — not a re-export — re-verified in place:
+
+| Property | Value |
+| --- | --- |
+| **SHA-256** | **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** |
+| Bytes | 3,114,377 |
+| Payload blocks | 522 |
+| `xmllint --noout` | PASS |
+
+Provenance of the two superseded files, recorded before they were deleted with `git rm` (their bytes
+remain recoverable from git history):
+
+- `x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` — 4,062,067 bytes, **988**
+  payload blocks, sha256 `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d`.
+  *Superseded:* a hand-authored package (`<unload>` banner, comment blocks inside payloads, no
+  `payload_hash`), never produced by the platform and never gated through a teardown-and-reimport commit.
+- `x_casemgmt_case_management_update_set.AMENDED-NOT-GATED.xml` — 3,973,569 bytes, **935** payload
+  blocks, sha256 `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`.
+  *Superseded:* likewise hand-authored and, as its own filename records, never gated.
+
+The file it replaced measured 3,781,097 bytes / 926 blocks / sha256
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`. Every forward-looking document that
+still names the 926-, 935- or 988-block artifact, or a superseded checksum, as the shipping package is now
+stale by design and needs re-pointing to the value above.
+
+`update-set/` ends with **exactly two files**: this canonical package and the FALLBACK package. The
+FALLBACK file was not opened, read, checksummed, diffed, archived, deleted, or included in any count or
+comparison; that it is unchanged is shown by `git status` and an empty `git diff --stat`, and its own
+instance record was excluded by `sys_id` from every teardown sweep.
+
+### 9. Hand-off
+
+The instance is **deliberately left standing** in the verified post-commit state described in §4, so the
+ATF step can run against it. For that step: scope `sys_id` **`82b99028936f74320d74d6f88357a5af`** (measured,
+unchanged); ATF suite **`8e8c6de584ba8f081439ad5ee09ad1a1`**, "x_casemgmt Case Management POC", inventory
+**20 tests / 1 suite / 180 steps / 20 suite-tests**. Two update-set records remain — the committed
+Retrieved set `8ebb770493534b1009aa70d19dba102a` (kept as the gate's evidence) and the Local set
+`bce2c05c93934b1009aa70d19dba1042` that the platform created automatically as commit bookkeeping. Both are
+removed by the final teardown step. No probe artifact, throwaway user or test table was created at any
+point in this step, so there is nothing else to clean up.
+
 ## Step 7 — ATF suite and transition harness
 
 ## Step 8 + Exit Condition
