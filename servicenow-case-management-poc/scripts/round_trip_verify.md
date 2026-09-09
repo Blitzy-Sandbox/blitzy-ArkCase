@@ -2,6 +2,58 @@
 
 Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7.3, Gate 7)
 
+## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12)
+
+**One identity, and it prevails over every other figure in this document.** Earlier revisions of this file
+present more than one package as "the deliverable". The seven statements below are what is on disk today and
+what is true of it; every identity figure elsewhere in this document is dated provenance of an earlier
+revision, and where any of them disagrees with this block, **this block is correct**.
+
+1. **The only shipping artifact is `../update-set/x_casemgmt_case_management_update_set.xml`** — **522** payload
+   blocks · **2,994,341** bytes · SHA-256
+   **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`**. Reproduce it from the repository
+   root with `sha256sum servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
+2. **Status: MEASURED, NOT GATE-VERIFIED.** These exact bytes have never been uploaded, previewed or
+   committed on any instance. What backs them is static checking only.
+3. **The one gate this project ran did not run on these bytes, and the platform did not report it clean.**
+   It ran on 2026-09-08 against a superseded **3,114,377**-byte revision (SHA-256 `b2217224…`, also 522
+   blocks): the preview reached **0 `type=error` and 0 `type=warning`**, but the platform's own verdict on
+   the single native commit was **"Failed at 100% — the update set commit completed but some updates failed
+   to commit"**, with **three** `sys_user_has_role` rows skipped (`permission denied: no thrown error`).
+   **No candidate has yet produced a commit the platform reported as clean**, so a "GATE MET" or "GATED"
+   label anywhere below describes that attempt and not a clean pass.
+4. **No test result covers the shipping bytes.** Neither the 20-test / 180-step ATF suite nor the
+   13-assertion transition harness has been run against them. The most recent suite result — **`TES0001006`**,
+   created **2026-09-08 22:09:18 UTC**, 20 tests = **4 Success / 16 Failure / 0 Error / 0 Skipped** — and the
+   most recent harness pass (`TOTAL=13 PASSED=13 FAILED=0`, 2026-09-08 22:17:27 UTC) both ran against the
+   artifacts the gated revision's commit created.
+5. **The two candidate packages that older text below still names — `…REBUILT-DEPENDENCY-ORDERED.xml` (988
+   blocks) and `…AMENDED-NOT-GATED.xml` (935 blocks) — were deleted on 2026-09-08 and are not on disk.**
+   Neither may be an upload, verification or promotion target. Where a sentence below still points at one,
+   read it as provenance of a superseded round and nothing else.
+6. **The itemised exit-condition verdict, and the procedure that re-gates the shipping bytes**, are in
+   [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) §12.
+7. This run recorded no property of, and performed **no comparison of any kind against**, any artifact that
+   its scope excludes; the identity above comes from item 1 and from nowhere else.
+
+## SUPPORTED INSTALL ROUTE — 2026-09-09 (code review CR3, finding F16)
+
+**One clean commit of the exact candidate bytes, and nothing else.** AAP §0.7.2 requires scoped-namespace
+exclusivity with **zero global-scope writes**; the release gate requires **a single clean commit — no second
+commit, no remediation script, no live-instance patching**. Both constraints stand unchanged.
+
+- Every passage in this document that tells an operator to run `./post_import_remediation.js` (or any
+  script) from *Scripts - Background* with **"In scope" = Global**, to accept preview collisions, or to
+  commit the Update Set a second time, is **⛔ NOT A SUPPORTED STEP**. Those passages are retained as the
+  record of what an earlier round did, and each is marked where it appears.
+- `./post_import_remediation.js` and `./sys_script_fix_x_casemgmt_post_import_remediation.xml` stay in the
+  repository deliberately — as that record and as the diagnosis of what the superseded packages left short.
+  Retention is not a licence to run them, and no gate is satisfied by running them.
+- **A shortfall the package leaves is a source-side defect.** Correct it where the package is produced, then
+  re-run the full gate on the exact candidate bytes; never patch the instance. The one shortfall the platform
+  forces — the **3** `sys_user_has_role` grants, which Role Management V2 refuses from any update set on this
+  release — is recorded as a BLOCKED capability gap, not as a step that satisfies a gate.
+
 > **CR1 AMENDMENT — 2026-09-09. The canonical package's bytes changed after the identity rows below were written.**
 > Code review checkpoint CR1 raised seven findings against the shipped package. Resolving them **removed four
 > payloads** — the three `sys_user_has_role` records this release's Role Management V2 refuses to install, and the
@@ -37,15 +89,18 @@ Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7
 > | Artifact | Identity, as measured 2026-09-08 | Status |
 > | --- | --- | --- |
 > | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE** | **926** `<sys_update_xml>` blocks · **3,781,097** bytes · SHA-256 **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** · 26 `sys_security_acl` · descriptor `sys_id` `9929f50df18ccec91ea13b2a3bccfc90` · `xmllint --noout` clean | **THE EXACT, UNTOUCHED ELECTED PACKAGE**, and `cmp` against `…FALLBACK.xml` reports no difference. **NOT GATE-VERIFIED** — these bytes have never been uploaded or previewed on any instance |
-> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE**, corrected 2026-09-08 | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED — by a same-instance reset-and-reimport, not by an independent second PDI.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a recorded zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) |
+> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE, as of 2026-09-09 (CR3 F12)** | **522** `<sys_update_xml>` blocks · **2,994,341** bytes · SHA-256 **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** · 26 `sys_security_acl` + 27 `sys_security_acl_role` · 8 `sys_grid_canvas_pane` · 0 `sys_user_has_role` · `xmllint --noout` clean | **MEASURED, NOT GATE-VERIFIED.** These exact bytes have never been uploaded, previewed or committed on any instance — **this procedure has never been run on them**, and Phase 1's digest check is the one to assert against them. Re-gate procedure: [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) §12 |
+> | `update-set/x_casemgmt_case_management_update_set.xml` — **the 2026-09-08 revision; SUPERSEDED 2026-09-09, not the deliverable (CR3 F12)**, corrected 2026-09-08 | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED, BUT NOT CLEANLY — by a same-instance reset-and-reimport, not by an independent second PDI. This cell read "GATED"; corrected 2026-09-09 (CR3 F12): the platform's own verdict on the single commit was "Failed at 100% — the update set commit completed but some updates failed to commit", with three `sys_user_has_role` rows skipped.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a recorded zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 > | `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` — **the elected package, retained** | **926** blocks · **3,781,097** bytes · SHA-256 **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** · 26 `sys_security_acl` · `xmllint` clean | Retained. Modified after election by the three commits below, then **restored to the elected bytes 2026-09-05T04:45Z**. Byte-identical to the deliverable again — which is D3's intended end state, not the defect: the defect was this file tracking edits made to the deliverable, and those edits now live in the separate `…AMENDED-NOT-GATED.xml` |
 > | The two candidate packages this consolidation superseded — `…REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks · 4,062,067 bytes · `e109e1d1…`) and `…AMENDED-NOT-GATED.xml` (935 blocks · 3,973,569 bytes · `9f3ea74c…`) | Both **deleted** from `update-set/` in this consolidation; their bytes remain recoverable from git history | Superseded: each was hand-authored rather than platform-exported, and neither was ever gated through a teardown-and-reimport commit. Provenance recorded in [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 >
 > **What the deliverable is: THE EXACT, UNTOUCHED ELECTED PACKAGE. It IS byte-identical to `…FALLBACK.xml`.**
 > *(Retained as written on 2026-09-05. **CORRECTED 2026-09-08:** that is no longer what the deliverable is,
 > and the digest to verify against is the consolidated export's.)*
-> **What the deliverable now is: the consolidated, platform-exported package identified in the table above —
-> 522 blocks / 3,114,377 bytes / `b2217224…`.**
+> **What the deliverable was between 2026-09-08 and 2026-09-09: the consolidated, platform-exported package
+> relabelled in the table above — 522 blocks / 3,114,377 bytes / `b2217224…`. CORRECTED 2026-09-09 (CR3 F12):
+> what the deliverable IS is 522 blocks / 2,994,341 bytes / `751ceb61…`, and the digest to verify a copy
+> against is that one — see the CURRENT ARTIFACT STATE block at the top of this file.**
 > It was produced by the platform's own application-publish path on an instance rebuilt from the 988-block
 > package and then corrected by the two post-rebuild fixes — the 24 native `sys_choice` values and the
 > case/task/party linkage — captured with the platform's own capture API rather than by editing XML, and
@@ -131,9 +186,11 @@ Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7
 > directives D2/D21 ordered — **30** platform-named `sys_dictionary` rows, **30** `sys_documentation` rows and all
 > **27** `sys_security_acl_role` links, and it served as the baseline the consolidation rebuilt the application
 > from; but it was hand-authored rather than platform-exported and was never gated through a
-> teardown-and-reimport commit, so it was deleted rather than promoted. What ships instead is the platform export
+> teardown-and-reimport commit, so it was deleted rather than promoted. What replaced it is the platform export
 > in the table above, which carries the same platform-named schema rows and the same 27 role links **and** the
-> post-rebuild choice and linkage fixes, and which was gated on its own bytes. The deleted file's identity was
+> post-rebuild choice and linkage fixes, and which was gated on its own bytes — a gate whose commit the platform
+> reported as *Failed at 100%*, on bytes since superseded by the ungated 2,994,341-byte `751ceb61…` file that
+> ships now (CR3 F12). The deleted file's identity was
 > **`e109e1d1…` over 4,062,067
 > bytes**, which **superseded** `90ee0249…` over 4,062,436 bytes — commit `f8454fb078` applied the same
 > choice-materialization fix to this package too. `90ee0249…` matches **no file in this tree**, so any
@@ -179,13 +236,19 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
 2. **Preview** the Update Set and verify zero errors.
 3. **Commit** the Update Set after a clean preview.
 4. **Remediate** — **updated 2026-09-05: mandatory, because the shipping deliverable is the elected base AS AMENDED and carries no role links.** Run `scripts/post_import_remediation.js` in scope **Global**, commit the Update Set a second time, run it again, then seed — a commit alone leaves the three tables without physical storage and the shipping package's 29 ACLs without their 36 role links (manager 17 / agent 13 / viewer 6; on the 26-ACL elected base retained at `…FALLBACK.xml` the corresponding totals are 26 and 27, split 14 / 10 / 3), since the package carries **0** `sys_security_acl_role` rows. It is the seven-step primary procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md). **On the retained rebuilt package this phase is expected to shrink**, and that is the one difference the promotion buys: a single commit of those 988 records on a clean instance produced physical storage for all three tables and all 27 `sys_security_acl_role` links out of the commit itself, with the remediation script never run and no second commit — **measured on export 3's `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` sequence**, which carries the same 988 records in the block order that preceded the §0.5.2 re-sequencing. `../update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (now `e109e1d1…`, 988 blocks / 4,062,067 bytes after the 2026-09-03 choice-composite fix) carries those records in dependency order and **its own complete bytes were never uploaded, previewed or committed**, so on it this is the expected outcome rather than a measured one ([`../docs/refine-run/FINAL-REPORT.md`](../docs/refine-run/FINAL-REPORT.md)). **The choice rows are no longer part of this phase on either package.** Both now carry seven platform-native choice composites, and that exact seven-child delta was uploaded, previewed to **0 problems of any type** and committed natively on 2026-09-03, taking `sys_choice` for the three tables from **0 to 24** rows with every option label rendering on the real forms — so a commit creates them and no post-import choice step exists. What still needs a post-commit step is the seed-row linkage and `opened_date`, by running `scripts/seed_demo_data.js` in scope.
-4. **Remediate (superseding the retained item above)** — **updated 2026-09-08: no longer a mandatory phase on the bytes that ship.** The consolidated deliverable carries the platform-captured schema (3 `sys_db_object`, `sys_dictionary` + `sys_documentation` 21/21 · 14/14 · 13/13), **26** `sys_security_acl` **with their 27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3), the seven native choice composites holding **24** values, the 3 `sys_number` counters and the demo rows — all measured present after a **single** commit on an emptied instance, with `scripts/post_import_remediation.js` never run, no second commit and `scripts/seed_demo_data.js` not needed ([`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md)). What this phase reduces to is **one** native step the package cannot carry: create the **3** `sys_user_has_role` grants on the demo personas with the role form's *Edit Members*, Role Management V2 owning that table on this release and refusing those payloads from any update set. Run `scripts/post_import_remediation.js` only if you are installing one of the superseded hand-authored packages from git history — on those a commit alone left the three tables without physical storage and their ACLs without role links, and the seven-step procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) is what applied. Note that the script asserts the repository's 29 ACLs / 36 links, so on the shipping package's 26 / 27 it correctly reports non-convergence on the ACL count rather than a defect.
+4. **Remediate (superseding the retained item above)** — ⛔ **the retained item above prescribes a
+   Global-scope run and a second commit and is NOT A SUPPORTED STEP (CR3 2026-09-09 · F16): it violates AAP
+   §0.7.2's zero-global-write constraint and the single-clean-commit gate, and is retained only as a record.**
+   **Updated 2026-09-08: no longer a mandatory phase on the bytes that ship, and re-dated 2026-09-09 (CR3 F12) — the measurements below were taken on the superseded 3,114,377-byte `b2217224…` revision, not on the shipping 2,994,341-byte `751ceb61…` bytes, which carry the same schema and role-link payloads but have never been committed.** The consolidated deliverable carries the platform-captured schema (3 `sys_db_object`, `sys_dictionary` + `sys_documentation` 21/21 · 14/14 · 13/13), **26** `sys_security_acl` **with their 27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3), the seven native choice composites holding **24** values, the 3 `sys_number` counters and the demo rows — all measured present after a **single** commit on an emptied instance, with `scripts/post_import_remediation.js` never run, no second commit and `scripts/seed_demo_data.js` not needed ([`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md)). What this phase reduces to is **one** native step the package cannot carry: create the **3** `sys_user_has_role` grants on the demo personas with the role form's *Edit Members*, Role Management V2 owning that table on this release and refusing those payloads from any update set. Run `scripts/post_import_remediation.js` only if you are installing one of the superseded hand-authored packages from git history — on those a commit alone left the three tables without physical storage and their ACLs without role links, and the seven-step procedure in [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) is what applied. Note that the script asserts the repository's 29 ACLs / 36 links, so on the shipping package's 26 / 27 it correctly reports non-convergence on the ACL count rather than a defect.
 5. **Re-verify** all six functional gates (Gates 1–6) on the verification PDI.
 6. **Assert self-sufficiency** — record, explicitly, everything the package did *not* do for itself.
 
-> **On the approved global exception.** Phase 4 runs an installer script in the **global** scope, and the
-> package carries that script as a global-scoped Fix Script. That is the single disclosed exception to the
-> scoped-namespace rule: `GlideTableDescriptor` and `GlideSecurityManager` are refused in scoped execution, and
+> **On the "approved global exception" — WITHDRAWN.** ⛔ **NOT A SUPPORTED STEP — CR3 2026-09-09 · F16.** This note read that "Phase 4 runs an
+> installer script in the **global** scope, and the package carries that script as a global-scoped Fix Script.
+> That is the single disclosed exception to the scoped-namespace rule". Neither half stands: code review CR1
+> (finding F04) removed the Global-stamped Fix Script payload from the package and established that **no
+> override authorised a Global-scope write**, and It violates AAP §0.7.2's zero-global-write constraint and the single-clean-commit gate ("no second commit, no remediation script, no live-instance patching"); it is retained only as a record of what an earlier round did on the two superseded hand-authored candidates. A shortfall the package leaves is a source-side defect: correct the package where it is produced and re-run the full gate on the exact candidate bytes — see SUPPORTED INSTALL ROUTE at the top of this document. The platform facts the note records remain
+> true and are why the script could never be the answer: `GlideTableDescriptor` and `GlideSecurityManager` are refused in scoped execution, and
 > both are required to create physical storage and flush the security cache. It is installer wiring rather than
 > application configuration, and the commit engine rewrites the record into `x_casemgmt` regardless. No other
 > record in the package is global-scoped, and no out-of-the-box table receives a schema change.
@@ -404,9 +467,12 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 
 ## Phase 4 — Post-Import Remediation (one native step on the shipping deliverable)
 
-> **CORRECTED 2026-09-08.** The shipping deliverable is the consolidated platform export
-> (`../update-set/x_casemgmt_case_management_update_set.xml`, **522** blocks, **3,114,377** bytes, SHA-256
-> `b2217224…`), so **this phase reduces to one native step**: creating the 3 `sys_user_has_role` grants with the
+> **CORRECTED 2026-09-08, and re-dated 2026-09-09 (CR3 F12).** The shipping deliverable is
+> `../update-set/x_casemgmt_case_management_update_set.xml` at **522** blocks, **2,994,341** bytes, SHA-256
+> **`751ceb61…`** — MEASURED, NOT GATE-VERIFIED. The identity in this note as written was the superseded
+> 2026-09-08 revision (**3,114,377** bytes, SHA-256 `b2217224…`), and the one-commit measurements below belong
+> to that revision; the shipping bytes carry the same 26 ACL / 27 role-link payloads but have never been
+> committed anywhere. On the measured revision **this phase reduced to one native step**: creating the 3 `sys_user_has_role` grants with the
 > role form's *Edit Members*. The package itself carries the platform-captured schema records and its **26** ACL
 > payloads **with** their **27** role links (manager 14 / agent 10 / viewer 3), so a single commit lands the
 > physical tables, the links and the 24 choice values with no script run at all ([`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md)).
@@ -448,6 +514,11 @@ seven-step procedure in
 full only to the superseded hand-authored packages, reduced here to
 the checklist a round-trip verifier needs.
 
+⛔ **NOT A SUPPORTED STEP — CR3 2026-09-09 · F16.** **The seven checklist items that follow — the Global-scope run, the second
+upload → preview → commit with collisions accepted, the second Global run, and their assertions — must not be
+executed.** It violates AAP §0.7.2's zero-global-write constraint and the single-clean-commit gate ("no second commit, no remediation script, no live-instance patching"); it is retained only as a record of what an earlier round did on the two superseded hand-authored candidates. A shortfall the package leaves is a source-side defect: correct the package where it is produced and re-run the full gate on the exact candidate bytes — see SUPPORTED INSTALL ROUTE at the top of this document. They are retained verbatim as the record of the superseded candidates' procedure; the
+`seed_demo_data.js` item is ordinary in-scope work and is the only one that survives as a step.
+
 - [ ] Run `scripts/post_import_remediation.js` from **System Definition → Scripts - Background** with
       **"In scope" = Global**. Not the Fix Script UI — that executes in the application scope and fails.
 - [ ] Expect this first pass to end `verified=false … errors=6`, every error being the ACL check
@@ -456,12 +527,25 @@ the checklist a round-trip verifier needs.
       zero role links.
 - [ ] Confirm the tables were built: `tables_built=3`, `fields_created=25`, `choices_created=24`,
       `counters_written=3`.
-- [ ] **Upload → preview → commit the same Update Set a second time.** This preview reports about 21
+
+⛔ **NOT A SUPPORTED STEP — CR3 2026-09-09 · F16. The next two checklist items — a second upload/preview/commit
+of the same Update Set, and a further Global-scope remediation run — are retained only as the record of what an
+earlier round did on the two hand-authored candidate packages this consolidation superseded and deleted.** They
+violate AAP §0.7.2's zero-global-write constraint and the single-clean-commit gate ("no second commit, no
+remediation script, no live-instance patching counts as clean"), and they are moot on the shipping bytes: the
+522-block package carries the platform-captured schema records and its 26 ACL payloads **with** their 27
+`sys_security_acl_role` links, so nothing in it needs a script to converge. Do not perform them. If the
+shipping bytes ever fail to converge, that is a source-side defect: correct the package where it is produced
+and re-run the whole gate on the exact candidate bytes — see **SUPPORTED INSTALL ROUTE** at the top of this
+document.
+
+- [ ] ~~**Upload → preview → commit the same Update Set a second time.**~~ This preview reports about 21
       `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization`
       problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports
       about 25 `sys_dictionary` collisions from the rows the remediation just wrote; accepting the remote is
       correct **for `sys_dictionary` only**. Never ignore a collision on any other table.
-- [ ] Run the remediation in **Global** again. This is the pass that must report `verified=true`, `errors=0`,
+- [ ] ~~Run the remediation in **Global** again.~~ (⛔ **NOT A SUPPORTED STEP — CR3 2026-09-09 · F16**, per the
+      block above.) This is the pass that must report `verified=true`, `errors=0`,
       `acl_links_created=36`, `acl_links_total=36`, `acl_links_expected=36`, `security_cache_flushed=true`.
 - [ ] Confirm independently of the log that **exactly 27** `sys_security_acl_role` rows exist in the scope,
       distributed manager 14 / agent 10 / viewer 3. A number other than 27 means it has not converged; the script
@@ -484,7 +568,7 @@ The Update Set is committed but not yet **delivered**. The final step is to re-r
 
 **A Fix Script inside an Update Set does not execute on commit.** Committing a Fix Script installs the record and nothing more — the platform does not run it, and neither does anything else in this package, which contains **no auto-execute record of any kind**. So no seed data appears by itself: run [`./seed_demo_data.js`](./seed_demo_data.js) on the verification PDI as a Background Script **in scope `x_casemgmt`**, after Phase 4's remediation, before re-verifying the gates below. Do **not** delete the packaged `Demo case …` rows first — every packaged seed row now carries a pinned number (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+), and the script matches on that number and ADOPTS the row. It fills blank references, repairs raw or dangling expected references, preserves valid populated references, and supplies a missing `opened_date`. Expect `inserted=0 adopted=10/10/8` on a committed install, and require `repaired=0` on a second run.
 
-The package's one Fix Script, `x_casemgmt Post-Import Remediation`, is subject to the same rule and to one more: running it from *System Definition → Fix Scripts → Run Fix Script* executes it **in the application scope**, where the privileged calls it needs are refused. Run its source, `post_import_remediation.js`, from *Scripts - Background* with **"In scope" = Global** instead.
+⛔ **NOT A SUPPORTED STEP — CR3 2026-09-09 · F16.** The paragraph that follows describes running the remediation in Global scope; it is a record of the superseded procedure, not a step. It violates AAP §0.7.2's zero-global-write constraint and the single-clean-commit gate ("no second commit, no remediation script, no live-instance patching"); it is retained only as a record of what an earlier round did on the two superseded hand-authored candidates. A shortfall the package leaves is a source-side defect: correct the package where it is produced and re-run the full gate on the exact candidate bytes — see SUPPORTED INSTALL ROUTE at the top of this document. (It also predates code review CR1 finding F04, which removed the Fix Script payload from the package, so the package has no Fix Script at all.) The package's one Fix Script, `x_casemgmt Post-Import Remediation`, is subject to the same rule and to one more: running it from *System Definition → Fix Scripts → Run Fix Script* executes it **in the application scope**, where the privileged calls it needs are refused. Run its source, `post_import_remediation.js`, from *Scripts - Background* with **"In scope" = Global** instead.
 
 ### Gate 1 — Data Model (Re-Verify)
 
@@ -574,7 +658,11 @@ then sits there.
 - [ ] Search `syslog` for the marker `X_CASEMGMT_REMEDIATION|` across the commit window.
 - [ ] **Expected result: no marker rows at all** — zero `BOOTSTRAP|fired` lines and zero `SUMMARY` lines, until a
       human runs `post_import_remediation.js` from *Scripts - Background* with **"In scope" = Global**. Finding
-      nothing here is a **pass**, and it is what makes Phase 4 mandatory rather than optional.
+      nothing here is a **pass**: it proves the package dispatches nothing by itself. **CORRECTED 2026-09-09
+      (CR3 F16): this item ended "and it is what makes Phase 4 mandatory rather than optional" — that
+      inference is withdrawn.** Phase 4's Global run and second commit are not a supported step at all, and
+      the shipping package needs neither: it carries the schema records and its 27 role links in its own
+      payloads.
 - [ ] If you *do* find a `SUMMARY|verified=false|…|errors=121` line, the instance is carrying a legacy copy of
       the removed bootstrap rule from earlier work. Treat an `active=true` copy as a hazard, not as evidence that
       the remediation ran: it changes nothing and it invites the belief that it did. The remediation deactivates
@@ -617,8 +705,9 @@ onto unrelated deployments.
 > record) — so a commit of the
 > current bytes yields the 24 rows without remediation. On the superseded hand-authored candidates physical
 > storage, auto-numbering and the role links were unchanged by that fix and still required the §9.5
-> remediation; on the consolidated platform export that ships today they arrive with the commit, as the
-> correction note above records.
+> remediation; on the consolidated platform export they arrive with the commit — measured on the 2026-09-08
+> `b2217224…` revision, and carried in the same payloads by the shipping `751ceb61…` bytes, on which no commit
+> has been run (CR3 F12) — as the correction note above records.
 
 - [ ] After the §9.5 remediation, re-run all four. **Result: tables 3/3 physical with 24 choice rows and all 7
       choice lists rendering; a new case numbered `CASE0000448`; anonymous `201` `{"number":…,"message":"Your case
@@ -867,7 +956,14 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > `8ebb770493534b1009aa70d19dba102a`, and the loaded record was located by that `sys_id` rather than by the
 > name-ordered locator. *(3)* A preview
 > against a populated instance returns `Found a local update that is newer than this one` collisions instead of
-> the clean-slate zero-problem result criterion 2 requires. Discharge it by running
+> the clean-slate zero-problem result criterion 2 requires. **[CR3 2026-09-09 · F13 and F16 — read the
+> discharge instruction that follows with two corrections. (i) The only file under test is
+> `../update-set/x_casemgmt_case_management_update_set.xml`: assert **522** children and SHA-256
+> `751ceb61…` over 2,994,341 bytes. The 935- and 988-block candidates its child-count list also names were
+> deleted on 2026-09-08, are not on disk, and are not upload, assert or promotion targets. (ii) The §5
+> procedure it points at contains a Global-scope remediation run and a second commit; those steps are ⛔ not
+> supported (AAP §0.7.2 zero global-scope writes; single clean commit) and are marked as such there.]**
+> Discharge it by running
 > [`../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5](../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) against the
 > file under test on a genuinely clean PDI — upload, assert its child count (**522** for the shipping deliverable, **926** for the package it replaced and
 > the same for the identical `…FALLBACK.xml` / **935** retained `…AMENDED-NOT-GATED.xml` / **988** retained
@@ -897,7 +993,10 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > count asserted at **925**, then preview → **31 problems, every one
 > `Found a local update that is newer than this one`, ZERO `Could not find a record`** (63 → 0), with all 31
 > targets confirmed to hold a local `sys_update_version` in state `current`. **Phases 1-3 were re-executed in
-> full on 2026-09-08 on the bytes that ship** — the consolidated 522-block export, `b2217224…`: uploaded to an
+> full on 2026-09-08 on the then-shipping bytes — superseded 2026-09-09 (CR3 F12): they have never been run on
+> the 2,994,341-byte `751ceb61…` file that ships now, and the 2026-09-08 commit itself was reported by the
+> platform as *Failed at 100%* with three `sys_user_has_role` rows skipped** — the consolidated 522-block
+> export, `b2217224…`: uploaded to an
 > instance torn down to a recorded zero-state, `state=loaded` with the child count asserted at exactly **522**,
 > preview **0 `type=error` and 0 `type=warning`**, then one native-UI commit reaching `state=committed`, with
 > nothing run in between — a same-instance reset-and-reimport, not an independent second instance. They remain
@@ -912,7 +1011,8 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > criteria also held earlier on the 916-block `32a064d6…` revision, which is retained as history in
 > [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §9.10](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md); §0.3 of
 > that document is the current record. Criterion 4
-> holds on the bytes that ship without a remediation run at all: a single commit of the 522-block export
+> held on the 2026-09-08 revision without a remediation run at all (CR3 F12 — not re-measured on the shipping
+> `751ceb61…` bytes): a single commit of the 522-block export
 > produced **27 of 27** ACL role links (manager 14 / agent 10 / viewer 3), the 24 choice values and the demo
 > rows, with nothing executed after the commit. The two superseded hand-authored candidates behaved
 > differently — the 926-block package carried none of the links itself and reached `verified=true` with 36 of
@@ -989,9 +1089,11 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > and
 > not the deleted 988-block `e109e1d1…` rebuilt candidate (its complete bytes never uploaded, previewed or
 > committed); the seven choice children they shared had their own upload, preview and native commit on
-> 2026-09-03. What ships today was gated on its own bytes instead — the consolidated 522-block export,
+> 2026-09-03. The 2026-09-08 revision was gated on its own bytes instead — the consolidated 522-block export,
 > `b2217224…`, uploaded, previewed to **0 problems of any type** and committed natively on 2026-09-08 against
-> an instance torn down to a recorded zero-state — consistent with the
+> an instance torn down to a recorded zero-state — a commit the platform reported as *Failed at 100%* with
+> three `sys_user_has_role` rows skipped, and on bytes since superseded by the ungated `751ceb61…` file
+> (CR3 F12) — consistent with the
 > *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 1a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — item 1a is that round trip, closed on 2026-09-08 by the same-instance reset-and-reimport recorded above; item 0's wake of the retired `dev379024` is superseded and gates nothing.
 
 ### Fail Criteria (Any One Triggers Fail)
@@ -1027,7 +1129,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 - **Round-trip-verify is non-negotiable.** Zero preview errors required before commit.
 - **Two PDI rule.** The source PDI and the verification PDI SHOULD be different instances. Where a second instance is genuinely unavailable, the AAP-approved substitute (override C6) is an **application-level clean slate** on the source instance: remove every `x_casemgmt` artifact and every row in the three scoped tables first, so the import creates the application from nothing. That is what was done here. Record which route you used — the clean-slate route cannot detect a dependency on a leftover **global** record, and that limitation must be stated rather than absorbed into a pass.
 - **No hard-coded `sys_id`s.** The most common cause of preview failures is `sys_id` literals that resolve on the source PDI but not the verification PDI. Every cross-reference in the Update Set MUST resolve via `GlideRecord` lookup by a stable human-readable key (`name`, `user_name`, `number`, `role_label`).
-- **Scoped-namespace exclusivity.** All artifacts MUST be in the `x_casemgmt` scope, with **one disclosed and approved exception**: the installer Fix Script `x_casemgmt Post-Import Remediation`, authored global because `GlideTableDescriptor` and `GlideSecurityManager` are refused in scoped execution. Any *other* global-scope write is prohibited per AAP Section 0.3.2. Global tables receive **data** inserts only — never schema changes.
+- **Scoped-namespace exclusivity.** All artifacts MUST be in the `x_casemgmt` scope, **with no exception — CORRECTED 2026-09-09, CR3 F16.** This bullet read "with **one disclosed and approved exception**: the installer Fix Script `x_casemgmt Post-Import Remediation`, authored global because `GlideTableDescriptor` and `GlideSecurityManager` are refused in scoped execution". Code review CR1 finding F04 removed that payload: no override authorised a Global-scope write, AAP §0.7.2 requires zero global-scope writes, and the shipping package carries **0** Fix Script payloads and **0** global scope stamps (measured). The scoped-execution refusals remain true of the platform and are why no script could have been the answer — a shortfall the package leaves is a source-side defect to correct and re-gate, never a Global run. Every global-scope write is prohibited per AAP Section 0.3.2 and §0.7.2. Global tables receive **data** inserts only — never schema changes.
 - **Email-disabled.** Even though email is disabled on PDIs, the Update Set MUST NOT include any SMTP / notification rule / email template configuration.
 - **No Store dependencies.** The verification PDI must be a clean PDI with no extra Store apps installed; if the Update Set required a Store app to commit, that is an out-of-scope workaround and is rejected.
 - **No PII.** All synthetic test submissions made during Phase 4 Gate 4 MUST use fabricated synthetic values. Do not enter real names, email addresses, phone numbers, or organization names.
