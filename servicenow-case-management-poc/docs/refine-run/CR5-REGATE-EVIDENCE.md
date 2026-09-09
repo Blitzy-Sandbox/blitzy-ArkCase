@@ -455,6 +455,13 @@ Retained captures (tracked repository path, not scratch — this is finding F13'
 
 No `cr5-regate-03-unexpected-dialog.png` exists, because no dialog appeared — that branch did not occur.
 
+Two further captures this run produced are **deliberately not committed** and nothing here cites them:
+`blitzy/screenshots/login_signed_out_baseline.png` and `blitzy/screenshots/authenticated_admin_landing.png`,
+taken by the dashboard/portal pass as its own login baseline. They duplicate what
+`cr5-regate-01-authenticated.png` and `cr5-regate-login.png` already retain, so they are left in the
+working tree untracked rather than adding two redundant binaries to the repository. Every capture this file
+cites is committed.
+
 ---
 
 ## E. Step 6 — post-commit census, by direct query
