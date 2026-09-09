@@ -800,9 +800,23 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
     post-commit action of any kind**. That ordering is what makes it a measurement of the deliverable. Run
     afterwards, [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5h created
     exactly **3** (`inserted=3 already_present=0 unresolved=0`; verified as 3 rows with `inherited=false`,
-    and **0** stock-role grants to any demo persona or scoped role). This gate therefore stays **NOT MET on
+    and **0** stock-role grants *authored by that step or by the package* — see the boundary immediately
+    below, which is why this reads "authored" and not simply "0"). This gate therefore stays **NOT MET on
     the assignment half**: a manual write after the commit is a deployer workaround for a BLOCKED platform
     capability gap, not gate satisfaction.
+  - **The boundary on that "0 stock-role grants" figure — stated 2026-09-09 (code review CR5, finding
+    F06/F10), because the bare number overstates it.** It is true of *authorship*: neither the package nor
+    §5h grants a stock role, and all three `roles/*.xml` carry an empty `grantable`/contains list. It is
+    **not** true of the deployed instance. The same measurement that returned the three scoped grants also
+    returned, for each of the three personas, one `snc_required_script_writer_permission` row with
+    `inherited=true` and `sys_created_by=system` — the platform's own companion, auto-provisioned because
+    each scoped role can author script fields, not a row anything here wrote. So each deployed persona's
+    effective role set is **its one scoped role plus that companion**, not its one scoped role alone, and
+    the standing "no stock-role grants to the scoped roles or demo personas" constraint does **not** hold as
+    a statement about the instance. Measured at check **F2** of
+    [`refine-run/CR5-REGATE-EVIDENCE.md`](./refine-run/CR5-REGATE-EVIDENCE.md); adjudicated at length in
+    [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) (CR2 finding
+    F10, CR4 finding F04).
   - **The procedure above then passes end to end once the grants exist.** With §5h run before the suite, the
     impersonation tests `ATF 02`-`ATF 07` — the full 3-role × 4-operation matrix, both halves of "Assigned
     only", the field-level ACLs on `assigned_group` / `assigned_agent`, and the mirror on `case_task` and

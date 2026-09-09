@@ -276,11 +276,24 @@ does not hold, and the instance state it measured was torn down, so it cannot be
    a foreign instance is still unproven.
 2. **The package is short 12 scoped records this repository holds** — five business rules, three client
    scripts, three `query_range` ACLs and one UI policy with its ten actions. Item 11 above names them and
-   what their absence costs; all twelve are installable natively from this repository.
-3. **Four open items travel with the release** — literal-`sys_id` foreign references (18 of them dangling on
-   the target, flows working regardless), two `core_company` and three `ua_table_licensing_config` writes
-   into global tables, no role grants in the package, and rate-limit rules that count without enforcing.
-   Item 12 above states each with the deployer action it needs.
+   what their absence costs. All twelve are installable natively from this repository, but only behind
+   **GATE 5i** of [`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md):
+   each file carries the application's scope `sys_id`, and an import whose scope reference does not resolve
+   creates the record **in Global scope**, which AAP §0.7.2 prohibits. The gate proves the scope resolves
+   before anything is uploaded and aborts otherwise. The supported alternative is to restore the records at
+   source and re-export; leaving the gap open and disclosed is itself a safe state.
+3. **Six open items travel with the release** — (a) literal-`sys_id` foreign references (18 occurrences, 9
+   distinct ids, all dangling on the target, flows working regardless), (b) two `core_company` and three
+   `ua_table_licensing_config` writes into global tables, (c) no role grants in the package, so AAP §0.7.3
+   Gate 3 and §0.7.4's "3 users (one per role)" are **UNSATISFIED by the deliverable** and the ACL gate is
+   NOT MET on its assignment half, (d) rate-limit rules that count without enforcing — 300 consecutive
+   anonymous lookups all returned HTTP 200 with the counter past its ceiling and no 429, (e) each deployed
+   persona's effective role set is its one scoped role **plus** a platform-provisioned
+   `snc_required_script_writer_permission` companion, so the "no stock-role grants" constraint holds of what
+   this work authors and **not** of the instance, and (f) the sequence that built the 24 choice values was
+   run in a Global session and is classified **permanently noncompliant** with AAP §0.7.2 — it cannot be
+   made compliant retroactively, and it is reported rather than repaired. Item 12 above and
+   [`docs/validation-gates.md`](docs/validation-gates.md) state each with the deployer action it needs.
 4. **The packaging route still needs a human decision.** These bytes were produced by a native export with a
    post-export sanitization stage applied (item 8); adopting that as the release artifact is a call only a
    human can make (item 10, Blocker 3).
@@ -1469,7 +1482,10 @@ class still created natively is the 3 `sys_user_has_role` grants, on each role f
 list. [`docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](docs/refine-run/CONSOLIDATION-FINAL-REPORT.md).
 
 **RE-MEASURED 2026-09-09 ON THE SHIPPING BYTES (code review CR5, findings F01 / F03 / F04 / F11) — all seven
-gates measured on `5a3c629f…` itself, with two qualifications and no NOT MET.** The paragraph above measured
+gates measured on `5a3c629f…` itself: six MET, and ACLs NOT MET on its assignment half.** (This line
+previously read "two qualifications and no NOT MET", which contradicted
+[`docs/validation-gates.md`](docs/validation-gates.md)'s own row for the same measurement — corrected
+2026-09-09, code review CR5, finding F06/F10.) The paragraph above measured
 the superseded `b2217224…` revision; both paragraphs are retained. On 2026-09-09 the canonical bytes were
 committed once from a verified-empty namespace (see Install & Deployment above):
 - **Data model** — 3 tables at HTTP 200, `sys_dictionary` and `sys_documentation` 21 / 14 / 13 each, 3
@@ -1477,11 +1493,18 @@ committed once from a verified-empty namespace (see Install & Deployment above):
 - **Workflow** — 7 flows active and published; the 13-assertion transition harness `TOTAL=13 PASSED=13
   FAILED=0`; ATF 08-17 (transitions, prohibited transitions and the form-level blocking behaviour) all
   Success. PASS.
-- **ACLs** — 26 scoped ACLs with 27 role links (manager 14 / agent 10 / viewer 3); ATF 02-07 Success. PASS,
-  with the disclosed shortfall that the three field-level `query_range` ACLs this repository holds are **not**
-  in the package (item 11 of CURRENT ARTIFACT STATE) and that the package delivers **no role grants** — §5h
-  of [`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) is a mandatory
-  post-commit step, not a troubleshooting entry.
+- **ACLs** — ❌ **NOT MET on the assignment half; the enforcement half is proven.** *Proven from the package
+  alone:* 26 scoped ACLs with 27 role links (manager 14 / agent 10 / viewer 3), ATF 02-07 Success. *Not met:*
+  `sys_user_has_role` read **0** immediately after the commit and before any post-commit action, so the
+  package transports **no role grants**; the three grants exist on that install only because §5h of
+  [`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) was then run, which
+  makes it a mandatory post-commit step rather than a troubleshooting entry. A gate needing a manual write
+  after the commit is not met **by the deliverable**, so AAP §0.7.3 Gate 3 and §0.7.4's "3 users (one per
+  role)" remain UNSATISFIED. Also disclosed: the three field-level `query_range` ACLs this repository holds
+  are **not** in the package (item 11 of CURRENT ARTIFACT STATE). Corrected 2026-09-09 (code review CR5,
+  finding F06/F10) — this row previously read PASS while
+  [`docs/validation-gates.md`](docs/validation-gates.md) recorded NOT MET for the same measurement; that
+  document's row is the accurate one and this now agrees with it.
 - **Portal — submission** and **Portal — lookup** — both verified in a proven signed-out browser context and
   at the REST contract: the submission page renders its five inputs; `CASE9000002` returns exactly status,
   subject and opened_date; an unknown number renders the verbatim `No case found with that number.` PASS.

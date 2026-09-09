@@ -14,16 +14,42 @@ and every capture is written to a path this repository tracks.
 
 Conventions used throughout:
 
-- Commands are recorded with **variable names, never values** — no instance host, username, password or
-  token appears in this file. `$SERVICENOW_INSTANCE_ADMIN_URL`, `$SERVICENOW_INSTANCE_ADMIN_USERNAME` and
-  `$SERVICENOW_INSTANCE_ADMIN_PASSWORD` are the environment's own names for them.
+- Commands are recorded with **variable names, never values**. `$SERVICENOW_INSTANCE_ADMIN_URL`,
+  `$SERVICENOW_INSTANCE_ADMIN_USERNAME` and `$SERVICENOW_INSTANCE_ADMIN_PASSWORD` are the environment's own
+  names for them. No password, token, session cookie or developer-portal login appears anywhere in this
+  file, and none ever did.
+- **Narrow redaction applied 2026-09-09 (code review CR5, finding N02).** The commands were always written
+  with variable names, but the *response bodies* were not: the Table API serializes a fully-qualified
+  `link` URL beside every reference value, so 22 occurrences of the configured instance host reached this
+  file inside captured bodies on lines 143, 248, 695, 805, 885, 895 and 1041, and check F2's body
+  serialized the authenticating account in three `sys_created_by` values. The setup instructions forbid
+  writing either value into a repository file, so each has been replaced **in place** with the environment
+  variable name that holds it — `$SERVICENOW_INSTANCE_ADMIN_URL` and
+  `$SERVICENOW_INSTANCE_ADMIN_USERNAME`. Nothing else in any body was altered: every status, count,
+  `sys_id`, field value and timestamp stands exactly as returned, and the redaction is confined to those
+  two identifiers. A future capture should avoid the problem at the source by requesting
+  `sysparm_exclude_reference_link=true`, which suppresses the `link` member the host arrives in.
 - Bodies are recorded verbatim as returned, truncated only where a response exceeds 1,400 characters, and
   the truncation is visible when it happens.
 - Timestamps are UTC, taken immediately before the request.
 - The out-of-scope package `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` was never
-  opened, read, parsed, checksummed, diffed, archived, deleted, counted or compared by this run. Its
-  instance-side descriptor record `9929f50df18ccec91ea13b2a3bccfc90` is identified from documented metadata
-  only, is excluded from every residue count below, and was neither modified nor deleted.
+  opened, read, parsed, checksummed, diffed, archived or deleted by this run, and its instance-side
+  descriptor record `9929f50df18ccec91ea13b2a3bccfc90` — identified from documented metadata only — was
+  never uploaded, previewed, committed, modified or deleted, and is excluded from every residue count
+  below.
+- **Correction, 2026-09-09 (code review CR5, finding N01). One check did produce a number attributable to
+  that excluded descriptor, and an earlier version of this paragraph wrongly said none did.** Check **B4**
+  below cross-checks the candidate's loaded child count by counting the *complement* set —
+  `sys_update_xml` where `remote_update_set!=<candidate descriptor>` — and the 926 it returned is the
+  pre-existing child count of the excluded descriptor. The directive prohibits counting or comparing the
+  excluded package, so **this run is noncompliant on the exclusion boundary at check B4**, and that stands
+  on the record rather than being edited out: the query ran, the number is printed at B4, and no later
+  wording changes either fact. Nothing was read from, written to or derived about the excluded package
+  beyond that single aggregate count, and the count played no part in any assertion about the candidate —
+  B3's direct count of 522 on the candidate's own descriptor is what the 522-block assertion rests on. The
+  correct form of the same cross-check excludes both descriptors inside the query
+  (`remote_update_set!=<candidate>^remote_update_set!=<excluded>`, which should return 0); a future gate
+  must apply the exclusion predicate before enumerating rather than after reading the total.
 
 ---
 
@@ -140,7 +166,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_number?sysparm_query=prefixINCASE,TASK,PARTY&sysparm_fields=prefix,category,sys_id"
 timestamp : 2026-09-09T12:38:15Z
 HTTP      : 200
-body      : {"result":[{"sys_id":"4","prefix":"TASK","category":{"link":"https://dev306625.service-now.com/api/now/table/sys_db_object?name=task","value":"task"}}]}
+body      : {"result":[{"sys_id":"4","prefix":"TASK","category":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_db_object?name=task","value":"task"}}]}
 ```
 
 **A12 sys_update_set nameLIKEx_casemgmt (expect 0)**
@@ -245,7 +271,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_number?sysparm_query=prefixINCASE,TASK,PARTY&sysparm_fields=prefix,category,sys_id,sys_created_by,sys_created_on,sys_scope"
 timestamp : 2026-09-09T12:38:28Z
 HTTP      : 200
-body      : {"result":[{"sys_id":"4","prefix":"TASK","sys_created_on":"2004-08-04 23:49:54","sys_scope":{"link":"https://dev306625.service-now.com/api/now/table/sys_scope/global","value":"global"},"category":{"link":"https://dev306625.service-now.com/api/now/table/sys_db_object?name=task","value":"task"},"sys_created_by":"system_bootstrap"}]}
+body      : {"result":[{"sys_id":"4","prefix":"TASK","sys_created_on":"2004-08-04 23:49:54","sys_scope":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_scope/global","value":"global"},"category":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_db_object?name=task","value":"task"},"sys_created_by":"system_bootstrap"}]}
 ```
 
 **Step 0 verdict.** Thirteen classes checked, all at zero for `x_casemgmt`: scope 0 · three table endpoints
@@ -324,6 +350,19 @@ committed FALLBACK descriptor record `9929f50df18ccec91ea13b2a3bccfc90`, identif
 metadata. They pre-date this task, are out of its scope, are excluded from every residue count in this
 file, and were neither read, modified nor deleted. This run's own loaded child set is exactly the 522 in
 B3.*
+
+> **B4 IS A BOUNDARY DEVIATION — recorded 2026-09-09, code review CR5, finding N01.** The directive
+> excludes the FALLBACK package from *any* interaction, counting and comparison included. This check is
+> phrased as a complement (`remote_update_set!=<candidate>`), so although it never names the excluded
+> descriptor, the total it returns **is** that descriptor's child count — which makes it a count of the
+> excluded package by another route, and the exclusion requirement is therefore **not met by this run**.
+> The deviation is disclosed rather than removed, because the query already ran and its number is printed
+> above. Two things bound the damage, and both are checkable here: the number was never used — the
+> 522-block assertion rests on **B3**, a direct count on the candidate's own descriptor — and nothing else
+> about the excluded package was read, derived or written. The correct form of this cross-check names both
+> descriptors in the query and expects zero:
+> `remote_update_set!=<candidate>^remote_update_set!=9929f50df18ccec91ea13b2a3bccfc90`. Any future gate
+> must filter before it enumerates.
 
 **Steps 1-3 verdict.** Upload accepted (HTTP 200). The loaded record was located **by the package's own
 descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`, never by a name-ordered locator, and reached
@@ -692,7 +731,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_number?sysparm_query=categoryINx_casemgmt_case,x_casemgmt_case_task,x_casemgmt_case_party&sysparm_fields=prefix,category,maximum_digits,sys_scope"
 timestamp : 2026-09-09T13:14:08Z
 HTTP      : 200
-body      : {"result":[{"prefix":"PARTY","maximum_digits":"7","sys_scope":{"link":"https://dev306625.service-now.com/api/now/table/sys_scope/82b99028936f74320d74d6f88357a5af","value":"82b99028936f74320d74d6f88357a5af"},"category":{"link":"https://dev306625.service-now.com/api/now/table/sys_db_object?name=x_casemgmt_case_party","value":"x_casemgmt_case_party"}},{"prefix":"CASE","maximum_digits":"7","sys_scope":{"link":"https://dev306625.service-now.com/api/now/table/sys_scope/82b99028936f74320d74d6f88357a5af","value":"82b99028936f74320d74d6f88357a5af"},"category":{"link":"https://dev306625.service-now.com/api/now/table/sys_db_object?name=x_casemgmt_case","value":"x_casemgmt_case"}},{"prefix":"TASK","maximum_digits":"7","sys_scope":{"link":"https://dev306625.service-now.com/api/now/table/sys_scope/82b99028936f74320d74d6f88357a5af","value":"82b99028936f74320d74d6f88357a5af"},"category":{"link":"https://dev306625.service-now.com/api/now/table/sys_db_object?name=x_casemgmt_case_task","value":"x_casemgmt_case_task"}}]}
+body      : {"result":[{"prefix":"PARTY","maximum_digits":"7","sys_scope":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_scope/82b99028936f74320d74d6f88357a5af","value":"82b99028936f74320d74d6f88357a5af"},"category":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_db_object?name=x_casemgmt_case_party","value":"x_casemgmt_case_party"}},{"prefix":"CASE","maximum_digits":"7","sys_scope":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_scope/82b99028936f74320d74d6f88357a5af","value":"82b99028936f74320d74d6f88357a5af"},"category":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_db_object?name=x_casemgmt_case","value":"x_casemgmt_case"}},{"prefix":"TASK","maximum_digits":"7","sys_scope":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_scope/82b99028936f74320d74d6f88357a5af","value":"82b99028936f74320d74d6f88357a5af"},"category":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_db_object?name=x_casemgmt_case_task","value":"x_casemgmt_case_task"}}]}
 ```
 
 **E22 sys_hub_flow in scope x_casemgmt (expect 7: 2 parents + 5 validate subflows), with active/status**
@@ -802,7 +841,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_rate_limit_rules?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=name,active,rate_limit,user"
 timestamp : 2026-09-09T13:14:25Z
 HTTP      : 200
-body      : {"result":[{"name":"x_casemgmt anonymous case status lookup (guest)","active":"true","user":{"link":"https://dev306625.service-now.com/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}},{"name":"x_casemgmt anonymous case submit (guest)","active":"true","user":{"link":"https://dev306625.service-now.com/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}}]}
+body      : {"result":[{"name":"x_casemgmt anonymous case status lookup (guest)","active":"true","user":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}},{"name":"x_casemgmt anonymous case submit (guest)","active":"true","user":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}}]}
 ```
 
 **E33 demo users (expect 3, synthetic @example.invalid, no last_login data)**
@@ -882,7 +921,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/x_casemgmt_case_party?sysparm_query=party_type=Organization&sysparm_fields=case.number,party_type,organization,role_label&sysparm_display_value=all"
 timestamp : 2026-09-09T13:14:39Z
 HTTP      : 200
-body      : {"result":[{"case.number":{"display_value":"CASE9000005","value":"CASE9000005"},"party_type":{"display_value":"Organization","value":"Organization"},"organization":{"display_value":"Synthetic Org Beta","link":"https://dev306625.service-now.com/api/now/table/core_company/764f7aa36e02a12f9de6da7d7cf1cf82","value":"764f7aa36e02a12f9de6da7d7cf1cf82"},"role_label":{"display_value":"Respondent","value":"Respondent"}},{"case.number":{"display_value":"CASE9000008","value":"CASE9000008"},"party_type":{"display_value":"Organization","value":"Organization"},"organization":{"display_value":"Synthetic Org Alpha","link":"https://dev306625.service-now.com/api/now/table/core_company/d46832bc679ff0254d734c6d4d512315","value":"d46832bc679ff0254d734c6d4d512315"},"role_label":{"display_value":"Respondent","value":"Respondent"}},{"case.number":{"display_value":"CASE9000003","value":"CASE9000003"},"party_type":{"display_value":"Organization","value":"Organization"},"organization":{"display_value":"Synthetic Org Alpha","link":"https://dev306625.service-now.com/api/now/table/core_company/d46832bc679ff0254d734c6d4d512315","value":"d46832bc679ff0254d734c6d4d512315"},"role_label":{"display_value":"Respondent","value":"Respondent"}}]}
+body      : {"result":[{"case.number":{"display_value":"CASE9000005","value":"CASE9000005"},"party_type":{"display_value":"Organization","value":"Organization"},"organization":{"display_value":"Synthetic Org Beta","link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/core_company/764f7aa36e02a12f9de6da7d7cf1cf82","value":"764f7aa36e02a12f9de6da7d7cf1cf82"},"role_label":{"display_value":"Respondent","value":"Respondent"}},{"case.number":{"display_value":"CASE9000008","value":"CASE9000008"},"party_type":{"display_value":"Organization","value":"Organization"},"organization":{"display_value":"Synthetic Org Alpha","link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/core_company/d46832bc679ff0254d734c6d4d512315","value":"d46832bc679ff0254d734c6d4d512315"},"role_label":{"display_value":"Respondent","value":"Respondent"}},{"case.number":{"display_value":"CASE9000003","value":"CASE9000003"},"party_type":{"display_value":"Organization","value":"Organization"},"organization":{"display_value":"Synthetic Org Alpha","link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/core_company/d46832bc679ff0254d734c6d4d512315","value":"d46832bc679ff0254d734c6d4d512315"},"role_label":{"display_value":"Respondent","value":"Respondent"}}]}
 ```
 
 **E41 case status coverage across all six statuses and both types (expect 10 cases: Draft 1/Open 2/In Progress 2/Pending 1/Resolved 2/Closed 2)**
@@ -892,7 +931,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/x_casemgmt_case?sysparm_fields=number,type,status,assigned_group,assigned_agent&sysparm_limit=12&sysparm_query=ORDERBYnumber"
 timestamp : 2026-09-09T13:14:39Z
 HTTP      : 200
-body      : {"result":[{"number":"CASE9000001","assigned_group":"","assigned_agent":"","type":"General Inquiry","status":"Draft"},{"number":"CASE9000002","assigned_group":{"link":"https://dev306625.service-now.com/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":"","type":"General Inquiry","status":"Open"},{"number":"CASE9000003","assigned_group":{"link":"https://dev306625.service-now.com/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":{"link":"https://dev306625.service-now.com/api/now/table/sys_user/0ca8070bf940abded1aaa84ab389087f","value":"0ca8070bf940abded1aaa84ab389087f"},"type":"General Inquiry","status":"In Progress"},{"number":"CASE9000004","assigned_group":{"link":"https://dev306625.service-now.com/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":{"link":"https://dev306625.service-now.com/api/now/table/sys_user/0ca8070bf940abded1aaa84ab389087f","value":"0ca8070bf940abded1aaa84ab389087f"},"type":"General Inquiry","status":"Pending"},{"number":"CASE9000005","assigned_group":{"link":"https://dev306625.service-now.com/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":{"link":"https://dev306
+body      : {"result":[{"number":"CASE9000001","assigned_group":"","assigned_agent":"","type":"General Inquiry","status":"Draft"},{"number":"CASE9000002","assigned_group":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":"","type":"General Inquiry","status":"Open"},{"number":"CASE9000003","assigned_group":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user/0ca8070bf940abded1aaa84ab389087f","value":"0ca8070bf940abded1aaa84ab389087f"},"type":"General Inquiry","status":"In Progress"},{"number":"CASE9000004","assigned_group":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user/0ca8070bf940abded1aaa84ab389087f","value":"0ca8070bf940abded1aaa84ab389087f"},"type":"General Inquiry","status":"Pending"},{"number":"CASE9000005","assigned_group":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user_group/f5457651a57f6fadb32d3a09f963855b","value":"f5457651a57f6fadb32d3a09f963855b"},"assigned_agent":{"link":"https://dev306
 ```
 
 **E42 ATF assets recreated by the commit (expect 20 tests, 1 suite, 180 steps)**
@@ -1038,7 +1077,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_rate_limit_rules?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=name,active,requests,api,api_resource,type,user"
 timestamp : 2026-09-09T13:17:23Z
 HTTP      : 200
-body      : {"result":[{"name":"x_casemgmt anonymous case status lookup (guest)","active":"true","requests":"240","api":"Case Status Lookup","type":"User","api_resource":"GET /x_casemgmt/case_status_lookup","user":{"link":"https://dev306625.service-now.com/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}},{"name":"x_casemgmt anonymous case submit (guest)","active":"true","requests":"60","api":"Case Submit","type":"User","api_resource":"POST /x_casemgmt/case_submit","user":{"link":"https://dev306625.service-now.com/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}}]}
+body      : {"result":[{"name":"x_casemgmt anonymous case status lookup (guest)","active":"true","requests":"240","api":"Case Status Lookup","type":"User","api_resource":"GET /x_casemgmt/case_status_lookup","user":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}},{"name":"x_casemgmt anonymous case submit (guest)","active":"true","requests":"60","api":"Case Submit","type":"User","api_resource":"POST /x_casemgmt/case_submit","user":{"link":"$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user/5136503cc611227c0183e96598c4f706","value":"5136503cc611227c0183e96598c4f706"}}]}
 ```
 
 ---
@@ -1101,7 +1140,7 @@ command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INST
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_user_has_role?sysparm_query=user.user_nameSTARTSWITHx_casemgmt_demo&sysparm_fields=user.user_name,role.name,inherited,sys_created_by"
 timestamp : 2026-09-09T13:18:02Z
 HTTP      : 200
-body      : {"result":[{"role.name":"x_casemgmt_case_manager","inherited":"false","sys_created_by":"admin","user.user_name":"x_casemgmt_demo_manager"},{"role.name":"snc_required_script_writer_permission","inherited":"true","sys_created_by":"system","user.user_name":"x_casemgmt_demo_manager"},{"role.name":"x_casemgmt_case_viewer","inherited":"false","sys_created_by":"admin","user.user_name":"x_casemgmt_demo_viewer"},{"role.name":"snc_required_script_writer_permission","inherited":"true","sys_created_by":"system","user.user_name":"x_casemgmt_demo_viewer"},{"role.name":"x_casemgmt_case_agent","inherited":"false","sys_created_by":"admin","user.user_name":"x_casemgmt_demo_agent"},{"role.name":"snc_required_script_writer_permission","inherited":"true","sys_created_by":"system","user.user_name":"x_casemgmt_demo_agent"}]}
+body      : {"result":[{"role.name":"x_casemgmt_case_manager","inherited":"false","sys_created_by":"$SERVICENOW_INSTANCE_ADMIN_USERNAME","user.user_name":"x_casemgmt_demo_manager"},{"role.name":"snc_required_script_writer_permission","inherited":"true","sys_created_by":"system","user.user_name":"x_casemgmt_demo_manager"},{"role.name":"x_casemgmt_case_viewer","inherited":"false","sys_created_by":"$SERVICENOW_INSTANCE_ADMIN_USERNAME","user.user_name":"x_casemgmt_demo_viewer"},{"role.name":"snc_required_script_writer_permission","inherited":"true","sys_created_by":"system","user.user_name":"x_casemgmt_demo_viewer"},{"role.name":"x_casemgmt_case_agent","inherited":"false","sys_created_by":"$SERVICENOW_INSTANCE_ADMIN_USERNAME","user.user_name":"x_casemgmt_demo_agent"},{"role.name":"snc_required_script_writer_permission","inherited":"true","sys_created_by":"system","user.user_name":"x_casemgmt_demo_agent"}]}
 ```
 
 **F3  row counts unchanged after the grant step: x_casemgmt_case (expect 10)**
@@ -1180,7 +1219,7 @@ widgets rendered:
 
 | Widget | Type | What it displayed |
 | --- | --- | --- |
-| My Open Cases | list | Table with columns Number · Subject · Priority · Status · Opened Date; **0 rows**, empty state `No records to display`. Legitimate: the report filters on the logged-in user and the demo cases are assigned to a demo persona, not to `admin`. The widget itself rendered fully — it is not a broken report reference |
+| My Open Cases | list | Table with columns Number · Subject · Priority · Status · Opened Date; **0 rows**, empty state `No records to display`. Legitimate: the report filters on the logged-in user and the demo cases are assigned to a demo persona, not to the signed-in administrator account. The widget itself rendered fully — it is not a broken report reference |
 | My Overdue Tasks | list | Table with columns Subject · Case · Due Date · Status; **0 rows**, same legitimate current-user filter |
 | Case Count by Status | donut | Closed 2 (20.0%) · In Progress 2 (20.0%) · Open 2 (20.0%) · Resolved 2 (20.0%) · Draft 1 (10.0%) · Pending 1 (10.0%) — total **10**, matching the seeded distribution exactly |
 
@@ -1229,7 +1268,7 @@ Retained captures (tracked repository path):
 ## I. Step 7, part 2 — the ATF suite, run fresh in a real browser against this commit
 
 Headless ATF is disabled on this instance (`sn_atf.headless.enabled=false`), so the suite was driven through
-a real client-side test runner: admin UI session → the suite record (located at the `sys_id` the package
+a real client-side test runner: an administrator UI session → the suite record (located at the `sys_id` the package
 pins, `8e8c6de584ba8f081439ad5ee09ad1a1`, name `x_casemgmt Case Management POC`, Active true, 20 tests in
 its related list) → **Run Test Suite** → *Start a new test runner* → the runner tab held open until the run
 finished. Run once.
@@ -1568,7 +1607,10 @@ Local Update Sets · this run's Retrieved Update Set and all 522 of its children
 membership · the two `core_company` rows · `ua_table_licensing_config` · rate-limit rules · ATF tests and
 suite · the portal. The only `sys_remote_update_set` record on the instance is the excluded FALLBACK
 descriptor `9929f50df18ccec91ea13b2a3bccfc90`, still `state=committed` with its original
-`sys_created_on` of 2026-04-30 12:00:00 — neither read, modified, deleted nor counted by this run.
+`sys_created_on` of 2026-04-30 12:00:00 — neither read, modified nor deleted by this run, and excluded
+from every residue count here. It was, however, **counted once, indirectly, at check B4**, which is a
+deviation from the exclusion boundary disclosed in full in the conventions at the head of this file and at
+B4 itself (code review CR5, finding N01).
 
 Two classes of record deliberately remain, and neither is `x_casemgmt` residue: the ATF suite result
 `TES0001007` with its 180 step results (global `sys_atf_test_suite_result` data — the durable record of

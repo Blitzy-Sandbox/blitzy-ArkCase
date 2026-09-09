@@ -1161,7 +1161,19 @@ the **24** choice values across 7 composites, the **3** `sys_number` counters an
 criterion 4's substance was satisfied without a remediation pass at all. The one class the commit does not
 carry is the **3** `sys_user_has_role` grants: `sys_user_has_role` measured **0** immediately after the
 commit and before any post-commit action, and the documented §5h step then created exactly 3
-(`inserted=3 already_present=0 unresolved=0`, all `inherited=false`, with **0** stock-role grants).
+(`inserted=3 already_present=0 unresolved=0`, all `inherited=false`, and **0** stock-role grants *authored
+by that step or by the package*).
+
+> **That last figure needs its boundary, or it overstates — stated 2026-09-09 (code review CR5, finding
+> F06/F10).** "0 stock-role grants" is true of authorship only. The same query that returned the three
+> scoped grants also returned one `snc_required_script_writer_permission` row per persona, with
+> `inherited=true` and `sys_created_by=system`: the platform's own auto-provisioned companion for roles that
+> can author script fields, not a row this work wrote. Each deployed persona therefore holds **its one
+> scoped role plus that companion**, so the standing "no stock-role grants to the scoped roles or demo
+> personas" constraint does **not** hold as a statement about the deployed instance — only about what this
+> package and this procedure author. Check **F2** of
+> [`../docs/refine-run/CR5-REGATE-EVIDENCE.md`](../docs/refine-run/CR5-REGATE-EVIDENCE.md) is the
+> measurement.
 
 **Phase 5 — the six functional gates, re-verified on the committed install.** 3 tables at HTTP 200 with
 **10 / 10 / 8** rows and `sys_dictionary` / `sys_documentation` at **21 / 14 / 13** each · the transition

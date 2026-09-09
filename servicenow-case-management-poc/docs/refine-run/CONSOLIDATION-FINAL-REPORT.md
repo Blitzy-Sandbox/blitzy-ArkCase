@@ -1621,7 +1621,11 @@ deleted, counted or compared. Repository-level proof: `git status --porcelain` u
 is empty, so no file in that directory changed. *(Scope of this claim narrowed 2026-09-09, CR3 F08: it
 read "zero interaction of any kind". At **file** level that is accurate and evidenced. Two interactions
 with the excluded package's **instance record** did occur — an id-only existence probe and a bytes-equality
-claim — and both are disclosed and withdrawn as evidence in §8 of Step 1-2 and in §14 of Step 8.)*
+claim — and both are disclosed and withdrawn as evidence in §8 of Step 1-2 and in §14 of Step 8. A **third**
+occurred in the later 2026-09-09 re-gate, which is a different run than this paragraph describes and does not
+change what it says: cross-check B4 counted the complement of the candidate's children and so counted the
+excluded descriptor's 926 indirectly — recorded as a boundary deviation in the CR5 block at the head of §12
+and at B4 in `CR5-REGATE-EVIDENCE.md`, CR5 finding N01.)*
 
 All seven baseline gates still pass, so the Step 2 baseline remains exportable: the three table
 endpoints return HTTP 200 with JSON bodies, each of the three scoped roles returns exactly one
@@ -3066,8 +3070,22 @@ be undone before it is installed: the instance is now the clean target such an i
 >
 > Afterwards the instance was returned to a verified zero state, behind the directive's line-34 guard
 > applied fresh and evaluated in code before any delete: **instance zero-state confirmed at
-> 2026-09-09T13:56:56Z, no residue remaining.** The excluded FALLBACK descriptor was never opened, read,
-> parsed, checksummed, diffed, archived, deleted, counted or compared.
+> 2026-09-09T13:56:56Z, no residue remaining.** The excluded FALLBACK package was never opened, read,
+> parsed, checksummed, diffed, archived or deleted, and its descriptor record was never uploaded,
+> previewed, committed, modified or deleted.
+>
+> **Correction to that sentence — 2026-09-09, code review CR5, finding N01.** It previously also claimed
+> the excluded descriptor was never "counted or compared", and that was **false**. Cross-check **B4** of
+> the re-gate counted the complement set `sys_update_xml` where `remote_update_set!=<candidate>`, and the
+> 926 it returned is the excluded descriptor's own pre-existing child count — a count of the excluded
+> package by another route. The directive prohibits counting or comparing it, so **this run does not meet
+> the exclusion requirement**, and that is recorded here as a deviation rather than corrected away: the
+> query ran and its number is printed in the evidence file. What bounds it is checkable: the number was
+> never used for anything — the 522-block assertion rests on check B3, a direct count on the candidate's
+> own descriptor — and nothing else about the excluded package was read, derived or written. Full
+> disclosure sits at `CR5-REGATE-EVIDENCE.md`, in the conventions at the head of the file and beside B4
+> itself, together with the correct form of the cross-check (name both descriptors in the query, expect
+> zero) that a future gate must use instead.
 >
 > **What this re-gate does NOT settle, and what therefore travels to the human as the release-relevant
 > remainder (finding F06):**

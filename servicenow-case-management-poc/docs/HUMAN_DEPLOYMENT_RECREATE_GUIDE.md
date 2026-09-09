@@ -1535,9 +1535,58 @@ is recoverable without re-exporting anything.
 #### Installing them natively — OPTIONAL, post-commit
 
 This is the platform's own XML record import: the same upload processor §2 and §4.2 already use for
-`sys_remote_update_set`, pointed at each record's target table. It writes only into the `x_casemgmt` scope and
-runs no script. Do it **after** the commit and after the post-commit sequence (§5h, then §5g), so the tables,
-roles and choices the records reference already exist.
+`sys_remote_update_set`, pointed at each record's target table. It runs no script. Do it **after** the commit
+and after the post-commit sequence (§5h, then §5g), so the tables, roles and choices the records reference
+already exist.
+
+> **Prefer source-side restoration.** The supported way to close the 12-artifact gap is to restore these
+> records in the source application and produce a native export, so they arrive inside the Update Set like
+> every other artifact. This route exists only because that was not available at this checkpoint, and it is
+> **optional** — skipping it leaves the gap open and disclosed, which is a safe state. Nothing below is a
+> substitute for a complete package.
+
+> **GATE 5i — run this first, and do not upload anything if it fails.** Added 2026-09-09 (code review CR5,
+> finding N03). Each of the 12 files serializes a `<sys_scope>` value of
+> `82b99028936f74320d74d6f88357a5af`. The importer resolves that reference **against your instance**: if it
+> resolves, the row lands in `x_casemgmt`; **if it does not resolve, the row is created in Global scope** —
+> a business rule, a client script, an ACL or a UI policy, executable and security metadata, written outside
+> the application's namespace. AAP §0.7.2 permits zero global-scope writes, so that outcome is prohibited,
+> and it must be prevented **before** the upload rather than repaired after it. This gate is why the
+> paragraph above no longer claims the import "writes only into `x_casemgmt`" — that claim was
+> unconditional and the behaviour is not.
+>
+> ```bash
+> # Exactly one x_casemgmt scope record, and its sys_id is the one the files carry.
+> SCOPE_EXPECTED=82b99028936f74320d74d6f88357a5af
+> curl -s -K "$SNRUN/sn_curl.cfg" \
+>   "$SN/api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id,scope,version" \
+>   -o "$SNRUN/scope.json"
+> python3 - "$SNRUN/scope.json" "$SCOPE_EXPECTED" <<'EOF'
+> import json,sys
+> r=json.load(open(sys.argv[1])).get('result',[])
+> if len(r)!=1:                 sys.exit("ABORT: expected exactly 1 x_casemgmt scope record, found %d" % len(r))
+> if r[0]['sys_id']!=sys.argv[2]: sys.exit("ABORT: scope sys_id is %s, the files carry %s" % (r[0]['sys_id'], sys.argv[2]))
+> print("GATE 5i PASS - scope resolves to", r[0]['sys_id'], "version", r[0].get('version'))
+> EOF
+> ```
+>
+> **On any of the three failure shapes — no record, more than one record, or a different `sys_id` — stop.**
+> Do not import and then move rows: by then the records already exist in Global.
+> - *No record*: the Update Set has not been committed on this instance yet. Commit it (§4), re-run this
+>   gate, and only then import.
+> - *A different `sys_id`*: the application was created on this instance by some route other than committing
+>   this package, so the files' scope reference cannot resolve. Either close the gap the supported way
+>   (restore at source and re-export), or, if you accept maintaining a local variant, first copy the 12
+>   files and rewrite **only** the `<sys_scope>` value in the copies to your instance's own scope `sys_id`,
+>   verify each copy still parses, and import the copies. Never edit the shipped repository files, and never
+>   import a file whose scope reference you have not resolved.
+> - *More than one record*: ambiguous target. Resolve the duplication on the instance first.
+>
+> Committing this package on a clean instance produces exactly the passing shape: the re-gate of 2026-09-09
+> measured one `sys_scope` row, `sys_id 82b99028936f74320d74d6f88357a5af`, version 1.0.0, immediately after
+> the commit on an instance that was empty beforehand — recorded at
+> [`refine-run/CR5-REGATE-EVIDENCE.md`](./refine-run/CR5-REGATE-EVIDENCE.md) check E2. The gate exists for
+> the cases that are not that one.
 
 **In a browser:** open the target list (`sys_script_list.do`, `sys_script_client_list.do`,
 `sys_security_acl_list.do`, `sys_ui_policy_list.do`), right-click the list header → **Import XML**, choose the
@@ -1596,9 +1645,16 @@ import_record_xml sys_ui_policy "$REPO/ui_policy/x_casemgmt_case_closed_readonly
 **Three normalisations the import does not do for you.** Check each one on the record form before you treat any
 of these rows as in force:
 
-1. **`Application` on every imported row must read *Case Management*.** All 12 files carry the source PDI's
-   scope `sys_id` in `<sys_scope>`, which does not exist on your instance, so a row whose scope did not resolve
-   is stranded in Global — and will not appear in the scoped counts below. Re-set the field on the form if so.
+1. **`Application` on every imported row must read *Case Management*** — this is a **verification** that
+   GATE 5i held, not a repair step. All 12 files carry scope `sys_id`
+   `82b99028936f74320d74d6f88357a5af` in `<sys_scope>`; committing this package creates exactly that scope
+   record, so with the gate passed the reference resolves and every row lands in `x_casemgmt`, where the
+   scoped counts below will find it. If any row nevertheless reads *Global*, **treat it as a prohibited
+   global-scope write, not a formatting nit**: delete that row, do not re-point it, re-run GATE 5i to find
+   what changed, and import again only once it passes. (An earlier version of this item described the source
+   scope as absent on the recipient and told you to re-set the field afterwards. Both were wrong — the scope
+   *is* present after the commit, and moving a row that has already been created in Global does not undo the
+   write. Corrected 2026-09-09, code review CR5, finding N03.)
 2. **`Operation` on the three ACLs must read `query_range`.** Those files carry the operation's human-readable
    **name**, not its `sys_id`, deliberately: AAP §0.7.2 forbids a hard-coded `sys_id` in a reference field. An
    unresolved row renders a blank *Operation* and simply does not participate — inert rather than dangerous.
