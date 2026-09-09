@@ -10,8 +10,46 @@ longer the ones §1 and §8 below measure**:
 | Property | Pre-amendment (what §1/§8 measure) | Shipping now |
 | --- | --- | --- |
 | Payload blocks | 522 | **522** (four removed, four added) |
-| Bytes | 3,114,377 | **2,994,341** |
-| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
+| Bytes | 3,114,377 | **2,985,822** |
+| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`** |
+
+> **RE-POINTED 2026-09-09 (code review CR4) — the canonical package's identity changed again today, and
+> the "Shipping now" column above is the corrected one. Its provenance is no longer "the Step 5c gated
+> export", and that is stated here precisely because every identity figure in this report depends on
+> it.** The canonical package now ships the Step 5c gated export with two post-export redactions applied
+> for code review CR4: **(F02)** `last_login`, `last_login_time` and `last_login_device` were emptied on
+> the `x_casemgmt_demo_agent` and `x_casemgmt_demo_viewer` `sys_user` payloads, removing a routable
+> login-source IP and two login timestamps; **(F05)** `sys_created_by` and `sys_updated_by` were set to
+> the neutral platform service identity `system` in place of the administrator login identifier, in
+> **4,000** places across the descriptor, all 522 block wrappers and all 522 payloads in both the CDATA
+> and XML-escaped encodings; and `<payload_hash>` was cleared on the **515** blocks that still carried
+> one, since the stored value is not a recomputable digest and a redacted payload must not assert a
+> fingerprint of bytes that no longer exist (**0** non-empty, **522** empty). Verified unchanged by the
+> redaction: **522** blocks, **25,518** lines, one descriptor, `<inserted>`/`<summary>` = **522**, the
+> multiset of all 32-hex tokens (**2,843** distinct — so no `sys_id` and no reference moved),
+> `xmllint --noout` clean, and all 522 payloads still parse individually. **New identity: sha256
+> `5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`, 2,985,822 bytes. These exact bytes
+> have not been previewed or committed on any instance.**
+>
+> Two consequences for how the rest of this report reads:
+>
+> - **The canonical file is no longer the gated bytes, and it remains UNGATED.** Wherever a sentence
+>   below says the canonical file "was replaced with the Step 5c gated export", read it as *the gated
+>   export plus the two post-export redactions named above*. The gate evidence attaches to
+>   `b2217224…` / 3,114,377 and to nothing else; it did not attach to the interim CR1/CR2-remediated
+>   revision this re-point supersedes, and it does not attach to `5a3c629f…` / 2,985,822 either. §12's
+>   verdict on exit-condition items (2) and (3) is unchanged and still **NOT MET**, for the same reason
+>   and now on a third byte sequence.
+> - **Nothing measured is lost by the re-point, which is why it is a substitution and not an added
+>   provenance row.** The interim revision it replaces — the one the CR1/CR2 remediation produced, which
+>   every identity citation below used to name — was **itself never uploaded, previewed or committed on
+>   any instance**, so no gate result, no preview, no commit, no post-commit census, no ATF suite result
+>   and no harness result was ever taken on it. It carried a file identity and no measurement, and its
+>   exact bytes remain recoverable from this branch's git history at commit `d4bd80b61a`, the last commit
+>   to touch the canonical path before today's redactions. Every identity citation in this document has
+>   therefore been re-pointed to the identity above rather than doubled. Block count (**522**) and line
+>   count (**25,518**) are unchanged across the re-point and are two of the figures the redaction
+>   deliberately preserved.
 
 The seven amendments, each traceable to the finding it answers:
 
@@ -124,6 +162,21 @@ Two consequences a reader must carry into everything below:
   `inserted`/`summary` equal 522; zero `global` scope stamps anywhere; every one of the 122 embedded
   script bodies parses and is ES5-conformant; every reference inside the restored pane bundles
   resolves to a record the same package carries; and the dependency-order assertion passes.
+  *(RE-MEASURED 2026-09-09, code review CR4: the `<payload_hash>` clause is the CR3 measurement and is
+  retained as such; on the bytes that ship today it is **0 non-empty / 522 empty**, because the CR4
+  redactions cleared the hash on the 515 blocks that still carried one — a redacted payload must not
+  assert a fingerprint of bytes that no longer exist. Every other item in this list was re-measured
+  directly on the shipping bytes at CR4 and each still holds: `xmllint --noout` clean; all **522**
+  payloads parse individually; **522** payload blocks with **522** distinct block `<name>`s; **zero**
+  stray `<sys_id>` after any `</payload>`; exactly **one** `<sys_remote_update_set>` descriptor with
+  `inserted`/`summary` = **522**; **zero** `global` scope stamps (`source="global"` = 0 and
+  `<sys_scope…>global<` = 0); and the multiset of all 32-hex tokens unchanged from the pre-redaction
+  revision at **2,843** distinct / **10,121** total, which is what establishes that no `sys_id` and no
+  reference moved. The three items not re-run at CR4 — the 122 embedded ES5 script bodies, the
+  pane-bundle reference resolution and the dependency-order assertion — are unaffected by a
+  redaction confined to actor values, three `last_login*` fields and the `<payload_hash>` elements, none
+  of which appears in a script body, a reference field or a block's ordering key. See also §12 item
+  (1).)*
 
 ## What this task is
 
@@ -414,8 +467,9 @@ treated as the FALLBACK package's own record and excluded."* Two things are wron
 comparison** — asserting that two files hold the same bytes is exactly the kind of statement the
 directive's no-interaction constraint (lines 221-223: "do not include it in any count or comparison")
 puts out of bounds, whether the comparison is made by `cmp` or by inference from a prior document. And
-**it is no longer true**: the canonical path's bytes were replaced twice since (by the gated export, then
-by the CR1/CR2 amendment), so any statement equating them with another file's is false as well as
+**it is no longer true**: the canonical path's bytes have been replaced three times since (by the gated
+export, then by the CR1/CR2 amendment, then by the CR4 redactions re-pointed at the top of this report),
+so any statement equating them with another file's is false as well as
 unauthorised. The identification stands **without** it, on the descriptor `sys_id` the canonical package
 carries and nothing else — which is all it ever needed, because a colliding descriptor `sys_id` is
 sufficient reason to leave a row alone. No property of the excluded file is asserted here, and none is
@@ -837,6 +891,37 @@ the state and repairing it (all probes reverted):
 > snapshot (next paragraph), so nothing from these three runs survives on the instance or in the
 > package.
 
+> **CORRECTION 2026-09-09 (code review CR4, finding F03) — TERMINAL CLASSIFICATION: this run is
+> PERMANENTLY NONCOMPLIANT with AAP §0.7.2's "Zero global-scope writes", and nothing recorded above or
+> below this block retires that breach.** The corrections surrounding this one record real remedies, and
+> CR4 disputes none of them: the tuples were restored to a state proven identical to the pre-run
+> snapshot, and the shipping script now refuses Global execution before it resolves the scope record or
+> attempts any write. Neither is a pass. AAP §0.7.2 states the constraint as an absolute property of the
+> **process** — the scoped-namespace-only bullet's **"Zero global-scope writes"** and the PDI-only
+> bullet's **"no global-scope writes"** — and not as a property of the end state, so it is breached at
+> the instant a Global-context write executes and it cannot be satisfied retroactively by undoing that
+> write. Runs 4, 6 and 7 executed such writes. Therefore, stated so that no later sentence can be
+> weighed against it:
+>
+> - **What the two remedies achieved, precisely.** The reversion prevented **residual contamination** —
+>   no row, tuple or byte originating in those three runs survives on the instance or in the package,
+>   which is what the tuple diff and the 18985 instance-wide total establish. The script's scope gate
+>   prevents **recurrence** — that route is now closed in code. Both are containment of the
+>   consequences. Neither is, or can become, compliance with the constraint itself.
+> - **Reverted writes must not be reclassified as compliance.** Nothing in this report, and no
+>   downstream document, may cite the tuple-identical final state, the restored 18985 total, the
+>   withdrawal of the Global-write procedure, or the script's `out-of-scope execution` refusal as
+>   evidence that this run met the zero-global-write constraint. It did not meet it. This verdict is
+>   unqualified and it is not superseded anywhere below.
+> - **The only compliant path, stated once.** Repeat the affected build-and-verification sequence from a
+>   clean guarded state, executing **exclusively** in the `x_casemgmt` scope — every choice-list
+>   reconciliation, drift repair and surplus probe included — and retain, per run, evidence that no
+>   Global-context write occurred: `gs.getCurrentScopeName()` asserted equal to `x_casemgmt` ahead of
+>   any write, the refusal path exercised and captured for a deliberate out-of-scope attempt, and a
+>   post-run census showing no `sys_choice` write attributable to a Global session. Only a sequence
+>   carrying that evidence satisfies AAP §0.7.2's zero-global-write constraint. This sequence does not,
+>   and no remedy applied after the fact can make it do so.
+
 > **CORRECTION 2026-09-09 (code review CR2, findings F01-F05) — every verdict in the table above was
 > produced by the script as it stood at the time, and its verification contract has since been
 > strengthened. Read those verdicts against the contract that existed then, not against the current
@@ -1232,6 +1317,15 @@ Evidence legend for the grants:
   those three rows at grant time. It is kept as native-authoring evidence **and** reported there as a
   **BLOCKING capability gap**, because provisioning a scoped-application persona through the native
   path makes the platform add a stock role. Both statements are true and neither is withdrawn.
+  *(CLASSIFIED TERMINALLY 2026-09-09, code review CR4, finding F04: read the consequence of G2 as well as
+  its evidential value. Because the required deployed-persona outcome contains this forbidden stock role,
+  the standing **"no stock-role grants to the scoped roles or demo personas"** constraint does **NOT
+  pass**, and neither this section's role-assignment result nor the ACL/role-assignment gate that depends
+  on it may be presented as passing. The two changes that would close it are both forbidden — writing
+  global `sys_user_has_role` rows, which AAP §0.3.2 bars, and adding a global ACL — so compliance
+  requires a platform-supported provisioning path that does not derive the stock role. Until such a path
+  exists this is a **BLOCKING capability gap**, reported and not worked around; see the CR4 F04 addition
+  to the CR2 F10 correction below the table.)*
 - **G3 — the table total moved by 6, not 3.** `sys_user_has_role` went 3890 → 3884 across the delete
   pass (3 grants + 3 companions) and back to **3890** after the re-grant — the companion mechanism
   measured at the table level rather than inferred from three rows. Read carefully, that same figure
@@ -1288,6 +1382,37 @@ native re-grant.
 > — the three companion `sys_id`s, `sys_created_by=system`, `inherited=true`, and the 3890 → 3884 →
 > 3890 movement — are unchanged; only the classification is.
 
+> **CORRECTION 2026-09-09 (code review CR4, finding F04) — the BLOCKING classification above stands, and
+> CR4 adds the verdict it implies about the constraint: the "no stock-role grants" constraint does NOT
+> pass, and no gate that depends on the persona role assignment may be presented as passing.** CR4
+> disputes nothing measured above and withdraws nothing. What it fixes is the gap between two true
+> statements — *this package authors no stock-role grant* and *every deployed persona holds one* — which
+> a reader could otherwise resolve in favour of the first. It resolves in favour of the second, because
+> the constraint governs the **deployed outcome**, not the authorship of the rows that produce it. Stated
+> as three findings a reader must carry forward together:
+>
+> 1. **The constraint FAILS.** The required deployed-persona outcome — three demo personas each holding
+>    their one scoped role — contains a forbidden stock role, `snc_required_script_writer_permission`,
+>    on all three. So the standing **"no stock-role grants to the scoped roles or demo personas"**
+>    constraint is **not satisfied by this deliverable**, and the ACL/role-assignment gate that rests on
+>    the persona provisioning — **AAP §0.7.3 Gate 3** and **AAP §0.7.4's "3 users (one per role)"** —
+>    must **not** be presented as passing, for this reason in addition to the separate blocked
+>    `sys_user_has_role` transport gap recorded in §7 of Step 5-6 and at the top of this report. Two
+>    independent reasons, one verdict: UNSATISFIED.
+> 2. **Both workarounds that would close it are forbidden, so neither is available.** Deleting or
+>    suppressing the companion means **writing global `sys_user_has_role` rows**, which AAP §0.3.2's
+>    out-of-the-box-table prohibition bars. Granting the personas the readability they lack by other
+>    means — the `core_company` case in §9 is the standing example — means **adding a global ACL**,
+>    which the same constraint bars and which this project records as forbidden. Neither was attempted
+>    and neither may be attempted; a report of the gap is the resolution the AAP requires here.
+> 3. **What compliance would actually require.** A platform-supported provisioning path that grants a
+>    scoped role to a user **without deriving a stock role** — so that the personas' effective role set
+>    is exactly their one scoped role each, verified by impersonation on a deployed instance. No such
+>    path exists on this release through *Edit Members*, through an update set, or through any mechanism
+>    this project is permitted to use, which is precisely why the classification is BLOCKING rather
+>    than open. Until such a path exists, this constraint cannot be brought to a pass by anything inside
+>    this deliverable's control.
+
 Screenshots (each shows the platform's own "Edit Members" screen with the role in the assigned Roles
 List before Save, plus the resulting user form), all under
 `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/` — **NOT RETAINED**
@@ -1324,7 +1449,15 @@ profile so the elevated administrator session used for the recreation work was n
 effective is itself live proof that the natively re-granted row works — and this same reading is the
 evidence that the **stock** `snc_required_script_writer_permission` role is effective on the persona
 too, which §8's CR2 F10 correction classifies as a **BLOCKING capability gap** of the native
-role-grant path rather than a property of this package. All **10** cases readable
+role-grant path rather than a property of this package. *(CLASSIFIED TERMINALLY 2026-09-09, code review
+CR4, finding F04: this impersonation reading is the direct measurement that the **"no stock-role grants
+to the scoped roles or demo personas"** constraint does **NOT pass** on the deployed outcome. The
+persona's effective role set is not its one scoped role — it is that role plus a forbidden stock role —
+so this sub-section's role-model result must not be read as clearing that constraint, and the
+ACL/role-assignment gate resting on the persona provisioning must not be presented as passing. The
+per-persona access findings recorded here — read-only for the viewer, assigned-only for the agent — are
+unchanged, correct and retained; what is not established is the persona's role-set purity. See the CR4
+F04 correction in §8.)* All **10** cases readable
 (read All). On `CASE9000001`: `g_form.getEditableFields()` returns **`[]`**, no Update, no Insert and
 no Delete control renders, and all seven business fields render read-only ⇒ **read-only confirmed**.
 Structurally guaranteed too: the viewer role's only 3 ACL links are all `operation=read`.
@@ -1369,6 +1502,25 @@ writing global `sys_user_has_role` rows AAP §0.3.2 forbids this package to own.
 in the privileged `<configured administrator>` session rather than under a persona, which is what the
 directive's wording asks for.
 
+> **CORRECTED 2026-09-09 (code review CR4, finding F04) — the bolded sentence above ("No global ACL was
+> created here, and this work granted no stock role") is true about this work's *authorship* and is NOT a
+> statement that the constraint holds; the constraint does not hold.** Both halves need their verdict
+> attached, because a reader reaching this paragraph for the ADV-1 limitation could otherwise take the
+> sentence as a clean pass on the stock-role constraint:
+>
+> - **No global ACL was created — and that half does hold.** No global ACL exists in the package or was
+>   written on the instance, and the `core_company` readability workaround this paragraph declines is
+>   precisely the global ACL that AAP §0.3.2 forbids. Declining it is correct and remains correct.
+> - **"This work granted no stock role" is about who wrote the row, and the constraint is about what the
+>   personas end up holding.** All three demo personas hold the stock
+>   `snc_required_script_writer_permission` role, platform-derived at native grant time and measured
+>   effective by impersonation, so the standing **"no stock-role grants to the scoped roles or demo
+>   personas"** constraint **FAILS on the deployed outcome** and the ACL/role-assignment gate resting on
+>   the persona provisioning must not be presented as passing. Compliance would require a
+>   platform-supported provisioning path that does not derive the stock role; the two changes that would
+>   remove it — a global `sys_user_has_role` write and a global ACL — are both forbidden and neither was
+>   made. The full statement is the CR4 F04 correction in §8.
+
 ### 10. Collateral: what changed, and nothing else
 
 A census taken before any write was re-taken afterwards. The diff contains **exactly three
@@ -1405,7 +1557,14 @@ granted by the elevated `admin`/`security_admin` session — the native grants) 
 `snc_required_script_writer_permission` (`inherited=true`, `by=system` — **platform-derived, not
 granted here, and reported as a BLOCKING capability gap under the CR2 F10 correction in §8**: it is
 effective on all three personas, it is absent from every artifact in this repository, and AAP §0.3.2
-forbids the global `sys_user_has_role` write that removing it would need). Directive L224–225 is
+forbids the global `sys_user_has_role` write that removing it would need). *(CLASSIFIED TERMINALLY
+2026-09-09, code review CR4, finding F04: "exactly six role rows" is the correct census and it is also
+the measurement that fails the constraint. Three of the six are the forbidden stock role, so the
+deployed personas' effective role sets are not their one scoped role each and the **"no stock-role
+grants to the scoped roles or demo personas"** constraint does **NOT pass** — see the CR4 F04 correction
+in §8. Nothing else in this collateral census is affected: the three intended changes, the
+byte-identical remainder, the zero SMTP interaction and the zero Store apps all stand as measured.)*
+Directive L224–225 is
 intact: no field, dictionary, table or ACL was added, removed or edited.
 
 **Disclosure — one unintended artifact, retained deliberately.** `sys_ui_section`
@@ -1467,7 +1626,7 @@ freshly against this specific export; nothing is carried over from an earlier se
 > disclosure), so the canonical file was replaced after a commit the platform reported as partially
 > failed, not after an unqualified pass. Second, "this specific export" is the revision of **3,114,377**
 > bytes / `b2217224…`, which the CR1/CR2 remediation superseded; the bytes at the canonical path today are
-> **2,994,341** / `751ceb…` and **have never been uploaded, previewed or committed on any instance**.
+> **2,985,822** / `5a3c629f…` and **have never been uploaded, previewed or committed on any instance**.
 > Every measurement in this section is retained as evidence about the gated revision, and §12 of the
 > Step 8 section records exit-condition item (2) as **NOT MET** for the bytes that ship.
 
@@ -1537,7 +1696,7 @@ consumed the two-cycle fix budget:
 The first candidate (530 blocks, sha256 `cc6433bf…`) is the one that failed the gate; §6 records what was
 fixed and re-exported. The **gate candidate** — the revision this section's gate ran on, and the one the
 CR1/CR2 remediation later superseded (*label corrected 2026-09-09, CR3 F02: it read "the shipped
-candidate", which is now `751ceb…` / 2,994,341 bytes and is not what any measurement in this section was
+candidate", which is now `5a3c629f…` / 2,985,822 bytes and is not what any measurement in this section was
 taken on*) — verified off-instance as:
 
 | Property | Value |
@@ -1574,6 +1733,14 @@ F05 named each of them. Corrected:
   That payload has since been removed (see the CR1 amendment at the top of this report); the claim is
   true of the bytes that ship now, and the measurement that establishes it is
   `zero payloads containing source="global" or <sys_scope>global</sys_scope>`.
+  *(BOUNDED 2026-09-09, code review CR4, finding F03: this bullet settles the **artifact** half of scope
+  exclusivity only — where the shipped payloads live — and it must not be weighed against the **process**
+  half. AAP §0.7.2's **"Zero global-scope writes"** is a separate constraint about where writes were
+  executed, and this run is PERMANENTLY NONCOMPLIANT with it because choice-script runs 4, 6 and 7 wrote
+  `sys_choice` rows from a Global session; that they were reverted is containment, not compliance. The
+  terminal verdict is the CR4 F03 correction under §4's run table in the Step 3-4 section. Zero `global`
+  stamps in the shipping bytes is therefore true and is **not** evidence that the zero-global-write
+  constraint was met.)*
 - **Dependency ordering (F03).** Block order being the platform's capture order rather than the AAP
   §0.5.2 dependency order is a **requirement violation, not a reported property**. No override
   supersedes §0.5.2, and a passing preview does not settle it: preview resolves a reference against
@@ -1752,7 +1919,7 @@ the first gate attempt, and again from the top before the passing attempt.)
 | Stage | Evidence |
 | --- | --- |
 | Collision proof | descriptor `sys_id` → 0 records; `nameLIKEx_casemgmt` → 0 records |
-| Checksum before upload | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` — re-computed immediately before the upload, matching the gate candidate verified in §2. *(Labelled 2026-09-09, CR3 F02: this is the **superseded** revision, 3,114,377 bytes. The bytes at the canonical path today are `751ceb…` / 2,994,341 and were never uploaded — everything in this table is evidence about the gated revision.)* |
+| Checksum before upload | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` — re-computed immediately before the upload, matching the gate candidate verified in §2. *(Labelled 2026-09-09, CR3 F02: this is the **superseded** revision, 3,114,377 bytes. The bytes at the canonical path today are `5a3c629f…` / 2,985,822 and were never uploaded — everything in this table is evidence about the gated revision.)* |
 | Upload | `/upload.do` → `/sys_upload.do` multipart → HTTP 200 (empty body, as expected) |
 | Record located | **by descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`, never by the name-ordered locator |
 | Load | `state=loaded`, **522 children = 522 payload blocks exactly** — no duplicate append |
@@ -1998,15 +2165,17 @@ At the end of this consolidation,
 `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` held the
 **exact bytes that were uploaded and committed** in §4 — not a re-export — re-verified in place:
 
-| Property | Value (as of this consolidation) | Shipping now (after the CR1 amendment) |
+| Property | Value (as of this consolidation) | Shipping now (after the CR1 amendment and the CR4 redactions) |
 | --- | --- | --- |
-| **SHA-256** | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
-| Bytes | 3,114,377 | **2,994,341** |
+| **SHA-256** | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`** |
+| Bytes | 3,114,377 | **2,985,822** |
 | Payload blocks | 522 | **522** |
 | `xmllint --noout` | PASS | **PASS** |
 | Gated by upload → preview → commit | **yes**, §4 | **no** — the recipient's first step, per [`../deployment.md`](../deployment.md) |
 
-The right-hand column is the seven-amendment package described at the top of this report; the left-hand
+The right-hand column is the seven-amendment package described at the top of this report, **as re-pointed
+by the two CR4 post-export redactions recorded there** — so the right-hand column is the gated export plus
+the CR1/CR2 amendments plus those redactions, and it is not the gated bytes; the left-hand
 column is retained because it is what §4's gate evidence was measured on.
 
 Provenance of the two superseded files, recorded before they were deleted with `git rm` (their bytes
@@ -2054,8 +2223,10 @@ predates the choice-list fix: the stale baseline was `TES0001005` = 17 Success /
 > **CORRECTED 2026-09-09 (code review CR3, finding F03) — read every result in this section as a
 > measurement of the GATED revision, not of the bytes that ship.** "The package the Step 5c commit
 > installed" was the revision of 3,114,377 bytes / `b2217224…`. The CR1/CR2 remediation rewrote the
-> canonical file afterwards (2,994,341 bytes / `751ceb…`; measured at CR3, four blocks removed, four added
-> and three payloads changed — the itemisation is in §4 below), and no
+> canonical file afterwards, and the CR4 redactions rewrote it again to what ships today
+> (2,985,822 bytes / `5a3c629f…`; four blocks removed and four added, and three payloads changed, measured
+> at CR3 — the itemisation is in §4 below; the two CR4 redactions on top of that are itemised at the top
+> of this report and changed no block count), and no
 > instance has loaded those bytes, so **no ATF suite result and no harness result exists for what ships**.
 > Every number below stands for the revision it measured and none of it is withdrawn — including the
 > sixteen itemised failures and the single root cause behind them, which are properties of the
@@ -2760,8 +2931,9 @@ The goal of this task was a single, portable XML file at the canonical path, not
 The Update Set XML from Step 6 is the durable artifact; the live instance was never meant to hold the proof,
 and after this step it holds none of it. *(Wording corrected 2026-09-09, CR3 F01: this read "The
 **verified**, final Update Set XML". The file at the canonical path is **not** gate-verified, because the
-CR1/CR2 remediation rewrote it after the only gate run. §12 records exit-condition items (2) and (3) as NOT
-MET on those bytes and sets out the re-gate that closes them.)* A clean, empty instance is therefore the **correct, successful end
+CR1/CR2 remediation rewrote it after the only gate run — and the CR4 redactions rewrote it once more, so
+the shipping bytes are two revisions removed from the gated ones. §12 records exit-condition items (2) and
+(3) as NOT MET on those bytes and sets out the re-gate that closes them.)* A clean, empty instance is therefore the **correct, successful end
 state** of this task, and the missing application, the unreachable portal URL, the absent dashboards and the
 absent demo data are all expected consequences of it rather than regressions, unmet gates or AAP deviations.
 
@@ -2784,14 +2956,15 @@ be undone before it is installed: the instance is now the clean target such an i
 > **CORRECTED 2026-09-09 (code review CR3, finding F01) — this section is a verdict about the bytes that
 > ship, and on those bytes the exit condition is PARTLY MET.** It was written as though one set of bytes
 > existed. Two do: the revision the gate, the ATF suite and the post-commit census were measured on
-> (3,114,377 bytes, `b2217224…`), and the revision at the canonical path now (2,994,341 bytes,
-> `751ceb…`), which the CR1/CR2 remediation produced **after** the gate and which has never been on an
+> (3,114,377 bytes, `b2217224…`), and the revision at the canonical path now (2,985,822 bytes,
+> `5a3c629f…`), which the CR1/CR2 remediation and then the CR4 post-export redactions produced **after**
+> the gate and which has never been on an
 > instance. Every measurement below is retained; what is corrected is which bytes each one speaks for.
 > The per-item verdict, stated once here and repeated in each item:
 >
 > | Exit-condition item | Verdict on the bytes at the canonical path |
 > | --- | --- |
-> | (1) One file, at the canonical path, checksum-recorded | **MET** — 522 blocks / 2,994,341 bytes / `751ceb…`, re-computed below |
+> | (1) One file, at the canonical path, checksum-recorded | **MET** — 522 blocks / 2,985,822 bytes / `5a3c629f…`, re-computed below |
 > | (2) Proven by a real preview and commit on a zero-stated instance, installing with everything intact | **NOT MET** — the preview-and-commit evidence belongs to the superseded revision; these bytes have never been uploaded, previewed or committed on any instance |
 > | (3) ATF suite result current against this exact file | **NOT MET** — `TES0001006` and the 13-assertion harness measured the artifacts the *gated* commit created; no suite or harness result covers these bytes |
 > | (4) Verification method stated explicitly (same-instance reset-and-reimport) | **MET** — §13 |
@@ -2803,13 +2976,14 @@ be undone before it is installed: the instance is now the clean target such an i
 
 **(1) One file, at the canonical path, checksum-recorded.** — **MET.**
 `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` —
-**522** payload blocks, **2,994,341** bytes,
+**522** payload blocks, **2,985,822** bytes,
 
-> SHA-256 `751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`
+> SHA-256 `5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`
 
 re-computed with `sha256sum` against the file on disk (`sha256sum
 servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, re-run at code review
-CR3 on 2026-09-09 and character-for-character identical to the value the CR1 amendment at the top of this
+**CR4** on 2026-09-09 after the two post-export redactions and character-for-character identical to the
+value the CR1 amendment's re-pointed table at the top of this
 report records), with `wc -c` giving the byte count and `grep -o '<sys_update_xml action=' | wc -l` giving
 522. `xmllint
 --noout` parses it cleanly. *(CORRECTED 2026-09-09, CR3 F08 second pass: a sentence here read "`ls
@@ -2825,6 +2999,20 @@ block carries a `<payload_hash>`, as a genuine platform export does", was true o
 **withdrawn for the bytes that ship** (CR3 F01): a hash-free block is a block the platform did not export,
 which is one more reason these bytes need the re-gate in item (2) rather than inheriting the old one's
 result.
+
+> **RE-MEASURED 2026-09-09 (code review CR4) — the `515 of 522` figure above is the CR3 measurement and is
+> now provenance, not the shipping state. On the bytes that ship, `<payload_hash>` is empty on ALL 522
+> blocks: 0 non-empty, 522 empty.** The CR3 count and the seven blocks it names are retained exactly as
+> measured, because they record which blocks the CR1/CR2 remediation authored. What changed is that the CR4
+> redactions **cleared** the hash on the 515 blocks that still carried one — the stored value is not a
+> recomputable digest, and a payload whose bytes were redacted must not go on asserting a fingerprint of
+> bytes that no longer exist. Two consequences, both strengthening rather than weakening the paragraph
+> above: the "genuine platform export" signature is now absent from **every** block rather than seven, so
+> the argument that these bytes need the item (2) re-gate rather than inheriting the gated revision's
+> result applies to the whole file; and any check that expects a populated `<payload_hash>` will find
+> none, which is expected and is not a defect in the package. Measured with
+> `grep -o '<payload_hash/>' … | wc -l` = 522 and `grep -oE '<payload_hash>[^<]+</payload_hash>' … | wc -l`
+> = 0.
 
 *Dated provenance, retained rather than replaced (2026-09-09, CR3 F01/F02).* Until the CR1/CR2 remediation
 this item read **522** payload blocks / **3,114,377** bytes / SHA-256
@@ -2843,7 +3031,7 @@ path.**
 > Step 5c preview-and-commit evidence as the proof for the file this report delivers, qualified only by the
 > raw-evidence caveat on the pre-commit teardown. That is not what the evidence covers. **The
 > preview-and-commit evidence attaches to the superseded revision** — 522 blocks / 3,114,377 bytes /
-> `b2217224…` — and **the bytes at the canonical path (2,994,341 / `751ceb…`) have never been uploaded,
+> `b2217224…` — and **the bytes at the canonical path (2,985,822 / `5a3c629f…`) have never been uploaded,
 > previewed or committed on any instance**, by this task or by anything after it: the CR1/CR2 remediation
 > rewrote the file after the only gate run, and every checkpoint since has been read-only with the instance
 > at its torn-down zero state (§9 of Step 8; the CR1 amendment at the top of this report). Nothing below is
@@ -2956,7 +3144,7 @@ status and the body** — that retention is what discharges the obligation Step 
 > the **gated** commit created — the commit of the superseded revision (3,114,377 / `b2217224…`) — 42
 > minutes and 50 minutes after it respectively. The CR1/CR2 remediation then rewrote the package, changing
 > four payloads and adding four, so **no suite result and no harness result covers the bytes that ship**
-> (2,994,341 / `751ceb…`). Nothing in the result itself is withdrawn: the counts, the identifiers, the
+> (2,985,822 / `5a3c629f…`). Nothing in the result itself is withdrawn: the counts, the identifiers, the
 > timestamps, the sixteen named failures and their single root cause are all measurements of that
 > revision's installed artifacts and are retained below as such. Only the currency claim is withdrawn.
 > Closing this item requires step 7 of the re-gate in item (2): a fresh 20-test / 180-step suite run and a
@@ -3035,7 +3223,7 @@ zero-state (CR2 F06 — recorded, not proven: see Step 5-6 §3) and the candidat
 
 > **CORRECTED 2026-09-09 (code review CR3, findings F01 and F05) — this caveat describes the method, and
 > the method was applied to the superseded revision.** The bytes it was applied to were 3,114,377 /
-> `b2217224…`; the bytes at the canonical path are 2,994,341 / `751ceb…` and have never been uploaded,
+> `b2217224…`; the bytes at the canonical path are 2,985,822 / `5a3c629f…` and have never been uploaded,
 > previewed or committed on any instance (§12 item (2)). So the same-instance limitation below is **not
 > the only thing standing between this deliverable and a proven install** — the shipping bytes are
 > ungated, and the same-instance caveat is what will still qualify the result *after* the §12 re-gate is
@@ -3055,7 +3243,7 @@ raw-evidence obligation is **NOT DISCHARGED** and cannot now be (CR2 F06, CR3 F0
 Step 8's ten checks do carry their verbatim requests and bodies). A
 genuinely independent second PDI is the only thing that closes that gap, and this task did not have one.
 Whoever reads this report should treat the Update Set gate as **NOT MET, on either byte sequence.** On the
-bytes at the canonical path (`751ceb…`) it is not met because no instance has ever loaded them. On the
+bytes at the canonical path (`5a3c629f…`) it is not met because no instance has ever loaded them. On the
 superseded revision (`b2217224…`) it is not met either: its preview was clean, but its single native commit
 was reported by the platform as "Failed at 100% — the update set commit completed but some updates failed to
 commit", and directive lines 113-120 (INTERP-10) define the gate as **one clean commit**, which a commit with
@@ -3118,7 +3306,7 @@ aggregate `git status` / `git diff --stat` evidence named in the same sentence.)
 
 | Script | Run? | Why |
 |---|---|---|
-| `scripts/create_choice_values.js` | **RUN** | newly authored for this task — ES5, idempotent, keyed on the natural key `(name, element, value)`: it inserts only what is missing, repairs a wrong `label`/`sequence`/`language`/`inactive` in place, never duplicates, reports a surplus as a failure exactly as it reports a shortfall, and prints a per-field expected-vs-found line plus a total and a verdict. No standalone choice-only script existed, so it was authored per the directive's Step 3 branch. **What it actually did on this baseline: it verified and reconciled the required set and found no shortfall.** *(CORRECTED 2026-09-09, code review CR3, finding F09 — this cell previously ended "an Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively before the Step 5a export", which reads as though this script created them. §4's own measurement is **Before = 24 / After = 24**: the Step 2 baseline already held all 24 values at the correct 2/6/4/3/4/3/2 split, carried through the rebuilt package's own native `sys_choice_set` composites, so the gap the directive anticipated did not exist here. Of the eight recorded runs, **runs 1, 2, 5 and 8 were in scope and wrote nothing** — they confirmed the baseline, proved idempotency, and detected an induced label/sequence drift while refusing to repair it; **runs 4, 6 and 7 were made from the Global scope and are AAP §0.7.2 scope-exclusivity violations**, recorded in §4 as what was measured rather than as remedies, and it is those three — not any in-scope run — that wrote or removed a `sys_choice` row. Run 3, in scope, is the one that matters: it detected the induced shortfall and **refused** to paper over it. The transport limitation is real and is recorded in §1; it is simply not what put these 24 rows on the instance.)* *(CORRECTED 2026-09-09, CR2: a line count stood in this cell and has been removed — a line count in prose goes stale the moment the file is edited. The script's behaviour, described here, is what a reader needs; its header comment is the authority on how to run it.)* *(CORRECTED 2026-09-09, CR2 findings F01-F05: the description above is now the count-based part of a larger contract. The script refuses to write at all — before resolving the scope record — unless it is executing in the `x_casemgmt` scope and the `sys_scope` query for it resolves to exactly one well-formed row; it re-reads all 24 rows from the database after writing and fails on any attribute that did not persist; it verifies exactly one app-owned `sys_choice_set` composite per field, ownership included, and fails on a missing, duplicated, mis-owned or surplus one; and it detects a concurrent writer, stops writing and fails rather than duplicating a value. See §3 and the correction under §4's run table.)* *(CORRECTED AGAIN 2026-09-09, CR2 F05 second pass: **as it now ships the script's default run does not write at all** — reconciliation is gated behind an `ALLOW_WRITES` flag shipping `false`, because the single-writer precondition it depends on is not enforceable by the script. A default run reports a `BLOCKED` problem naming any write it withheld and ends `FAILED`, reaching `OK` only when nothing needed writing. *(Provenance corrected 2026-09-09, CR3 F09: this previously read "The 24 values were created during this task by a run made before that gate existed". They were not. The 24 rows were on the instance from the **Step 2 commit's own native `sys_choice_set` composites** — §4's Before = 24 — and the only `sys_choice` writes this script made were the three Global-scope probe runs (4, 6, 7), each an AAP §0.7.2 violation and each reverted, which is why the final state read 24 again.)* Recreating the values on a fresh install means the package's own composites, the native in-scope Choices-list path, or an operator explicitly authorizing a run. See §3.)* |
+| `scripts/create_choice_values.js` | **RUN** | newly authored for this task — ES5, idempotent, keyed on the natural key `(name, element, value)`: it inserts only what is missing, repairs a wrong `label`/`sequence`/`language`/`inactive` in place, never duplicates, reports a surplus as a failure exactly as it reports a shortfall, and prints a per-field expected-vs-found line plus a total and a verdict. No standalone choice-only script existed, so it was authored per the directive's Step 3 branch. **What it actually did on this baseline: it verified and reconciled the required set and found no shortfall.** *(CORRECTED 2026-09-09, code review CR3, finding F09 — this cell previously ended "an Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively before the Step 5a export", which reads as though this script created them. §4's own measurement is **Before = 24 / After = 24**: the Step 2 baseline already held all 24 values at the correct 2/6/4/3/4/3/2 split, carried through the rebuilt package's own native `sys_choice_set` composites, so the gap the directive anticipated did not exist here. Of the eight recorded runs, **runs 1, 2, 5 and 8 were in scope and wrote nothing** — they confirmed the baseline, proved idempotency, and detected an induced label/sequence drift while refusing to repair it; **runs 4, 6 and 7 were made from the Global scope and are AAP §0.7.2 scope-exclusivity violations**, recorded in §4 as what was measured rather than as remedies, and it is those three — not any in-scope run — that wrote or removed a `sys_choice` row. Run 3, in scope, is the one that matters: it detected the induced shortfall and **refused** to paper over it. The transport limitation is real and is recorded in §1; it is simply not what put these 24 rows on the instance.)* *(CORRECTED 2026-09-09, CR2: a line count stood in this cell and has been removed — a line count in prose goes stale the moment the file is edited. The script's behaviour, described here, is what a reader needs; its header comment is the authority on how to run it.)* *(CORRECTED 2026-09-09, CR2 findings F01-F05: the description above is now the count-based part of a larger contract. The script refuses to write at all — before resolving the scope record — unless it is executing in the `x_casemgmt` scope and the `sys_scope` query for it resolves to exactly one well-formed row; it re-reads all 24 rows from the database after writing and fails on any attribute that did not persist; it verifies exactly one app-owned `sys_choice_set` composite per field, ownership included, and fails on a missing, duplicated, mis-owned or surplus one; and it detects a concurrent writer, stops writing and fails rather than duplicating a value. See §3 and the correction under §4's run table.)* *(CORRECTED AGAIN 2026-09-09, CR2 F05 second pass: **as it now ships the script's default run does not write at all** — reconciliation is gated behind an `ALLOW_WRITES` flag shipping `false`, because the single-writer precondition it depends on is not enforceable by the script. A default run reports a `BLOCKED` problem naming any write it withheld and ends `FAILED`, reaching `OK` only when nothing needed writing. *(Provenance corrected 2026-09-09, CR3 F09: this previously read "The 24 values were created during this task by a run made before that gate existed". They were not. The 24 rows were on the instance from the **Step 2 commit's own native `sys_choice_set` composites** — §4's Before = 24 — and the only `sys_choice` writes this script made were the three Global-scope probe runs (4, 6, 7), each an AAP §0.7.2 violation and each reverted, which is why the final state read 24 again.)* Recreating the values on a fresh install means the package's own composites, the native in-scope Choices-list path, or an operator explicitly authorizing a run. See §3.)* *(TERMINALLY CLASSIFIED 2026-09-09, code review CR4, finding F03: the three Global-scope runs this cell names make this run **PERMANENTLY NONCOMPLIANT** with AAP §0.7.2's **"Zero global-scope writes"**. That each was reverted, that the final state was tuple-identical to the pre-run snapshot, and that the shipping script now refuses Global execution outright are all true — they prevented residual contamination and they prevent recurrence, and **none of them retires the breach or may be read as compliance**. The constraint is a property of the process, so it is breached at the instant a Global-context write executes and cannot be satisfied retroactively. The only compliant path is to repeat the affected build-and-verification sequence from a clean guarded state executing exclusively in `x_casemgmt`, retaining per-run evidence that no Global-context write occurred; see the CR4 F03 correction under §4's run table in the Step 3-4 section, which states it in full.)* |
 | `scripts/seed_demo_data.js` | **RUN**, unmodified | the case/task/party linkage fix; it contains no `sys_choice` handling |
 | `scripts/post_import_remediation.js` and its Fix Script twin `scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` | **NOT RUN** | not choice-only: its `ensureTable`, dictionary, ACL and number branches — including a destructive table delete — would have mutated the Step 2 natively-committed rebuild output, which the directive classifies as a CRITICAL trigger. The five measured reasons are recorded in the Step 3-4 section |
 | `scripts/pre_delete_collateral_guard.js` | **RUN**, unmodified, read-only | used here in §4 to bound the blast radius before the teardown |
@@ -3132,6 +3320,40 @@ zero global-scope writes, no global ACLs and no stock-role grants **authored or 
 SMTP or email configuration, no
 ServiceNow Store apps, AAP §0.5.2 dependency ordering in the shipped package, and no secret — instance URL,
 username, password or session token — written into any repository file.
+
+> **CORRECTED 2026-09-09 (code review CR4, findings F03 and F04) — the list above states the standard the
+> work was held to, and it must not be read as a statement that the work met all of it. Two of those
+> constraints are NOT satisfied, terminally, and both verdicts are stated here so the list cannot be
+> weighed against them.**
+>
+> - **"Scope-namespace exclusivity with zero global-scope writes" — FAILED, PERMANENTLY NONCOMPLIANT
+>   (F03).** Choice-script runs 4, 6 and 7 wrote `sys_choice` rows from a Global session. AAP §0.7.2
+>   states **"Zero global-scope writes"** as an absolute property of the process, so the breach occurred
+>   when those writes executed. The writes were reverted to a tuple-identical state and the shipping
+>   script now refuses Global execution outright; that prevented residual contamination and prevents
+>   recurrence, and it **did not and cannot retire the breach**. Reverted writes are not compliance. The
+>   only compliant path is a repeat of the affected build-and-verification sequence from a clean guarded
+>   state, executing exclusively in `x_casemgmt`, with retained per-run evidence that no Global-context
+>   write occurred — written out in full in the **CR4 F03** correction under §4's run table in the
+>   Step 3-4 section.
+> - **"No stock-role grants" — FAILED (F04), and the narrowing this sentence applied to it is
+>   withdrawn.** The clause *"authored or performed by this work"* is not a licence the constraint
+>   admits: the constraint governs the **deployed persona outcome**, and that outcome contains a
+>   forbidden stock role. The platform derived an `inherited=true`
+>   `snc_required_script_writer_permission` companion row on each of the three demo personas at native
+>   grant time, and impersonation proves it effective on each. Everything the narrowing was reaching for
+>   remains true and is retained — this repository authors no such grant (0 occurrences of the role
+>   name, 0 `sys_user_has_role` payloads, 0 `sys_user_role_contains` payloads, empty
+>   `<includes_roles/>` on all three `roles/*.xml`, and no global ACL) — but authoring nothing is not the
+>   same as the constraint holding. It does not hold, so neither this item nor the ACL/role-assignment
+>   gate that depends on it may be presented as passing. See the **CR4 F04** additions in §8 and §9 of
+>   the Step 3-4 section and beside the CR2 F10 boundary statement below.
+>
+> The remaining constraints in the list are unaffected by this correction and each is adjudicated where
+> this report already adjudicates it: the no-hardcoded-`sys_id` rule in the CR1 F05 correction in §2 of
+> Step 5-6 (reported as a blocking PDI capability gap, not as met), AAP §0.5.2 dependency ordering in the
+> CR1 F03 correction in the same section, and the secret-hygiene item in the corrections immediately
+> following this block.
 
 **CORRECTED 2026-09-09 (CR2, finding F11) — the last item was not fully true when written, and the
 redaction rule now applied is stated here so a reader can audit it.** No password, no instance URL and
@@ -3204,12 +3426,42 @@ effective. That is reported as a **BLOCKING capability gap** — §8 and §9 of 
 `../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` — and not as compliance: removing it would require writing
 global `sys_user_has_role` rows AAP §0.3.2 forbids this package to own.
 
+> **CORRECTED 2026-09-09 (code review CR4, finding F04) — a boundary is not a verdict, so the verdict is
+> stated here: this constraint FAILS.** Everything above is retained. What it lacked was the conclusion,
+> and without it the paragraph could be read as though stating the boundary discharged the item. It does
+> not:
+>
+> - **The required deployed-persona outcome contains a forbidden stock role**, on all three personas,
+>   measured by impersonation. So the standing **"no stock-role grants to the scoped roles or demo
+>   personas"** constraint does **NOT pass** for this deliverable, and the ACL/role-assignment gate that
+>   depends on the persona provisioning — **AAP §0.7.3 Gate 3** and **§0.7.4** — may not be presented as
+>   passing on this ground, independently of the blocked `sys_user_has_role` transport gap that also
+>   leaves it unsatisfied.
+> - **The two changes that would close it are forbidden**: writing global `sys_user_has_role` rows (AAP
+>   §0.3.2's out-of-the-box-table prohibition) and adding a global ACL. Neither was made and neither may
+>   be made.
+> - **Compliance requires a platform-supported provisioning path that does not derive the stock role** —
+>   a grant of a scoped role that leaves the persona's effective role set equal to that one role, proven
+>   by impersonation on a deployed instance. No such path exists on this release, which is why this is
+>   classified BLOCKING and reported rather than remediated.
+
 **Outcome classification.** The run did **not** end CRITICAL, and it did not take the directive's CRITICAL
 stop path. Step 5c's second gated attempt — after one earlier failure cycle (1 of the 2 permitted, recorded
 in the Step 5-6 section) — previewed to zero errors and zero warnings and reached `state=committed` from a
 single native commit; the canonical file was replaced with that gated export, and the instance was then
 emptied. Had the run ended CRITICAL, this section would record that the canonical file had been left
 unchanged and why; it does not, because it did not.
+
+> **CORRECTED 2026-09-09 (code review CR4) — "the canonical file was replaced with that gated export" is
+> true of what this run did and is no longer true of what the canonical path holds.** Two later rewrites
+> stand between the two: the CR1/CR2 remediation, and today's two CR4 post-export redactions. **The
+> canonical package now ships the Step 5c gated export plus those two redactions, so it is no longer the
+> gated bytes and it remains UNGATED** — sha256 `5a3c629f…`, 2,985,822 bytes, 522 blocks, 25,518 lines,
+> never previewed and never committed on any instance. The redactions, their measurements and the
+> verified-unchanged list are recorded once, in full, in the **RE-POINTED 2026-09-09 (code review CR4)**
+> block at the top of this report; the sentence above is retained because the *process* outcome it states
+> — non-CRITICAL, one fix cycle of the two permitted, no second commit, no remediation script, no live
+> patch — is unchanged and correct.
 
 > **CORRECTED 2026-09-09 (code review CR3, finding F04) — the sentence above read "Step 5c was a clean pass
 > on the first gated attempt", and that is two claims, one of them false.** The attempt reached
@@ -3290,8 +3542,16 @@ categories" reading of this paragraph:
 > **Withdrawn (1) — the identity category (b) corrected to.** Category (b) said the seven documents were
 > corrected to "522 blocks / 3,114,377 bytes / `b2217224…`". That was the identity at the time the sweep ran
 > and it is no longer the canonical one: the CR1/CR2 remediation rewrote the canonical file afterwards, and the
-> identity the seven documents now carry — and the only one they may carry — is **522 blocks / 2,994,341 bytes
-> / `751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`**.
+> identity the seven documents now carry — and the only one they may carry — is **522 blocks / 2,985,822 bytes
+> / `5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`**.
+> *(RE-POINTED 2026-09-09 at code review CR4: the identity in this paragraph was itself superseded once
+> more on the day it was written. The two CR4 post-export redactions rewrote the canonical file again, so
+> the value above is the current one and the interim CR1/CR2-remediated identity this paragraph used to
+> name is gone from this report entirely — it was never uploaded, previewed or committed, so no
+> measurement is lost with it. Re-pointing the seven forward-looking documents to the value above is a
+> **CR4 obligation on those documents**, tracked in that checkpoint and not asserted as done by this
+> paragraph; what this paragraph states is the identity they may carry, which is the one above and no
+> other.)*
 >
 > **Withdrawn (2) — the verification status category (b) corrected to.** Category (b) said the documents were
 > corrected to read that "the gate was met by a same-instance reset-and-reimport". The method statement is
@@ -3396,8 +3656,8 @@ state. The deliverable is the file at
 | Property | Value |
 | --- | --- |
 | Payload blocks | **522** |
-| Bytes | **2,994,341** |
-| **SHA-256** | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
+| Bytes | **2,985,822** |
+| **SHA-256** | **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`** |
 | Gate status | **UNGATED** — never uploaded, previewed or committed on any instance |
 | ATF status | **NO RESULT** — no suite run and no harness run covers these bytes |
 
@@ -3405,11 +3665,17 @@ state. The deliverable is the file at
 > `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` as the deliverable's identity.** That
 > is the **superseded, gated revision** (3,114,377 bytes), retained here as dated provenance only: it is
 > the revision Step 5c uploaded, previewed and committed, and the revision the Step 7 ATF suite and the
-> Step 8 post-commit census measured. The CR1/CR2 remediation rewrote the canonical file afterwards to the
+> Step 8 post-commit census measured. The CR1/CR2 remediation rewrote the canonical file afterwards, and
+> the two CR4 post-export redactions rewrote it once more, to the
 > identity in the table above, so **the bytes a recipient will install have never been on an instance**.
-> One identity, used consistently: `751ceb…` / 2,994,341 is what ships and what every forward-looking
+> One identity, used consistently: `5a3c629f…` / 2,985,822 is what ships and what every forward-looking
 > statement must name; `b2217224…` / 3,114,377 appears in this report only as the label on a past
-> measurement.
+> measurement. *(RE-POINTED 2026-09-09 at code review CR4: this hand-off previously named the interim
+> CR1/CR2-remediated identity in the table above. That revision was superseded by today's redactions
+> — recorded in full in the **RE-POINTED 2026-09-09 (code review CR4)** block at the top of this report
+> — and it carried no measurement of its own, having never been uploaded, previewed or committed, so it
+> is replaced here rather than retained beside the new value. The **UNGATED** and **NO RESULT** rows in
+> the table above are unchanged and now describe a third byte sequence for the same two reasons.)*
 
 Installing it is a separate deployment
 step outside this task's scope, and the recipient's **first** action is the seven-step re-gate written out

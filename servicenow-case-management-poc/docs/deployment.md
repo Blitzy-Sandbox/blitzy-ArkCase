@@ -2,18 +2,18 @@
 
 ## Purpose
 
-This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed end-to-end on the deliverable's current byte sequence (935 blocks, 3,973,569 bytes, SHA-256 `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, measured 2026-09-05T04:45Z — MEASURED, NOT GATE-VERIFIED) — no preview of the complete file has been run on it, so the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it, and directive D48's stop condition is live because the checksum recorded for the shipping package was `7292a6fe…`. What those bytes do carry, added 2026-09-03, is seven platform-native choice composites with their own runtime proof: that exact seven-child delta was uploaded, previewed to 0 problems of any type and committed by the native commit action (commit worker `state=complete`, message "Update set committed"), taking `sys_choice` for the three tables from 0 to 24 rows with every option label rendering on the real forms. Choice creation is therefore no longer a post-import step. The delivery election has been made and the shipping package ships; the note below states which sequence carries which result and which artifact is retained as the upgrade path.**
+This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed end-to-end on the deliverable's current byte sequence (935 blocks, 3,973,569 bytes, SHA-256 `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, measured 2026-09-05T04:45Z — MEASURED, NOT GATE-VERIFIED) — no preview of the complete file has been run on it, so the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it, and directive D48's stop condition is live because the checksum recorded for the shipping package was `7292a6fe…`. What those bytes do carry, added 2026-09-03, is seven platform-native choice composites with their own runtime proof: that exact seven-child delta was uploaded, previewed to 0 problems of any type and committed by the native commit action (commit worker `state=complete`, message "Update set committed"), taking `sys_choice` for the three tables from 0 to 24 rows with every option label rendering on the real forms. Choice creation is therefore no longer a post-import step. The delivery election has been made and the shipping package ships; the note below states which sequence carries which result and which artifact is retained as the upgrade path.** **[RE-DATED 2026-09-09 (CR3 F12, CR4 F02/F05): the identity this standing note calls "the deliverable's current byte sequence" is a 2026-09-05 measurement of a package that was superseded and deleted on 2026-09-08. It is not the file you hold, and its digest must not be checked against the canonical path. The shipping identity is 522 blocks / 2,985,822 bytes / `5a3c629f…` — CURRENT ARTIFACT STATE, immediately below, prevails. What the note gets right and what still stands: no preview of the complete file has been run on the bytes that ship, so the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until Step 2 is run on it.]**
 
-## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12)
+## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed the same day for code review CR4, findings F02 and F05)
 
 **One identity, and it prevails over every other figure in this document.** Earlier revisions of this file
-present more than one package as "the deliverable". The seven statements below are what is on disk today and
+present more than one package as "the deliverable". The eight statements below are what is on disk today and
 what is true of it; every identity figure elsewhere in this document is dated provenance of an earlier
 revision, and where any of them disagrees with this block, **this block is correct**.
 
 1. **The only shipping artifact is `../update-set/x_casemgmt_case_management_update_set.xml`** — **522** payload
-   blocks · **2,994,341** bytes · SHA-256
-   **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`**. Reproduce it from the repository
+   blocks · **2,985,822** bytes · SHA-256
+   **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`**. Reproduce it from the repository
    root with `sha256sum servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`.
 2. **Status: MEASURED, NOT GATE-VERIFIED.** These exact bytes have never been uploaded, previewed or
    committed on any instance. What backs them is static checking only.
@@ -37,6 +37,21 @@ revision, and where any of them disagrees with this block, **this block is corre
    [`./refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) §12.
 7. This run recorded no property of, and performed **no comparison of any kind against**, any artifact that
    its scope excludes; the identity above comes from item 1 and from nowhere else.
+8. **Why item 1's identity differs from the Step 5c export it came from — code review CR4, findings F02 and
+   F05.** The canonical package ships the Step 5c gated export with two post-export redactions applied.
+   **(F02)** `last_login`, `last_login_time` and `last_login_device` are emptied on the
+   `x_casemgmt_demo_agent` and `x_casemgmt_demo_viewer` `sys_user` payloads, removing a routable login-source
+   IP and two login timestamps. **(F05)** `sys_created_by` and `sys_updated_by` carry the neutral platform
+   service identity `system` in place of the administrator login identifier, in **4,000** places across the
+   descriptor, all 522 block wrappers and all 522 payloads, in both the CDATA and the XML-escaped encodings.
+   `<payload_hash>` was **cleared** on the 515 blocks that still carried one — the stored value is not a
+   recomputable digest, and a redacted payload must not assert a fingerprint of bytes that no longer exist —
+   so the file now carries **0** non-empty and **522** empty `<payload_hash>` elements. Verified unchanged by
+   the redaction: **522** blocks, **25,518** lines, one descriptor whose `<inserted>` and `<summary>` both
+   read **522**, the multiset of all 32-hex tokens (**2,843** distinct — so no `sys_id` and no reference
+   moved), `xmllint --noout` clean, and all 522 payloads still parsing individually. **These exact bytes have
+   never been previewed or committed on any instance**, so the package remains ungated and Gate 7 remains
+   open, exactly as item 2 states.
 
 ## SUPPORTED INSTALL ROUTE — 2026-09-09 (code review CR3, finding F16)
 
@@ -55,6 +70,18 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
   re-run the full gate on the exact candidate bytes; never patch the instance. The one shortfall the platform
   forces — the **3** `sys_user_has_role` grants, which Role Management V2 refuses from any update set on this
   release — is recorded as a BLOCKED capability gap, not as a step that satisfies a gate.
+- **Know what the format cannot carry before you preview it — the CR4 F01 portability capability gap.** A
+  ServiceNow Update Set serializes every reference column as the target record's 32-character `sys_id`, and
+  the format has no natural-key encoding, so AAP §0.7.2's literal "no hardcoded `sys_id` in any reference
+  field" is unsatisfiable by the artifact format itself; it is reported as a capability gap rather than
+  worked around, and the register entry is
+  [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) (code review CR4, finding
+  F01). What is measured on the shipping bytes: every reference to an application record resolves to a record
+  the same package carries, so nothing in the application can misbind; and exactly **18** references — 8
+  `<snapshot>` and 10 `<block>` inside Flow Designer's platform-generated compiled-plan rows — point at rows
+  that exist only on the source instance and will not resolve on a target. That residue closes only by
+  re-exporting the application from an instance where it is installed and published and then re-running
+  Gate 7. Read it as open: no gate passes on it, and the register entry is where its state is kept.
 
 > **CR1 AMENDMENT — 2026-09-09. The canonical package's bytes changed after the identity rows below were written.**
 > Code review checkpoint CR1 raised seven findings against the shipped package. Resolving them **removed four
@@ -68,8 +95,8 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 > | Property | Pre-amendment (the rows below) | **Shipping now** |
 > | --- | --- | --- |
 > | Payload blocks | 522 | **522** |
-> | Bytes | 3,114,377 | **2,994,341** |
-> | SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
+> | Bytes | 3,114,377 | **2,985,822** |
+> | SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`** |
 >
 > Re-derive all three from the file itself — `sha256sum`, `stat -c %s`, `grep -c '<sys_update_xml action='` —
 > rather than trusting any quoted figure. **The amended bytes have not been previewed or committed on an
@@ -101,7 +128,7 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 >
 > | Artifact | Identity, as measured 2026-09-08 | Status |
 > | --- | --- | --- |
-> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE, as of 2026-09-09 (CR3 F12)** | **522** `<sys_update_xml>` blocks · **2,994,341** bytes · SHA-256 **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** · 26 `sys_security_acl` + 27 `sys_security_acl_role` · 8 `sys_grid_canvas_pane` · 0 `sys_user_has_role` · `xmllint --noout` clean | **MEASURED, NOT GATE-VERIFIED.** These exact bytes have never been uploaded, previewed or committed on any instance, so Step 2 of this document is the recipient's first run of the gate and not a re-run of one. Re-gate procedure: [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) §12 |
+> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE, as of 2026-09-09 (CR3 F12)** | **522** `<sys_update_xml>` blocks · **2,985,822** bytes · SHA-256 **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`** · 26 `sys_security_acl` + 27 `sys_security_acl_role` · 8 `sys_grid_canvas_pane` · 0 `sys_user_has_role` · `xmllint --noout` clean | **MEASURED, NOT GATE-VERIFIED.** These exact bytes have never been uploaded, previewed or committed on any instance, so Step 2 of this document is the recipient's first run of the gate and not a re-run of one. Re-gate procedure: [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) §12 |
 > | `update-set/x_casemgmt_case_management_update_set.xml` — **the 2026-09-08 revision; SUPERSEDED 2026-09-09, not the deliverable (CR3 F12)** | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED, BUT NOT CLEANLY — by a same-instance reset-and-reimport, not by an independent second PDI. This cell read "GATED"; corrected 2026-09-09 (CR3 F12): the platform's own verdict on the single commit was "Failed at 100% — the update set commit completed but some updates failed to commit", with three `sys_user_has_role` rows skipped.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a recorded zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 > | `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` — **the elected base** | **926** blocks · **3,781,097** bytes · SHA-256 **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** · 26 `sys_security_acl` · `xmllint` clean | Retained. Modified after election by the three commits below, then **restored to the elected bytes 2026-09-05T04:45Z**. Deliberately **no longer** byte-identical to the deliverable — a fallback that tracks the deliverable is not a fallback |
 > | The two candidate packages this consolidation superseded — `…REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks · 4,062,067 bytes · `e109e1d1…`) and `…AMENDED-NOT-GATED.xml` (935 blocks · 3,973,569 bytes · `9f3ea74c…`) | Both **deleted** from `update-set/` in this consolidation; their bytes remain recoverable from git history | Superseded: each was hand-authored rather than platform-exported, and neither was ever gated through a teardown-and-reimport commit. Provenance recorded in [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) |
@@ -110,12 +137,17 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 > *(Retained as written on 2026-09-05. **CORRECTED 2026-09-08:** that is no longer what the deliverable is.)*
 > **What the deliverable was between 2026-09-08 and 2026-09-09: the consolidated, platform-exported package
 > relabelled in the table above — 522 blocks / 3,114,377 bytes / `b2217224…`. CORRECTED 2026-09-09 (CR3 F12):
-> what the deliverable IS is 522 blocks / 2,994,341 bytes / `751ceb61…`, MEASURED, NOT GATE-VERIFIED — see the
+> what the deliverable IS is 522 blocks / 2,985,822 bytes / `5a3c629f…`, MEASURED, NOT GATE-VERIFIED — see the
 > CURRENT ARTIFACT STATE block at the top of this file.**
 > It was produced by the platform's own application-publish path on an instance rebuilt from the 988-block
 > package and then corrected by the two post-rebuild fixes (the 24 native `sys_choice` values and the
 > case/task/party linkage), captured with the platform's own capture API rather than by editing XML, and exported
-> by `UpdateSetExport`. All 522 blocks carry a `<payload_hash>`, the signature of a genuine platform export. Its
+> by `UpdateSetExport`. All 522 blocks carry a `<payload_hash>`, the signature of a genuine platform export.
+> **CORRECTED 2026-09-09 (code review CR4, finding F05): that sentence describes the export before the CR4
+> redaction, and no longer describes the file on disk — `<payload_hash>` is now empty on all 522 blocks
+> (measured: 0 non-empty, 522 empty), because a redacted payload must not assert a fingerprint of bytes that
+> no longer exist. It is still the platform's own export; the provenance evidence is the descriptor and the
+> block structure, not the hash. See CURRENT ARTIFACT STATE item 8.** Its
 > payload inventory: 3 `sys_db_object`; the full dictionary set; **7** `sys_choice_set` composites carrying
 > exactly **24** values at 2/6/4/3/4/3/2; 3 `sys_number`; 3 `sys_user_role`; 26 `sys_security_acl`; **27**
 > `sys_security_acl_role`; 7 flows; 7 business rules; 2 script includes; 6 UI actions; 8 reports; 2 dashboards;
@@ -141,14 +173,14 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 > zero-preview-error round trip — was **run on the 2026-09-08 revision by a same-instance reset-and-reimport,
 > not by an independent second instance. CORRECTED 2026-09-09 (CR3 F12): this read "is met on these bytes", and
 > it is not met — the preview was clean but the platform reported that commit as *Failed at 100%* with three
-> `sys_user_has_role` rows skipped, and the bytes that ship now (2,994,341 / `751ceb61…`) have never been
+> `sys_user_has_role` rows skipped, and the bytes that ship now (2,985,822 / `5a3c629f…`) have never been
 > uploaded, previewed or committed at all.** The route, and the risk it leaves, are recorded as measured: only one PDI is available to this project, so the instance was torn down to a
 > recorded zero-state and the exact candidate bytes were then imported and committed with nothing running in
 > between. The residual risk that leaves is named rather than waved away: anything the platform holds outside the
 > records a teardown removes — caches, indexes, retained update history, metadata a scope deletion does not
 > reach — was not re-created by the exercise and was not tested by it. Directive **D48's stop condition is
 > closed**: the checksum recorded for that package and the bytes then on disk were both `b2217224…` (the file
-> on disk now measures `751ceb61…`). The full
+> on disk now measures `5a3c629f…`). The full
 > record is [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md).
 >
 > *Retained as written on 2026-09-05, and superseded by the paragraph above — D48's two remedies as they stood
@@ -168,7 +200,7 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 > in the table above, which carries the same platform-named schema rows and the same 27 role links **and** the
 > post-rebuild choice and linkage fixes, and which was gated on its own bytes — a gate whose commit the
 > platform reported as *Failed at 100%*, and whose bytes were superseded on 2026-09-09 by the ungated
-> 2,994,341-byte `751ceb61…` file that ships now (CR3 F12). The deleted file's identity was
+> 2,985,822-byte `5a3c629f…` file that ships now (CR3 F12). The deleted file's identity was
 > **`e109e1d1…` over 4,062,067 bytes**, which superseded `90ee0249…` over 4,062,436 bytes; neither matches any
 > file in this tree, so any instruction still quoting either would send an operator to a checksum they cannot
 > reproduce, and they would correctly abort. Provenance: [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md).
@@ -254,6 +286,10 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > stated at the top of this document for the artifact a reader holds:
 >
 > **CORRECTED 2026-09-08 — items (2) and (3) above are retained as written and no longer describe this tree.**
+> **[RE-DATED 2026-09-09 (CR3 F12, CR4 F02/F05): the identity this paragraph states as "what ships" is the
+> superseded 2026-09-08 revision. The shipping identity is 522 blocks / 2,985,822 bytes / `5a3c629f…` — see
+> CURRENT ARTIFACT STATE at the top of this document — and it is ungated. Do not check the digest or the byte
+> size below against the file on disk.]**
 > The two candidate packages were superseded and deleted in this consolidation, so there is no rebuilt artifact
 > to promote; and what ships is the consolidated platform export — **522** blocks, **3,114,377** bytes, SHA-256
 > `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` — on whose exact bytes the gate was run and
@@ -306,10 +342,14 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > | `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` | 988 | 4,062,436 | **0 `type=error` / 0 `type=warning`** | committed `2026-09-02T20:53:14Z` | no file on disk — export 3 (snapshot `0b3b7452934f435009aa70d19dba100d`) | historical — **the only complete round trip this run** |
 > | `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` | 988 | 4,062,436 | none | none | no file on disk — the §0.5.2-reordered sequence as it stood at commit `3671901b5b`, superseded by the choice-materialization fix at `f8454fb078` | historical — **superseded; matches no file in this tree, so never verify or promote against it** |
 > | `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` | 988 | 4,062,067 | **none on the complete file**; the same seven choice children previewed **0 problems of any type** as their own delta, 2026-09-03 | seven-child delta committed natively 2026-09-03; complete file never committed | no file on disk — **deleted in the 2026-09-08 consolidation** after serving as the baseline the application was rebuilt from; bytes in git history | retained, not shipped — **static evidence plus exact-child runtime proof** |
-> | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | 522 | 3,114,377 | **0 `type=error` / 0 `type=warning`** on an instance torn down to a recorded zero-state, 2026-09-08 | committed once through the native UI action, 2026-09-08 21:27:27 UTC | `update-set/x_casemgmt_case_management_update_set.xml` — **on disk** | **THE CURRENT DELIVERABLE — genuine platform export; Update Set gate MET on these exact bytes by a same-instance reset-and-reimport, not by an independent second instance; 26 `sys_security_acl` + 27 `sys_security_acl_role`** |
+> | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | 522 | 3,114,377 | **0 `type=error` / 0 `type=warning`** on an instance torn down to a recorded zero-state, 2026-09-08 | committed once through the native UI action, 2026-09-08 21:27:27 UTC | **no file on disk** — this cell read "`update-set/x_casemgmt_case_management_update_set.xml` — **on disk**"; corrected 2026-09-09 (CR3 F12 / CR4 F02-F05): the canonical path holds the row below, and these bytes survive only in git history | **SUPERSEDED 2026-09-09 — this cell read "THE CURRENT DELIVERABLE"; it is the gated pre-amendment revision, and the platform reported its single commit as *Failed at 100%* with three `sys_user_has_role` rows skipped. Genuine platform export; 26 `sys_security_acl` + 27 `sys_security_acl_role`. Never verify the file on disk against this digest or byte size** |
+> | `5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191` | 522 | 2,985,822 | **none ever** — these exact bytes have never been uploaded or previewed on any instance | none | `update-set/x_casemgmt_case_management_update_set.xml` — **on disk** | **THE CURRENT DELIVERABLE (added 2026-09-09, code review CR4) — the Step 5c platform export with the CR4 F02 and F05 redactions applied and `<payload_hash>` cleared on all 522 blocks; MEASURED, NOT GATE-VERIFIED; 26 `sys_security_acl` + 27 `sys_security_acl_role`. This is the only digest and byte size to check the file on disk against** |
 >
 > Read the table as the rule INTERP-9 states: a runtime measurement belongs to the byte sequence it was taken on.
-> **CORRECTED 2026-09-08 — the sentence that follows is retained as written.** The tree now holds the
+> **CORRECTED 2026-09-08 — the sentence that follows is retained as written.** **[RE-DATED 2026-09-09 (CR3
+> F12, CR4 F02/F05): the preview-and-commit result named in this correction belongs to the superseded
+> `b2217224…` revision, not to the 2,985,822-byte `5a3c629f…` bytes now on the canonical path, which carry no
+> preview and no commit result of any kind.]** The tree now holds the
 > 522-block platform export as the deliverable, whose complete bytes **do** carry a preview and a commit
 > result (0 problems of any type, then one native commit, on an instance reset to a recorded zero-state), plus
 > the retained base file named below; the two candidate packages were superseded and deleted in this
@@ -424,6 +464,12 @@ Per AAP Section 0.7.2: "Re-import the exported XML on the same instance via Syst
    - Zero rows = pass. Proceed to Step 3.
    - One or more rows = **fail**. Do not commit. Resolve the underlying issue in the source application and restart from Step 1.
 
+**One thing to expect at step 5, and not to treat as a fault.** Because `<payload_hash>` is empty on all 522
+blocks after the CR4 F05 redaction (CURRENT ARTIFACT STATE item 8), the preview cannot short-circuit on a
+stored payload fingerprint and compares the payloads themselves — a normal state for an Update Set XML, which
+7 of these 522 blocks already shipped in before the redaction, and not an error condition. Expect the preview
+to take the longer end of the 1–5 minutes above, and judge it only on its **Preview Problems** rows.
+
 ### Common Preview Problem Categories and Remediation
 
 The remediation guidance below covers the most frequent preview-problem patterns observed when round-tripping a scoped application. The first category, **"Could not find a record"**, is by far the most common failure mode and accounts for the majority of preview-error reports.
@@ -435,7 +481,13 @@ The remediation guidance below covers the most frequent preview-problem patterns
   - Company references → `core_company.name`
   - Case references → `x_casemgmt_case.number`
   - Role-label references → `x_casemgmt_case_party.role_label`
-  Re-export the Update Set after the source-side fix and restart Step 2.
+  Re-export the Update Set after the source-side fix and restart Step 2. **Know the limit of that
+  remediation before you apply it:** a lookup by stable key is authorable in a script body, but an exported
+  Update Set serializes every *reference column* as a 32-character `sys_id` and the format has no natural-key
+  encoding — the CR4 F01 portability capability gap, recorded in
+  [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) and summarised in SUPPORTED
+  INSTALL ROUTE above. If this problem class names one of the 18 Flow Designer compiled-plan references, the
+  fix is to re-export from an instance where the application is installed and published, not to edit the XML.
 - **"Found in update set but missing"** — a referenced artifact was not captured in the Update Set. Verify the Update Set scope is `x_casemgmt` and that the missing record is included in the source Update Set's collected records. The cause is usually that a record was edited under the Default Update Set rather than under the scoped application Update Set, or that the referenced record lives outside the scoped application (which would be an out-of-scope global-scope write — investigate and remove). Re-export the Update Set after the fix and restart Step 2.
 - **"Has been changed by..."** — there is a global-scope conflict. The Update Set attempts to modify a record that is also being modified by a record outside the scoped application. Verify no global-scope writes exist in the Update Set per AAP Section 0.3.2 ("Global scope changes of any kind"). The remediation is to remove the conflicting modifications from the Update Set on the source PDI; if the conflict is intrinsic to the scoped-app design, the design has violated the scoped-namespace exclusivity rule and must be reworked.
 - **"Skip"** rows in the preview — these are not errors but indicate the destination already has a newer version of the record. For a fresh PDI verification, every row should be **Insert** or **Update**, not **Skip**. If skips appear on a fresh PDI, the destination is not actually fresh — start over with a clean PDI.
@@ -448,7 +500,7 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
 
 > **CORRECTED 2026-09-08 — on the 2026-09-08 revision (`b2217224…`, superseded 2026-09-09; CR3 F12), a single
 > commit DID reach this walkthrough's state for everything an update set can carry. The same has not been
-> measured on the shipping 2,994,341-byte `751ceb61…` bytes, which have never been committed anywhere.**
+> measured on the shipping 2,985,822-byte `5a3c629f…` bytes, which have never been committed anywhere.**
 > Measured after one commit of the 522-block platform export onto an
 > instance torn down to a recorded zero-state, with no script run and no second commit: three tables at HTTP 200
 > with physical storage (`sys_dictionary` and `sys_documentation` 21 / 14 / 13 each), the three roles, 26
@@ -586,8 +638,8 @@ This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifact
 
 > **Sub-step 3's "confirmation that all 7 validation gates passed" CANNOT be given for the artifact as it
 > stands — CORRECTED 2026-09-09 (CR3 F12).** This note read that it "can now be given … with one qualification
-> stated rather than hidden". Two things defeat it: the shipping bytes (522 blocks / **2,994,341** /
-> `751ceb61…`) have never been uploaded, previewed or committed, and on the revision that *was* gated the
+> stated rather than hidden". Two things defeat it: the shipping bytes (522 blocks / **2,985,822** /
+> `5a3c629f…`) have never been uploaded, previewed or committed, and on the revision that *was* gated the
 > platform reported the commit as *Failed at 100%* with three `sys_user_has_role` rows skipped. What follows is
 > that revision's dated record. The Update Set gate is binary, and it was recorded as **MET**
 > on the then-deliverable's byte sequence — `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`, 522
@@ -647,8 +699,8 @@ The following constraints apply throughout deployment. They derive from AAP Sect
 - [`../update-set/`](../update-set/) — destination directory for the exported XML. Three files live here, all measured 2026-09-05T04:45Z and **none byte-identical to another**: `x_casemgmt_case_management_update_set.xml` (**THE DELIVERABLE**, 935 blocks, 3,973,569 bytes, `9f3ea74c…` — MEASURED, NOT GATE-VERIFIED), `x_casemgmt_case_management_update_set.FALLBACK.xml` (the **elected base**, 926 blocks, 3,781,097 bytes, `7292a6fe…`) and `x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks, 4,062,067 bytes, `e109e1d1…`, retained but **not shipped** — the upgrade path).
 - **CORRECTED 2026-09-08, and again 2026-09-09 (CR3 F12)** — [`../update-set/`](../update-set/) holds **two**
   files, one of which is the deliverable: `x_casemgmt_case_management_update_set.xml` (**522** blocks,
-  **2,994,341** bytes, SHA-256
-  `751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a` — **MEASURED, NOT GATE-VERIFIED**:
+  **2,985,822** bytes, SHA-256
+  `5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191` — **MEASURED, NOT GATE-VERIFIED**:
   never uploaded, previewed or committed). *This bullet read "**522** blocks, **3,114,377** bytes, SHA-256
   `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`, a genuine platform export whose exact
   bytes carry the Update Set gate as of 2026-09-08 by a same-instance reset-and-reimport" — that is the
