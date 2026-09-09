@@ -16,7 +16,7 @@ unchanged, so the gated bytes and the shipping bytes are the same bytes. Result,
 | Commit | **one** native *Commit Update Set*; the platform's own verdict: **`Succeeded 100%` / `Update set committed - Succeeded in 40 Seconds`**; `State = Committed` |
 | Census | 3 tables HTTP 200 (10/10/8 rows) · dictionary and documentation 21/14/13 · 26 ACLs · 27 role links 14/10/3 · 24 choices / 7 composites · 3 counters · 7 flows active and published · **8 dashboard pane placements** · portal + 2 public pages + 3 widgets · `sys_user_has_role` **0** |
 | Dashboards | **both rendered in a browser with data** — AAP §0.7.3 Gate 6, unproven on every prior revision |
-| Tests | ATF **`TES0001007` = 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps**; harness **13/13** |
+| Tests | ATF **`TES0001007` = 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps**; harness **13/13** *(QUALIFIED 2026-09-09, QA Delta QA3 — Issue 1 (F01): that suite figure was measured after the mandatory §5h post-commit grant step, which inserted the three `sys_user_has_role` grants at 2026-09-09 13:17:25, 17 minutes 41 seconds before this suite started at 13:35:06. The package alone scored 4 Success / 16 Failure (`TES0001006`, created 2026-09-08 22:09:18), every failure on a step executed under demo-persona impersonation. Those three grants transport in no update set on this release, so this figure does **not** make **AAP §0.7.3 Gate 3** or **AAP §0.7.4** pass — both remain **UNSATISFIED** per the CR2 F09 correction below. Fuller account: §12 item 7 of this document and §F and §I of [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md).)* |
 | Teardown | behind the line-34 guard applied fresh — **instance zero-state confirmed at 2026-09-09T13:56:56Z, no residue remaining** *(CORRECTED 2026-09-09, QA Delta QA1 — Issue 1 / 2 / 3 / 4: that statement was not true as written. Three classes bound to the dead scope by `application` / `sys_scope` rather than by name survived this teardown, and its check set had dropped the predicates that find them — 1 Local Update Set `b65dd39c939f8b1009aa70d19dba10e4`, platform-named `Default`, with 448 captured payload rows of which 73 are `x_casemgmt`-named, plus 1 stray capture in the global `Default` set; 1069 `sys_update_version` rows by `application` and 191 by name, 28 of those carrying no `application`; and 498 `sys_metadata` rows. All were removed on 2026-09-09 between 16:27:46Z and 16:31:47Z, together with 103 `sys_metadata_customization` rows and 1 `sys_user_preference` row that no check set had ever covered, and the statement is re-issued as: **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three the CR5 check set had dropped, with the residue named above removed.** `sys_audit` (567 rows for the three deleted tables) and `sys_upgrade_history` (90 rows) are retained platform event history and are deliberately outside that statement. Full account: §6, §7 and §17 of the Step 8 section below, and §K of [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md).)* |
 
 Raw evidence, check by check: [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) (sections A-L), with
@@ -3159,7 +3159,7 @@ be undone before it is installed: the instance is now the clean target such an i
 > | --- | --- |
 > | (1) One file, at the canonical path, checksum-recorded | **MET** — unchanged |
 > | (2) Proven by a real preview and commit on a zero-stated instance, installing with everything intact | **MET** (2026-09-09) — by a same-instance reset-and-reimport, the authorized substitution |
-> | (3) ATF suite result current against this exact file | **MET** (2026-09-09) — `TES0001007`, 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps, plus the harness at 13/13 |
+> | (3) ATF suite result current against this exact file | **MET** (2026-09-09) — `TES0001007`, 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps, plus the harness at 13/13 *(QUALIFIED 2026-09-09, QA Delta QA3 — Issue 1 (F01): MET on currency, which is all this item asks. The suite started 13:35:06, 17 minutes 41 seconds after the mandatory §5h post-commit grant step inserted the three `sys_user_has_role` grants at 13:17:25; the package alone scored 4 Success / 16 Failure (`TES0001006`), and those grants transport in no update set on this release, so **AAP §0.7.3 Gate 3** and **AAP §0.7.4** remain **UNSATISFIED** per CR2 F09. See item 7 below and §F and §I of [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md).)* |
 > | (4) Verification method stated explicitly (same-instance reset-and-reimport) | **MET** — and restated in every place the new result is claimed |
 > | (5) Nothing carried forward from a prior report's verification | **MET** — nothing below was reused; the scope `sys_id`, the descriptor `sys_id` and the ATF suite were re-queried, and the suite was located by name |
 >
@@ -3533,6 +3533,24 @@ harness at `TOTAL=13 PASSED=13 FAILED=0` in scope seventeen minutes earlier. The
 below and elsewhere as known — `ATF 17`, `ATF 18`, `ATF 19` — did not recur, and neither did the sixteen
 of `TES0001006`, whose single root cause was the absent role grants. Everything below in this item is
 retained as the dated record of the state before that run.)*
+
+*(QUALIFIED 2026-09-09, QA Delta QA3 — Issue 1 (F01), qualifying the re-adjudication immediately above
+and not part of the retained pre-run record that follows it: this item is **MET on currency** — a suite
+result now exists against these exact bytes, which is all item (3) asks — and that is **not** a pass for
+**AAP §0.7.3 Gate 3** or **AAP §0.7.4**. `TES0001007` was measured after the mandatory
+[`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) post-commit grant
+step, which inserted the three `sys_user_has_role` grants at 2026-09-09 13:17:25 — `Phase C role grants:
+inserted=3 already_present=0 unresolved=0` — 17 minutes 41 seconds before the suite started at 13:35:06.
+Those grants were load-bearing, not incidental: **133 of the suite's 180 step results were executed as
+the three demo personas** (`sys_updated_by` = `x_casemgmt_demo_manager` 93, `x_casemgmt_demo_agent` 21,
+`x_casemgmt_demo_viewer` 19; `admin` 47), and the package alone — the same bytes with post-commit
+`sys_user_has_role` at 0 — scored 4 Success / 16 Failure (`TES0001006`, created 2026-09-08 22:09:18),
+every one of those sixteen failures landing on a step executed under demo-persona impersonation. Those
+three grants transport in no update set on this release (§7 of the Step 5-6 section proved it at record
+level), so this suite result leaves **AAP §0.7.3 Gate 3 and AAP §0.7.4 UNSATISFIED**, exactly as the CR2
+F09 correction at the head of this report records them, and the 20 / 0 / 0 / 0 above may not be read as
+the RBAC matrix (`ATF 02` through `ATF 07`) passing for the deliverable. Fuller account: §12 item 7 of
+this document and §F and §I of [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md).)*
 
 > **CORRECTED 2026-09-09 (code review CR3, finding F03).** This item's heading claimed currency against
 > "this exact file", and that is false. `TES0001006` and the 13-assertion harness ran against the artifacts
