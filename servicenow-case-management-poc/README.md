@@ -46,6 +46,21 @@ revision, and where any of them disagrees with this block, **this block is corre
    widgets; **2** anonymous REST operations; zero empty parent references on either child table; and
    `sys_user_has_role` = **0**. Teardown then ran per the directive's Step 8 behind the 32-hex/exactly-one
    guard: **instance zero-state confirmed at 2026-09-09T13:56:56Z, no residue remaining.**
+   **CORRECTED 2026-09-09 (QA Delta QA1 — Issue 4).** That sentence was incomplete when written, because the
+   teardown's check set selected Local Update Sets by name alone and omitted `sys_update_version` and
+   `sys_metadata` entirely, so it could not see the `deleteApplication` cascade's own captures: one Local
+   Update Set the platform had named "Default" (`b65dd39c939f8b1009aa70d19dba10e4`, state `ignore`, bound to
+   the dead scope by its `application` field, carrying **448** `sys_update_xml` rows of which **73** were
+   x_casemgmt-named, plus one task-owned capture row the cascade wrote into the global "Default" set),
+   **1069** `sys_update_version` rows bound to the dead scope (**191** x_casemgmt-named, a union of **1097**),
+   and **498** `sys_metadata` rows (**492** `sys_metadata_delete` tombstones + **5** `sys_hub_flow_snapshot` +
+   **1** `sys_hub_action_type_snapshot`) — plus **103** `sys_metadata_customization` rows and **1**
+   `sys_user_preference` row found while fixing and removed with them. All of it was removed on 2026-09-09
+   between **16:27:46Z and 16:31:47Z**, leaving the FALLBACK descriptor and all **926** of its captured
+   children untouched and the intended empty end state unchanged, and the statement that holds today is
+   **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three the
+   CR5 check set had dropped** — raw evidence in
+   [`docs/refine-run/CR5-REGATE-EVIDENCE.md`](docs/refine-run/CR5-REGATE-EVIDENCE.md) §K.
    *Dated provenance, retained: the only earlier gate attempt ran on 2026-09-08 against a superseded
    **3,114,377**-byte revision (SHA-256 `b2217224…`, also 522 blocks). Its preview also reached 0
    `type=error` and 0 `type=warning`, but the platform's verdict on its single native commit was* **"Failed

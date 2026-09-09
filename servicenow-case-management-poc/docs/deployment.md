@@ -143,6 +143,29 @@ revision, and where any of them disagrees with this block, **this block is corre
    - The instance was then torn down per the run's own directive: **zero-state confirmed at
      2026-09-09T13:56:56Z, no residue remaining** — which is why the portal and dashboard URLs this document
      tells you to note do not currently resolve, and why Step 3 must be measured on **your** instance.
+     **CORRECTED 2026-09-09 (QA Delta QA1 — Issue 4):** that sentence was incomplete when written. The
+     teardown's check set selected Local Update Sets by `nameLIKEx_casemgmt` alone and never queried
+     `sys_update_version` or `sys_metadata`, so the `deleteApplication` cascade's own captures survived it:
+     one Local Update Set the platform had named **"Default"** (`b65dd39c939f8b1009aa70d19dba10e4`, bound to
+     the dead scope by its `application` field) carrying **448** `sys_update_xml` rows of which **73** were
+     x_casemgmt-named, **1069** `sys_update_version` rows bound to the dead scope (**191** x_casemgmt-named,
+     a union of **1097**) and **498** `sys_metadata` rows (**492** `sys_metadata_delete` tombstones + **5**
+     `sys_hub_flow_snapshot` + **1** `sys_hub_action_type_snapshot`) — plus **103**
+     `sys_metadata_customization` rows and **1** `sys_user_preference` row found while fixing. All of it was
+     removed on 2026-09-09 between **16:27:46Z and 16:31:47Z**, and the statement that holds is **instance
+     zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three the CR5 check
+     set had dropped** ([`refine-run/CR5-REGATE-EVIDENCE.md`](./refine-run/CR5-REGATE-EVIDENCE.md) §K). None
+     of it changes the deliverable or the walkthrough above; what it changes is your uninstall.
+     **If you ever remove this application from an instance, `deleteApplication` is not the whole job:**
+     afterwards sweep, by `application` / `sys_scope` and **not** by name, the Local Update Set the platform
+     captured the cascade into (it will be named `Default`), its `sys_update_xml` children, the scope's
+     `sys_update_version` rows — whose `state=current` rows are exactly what makes a later re-import collide
+     with `Found a local update that is newer than this one` — and its `sys_metadata`,
+     `sys_metadata_delete`, `sys_hub_flow_snapshot`, `sys_hub_action_type_snapshot` and
+     `sys_metadata_customization` rows (that last table's only filterable column is `sys_update_name`),
+     leaving any retrieved update set you mean to keep excluded null-safely. The register entry is
+     [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.QA1 with §4 items
+     26-28.
 
    **The qualification that travels with the result:** this was a **same-instance reset-and-reimport, not an
    independent second instance**. The namespace was emptied and re-verified immediately before the import, but

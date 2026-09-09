@@ -17,7 +17,7 @@ unchanged, so the gated bytes and the shipping bytes are the same bytes. Result,
 | Census | 3 tables HTTP 200 (10/10/8 rows) · dictionary and documentation 21/14/13 · 26 ACLs · 27 role links 14/10/3 · 24 choices / 7 composites · 3 counters · 7 flows active and published · **8 dashboard pane placements** · portal + 2 public pages + 3 widgets · `sys_user_has_role` **0** |
 | Dashboards | **both rendered in a browser with data** — AAP §0.7.3 Gate 6, unproven on every prior revision |
 | Tests | ATF **`TES0001007` = 20 Success / 0 Failure / 0 Error / 0 Skipped, 180 of 180 steps**; harness **13/13** |
-| Teardown | behind the line-34 guard applied fresh — **instance zero-state confirmed at 2026-09-09T13:56:56Z, no residue remaining** |
+| Teardown | behind the line-34 guard applied fresh — **instance zero-state confirmed at 2026-09-09T13:56:56Z, no residue remaining** *(CORRECTED 2026-09-09, QA Delta QA1 — Issue 1 / 2 / 3 / 4: that statement was not true as written. Three classes bound to the dead scope by `application` / `sys_scope` rather than by name survived this teardown, and its check set had dropped the predicates that find them — 1 Local Update Set `b65dd39c939f8b1009aa70d19dba10e4`, platform-named `Default`, with 448 captured payload rows of which 73 are `x_casemgmt`-named, plus 1 stray capture in the global `Default` set; 1069 `sys_update_version` rows by `application` and 191 by name, 28 of those carrying no `application`; and 498 `sys_metadata` rows. All were removed on 2026-09-09 between 16:27:46Z and 16:31:47Z, together with 103 `sys_metadata_customization` rows and 1 `sys_user_preference` row that no check set had ever covered, and the statement is re-issued as: **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three the CR5 check set had dropped, with the residue named above removed.** `sys_audit` (567 rows for the three deleted tables) and `sys_upgrade_history` (90 rows) are retained platform event history and are deliberately outside that statement. Full account: §6, §7 and §17 of the Step 8 section below, and §K of [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md).)* |
 
 Raw evidence, check by check: [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) (sections A-L), with
 15 captures at `blitzy/screenshots/cr5-regate-*.png`. Full re-adjudication, including what the re-gate
@@ -2800,6 +2800,91 @@ real columns (`name`, `url_suffix`) both read **0**, and `sp_portal`'s 9 rows ar
 kb, benchmarks, esc, perf, sp, sp_config, swp). `sys_package` / `sys_store_app` are ACL-refused to this account
 ("Failed API level ACL Validation") and were not readable either before or after.
 
+**Second removal ledger — 2026-09-09, 16:27:46Z→16:31:47Z (ADDED at QA Delta QA1, Issue 1 / 2 / 3 / 4).**
+The ledger above is the 2026-09-08 teardown's and is complete for that teardown. **It is not the last word
+on these classes, because the CR5 cycle of 2026-09-09 re-created them.** That is the plain fact and it is
+worth stating without softening: the `deleteApplication` cascade of 13:52:23Z→13:53:48Z had its own
+deletions captured by the platform into the scope's Local Update Set, into `sys_update_version` rows and
+into `sys_metadata_delete` tombstones — the same three classes this 2026-09-08 ledger swept by hand — and
+the CR5 teardown's check set no longer contained the predicates that find them (it selected Local sets by
+`nameLIKEx_casemgmt` only, which cannot match the platform-generated name `Default`, and it dropped
+`sys_update_version` and `sys_metadata` entirely). So the sweep had to be run again. It was, on 2026-09-09,
+read-only guard first and then two delete passes, and the ledger below is that run in the same shape as the
+one above.
+
+Guard pass, read-only, 16:26:40Z — four guards, all passed before anything was deleted: `sys_scope` for
+`scope=x_casemgmt` returned **0** rows · the scope `sys_id` `82b99028936f74320d74d6f88357a5af` matched
+`^[0-9a-f]{32}$` · `sys_remote_update_set` records in flight (`loading` / `previewing` / `committing`) =
+**0** of a total of **1** · the target Local set was confirmed bound to that scope and **not**
+`state=complete`. Every delete then ran as a guarded Background Script on `/sys.scripts.do` in the
+**Global** scope with `GlideRecord` + `setWorkflow(false)` + `autoSysFields(false)`, so that the deletes
+were **not themselves captured** — capture-on-delete being the mechanism that produced this residue in the
+first place. Every table in the ledger is a global table, so Global is the correct session for it.
+
+| Class | Selector | found | deleted |
+|---|---|---|---|
+| `sys_update_xml` | children of local `b65dd39c…` (platform-named `Default`, `state=ignore`, `application=82b99028…`) | 448 | 448 |
+| `sys_update_xml` | the stray task-owned row `46a4a3549313cb1009aa70d19dba10c2` (`sys_app_82b99028936f74320d74d6f88357a5af`, action DELETE, captured into the **global** `Default` set `11226d84…`) | 1 | 1 |
+| `sys_update_set` | local set `b65dd39c939f8b1009aa70d19dba10e4`, selected by `application=<scope>` — invisible to `nameLIKEx_casemgmt` | 1 | 1 |
+| `sys_metadata_delete` | tombstones in the deleted scope (`sys_scope=<scope>`), created 13:52:38→13:53:45 | 492 | 492 |
+| `sys_hub_flow_snapshot` | flow snapshots in the deleted scope | 5 | 5 |
+| `sys_hub_action_type_snapshot` | action-type snapshot in the deleted scope | 1 | 1 |
+| `sys_update_version` | by `application=<scope>` (501 `current` / 568 `previous`) and by `nameLIKEx_casemgmt` (28 rows carrying **no** `application` — the 10 case + 10 task + 8 party seed rows) | 1069 / 28 | 1069 / 28 (union **1097**) |
+| `sys_metadata_customization` | `sys_update_nameLIKEx_casemgmt` — **a class no ledger or check set in this task had ever covered**; the rows were created 2026-09-02 14:12:51→2026-09-08 20:53:48, so they survived the 2026-09-08 teardown as well, and every row's `sys_metadata` target no longer existed | 103 | 103 (skipped because the target was still alive: 0) |
+| `sys_user_preference` | `fd8c8c9093174b1009aa70d19dba1021`, name `recent.impersonations`, owned by the administrator account (`sys_user` `6816f79cc0a8016401c5a33be04be441`), value listing the three demo personas and the authenticating account — **also a class no check set had covered** | 1 | 1 |
+
+Pass 1 (16:27:46Z→16:28:12Z) took the first seven lines, and **0** rows were skipped. The pass also logged
+any row it deleted whose `sys_created_on` predated 2026-09-08 — a disclosure check rather than a guard, since
+such a row would have been deleted and reported, not skipped; it reported **0**, so nothing older than the
+two cycles of this task was touched. Pass 2 (16:31:46Z→16:31:47Z) took
+the last two.
+
+Preserved, and each re-read after the sweep: the excluded FALLBACK descriptor
+`9929f50df18ccec91ea13b2a3bccfc90` with all **926** of its `sys_update_xml` children — 926 before and 926
+after, a before/after aggregate taken only to prove the sweep destroyed nothing of that package's and
+disclosed under the same exclusion-boundary caveat as check B4 (see
+[`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) K14), not offered as compliance with the exclusion —
+and it remains the only `sys_remote_update_set` record on the instance; the global `Default` set
+`11226d84a56503108bb220b7a4d212b2`, which went 291→290 children because the single stray `sys_app` capture
+row was the only row taken from it — returning it to the 290 the update-set ledger above records for it;
+the two 2026-09-01 `Default` sets bound to other scopes; and the stock global `task` `sys_number` counter
+(`sys_id` `4`), the same row check 7 below preserves. The FALLBACK **file** was never opened.
+
+Collateral proof for this second sweep, 26 global totals taken before (~16:20Z) and after (~16:34Z): only
+the residue-bearing tables moved, each by exactly the predicted delta — `sys_update_set` 4→3 ·
+`sys_update_xml` 1665→1216 (−449) · `sys_update_version` 24794→23697 (−1097) · `sys_metadata`
+623645→623147 (−498) · `sys_metadata_delete` 11453→10961 (−492) · `sys_hub_flow_snapshot` 334→329 ·
+`sys_hub_action_type_snapshot` 574→573 · `sys_metadata_customization` 696→593 (−103). Every other total is
+identical to the "after" column of §8 below: `sys_user` 635 · `sys_user_role` 617 · `core_company` 177 ·
+`sys_choice` 18961 · `sys_db_object` 6290 · `sp_portal` 9 · `sys_hub_flow` 342 · `sys_atf_test` 186 ·
+`pa_dashboards` 3 · `sys_number` 145 · `sys_remote_update_set` 1 · `sys_dictionary` 154077 ·
+`sys_security_acl` 43713 · `sys_security_acl_role` 40590 · `sys_user_has_role` 3884 · `sys_app` 0. The
+authorized empty end state is unchanged by the sweep: scope 0, the three table endpoints still HTTP 400
+"Invalid table", every application class 0, `/sys_app_list.do` "Unfiltered Custom Applications list showing
+0 records", `/x_casemgmt_case_portal` "Page not found / The page you are looking for could not be found." to
+an interactive authenticated session and HTTP 302 → `/session_timeout.do` without one — the two signatures §9
+of this section already tabulates, both re-observed after the sweep (cookieless GET 2026-09-09T17:50:12Z;
+signed-out browser session the same, with zero `x_casemgmt` occurrences in the rendered DOM).
+
+Two classes are deliberately **not** in this ledger, and both are retained platform event history rather
+than application residue — the same treatment this report already gives `syslog`, `sys_upgrade_history`,
+the ATF suite results and the two `sys_rate_limit_count` guest rows. `sys_audit` holds **567** rows for the
+three deleted tables (`x_casemgmt_case` 382, `x_casemgmt_case_task` 114, `x_casemgmt_case_party` 71,
+created 2026-09-02 15:24:29→2026-09-09 13:37:27; a control query `tablenameLIKEincident` returned **84**,
+which proves the predicate filters rather than returning a table total), and `sys_upgrade_history` holds
+**90** rows, two of which record this package's commits. Deleting either would destroy the evidence trail
+this report rests on. **Two invalid-field traps for any future check set, in the same family as the
+`sys_ui_application` / `sp_portal` traps above:** `sys_upgrade_history` has **no** `name` and **no**
+`description` column (either filter silently returns the unfiltered **90**; its real columns include
+`summary`, `update_set`, `upgrade_started`, `upgrade_finished`), and `sys_metadata_customization` has
+**no** `name` and **no** `sys_scope` column (either filter silently returns the unfiltered **696**; its
+real column is `sys_update_name`).
+
+The re-issued statement for this sweep is recorded at §10 and §17 of this section and at the Step 8 verdict
+in [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) §K, where the sixteen post-removal predicates are
+written out one by one with their commands, timestamps, HTTP statuses and bodies (checks **K21-K29** are
+the ones added for the classes named here).
+
 ### 7. The ten zero-state checks, with raw evidence
 
 Re-run in full, from the top, after the last removal. **PASS = 10 / FAIL = 0.**
@@ -2910,6 +2995,42 @@ SUM of check-10 counters = 0
 Every earlier partial pass was followed by an explicit removal and then a re-run of **all ten** checks from
 the top; the pass recorded above is the complete final pass, not an aggregate of partial ones.
 
+> **CORRECTED 2026-09-09 (QA Delta QA1 — Issue 1 / 2 / 3 / 4) — checks 9 and 10 were true when they ran
+> on 2026-09-08 and are NOT withdrawn; what follows is what the same predicates returned after the CR5
+> cycle of 2026-09-09, and what they return now.** Nothing above is edited: the zeros printed in checks 9
+> and 10 are the 2026-09-08 measurements, taken after that teardown's own removal ledger had swept these
+> classes by hand, and they stood.
+>
+> Re-run on 2026-09-09 after the CR5 `deleteApplication` cascade (13:52:23Z→13:53:48Z), **three of those
+> predicates did not hold**:
+>
+> | Predicate, exactly as printed above | 2026-09-08 | After the CR5 cascade |
+> |---|---:|---:|
+> | `sys_update_set application=82b99028936f74320d74d6f88357a5af` (check 9, second line) | `{"result":[]}` | **1** record — `b65dd39c939f8b1009aa70d19dba10e4`, platform-named `Default`, `state=ignore`, holding **448** captured `sys_update_xml` rows (73 `x_casemgmt`-named), with a **449th** task-owned row captured into the global `Default` set |
+> | `sys_update_version application=82b99028936f74320d74d6f88357a5af` (check 10) | `=> 0` | **1069** (501 `current` / 568 `previous`); a further **191** by `nameLIKEx_casemgmt`, of which **28** carry no `application` at all |
+> | `sys_metadata sys_scope=82b99028936f74320d74d6f88357a5af` (check 10) | `=> 0` | **498** = 492 `sys_metadata_delete` + 5 `sys_hub_flow_snapshot` + 1 `sys_hub_action_type_snapshot` |
+>
+> Check 9's **second** predicate is precisely the one the CR5 teardown dropped: its check set queried
+> `sys_update_set` by `nameLIKEx_casemgmt` alone, and the set the cascade left is named `Default`, so the
+> name predicate could not match it however often it was re-run. The `application=` line printed above is
+> what finds it, and it is why this check was written with two lines rather than one. The
+> `sys_update_version` and `sys_metadata` lines of check 10 were absent from that check set altogether.
+>
+> **All three hold again**, together with thirteen further predicates, as of the 2026-09-09 sweep recorded
+> in the second removal ledger of §6 above: `sys_update_set application=<scope>` `{"result":[]}` ·
+> `sys_update_version application=<scope>` `=> 0` (and `^state=current`, `^state=previous` and
+> `nameLIKEx_casemgmt` each `=> 0`) · `sys_metadata sys_scope=<scope>` `=> 0`. These three were read over
+> independent REST at 2026-09-09T16:28:47Z, immediately after the first removal pass, and every predicate of
+> the set — including the two classes the second removal pass cleared at 16:31:46Z→16:31:47Z — reads 0 in the
+> fully recorded sixteen-predicate pass of 17:14:31Z→17:14:34Z, twelve of them also in a stable re-read at
+> ~16:36Z, and six of them (predicates 1, 2, 3, 6, 7 and 10) a third time in the platform UI; the raw commands, timestamps, HTTP statuses and bodies are at
+> [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) §K, checks **K21-K29**. Two classes that no pass of
+> this task had ever checked — 103 `sys_metadata_customization` rows and 1 `sys_user_preference` row —
+> were removed in the same sweep; the `sys_metadata_customization` rows were created
+> 2026-09-02 14:12:51→2026-09-08 20:53:48 and so were present, unchecked, when checks 9 and 10 above ran.
+> Check 7's preserved stock global `task` `sys_number` counter (`sys_id` `4`) and the excluded FALLBACK
+> descriptor with all **926** of its children were re-confirmed intact after that sweep.
+
 ### 8. Collateral proof — global totals before and after
 
 Snapshotted before the teardown and re-read after the last removal. Every delta equals the inventory in §3;
@@ -2971,6 +3092,28 @@ The timestamp is the instance's own, not this agent's host clock: the `Date` res
 `sys_created_on` of the syslog row that script wrote.
 
 > **instance zero-state confirmed at 2026-09-08T22:51:41Z, no residue remaining**
+
+> **CORRECTED 2026-09-09 (QA Delta QA1 — Issue 1 / 2 / 3 / 4) — the statement above stands as the dated
+> record of this teardown, and it is superseded twice over as a statement of current state.** First,
+> the CR5 cycle of 2026-09-09 re-created three of the classes this teardown had swept — the scope's Local
+> Update Set with 448 captured payload rows, 1069 `sys_update_version` rows (plus 191 by name, 28 of them
+> with no `application`) and 498 `sys_metadata` rows — and the CR5 teardown's own check set had dropped the
+> predicates that find them, so its verdict at 2026-09-09T13:56:56Z was not true as written either. Second,
+> one class was residue **at** 2026-09-08T22:51:41Z and no check set of this task had ever looked for it:
+> the 103 `sys_metadata_customization` rows removed on 2026-09-09 were created
+> 2026-09-02 14:12:51→2026-09-08 20:53:48, so they were present, unchecked, when this statement was
+> written. On that class, "no residue remaining" was already wider than what had been verified.
+>
+> Both are now closed. The residue named here was removed on 2026-09-09 between 16:27:46Z and 16:31:47Z
+> (second removal ledger, §6 above), and the operative statement is re-issued as:
+>
+> > **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three
+> > the CR5 check set had dropped, with the residue named above removed.**
+>
+> Explicitly outside that statement, retained on purpose: `sys_audit` (**567** rows for the three deleted
+> tables) and `sys_upgrade_history` (**90** rows, two of which record this package's commits) — immutable
+> platform event history, the same treatment this report gives `syslog`, the ATF suite results and the two
+> `sys_rate_limit_count` guest rows.
 
 ### 11. This teardown is intentional and expected — not a failure state
 
@@ -3086,6 +3229,62 @@ be undone before it is installed: the instance is now the clean target such an i
 > disclosure sits at `CR5-REGATE-EVIDENCE.md`, in the conventions at the head of the file and beside B4
 > itself, together with the correct form of the cross-check (name both descriptors in the query, expect
 > zero) that a future gate must use instead.
+>
+> **Second correction to that same sentence — 2026-09-09, QA Delta QA1 (Issue 1 / 2 / 3 / 4). The clause
+> "no residue remaining" was NOT true as written, and the check set behind it could not have detected what
+> remained.** The N01 correction above concerns the FALLBACK-exclusion clause; this one concerns the
+> zero-state claim itself. The sentence stands as written, as the dated record of what that teardown
+> checked and concluded, and what follows is what an independent read of the instance found afterwards.
+>
+> Three classes survived the teardown, every one of them bound to the dead scope by `application` or
+> `sys_scope` rather than by name:
+>
+> | Class | Selector that finds it | Surviving at 13:56:56Z |
+> |---|---|---|
+> | `sys_update_set` and its `sys_update_xml` children | `application=82b99028936f74320d74d6f88357a5af` | **1** set — `b65dd39c939f8b1009aa70d19dba10e4`, platform-named `Default`, `state=ignore`, created 2026-09-09 13:21:58 and updated 13:53:51 **inside** the cascade window — carrying **448** captured payload rows (created 13:23:14→13:53:45) of which **73** are `x_casemgmt`-named (30 Dictionary · 30 Field Label · 7 Choice list · 5 List Layout · 1 Related Lists), plus a **449th** task-owned row `46a4a3549313cb1009aa70d19dba10c2` (`sys_app_82b99028936f74320d74d6f88357a5af`, action DELETE) captured into the global `Default` set |
+> | `sys_update_version` | `application=<scope>` **and** `nameLIKEx_casemgmt` | **1069** by application (501 `current` / 568 `previous`, created 12:47:14→13:53:51) and **191** by name, of which **28** carry no `application` at all — the 10 case + 10 task + 8 party seed rows; union **1097** |
+> | `sys_metadata` | `sys_scope=<scope>` | **498** = 492 `sys_metadata_delete` tombstones (created 13:52:38→13:53:45) + 5 `sys_hub_flow_snapshot` + 1 `sys_hub_action_type_snapshot`; the same table filtered on `sys_class_name` in (`sys_hub_flow`, `sys_choice`, `sys_dictionary`) returned **0**, so bookkeeping only, no live application metadata |
+>
+> **The cause is the cascade recording itself**: `deleteApplication` ran 13:52:23Z→13:53:48Z and the
+> platform captured its own deletions into the scope's platform-named Local Update Set, into
+> `sys_update_version` rows and into `sys_metadata_delete` tombstones. **And the method had narrowed** —
+> the CR5 teardown selected Local sets by `nameLIKEx_casemgmt` alone, which can never match the name
+> `Default`, and dropped `sys_update_version` and `sys_metadata` from its check set altogether, while the
+> 2026-09-08 Step 8 pass had swept exactly those classes by hand (28 / 1041 version rows, 484 tombstones,
+> 5 flow + 1 action-type snapshots) and had run **both** `sys_update_set` predicates at its §7 check 9. The
+> three predicates it dropped are the three that failed.
+>
+> **Removal completed 2026-09-09**, behind a four-guard read-only pass at 16:26:40Z and through guarded
+> Background Scripts in the Global scope with `GlideRecord` + `setWorkflow(false)` + `autoSysFields(false)`
+> so the deletes were not themselves captured: pass 1 at 16:27:46Z→16:28:12Z took the 448 children, the
+> stray row and the set row, 492 tombstones, 5 + 1 snapshots and 1097 version rows (0 rows predating
+> 2026-09-08, 0 skipped); pass 2 at 16:31:46Z→16:31:47Z took **103** `sys_metadata_customization` rows and
+> **1** `sys_user_preference` row — two classes no check set of this task had ever covered, the former
+> created 2026-09-02 14:12:51→2026-09-08 20:53:48 and therefore residue at the 2026-09-08 statement too.
+> The full ledger, the guards, the preserved records and the 26-total collateral proof are in the second
+> removal ledger of §6 above; the sixteen post-removal predicates, each with its command, UTC timestamp,
+> HTTP status and body, are at [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) §K checks **K21-K29**
+> and the corrections at K12 and K14. The excluded FALLBACK descriptor kept all **926** of its children
+> (926 before, 926 after) and remains the only `sys_remote_update_set` record on the instance.
+>
+> **The re-issued statement, which replaces the sentence above as the statement of current state:**
+>
+> > **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three
+> > the CR5 check set had dropped, with the residue named above removed.**
+>
+> Deliberately outside that statement, and disclosed rather than swept: `sys_audit` holds **567** rows for
+> the three deleted tables (`x_casemgmt_case` 382, `x_casemgmt_case_task` 114, `x_casemgmt_case_party` 71;
+> a control query `tablenameLIKEincident` returned **84**, proving the predicate filters) and
+> `sys_upgrade_history` holds **90** rows, two of which record this package's commits. Both are immutable
+> platform event history, the treatment this report already gives `syslog`, the ATF suite results and the
+> two `sys_rate_limit_count` guest rows. None of this changes the authorization: an instance with no
+> `x_casemgmt` scope, no tables, no portal and no resolving REST endpoints remains the **correct, directed
+> end state** — scope 0, the three table endpoints still HTTP 400 "Invalid table", `/sys_app_list.do`
+> "Unfiltered Custom Applications list showing 0 records" and `/x_casemgmt_case_portal` serving no portal
+> after the sweep as before it — §9 above tabulates its two signatures, "Page not found / The page you are
+> looking for could not be found." to an interactive authenticated session and HTTP 302 →
+> `/session_timeout.do` without one, and both were re-observed after the sweep. What was wrong was the
+> claim that nothing at all remained.
 >
 > **What this re-gate does NOT settle, and what therefore travels to the human as the release-relevant
 > remainder (finding F06):**
@@ -3856,6 +4055,44 @@ state. The deliverable is the file at
 | **SHA-256** | **`5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`** |
 | Gate status | **UNGATED** — never uploaded, previewed or committed on any instance |
 | ATF status | **NO RESULT** — no suite run and no harness run covers these bytes |
+
+> **CORRECTED 2026-09-09 (QA Delta QA1 — Issue 1 / 2 / 3 / 4) — this hand-off's opening sentence ("it
+> holds no `x_casemgmt` scope, tables … seed data or update-set records of this application, and that is
+> the intended end state") is true as of the 2026-09-09T16:2x-16:3xZ sweep, and its final clause was NOT
+> true when it was written.** Every other clause held throughout; the clause "or update-set records of this
+> application" did not. What it did not cover at the time of writing: **1** Local Update Set bound to the
+> dead scope by `application` —
+> `b65dd39c939f8b1009aa70d19dba10e4`, platform-named `Default`, `state=ignore` — carrying **448** captured
+> `sys_update_xml` payload rows, **73** of them `x_casemgmt`-named, with a **449th** task-owned capture row
+> in the global `Default` set; **1069** `sys_update_version` rows bound to that scope (plus **191** by
+> name, **28** of which carry no `application`); and **498** `sys_metadata` rows in it (492
+> `sys_metadata_delete` tombstones + 5 `sys_hub_flow_snapshot` + 1 `sys_hub_action_type_snapshot`). The
+> `deleteApplication` cascade had captured its own deletions, and the teardown's check set — which
+> selected Local sets by `nameLIKEx_casemgmt`, a predicate that cannot match the name `Default` — could not
+> see any of it.
+>
+> All of it was removed on 2026-09-09 between 16:27:46Z and 16:31:47Z, behind a four-guard read-only pass
+> and through Background Scripts that do not themselves capture, together with **103**
+> `sys_metadata_customization` rows and **1** `sys_user_preference` row that no check set of this task had
+> ever covered. The ledger is in §6 of the Step 8 section; the post-removal predicates are at
+> [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) §K, checks **K21-K29**. The operative statement is
+> re-issued as:
+>
+> > **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three
+> > the CR5 check set had dropped, with the residue named above removed.**
+>
+> So that opening sentence should not be read as absolute. Two classes of platform event history are
+> retained on purpose and are outside both it and the re-issued statement: `sys_audit` holds **567** rows
+> for the three deleted tables (`x_casemgmt_case` 382, `x_casemgmt_case_task` 114, `x_casemgmt_case_party`
+> 71) and `sys_upgrade_history` holds **90** rows, two of which record this package's commits — immutable
+> history, the same treatment already given to `syslog`, the ATF suite results and the two
+> `sys_rate_limit_count` guest rows. The excluded FALLBACK descriptor was neither uploaded, previewed,
+> committed, modified nor deleted by the sweep and kept every one of its children — an aggregate disclosed
+> at [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) K14 under the same exclusion-boundary caveat as
+> check B4, not offered as compliance — and it remains the only `sys_remote_update_set` record on the
+> instance. A recipient
+> installing the deliverable inherits an instance with none of this application on it, which is the
+> directed end state, not a defect.
 
 > **CORRECTED 2026-09-09 (code review CR3, findings F01, F02 and F03) — this hand-off named SHA-256
 > `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` as the deliverable's identity.** That

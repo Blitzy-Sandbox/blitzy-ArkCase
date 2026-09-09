@@ -118,6 +118,19 @@ revision, and where any of them disagrees with this block, **this block is corre
      this verdict differs.
    - The instance was returned to a verified zero state afterwards, behind the same 32-hex/exactly-one-record
      guard applied fresh: **instance zero-state confirmed at 2026-09-09T13:56:56Z, no residue remaining**.
+     *(CORRECTED 2026-09-09, QA Delta QA1, Issue 4: that sentence is retained as written and was incomplete
+     when written. The teardown's check set selected Local Update Sets by `nameLIKEx_casemgmt` alone and did
+     not query `sys_update_version` or `sys_metadata` at all, so the `deleteApplication` cascade's own
+     captures survived it: one Local Update Set the platform had named **"Default"**
+     (`b65dd39c939f8b1009aa70d19dba10e4`) carrying **448** `sys_update_xml` rows of which **73** were
+     x_casemgmt-named, **1069** `sys_update_version` rows bound to the dead scope (**191** x_casemgmt-named,
+     a union of **1097**) and **498** `sys_metadata` rows (**492** `sys_metadata_delete` tombstones + **5**
+     `sys_hub_flow_snapshot` + **1** `sys_hub_action_type_snapshot`), plus **103**
+     `sys_metadata_customization` rows and **1** `sys_user_preference` row found while fixing. All of it was
+     removed on 2026-09-09 between 16:27:46Z and 16:31:47Z, and the statement that holds is **instance
+     zero-state re-verified at 2026-09-09T17:14:34Z across sixteen predicates including the three the CR5 check
+     set had dropped**. The register entry, with the two durable lessons and the two invalid-field traps it
+     leaves behind, is §0.QA1 below.)*
 4. **Two current test results cover the shipping bytes.** *(REPLACED 2026-09-09, code review CR5, finding
    F04. It read: "No test result covers the shipping bytes." `TES0001006` and the 2026-09-08 22:17:27 UTC
    harness pass are retained as provenance of the superseded revision's artifacts.)*
@@ -279,6 +292,89 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
   re-run the full gate on the exact candidate bytes; never patch the instance. The one shortfall the platform
   forces — the **3** `sys_user_has_role` grants, which Role Management V2 refuses from any update set on this
   release — is recorded as a BLOCKED capability gap, not as a step that satisfies a gate.
+
+## 0.QA1 Delta QA verification checkpoint QA1 (2026-09-09) — the teardown residue a name-only check set cannot see (Issue 4)
+
+QA1 was a **read-only** live-instance verification of the directed end state: it re-ran the CR5 teardown's own
+zero-state checks against the instance and found three classes non-zero, which makes the operative sentence
+"instance zero-state confirmed at 2026-09-09T13:56:56Z, **no residue remaining**" untrue as written and its
+check set unable to have detected what it missed. `review_rules` again reported exactly **"No user rules
+provided."**, so the substitute standard is unchanged. **No byte of the package changed** — the finding is
+about a verification method and the claim it supported. The original sentence is retained wherever it appears,
+each occurrence now carrying an adjacent dated correction: CURRENT ARTIFACT STATE item 3 above,
+[`../README.md`](../README.md) item 3, [`validation-gates.md`](./validation-gates.md) (Gate 7 item 11, the
+Update Set gate row and Gate 7 step 6), [`deployment.md`](./deployment.md) item 10 and
+[`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md)'s worked example.
+
+**Why the check set could not see it.** The teardown selected Local Update Sets only by `nameLIKEx_casemgmt` —
+which can never match a platform-generated name — and did not query `sys_update_version` or `sys_metadata` at
+all, although the earlier 2026-09-08 teardown had swept exactly those classes. The `deleteApplication` cascade
+(13:52:23Z→13:53:48Z) had its own deletions captured into all three.
+
+| Class that survived the 13:56:56Z statement | Measured | Why the predicate missed it |
+| --- | --- | --- |
+| Local Update Set `b65dd39c939f8b1009aa70d19dba10e4`, name **`Default`**, state `ignore`, `application` = the dead scope `82b99028936f74320d74d6f88357a5af` | **448** captured `sys_update_xml` rows, **73** of them x_casemgmt-named; plus one task-owned capture row (`46a4a3549313cb1009aa70d19dba10c2`, `sys_app_82b99028…`, action DELETE) the cascade wrote into the **global** `Default` set | The set is bound to the scope by `application`, and its name is the platform's own — §4 item 26 |
+| `sys_update_version` in the dead scope | **1069** (**501** `current` / **568** `previous`); **191** by `nameLIKEx_casemgmt` with 28 carrying an empty `application` — a union of **1097**; **101** named rows `state=current`, **60** of them `sys_dictionary_x_casemgmt_*` | Not queried at all, by either predicate — §4 item 27, and this is the class behind the historical 28 `type=error` "Found a local update that is newer than this one" problems |
+| `sys_metadata` in the dead scope | **498** = **492** `sys_metadata_delete` tombstones + **5** `sys_hub_flow_snapshot` + **1** `sys_hub_action_type_snapshot`; no live application metadata | Not queried at all — bookkeeping residue, but not zero |
+| Two classes no check named, found while fixing | **103** `sys_metadata_customization` rows naming x_casemgmt records (this class had survived the 2026-09-08 teardown too) and **1** `sys_user_preference` row (`recent.impersonations`) still naming the three deleted synthetic demo personas | `sys_metadata_customization` has no `name` and no `sys_scope` column, so both obvious predicates return the unfiltered table — §4 item 28 |
+
+**What is now true.** All of the above was removed on 2026-09-09 between **16:27:46Z and 16:31:47Z** through
+guarded Background Scripts (Global scope, `GlideRecord` with `setWorkflow(false)` and `autoSysFields(false)`)
+behind a re-evaluated four-part guard: the scope must already be absent, its id must be well-formed 32-hex, the
+update-set engine must be idle, and a Local set is deletable only when bound to the dead scope and not
+`complete`. Post-removal, **sixteen predicates all read 0** in a fully recorded REST pass taken
+2026-09-09T17:14:31Z→17:14:34Z, with earlier confirmations at 16:28:47Z (predicates 1-13 and 16 — the
+`sys_metadata_customization` and `sys_user_preference` classes were cleared by the second removal pass at
+16:31:46Z→16:31:47Z and read 0 from then on), an independent stable re-read of twelve of the sixteen at
+~16:36Z, and six of them a third time in the platform UI (predicates 1, 2, 3, 6, 7 and 10 — both
+`sys_update_set` predicates, `sys_update_xml` by the removed set, `sys_update_version` by
+`application` and by `name`, and `sys_metadata` by `sys_scope`): `sys_update_set` by `application` and by `name`;
+`sys_update_xml` by the removed set, and task-owned by `application` and by `name` under the null-safe FALLBACK
+exclusion `^remote_update_setISEMPTY^ORremote_update_set!=9929f50df18ccec91ea13b2a3bccfc90`;
+`sys_update_version` by `application`, by `name`, by `state=current`/`previous` and by
+`nameLIKEsys_dictionary_x_casemgmt`; `sys_metadata`, `sys_metadata_delete`, `sys_hub_flow_snapshot` and
+`sys_hub_action_type_snapshot` by `sys_scope`; `sys_metadata_customization` by `sys_update_name`;
+`sys_user_preference` by `value` and by `name`; and `sys_update_preview_problem` unfiltered instance-wide. The
+statement that holds is therefore **instance zero-state re-verified at 2026-09-09T17:14:34Z across sixteen
+predicates including the three the CR5 check set had dropped**, and the raw per-predicate evidence is in
+[`refine-run/CR5-REGATE-EVIDENCE.md`](./refine-run/CR5-REGATE-EVIDENCE.md) §K.
+
+**Untouched, and proven so.** The excluded FALLBACK descriptor `9929f50df18ccec91ea13b2a3bccfc90` (state
+`committed`, `sys_mod_count` 0) and all **926** of its captured children — **926** before and after; the global
+`Default` set (**291→290** children, only the one stray capture taken); and the stock global `task` number
+counter. Of 26 table totals snapshotted before and after, only the residue-bearing ones moved and each by
+exactly its predicted delta, and all sixteen stock totals the QA report sampled are unchanged (`sys_user` 635,
+`sys_user_role` 617, `core_company` 177, `sys_choice` 18961, `sys_db_object` 6290, `sp_portal` 9,
+`sys_hub_flow` 342, `sys_atf_test` 186, `pa_dashboards` 3, `sys_number` 145, `sys_remote_update_set` 1,
+`sys_dictionary` 154077, `sys_security_acl` 43713, `sys_security_acl_role` 40590, `sys_user_has_role` 3884,
+`sys_app` 0). The intended empty end state is unchanged: no scope, the three table endpoints still HTTP 400
+"Invalid table", the Custom Applications list at 0 records, and `/x_casemgmt_case_portal` serving no portal.
+
+**That last one has two signatures, and both mean absence** — worth stating precisely, because reading only
+one of them is how a checker convinces itself of the wrong thing. With an **interactive authenticated UI
+session** the URL returns HTTP 200 carrying the platform's own "Page not found / The page you are looking for
+could not be found." body. With **no UI session** — signed out in a browser, or any cookieless/Basic-auth
+request, since Basic auth does not mint a UI session on this platform — the same URL returns **HTTP 302 to
+`/session_timeout.do`** and lands on the login page. Both were re-observed after the sweep: the cookieless
+GET at **2026-09-09T17:50:12Z** (`Location: /session_timeout.do`), and a signed-out headless browser session
+which followed `/session_timeout.do` → `/navpage.do` to the login card with **zero** occurrences of the
+string `x_casemgmt` in the rendered DOM, no case number, no subject, no requester value. The stock `/sp`
+portal rendered normally in that same signed-out session, so the absence is the removed portal's and not a
+broken instance's. The pair is tabulated in
+[`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) "Step 8 + Exit
+Condition" §9.
+
+**Deliberately retained and NOT residue** — immutable platform event history, the same treatment this register
+already gives `syslog` and the ATF results: `sys_audit` (**567** rows for the three deleted tables),
+`sys_upgrade_history` (**90** rows, two of them recording this package's commits), the sweep's own `syslog`
+lines, the two `sys_rate_limit_count` guest rows, and the ATF suite results.
+
+**The durable lessons this leaves on the register** are §4 items 26 (a platform-named `Default` Local Update
+Set is invisible to any name predicate — select by `application`), 27 (`state=current` `sys_update_version`
+survives a teardown and is what a later import collides with) and 28 (the `sys_upgrade_history` and
+`sys_metadata_customization` invalid-field traps). A teardown's check set is part of the teardown: select
+scope-bound records by `application` / `sys_scope` **as well as** by name, and cover `sys_update_version`,
+`sys_metadata`, `sys_metadata_delete`, **both** snapshot tables and `sys_metadata_customization`.
 
 ## 0.CR5 Code review checkpoint CR5 (2026-09-09) — the global-table writes the exclusivity measurement did not see
 
@@ -3256,6 +3352,57 @@ so future operators don't mistake them for bugs.
     misread side effect: **the auto-number counter advances on every New-form *load*, not on insert**, because the
     platform pre-allocates the next number to display it. Loading four New forms and saving none consumes four
     numbers, so gaps in the `CASE…` sequence are expected and are not evidence of lost or deleted rows.
+
+26. **A platform-generated Local Update Set is named `Default`, so it is invisible to every name predicate —
+    select it by `application` (added 2026-09-09, QA Delta QA1, Issue 4).** Item 24 says the platform always
+    captures a scoped write somewhere; this is the consequence for anyone verifying that a scope is gone. When a
+    scope has no user-created open set, the platform captures into the set it creates and names itself —
+    literally `Default` — and binds that set to the scope through its **`application`** field, not through its
+    name. A `deleteApplication` cascade is captured the same way, so the deletions of an application are held in
+    a set whose name contains nothing of the application: `sys_update_set?sysparm_query=nameLIKEx_casemgmt`
+    returns **zero rows while such a set exists**, and so does any variant of that predicate. Measured on this
+    instance after the CR5 cascade: `b65dd39c939f8b1009aa70d19dba10e4`, name `Default`, state `ignore`,
+    `application` = the dead scope `82b99028936f74320d74d6f88357a5af`, carrying **448** `sys_update_xml` rows of
+    which **73** were x_casemgmt-named — plus one further capture row the cascade wrote into the **global**
+    `Default` set (`46a4a3549313cb1009aa70d19dba10c2`, `sys_app_82b99028…`, action DELETE), which no
+    scope-bound predicate of any kind can reach. **Query `sys_update_set` by `application=<scope sys_id>` as
+    well as by name, and query `sys_update_xml` for task-owned rows by name under a null-safe exclusion of any
+    retrieved set you mean to keep** (`^remote_update_setISEMPTY^ORremote_update_set!=<descriptor sys_id>` — a
+    bare `!=` is a SQL `<>` and drops the NULL-valued rows, which are exactly the local captures).
+
+27. **A scope teardown does not remove `sys_update_version`, and its `state=current` rows are precisely what
+    produces `Found a local update that is newer than this one` on the next import (added 2026-09-09, QA Delta
+    QA1, Issue 4).** Deleting an application removes its records; the platform's version history of those
+    records is a separate class and survives. Measured after the CR5 cascade: **1069** `sys_update_version` rows
+    bound to the dead scope (**501** `current` / **568** `previous`) and **191** by `nameLIKEx_casemgmt`, 28 of
+    them carrying an empty `application` — a union of **1097** rows that neither predicate finds on its own.
+    **101** of the x_casemgmt-named rows were `state=current` and **60** of those were
+    `sys_dictionary_x_casemgmt_*`: precisely the class this project's own known-failure record blames for the
+    historical **28** `type=error` "Found a local update that is newer than this one" preview problems. The
+    operational consequence is the one that matters to a deployer: **a teardown that leaves this class has
+    not cleared the ground for the next preview** — the namespace looks empty by every
+    application-facing query while the next import still collides with the version history. Include
+    `sys_update_version` by `application=<scope sys_id>` **and** by `nameLIKE<scope prefix>` in the teardown
+    itself and in its verification set. The same is true of `sys_metadata`: **498** rows remained in the dead
+    scope (**492** `sys_metadata_delete` tombstones + **5** `sys_hub_flow_snapshot` + **1**
+    `sys_hub_action_type_snapshot`), bookkeeping only — no live application metadata — but not zero, and not
+    reached by any name predicate either.
+
+28. **Three more filters that do not exist and are answered with the unfiltered table (added 2026-09-09, QA
+    Delta QA1, Issue 4).** Item 6 records the same trap on `sys_number` and item 15 its data-side cousin: an
+    `sysparm_query` naming a column a table does not have is **not** an error on this platform — the condition
+    is dropped and the query returns everything, which reads as a large non-zero where a residue check expects a
+    small one, or as a "match" where there is none. Two more, measured while re-verifying the teardown:
+    **`sys_upgrade_history` has no `name` and no `description` column** — either filter silently returns the
+    unfiltered **90** rows; its real columns include `summary` and `update_set`. **`sys_metadata_customization`
+    has no `name` and no `sys_scope` column** — either filter silently returns the unfiltered **696** rows; its
+    real column is **`sys_update_name`**, and the true count of rows naming this application's records was
+    **103**. A third, found during the closing regression pass: **`sp_portal` has no `url` column** — the
+    obvious `urlLIKEx_casemgmt` silently returns the unfiltered **9** and reads as nine surviving portals,
+    where the real column `url_suffix` returns **0** (`url_suffix=sp` returns 1 as its control). Confirm a
+    column exists before you read a count from a predicate that uses it, and give every zero a positive
+    control on the same column — the cheapest form of which is to read the unfiltered table total in the same
+    pass and treat "filtered count == table total" as a failed check rather than a result.
 
 ---
 

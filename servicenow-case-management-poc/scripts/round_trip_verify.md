@@ -1202,6 +1202,47 @@ newly started client runner. No test was patched, relaxed or re-run to obtain th
 removal ledger for what the scope cascade does not take: **instance zero-state confirmed at
 2026-09-09T13:56:56Z, no residue remaining.**
 
+> **[QA Delta QA1 2026-09-09 · Issue 4 — CORRECTED. That removal ledger was short by three classes, and the
+> sentence is retained above as the dated record.]** The ledger's own check set selected Local Update Sets by
+> `nameLIKEx_casemgmt` alone and never queried `sys_update_version` or `sys_metadata`, so what the
+> `deleteApplication` cascade (13:52:23Z→13:53:48Z) captured of its own deletions was not in the ledger and
+> not in its verification: one Local Update Set the platform had named **"Default"**
+> (`b65dd39c939f8b1009aa70d19dba10e4`, state `ignore`, bound to the dead scope
+> `82b99028936f74320d74d6f88357a5af` by its `application` field) carrying **448** `sys_update_xml` rows of
+> which **73** were x_casemgmt-named, plus one task-owned capture row (`46a4a3549313cb1009aa70d19dba10c2`,
+> `sys_app_82b99028…`, action DELETE) written into the global "Default" set; **1069** `sys_update_version`
+> rows bound to the dead scope (**501** `current` / **568** `previous`) and **191** by `nameLIKEx_casemgmt`,
+> 28 of them with an empty `application` — a union of **1097**, of which **101** were `state=current` and
+> **60** of those `sys_dictionary_x_casemgmt_*`; and **498** `sys_metadata` rows in that scope = **492**
+> `sys_metadata_delete` tombstones + **5** `sys_hub_flow_snapshot` + **1** `sys_hub_action_type_snapshot`.
+> **103** `sys_metadata_customization` rows and **1** `sys_user_preference` row (`recent.impersonations`,
+> still naming the three deleted demo personas) were found while fixing and removed with them. Removal ran
+> 2026-09-09 **16:27:46Z-16:31:47Z** behind a re-evaluated four-part guard — the scope already absent, its id
+> well-formed 32-hex, the update-set engine idle, and a Local set deletable only when bound to the dead scope
+> and not `complete` — and the statement that holds is **instance zero-state re-verified at
+> 2026-09-09T17:14:34Z across sixteen predicates including the three the CR5 check set had dropped**, raw
+> evidence in [`../docs/refine-run/CR5-REGATE-EVIDENCE.md`](../docs/refine-run/CR5-REGATE-EVIDENCE.md) §K.
+>
+> **If you run this procedure and then tear your instance back down, these are the predicates the
+> re-verification must read as zero** — a name predicate alone is not a zero-state check, because the set the
+> platform captures into is named `Default`: `sys_update_set` by `application` **and** by `name`;
+> `sys_update_xml` by that removed set, and task-owned rows by `application` and by `name` under a null-safe
+> exclusion of any retrieved set you keep (`^remote_update_setISEMPTY^ORremote_update_set!=<descriptor
+> sys_id>` — a bare `!=` is a SQL `<>` and drops the NULL-valued local captures); `sys_update_version` by
+> `application`, by `name`, by `state=current` / `previous` and by `nameLIKEsys_dictionary_<scope prefix>`;
+> `sys_metadata`, `sys_metadata_delete`, `sys_hub_flow_snapshot` and `sys_hub_action_type_snapshot` by
+> `sys_scope`; `sys_metadata_customization` by `sys_update_name` (it has no `name` and no `sys_scope`
+> column — either filter silently returns the unfiltered table); `sys_user_preference` by `value` and by
+> `name`; and `sys_update_preview_problem` unfiltered instance-wide. Untouched by that sweep and proven so:
+> the excluded FALLBACK descriptor `9929f50df18ccec91ea13b2a3bccfc90` with all **926** of its captured
+> children (**926** before and after), the global "Default" set (**291→290** children, only the one stray
+> capture taken) and the stock global `task` number counter. Deliberately retained and **not** residue, as
+> this document already treats `syslog` and the ATF results: `sys_audit` (**567** rows for the three deleted
+> tables), `sys_upgrade_history` (**90** rows, two of them this package's commits — note it has no `name` and
+> no `description` column, so either filter silently returns all 90; its real columns include `summary` and
+> `update_set`), the sweep's own `syslog` lines, the two `sys_rate_limit_count` guest rows and the ATF suite
+> results.
+
 **What this worked example does not establish, and no reader may take from it.** It was a **same-instance
 reset-and-reimport**, not a run on an independent second instance — the namespace was emptied and
 re-verified immediately before the import, but instance-level caches, indexes and dictionary/metadata state
