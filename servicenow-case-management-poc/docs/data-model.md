@@ -6,9 +6,19 @@ This document captures the three-table schema for the ServiceNow scoped applicat
 
 The three tables are:
 
-- **`x_casemgmt_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total).
+- **`x_casemgmt_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total). **The 14 is not an AAP figure:** AAP Section 0.5.7 specifies the 12, `pending_reason` is added for the Pending state per AAP Sections 0.4.1 and 0.5.5, and `duration_to_close` is a documented addition to the Section 0.5.7 field set — a disclosed deviation from Section 0.7.1's "no additions", declared at [Additional field: duration_to_close (Function Field)](#additional-field-duration_to_close-function-field) (code review CR5, finding F14).
 - **`x_casemgmt_case_task`** — child tasks linked to a parent case via the `case` reference field (6 fields).
 - **`x_casemgmt_case_party`** — polymorphic party associations linked to a parent case (5 fields, `party_type` discriminator + conditional `person`/`organization` reference fields).
+
+> **The two child tables each carry one column beyond their Section 0.5.7 field list, and it is
+> AAP-mandated rather than an addition (recorded 2026-09-09, code review CR5, alongside finding F14).**
+> Measured on the shipping package, `x_casemgmt_case_task` has 7 field-level `sys_dictionary` rows against
+> Section 0.5.7's 6, and `x_casemgmt_case_party` has 6 against 5; in both cases the extra column is
+> `number`. It is required by the AAP itself, not elected here: Sections 0.3.1 and 0.4.1 enumerate
+> `numbers/sys_number_x_[scope]_case_task.xml` and `numbers/sys_number_x_[scope]_case_party.xml` as
+> in-scope artifacts, and a `sys_number` counter has nothing to write into without a `number` column on
+> its table. It is recorded here for completeness rather than declared as a deviation the way
+> `duration_to_close` is: the counters are AAP deliverables and this column is what makes them work.
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -62,7 +72,7 @@ erDiagram
 
 ## Table 1: x_casemgmt_case
 
-The case-file table replicates ArkCase's `acm_case_file` (mapped to the `CaseFile.java` JPA entity). It is the parent record for all case-management workflows in the POC. Each case has 12 user-prompt-specified fields plus a `pending_reason` choice field used for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total.
+The case-file table replicates ArkCase's `acm_case_file` (mapped to the `CaseFile.java` JPA entity). It is the parent record for all case-management workflows in the POC. Each case has 12 user-prompt-specified fields plus a `pending_reason` choice field used for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total. **Of that 14, only the 12 in the table immediately below are AAP Section 0.5.7's**; `pending_reason` is added for the Pending state per AAP Sections 0.4.1 and 0.5.5, and `duration_to_close` is a documented addition to the Section 0.5.7 field set — a disclosed deviation from Section 0.7.1's "no additions", declared at [Additional field: duration_to_close (Function Field)](#additional-field-duration_to_close-function-field) (code review CR5, finding F14). The count is measured on the shipping package: 14 field-level `sys_dictionary` payloads for `x_casemgmt_case`, plus the table's own collection row.
 
 | Field | Type | Constraints |
 | --- | --- | --- |
@@ -88,6 +98,32 @@ Per AAP Section 0.4.1 (under choices) and AAP Section 0.5.5 (transition matrix),
 | pending_reason | Choice | Awaiting Info, Awaiting Third Party, Other (mandatory only when status = Pending) |
 
 ### Additional field: duration_to_close (Function Field)
+
+**DISCLOSED DEVIATION — 2026-09-09 (code review CR5, finding F14): this field is NOT in AAP Section 0.5.7's
+field table for `x_casemgmt_case`.** It is a deliberate, documented addition, and the constraint it departs from
+is AAP Section 0.7.1's *"Preserve the user-prompt's data-model field set verbatim … no additions, no renames, no
+type relaxations"*. Section 0.5.7 enumerates twelve columns for this table; the shipped dictionary carries
+fourteen field-level rows — those twelve, `pending_reason` (added for the Pending state per AAP Sections 0.4.1
+and 0.5.5), and this field. What compels it is AAP Section 0.4.4's Manager View Widget 4 — the single-score
+*"Average time to close"*, specified as `closed_date - opened_date` over Closed cases — together with AAP
+Section 0.7.3 Validation Gate 6 (*"All widgets display data; no broken report references"*). No
+Section-0.5.7-compliant alternative exists, for the platform reason set out in the paragraphs below: `sys_report`
+can compute `AVG` only over a native database column or a Function Field. The addition is bounded to exactly
+that: it is a query-time derivation of two columns Section 0.5.7 *does* enumerate, and the shipped dictionary
+payload carries `function_field = true`, `read_only = true`, `display = false` and `audit = false`, so it adds no
+stored column to the three-table schema, no auditing, and no field a user sees on any form or list. It travels in
+the deliverable as exactly one block, `sys_dictionary_x_casemgmt_case_duration_to_close`, at line 343 of
+[`../update-set/x_casemgmt_case_management_update_set.xml`](../update-set/x_casemgmt_case_management_update_set.xml)
+(measured 2026-09-09 on the shipping package, SHA-256 `5a3c629f…`). **Read this as a disclosed deviation still
+awaiting human ratification, not as a closed item** — it is recorded here so that the verbatim-field-set
+constraint is visibly carrying one named exception rather than being silently broken. Deleting the field is not
+available as a correction on this release: the alternative offered against F14 ("remove it and compute the
+average in the report definition") would require editing the canonical package's bytes, which the delivery
+directive forbids (no hand-splicing, no XML-merging), and it would also leave the AAP-mandated widget with
+nothing to average. The rest of this section is the standing detail behind that declaration: the aggregation
+constraint and the field's definition first, then the load-bearing `virtual` flag, then how a REST consumer reads
+the value, and finally — under *"This field is an addition to the AAP Section 0.5.7 field set"* — what a reader
+who requires strict Section 0.5.7 arity has to decide.
 
 Per AAP Section 0.4.4, the Manager View dashboard's Widget 4 ("Average Time to Close") is required to display the average of `closed_date - opened_date` over Closed cases. ServiceNow's Reports + Dashboards stack can aggregate (`AVG`) only over native database columns and Function Fields; it cannot aggregate over JavaScript "Calculated Value" fields because those run per-row at read time. To satisfy AAP Section 0.4.4 and AAP Section 0.7.3 Validation Gate 6 ("All widgets display data; no broken report references") the case table includes one additional virtual field — `duration_to_close` — typed as a `glide_duration` **Function Field** computed at query time by the platform-native operator `glidefunction:datediff(closed_date,opened_date)`. The field is virtual (not stored on the row), read-only by definition, hidden from the form/list views (`display = false`), and not auditable (`audit = false`). When `closed_date` is empty (i.e., the case has not yet been closed) the function returns `NULL`; the report's `status = Closed` filter excludes those rows so the AVG is computed only over actually-closed cases.
 
@@ -364,7 +400,7 @@ This section documents how the three ServiceNow tables semantically correspond t
 
 The following schema-level constraints are non-negotiable per AAP Section 0.7.1:
 
-- **Field set is non-negotiable.** No additions, no renames, no type relaxations beyond what is in AAP Section 0.5.7.
+- **Field set is non-negotiable.** No additions, no renames, no type relaxations beyond what is in AAP Section 0.5.7. **One named exception stands against this constraint, disclosed and unratified — 2026-09-09 (code review CR5, finding F14):** `x_casemgmt_case.duration_to_close`, the virtual `glide_duration` Function Field AAP Section 0.4.4's Manager View Widget 4 and Section 0.7.3 Validation Gate 6 cannot be satisfied without, is a thirteenth column in the shipped dictionary (fourteenth counting `pending_reason`, itself added per Sections 0.4.1 and 0.5.5). It is stated in full at [Additional field: duration_to_close (Function Field)](#additional-field-duration_to_close-function-field). Measured on the shipping package, it and `pending_reason` — whose addition AAP Sections 0.4.1 and 0.5.5 themselves direct — are the only two of `x_casemgmt_case`'s 14 field-level dictionary rows that Section 0.5.7 does not enumerate, and every remaining row carries a Section 0.5.7 field name unchanged.
 - **Choice values are non-negotiable.** Each Choice field's values match the user prompt verbatim.
 - **Mandatory flags are non-negotiable.** Every "Mandatory" cell in the schema tables MUST result in `mandatory = true` on the dictionary entry — AND in a server-side refusal of any write that would store the column empty, because the dictionary flag alone is enforced only by the form engine. See [Server-Side Enforcement of the Schema Contract](#server-side-enforcement-of-the-schema-contract).
 - **Conditional flags are non-negotiable.** `person` and `organization` form an exactly-one-of pair keyed on `party_type`: exactly one is populated on every stored row, never both and never neither.

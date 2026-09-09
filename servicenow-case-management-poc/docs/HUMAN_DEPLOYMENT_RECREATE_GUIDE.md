@@ -82,7 +82,12 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 - **A shortfall the package leaves is a source-side defect.** Correct it where the package is produced, then
   re-run the full gate on the exact candidate bytes; never patch the instance. The one shortfall the platform
   forces — the **3** `sys_user_has_role` grants, which Role Management V2 refuses from any update set on this
-  release — is recorded as a BLOCKED capability gap, not as a step that satisfies a gate.
+  release — is recorded as a BLOCKED capability gap, not as a step that satisfies a gate. **Those grants are
+  the first post-commit action** — §5h, step 7 of the primary procedure — and their acceptance check is a pass
+  condition of the §6.1 census (re-ordered 2026-09-09, code review CR5, finding F10).
+- **The package does not carry 12 scoped records this repository holds** — 5 business rules, 3 client scripts,
+  3 field-level `query_range` ACLs and 1 UI policy — by decision, with the functional consequence and an
+  optional native install route stated in **§5i** (added 2026-09-09, code review CR5, finding F02).
 
 > **DELIVERABLE IDENTITY — read this before comparing, verifying or asserting any digest, byte size or block count anywhere in these documents.**
 > Re-measured **2026-09-05T04:45Z** from the files on disk (`sha256sum`, `stat -c %s`,
@@ -111,9 +116,15 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 > four payloads (the three `sys_user_has_role` records this release refuses — §5h now delivers those grants —
 > and the Global-stamped `sys_script_fix` record), added four (the two dashboard-pane bundles restoring the
 > eight `sys_grid_canvas_pane` placements, and two scoped `sys_rate_limit_rules` records), hardened the two
-> anonymous portal endpoints, and reordered every block into the AAP §0.5.2 dependency tiers. **These bytes
-> have not been previewed or committed anywhere** — run the upload → preview → zero-problem gate in
-> [`deployment.md`](./deployment.md) Step 2 before committing. Full ledger:
+> anonymous portal endpoints, and reordered every block into the AAP §0.5.2 dependency tiers. ~~**These bytes
+> have not been previewed or committed anywhere**~~ — *(CORRECTED 2026-09-09, code review CR5, finding F01:
+> they have. These exact bytes were uploaded, previewed to **0 problems of any type** and committed once on
+> 2026-09-09, with the platform reporting `Succeeded 100%` / `Update set committed - Succeeded in 40
+> Seconds`, and the ATF suite then scoring 20/20 over 180 of 180 steps. Evidence:*
+> *[`refine-run/CR5-REGATE-EVIDENCE.md`](./refine-run/CR5-REGATE-EVIDENCE.md).* *That was a same-instance
+> reset-and-reimport, so it does not relieve you of running the gate on **your** instance)* — run the
+> upload → preview → zero-problem gate in
+> [`deployment.md`](./deployment.md) Step 2 before committing, then §5h immediately after. Full ledger:
 > [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.CR1.
 >
 > **What the deliverable was before that amendment: the consolidated, platform-exported package in the table
@@ -372,7 +383,7 @@ After completing this guide, on the instance you targeted — the current valida
 
 - Scoped application **`x_casemgmt` ("Case Management")** with a single scope/`sys_app` record (`sys_id 82b99028936f74320d74d6f88357a5af` on the current validation instance — that is a **measured value, not an input**: on any instance, yours included, resolve it with `GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id` rather than reusing the literal).
 - **3 physical tables**: `x_casemgmt_case` (with auto-number `CASE0000001`), `x_casemgmt_case_task`, `x_casemgmt_case_party`, each with all dictionary fields and choice lists.
-- **3 roles**: `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`. The roles themselves arrive in the package; the **three demo-persona grants of those roles do not** and are made post-commit per §5h — the commit cannot install them on this release.
+- **3 roles**: `x_casemgmt_case_manager`, `x_casemgmt_case_agent`, `x_casemgmt_case_viewer`. The roles themselves arrive in the package; the **three demo-persona grants of those roles do not** and are made post-commit per §5h, which is the **first** post-commit action (step 7 of the primary procedure) — the commit cannot install them on this release.
 - **29 ACLs + 36 role-link records** enforcing the role × CRUD matrix (manager full / agent assigned-only / viewer read-only). 26 of the ACLs are AAP §0.5.6's table-level and field-level set; the other 3 are field-level `query_range` grants on `case.opened_date`, `case.closed_date` and `case_task.due_date`, granted to all three roles so a date RANGE filter may participate in the query — which rows come back is still decided by each role's read ACL. The remediation script resolves those three ACLs' `operation` reference by name, since §0.7.2 forbids shipping the operation's sys_id.
 - **11 business rules** — in execution order on `x_casemgmt_case`: **`validate_case_mandatory_fields` (50, before-insert + update)** — refuses an empty `subject`, `description` or `requester_name` and names the offending field, which is what stops the Table API from creating a blank shell — **`validate_case_text_lengths` (70)**, `block_terminal_closed` (100, before-update), `set_opened_date` (100, before-insert), `block_draft_backtransition` (200), **`enforce_forward_transitions` (250)** — the one that runs the transition subflow and raises the blocking form error — `validate_assigned_agent_membership` (300, insert + update), `clear_pending_reason_on_inprogress` (400), and `set_closed_date` (500), the only writer of `closed_date`. Plus one on each child table at order 100: **`validate_case_task_integrity`** (task must carry its parent case, subject, assigned_to and due_date) and **`validate_case_party_integrity`** (exactly one of `person`/`organization`, matching `party_type`, per AAP §0.5.7's Conditional rows). The four order-50/70/100-on-children rules exist because a UI Policy cannot reach a REST caller: they enforce the data contract on every write path.
 - **7 Flow Designer flows** — 2 parent flows (`general_inquiry_state_machine`, `complaint_state_machine`) and 5 subflows (`validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`, `validate_resolved_transition`, `validate_closed_transition`) — plus **1 Custom Action** (`x_casemgmt_transition_guard_action`) and **1 shared flow logic block**.
@@ -816,6 +827,8 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > labels on real forms — so **§5a's choice-row steps are no longer required** (they remain harmless and
 > idempotent if you run them). §5a's **physical-schema half is still mandatory**, and
 > §5's step 7 (`seed_demo_data.js` in scope) is still needed for the seed linkage and `opened_date`.
+> **[RE-NUMBERED 2026-09-09 · CR5 F10: the seed pass is now step **8**. Step **7** is the three role grants
+> (§5h), which run first. `seed_demo_data.js` itself is unchanged.]**
 > **Everything below is REQUIRED as written for the shipping deliverable**
 > (`update-set/x_casemgmt_case_management_update_set.xml`, and its byte-identical copy
 > `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`) and for older revisions.
@@ -890,7 +903,8 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > exclusivity with **zero global-scope writes**, and the release gate requires **a single clean commit — no
 > second commit, no remediation script, no live-instance patching**. Those three steps are retained only as a
 > record of what an earlier round did on the two hand-authored candidate packages (both deleted on
-> 2026-09-08). **The supported route is steps 1, 2, 3, 7 and 8 only**; if the package leaves a shortfall,
+> 2026-09-08). **The supported route is steps 1, 2, 3, 7 and 8 only** — and since 2026-09-09 (CR5 F10) step 7
+> is the **role grants** (§5h) and step 8 is the **seed pass** (§5g), in that order; if the package leaves a shortfall,
 > correct it where the package is produced and re-run the full gate on the exact candidate bytes.
 >
 > **CORRECTED 2026-09-09 · CR3 F12 — step 1's child count and digest.** Assert **522** children and SHA-256
@@ -898,6 +912,14 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > and digests step 1 names (935, 988, and the packages behind them) belong to superseded revisions, two of
 > which were deleted on 2026-09-08 and are not on disk; step 1's row is retained as written, and this note
 > prevails over it.
+>
+> **RE-ORDERED 2026-09-09 (code review CR5, finding F10) — the role grants are now step 7 and the seed pass is
+> step 8; they were the other way round.** The three `sys_user_has_role` grants are **the first thing you do
+> after the commit**. They are mandatory on every install, no Update Set can deliver them on this release, and
+> a deployer who reaches the ATF run or the §6.3 impersonation probe without them re-derives a wholesale
+> failure that says nothing about the application. The section they live in keeps its **§5h** label — other
+> documents cross-reference that anchor — so §5h is deliberately printed **before** §5g below. Nothing else in
+> the numbering moves: the supported sequence is **1 → 2 → 3 → 7 → 8**.
 >
 > | # | Step | What to do | Where |
 > |---|---|---|---|
@@ -907,8 +929,8 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 > | 4 | ⛔ **NOT A SUPPORTED STEP (CR3 F16).** ~~**Run the remediation in scope `Global`** — *first pass*~~ | *System Definition → **Scripts - Background***, set **"In scope" = Global**, paste `scripts/post_import_remediation.js`, run. This pass builds the three tables' physical storage and their fields; it also writes their choice rows, which since 2026-09-03 the package already carries natively, so that part is redundant and idempotent rather than required. It does the `sys_db_object` work itself; **you do not delete anything and you do not touch the application picker** | §5a |
 > | 5 | ⛔ **NOT A SUPPORTED STEP (CR3 F16).** ~~**Commit the same Update Set a second time**~~ | The rebuild in step 4 **cascades away all 29 ACLs**, the seed rows, the demo users and the role grants; a second commit restores them. This preview reports ~21 `Could not find a record in x_casemgmt_case for column case` / `…core_company for column organization` problems, because the tables now exist but are empty — set **those** to `status=ignored`. It also reports ~25 `sys_dictionary` collisions from the rows step 4 wrote moments earlier; accepting the remote is correct **for `sys_dictionary` only**, because the package now carries the corrected `display` and `defaultsort` values itself. **Never ignore a collision on any other table** | §4 again |
 > | 6 | ⛔ **NOT A SUPPORTED STEP (CR3 F16).** ~~**Run the remediation in scope `Global`** — *second pass*~~ | Same invocation as step 4. This is the pass that creates the **36** `sys_security_acl_role` links and flushes the security cache. Without it you have 29 ACLs with **0** role links, and on a high-security instance an ACL with no role, no condition and no script evaluates to **deny** — the application is unusable for every non-admin | §5f |
-> | 7 | **Seed the demo data** | Run `scripts/seed_demo_data.js` **in scope** (not Global). Do **not** delete the packaged rows — they carry pinned numbers now and the script adopts them. Clear the dangling `sys_user_grmember` row if one is present | §5g |
-> | 8 | **Grant the three demo personas their scoped roles** | Mandatory on every install: the package carries **no `sys_user_has_role` payload**, because the loader refuses that table on this release. Make each grant through the platform's **Edit Members** slushbucket (user form → **Roles → Edit…**), one save per grant, then verify **exactly 3** scoped grants over REST. Without them every persona holds no role and every impersonation check and ATF test fails at its first persona step | §5h |
+> | 7 | **Grant the three demo personas their scoped roles** — **the FIRST post-commit action** | Mandatory on every install: the package carries **no `sys_user_has_role` payload**, because the loader refuses that table on this release. The three demo `sys_user` rows arrive **with** the commit, so this runs immediately after it and **before** the seed pass. Make each grant through the platform's **Edit Members** slushbucket (user form → **Roles → Edit…**), one save per grant, then verify **exactly 3** scoped grants over REST. Without them every persona holds no role and every impersonation check and ATF test fails at its first persona step | §5h |
+> | 8 | **Seed the demo data** | Run `scripts/seed_demo_data.js` **in scope** (not Global). Do **not** delete the packaged rows — they carry pinned numbers now and the script adopts them. Clear the dangling `sys_user_grmember` row if one is present | §5g |
 >
 > Run the remediation like this — **in `global`, never in scope**:
 >
@@ -1276,33 +1298,21 @@ Then confirm enforcement, not just the record count, with the impersonation `can
 viewer read-only; agent create-only at table level with delete false, and at record level readable/writable on
 its assigned case while an unassigned case is filtered out of the query entirely.
 
-### 5g. Seed the demo data  *(idempotent)*
-
-Run the deliverable's own seed script **in scope** (`scripts/seed_demo_data.js`) to create the 3 demo users,
-1 demo group, 10 cases across all six statuses and both case types, demo tasks (open + closed mix), and demo
-parties (Person + Organization mix). It resolves all references by `user_name` / `name` / `number`.
-
-```bash
-# This is step 7 of the primary procedure (step 8, the role grants, follows in 5h). Note the
-# scope argument: seeding runs IN SCOPE,
-# unlike the remediation, which must run in Global. SCOPE_SYS_ID comes from the Section 3
-# query block - re-run that one block now if it was empty before the commit.
-: "${SCOPE_SYS_ID:?resolve it first with the sys_scope query in Section 3}"
-"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/seed_demo_data.js "$SCOPE_SYS_ID"
-```
-
-Do **not** delete the packaged seed rows first — that instruction belonged to an earlier revision. Every
-packaged row now carries a pinned number (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+), and `ensureCase()` /
-`ensureTask()` / `ensureParty()` match on that number **first** and adopt the row. Reference fields use
-validity-aware reconciliation: the script fills a blank value, repairs a non-`sys_id` raw key or a dangling
-`sys_id`, and preserves a valid populated reference even when it is an operator-managed alternative. It also
-sets `opened_date` when missing on every adopted or inserted case, while retaining the explicit dates on
-`CASE9000006` and `CASE9000010`. A second run must report `repaired=0` and insert nothing. Expect
-`cases inserted=0 adopted=10 …` on a committed install; you will see `inserted=10` only if you run the script
-on an instance where the package was never committed, in which case the instance counter allocates the numbers
-instead. Clear the dangling `sys_user_grmember` row if one is present.
-
 ### 5h. Grant the three demo personas their scoped roles  *(mandatory — the package cannot carry these)*
+
+> **THIS IS THE FIRST POST-COMMIT ACTION — step 7 of the primary procedure. MOVED HERE 2026-09-09 (code
+> review CR5, finding F10).** It used to be step 8 and to sit after §5g, which meant a deployer could reach
+> the §6.3 impersonation probe or the §6.4 ATF run with **0** grants and re-derive a wholesale failure that
+> says nothing about the application. Do it **immediately after the commit**, before §5g's seed pass: the three
+> demo `sys_user` rows arrive with the commit itself, so nothing here waits on the seed script. **The section
+> keeps its `5h` label deliberately** — [`deployment.md`](./deployment.md),
+> [`validation-gates.md`](./validation-gates.md),
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md),
+> [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) and
+> `../scripts/seed_demo_data.js` all cross-reference "§5h" / "section 5h", and every one of those references
+> must keep resolving — which is
+> why §5h is printed **before** §5g. Nothing else in the guide's numbering moved; the acceptance check for
+> this step is also a pass condition of the §6.1 census.
 
 **This step is required on every install, and no Update Set can replace it.** The deliverable carries **no
 `sys_user_has_role` payload at all**, deliberately: `sys_user_has_role` is owned by Role Management V2 on this
@@ -1385,7 +1395,11 @@ removed through the same Edit Members screen.
 `scripts/seed_demo_data.js` Phase C (`ensureRoleAssignment()`) creates the same three grants with a direct
 `GlideRecord` insert, resolving the user by `sys_user.user_name` and the role by `sys_user_role.name`, and it is
 idempotent — a second run reports `already_present=3` and inserts nothing. It runs as part of §5g, **in scope
-`x_casemgmt`** (the same `SCOPE_SYS_ID` invocation as §5g — not Global):
+`x_casemgmt`** (the same `SCOPE_SYS_ID` invocation as §5g — not Global). **One ordering consequence, added
+2026-09-09 (CR5 F10):** taking this route instead of the slushbucket moves the grants from step 7 to step 8,
+because they then land with the seed pass — the *Edit Members* route above is the one that keeps them the
+**first** post-commit action, and it remains the route measured to work and the one to use wherever provenance
+matters:
 
 ```bash
 : "${SCOPE_SYS_ID:?resolve it first with the sys_scope query in Section 3}"
@@ -1405,6 +1419,225 @@ without a separate query.
 audit performed) will classify it as a script-authored row and may require it to be deleted and recreated
 through Edit Members. Where provenance matters — anything you will be asked to attest to — use Edit Members
 above and treat the script as the convenience path for a throwaway demo instance.
+
+### 5g. Seed the demo data  *(idempotent)*
+
+> **Step 8 of the primary procedure — run §5h above first (re-ordered 2026-09-09, code review CR5, finding
+> F10).** This section keeps its `5g` label and is printed after §5h on purpose; the seed pass is the **second**
+> post-commit action.
+
+Run the deliverable's own seed script **in scope** (`scripts/seed_demo_data.js`) to create the 3 demo users,
+1 demo group, 10 cases across all six statuses and both case types, demo tasks (open + closed mix), and demo
+parties (Person + Organization mix). It resolves all references by `user_name` / `name` / `number`.
+
+```bash
+# This is step 8 of the primary procedure. Step 7, the three role grants, is 5h ABOVE and must
+# already be done (re-ordered 2026-09-09, CR5 F10). Note the
+# scope argument: seeding runs IN SCOPE,
+# unlike the remediation, which must run in Global. SCOPE_SYS_ID comes from the Section 3
+# query block - re-run that one block now if it was empty before the commit.
+: "${SCOPE_SYS_ID:?resolve it first with the sys_scope query in Section 3}"
+"$SNRUN/bg.sh" servicenow-case-management-poc/scripts/seed_demo_data.js "$SCOPE_SYS_ID"
+```
+
+Do **not** delete the packaged seed rows first — that instruction belonged to an earlier revision. Every
+packaged row now carries a pinned number (`CASE9000001`+, `TASK9000001`+, `PARTY9000001`+), and `ensureCase()` /
+`ensureTask()` / `ensureParty()` match on that number **first** and adopt the row. Reference fields use
+validity-aware reconciliation: the script fills a blank value, repairs a non-`sys_id` raw key or a dangling
+`sys_id`, and preserves a valid populated reference even when it is an operator-managed alternative. It also
+sets `opened_date` when missing on every adopted or inserted case, while retaining the explicit dates on
+`CASE9000006` and `CASE9000010`. A second run must report `repaired=0` and insert nothing. Expect
+`cases inserted=0 adopted=10 …` on a committed install; you will see `inserted=10` only if you run the script
+on an instance where the package was never committed, in which case the instance counter allocates the numbers
+instead. Clear the dangling `sys_user_grmember` row if one is present.
+
+### 5i. Artifacts the shipped package does not carry  *(disclosed shortfall — optional native install route)*
+
+> **ADDED 2026-09-09 (code review CR5, finding F02).** The package installs **12 fewer scoped records than
+> this repository holds.** That is a decision, not an accident, and this section is where a deployer is told
+> which records they are, what their absence costs at runtime, and how to install them natively if they want
+> them. Nothing in this section is required to install the application and none of it is a gate step: this is
+> a disclosed shortfall with a documented remedy, not a resolved item.
+
+**The decision, and the reasoning behind it.** These 12 records are **not** re-exported into the package for
+this release. The artifact set AAP §0.4.1 enumerates ships complete — its six `x_casemgmt_case` business rules
+(`block_draft_backtransition`, `block_terminal_closed`, `set_opened_date`, `set_closed_date`,
+`validate_assigned_agent_membership`, `clear_pending_reason_on_inprogress`) are all present, and so is its one
+UI policy file, `../ui_policy/x_casemgmt_case_party_conditional_fields.xml`, whose two policy records and two
+policy actions the package carries. The 12 below are hardening added by later code-review rounds, which the
+AAP's Minimal-Change Clause does not require. Re-exporting the package to pick them up would discard this
+candidate's dependency ordering and its actor-metadata redaction and would substitute un-reviewed bytes for
+reviewed ones, and adding payload blocks to the XML by hand is prohibited outright. So the shortfall is
+disclosed here with a route, and the package is left as it is.
+
+**Re-derive the census yourself before relying on any figure below** — read-only, from the repository root:
+
+```bash
+F=servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml
+grep -o '<type>Business Rule</type>'    "$F" | wc -l   # 7  - repository business_rules/ holds 12 files
+grep -o '<type>Client Script</type>'    "$F" | wc -l   # 0  - repository client_scripts/ holds 3 files
+grep -o '<type>Access Control</type>'   "$F" | wc -l   # 26 - repository acl/ holds 29 files
+grep -o '<type>UI Policy</type>'        "$F" | wc -l   # 2  - repository ui_policy/ holds 3 policy records in 2 files
+grep -o '<type>UI Policy Action</type>' "$F" | wc -l   # 2  - repository ui_policy/ holds 12 policy-action records
+```
+
+Both packaged UI policies are the `x_casemgmt_case_party` Person/Organization pair; the policy the package does
+**not** carry is the one on `x_casemgmt_case`. **All 12 records exist in this repository**, so every one of them
+is recoverable without re-exporting anything.
+
+#### The 12 records, their repository files and their target tables
+
+| # | Repository file | Record, and where it runs | Target table |
+|---|---|---|---|
+| 1 | [`../business_rules/x_casemgmt_case_display_stored_state.xml`](../business_rules/x_casemgmt_case_display_stored_state.xml) | `x_casemgmt_case_display_stored_state` — `before_display`, order 10, on `x_casemgmt_case` | `sys_script` |
+| 2 | [`../business_rules/x_casemgmt_validate_case_mandatory_fields.xml`](../business_rules/x_casemgmt_validate_case_mandatory_fields.xml) | `x_casemgmt_validate_case_mandatory_fields` — `before` insert + update, order 50, on `x_casemgmt_case` | `sys_script` |
+| 3 | [`../business_rules/x_casemgmt_validate_case_text_lengths.xml`](../business_rules/x_casemgmt_validate_case_text_lengths.xml) | `x_casemgmt_validate_case_text_lengths` — `before` insert + update, order 70, on `x_casemgmt_case` | `sys_script` |
+| 4 | [`../business_rules/x_casemgmt_validate_case_task_integrity.xml`](../business_rules/x_casemgmt_validate_case_task_integrity.xml) | `x_casemgmt_validate_case_task_integrity` — `before` insert + update, order 100, on `x_casemgmt_case_task` | `sys_script` |
+| 5 | [`../business_rules/x_casemgmt_validate_case_party_integrity.xml`](../business_rules/x_casemgmt_validate_case_party_integrity.xml) | `x_casemgmt_validate_case_party_integrity` — `before` insert + update, order 100, on `x_casemgmt_case_party` | `sys_script` |
+| 6 | [`../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml`](../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml) | `x_casemgmt_case_closed_readonly_enforce` — `onLoad`, on `x_casemgmt_case` | `sys_script_client` |
+| 7 | [`../client_scripts/x_casemgmt_case_flush_stale_messages.xml`](../client_scripts/x_casemgmt_case_flush_stale_messages.xml) | `x_casemgmt_case_flush_stale_messages` — `onLoad`, on `x_casemgmt_case` | `sys_script_client` |
+| 8 | [`../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml`](../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml) | `x_casemgmt_case_party_clear_opposite_ref` — `onChange` on `party_type`, on `x_casemgmt_case_party` (the record name is truncated relative to the file name; that is the authored value) | `sys_script_client` |
+| 9 | [`../acl/x_casemgmt_case_query_range_opened_date.xml`](../acl/x_casemgmt_case_query_range_opened_date.xml) | `x_casemgmt_case.opened_date`, operation `query_range`, granted to all three scoped roles | `sys_security_acl` |
+| 10 | [`../acl/x_casemgmt_case_query_range_closed_date.xml`](../acl/x_casemgmt_case_query_range_closed_date.xml) | `x_casemgmt_case.closed_date`, operation `query_range`, granted to all three scoped roles | `sys_security_acl` |
+| 11 | [`../acl/x_casemgmt_case_task_query_range_due_date.xml`](../acl/x_casemgmt_case_task_query_range_due_date.xml) | `x_casemgmt_case_task.due_date`, operation `query_range`, granted to all three scoped roles | `sys_security_acl` |
+| 12 | [`../ui_policy/x_casemgmt_case_closed_readonly.xml`](../ui_policy/x_casemgmt_case_closed_readonly.xml) | *Case Closed Terminal State - Read Only* on `x_casemgmt_case` — **1** `sys_ui_policy` record **plus its 10 `sys_ui_policy_action` rows** (`assigned_agent`, `assigned_group`, `description`, `pending_reason`, `priority`, `requester_email`, `requester_name`, `status`, `subject`, `type`) in the one file | `sys_ui_policy` (+ `sys_ui_policy_action`) |
+
+#### What installing without them costs, concretely
+
+- **No server-side mandatory-field validation on `x_casemgmt_case`** (#2). An empty `subject`, `description` or
+  `requester_name` is accepted on every write path that is not the form — the Table API included.
+- **No text-length enforcement** (#3): oversized `subject` / `description` / `requester_name` values are stored
+  as submitted.
+- **No `case_task` referential-integrity guard** (#4): a task can be written without its parent case, subject,
+  `assigned_to` or `due_date`.
+- **No `case_party` referential-integrity guard** (#5): the "exactly one of `person` / `organization`, matching
+  `party_type`" contract of AAP §0.5.7's Conditional rows is unenforced on any non-form write path. The two
+  packaged UI policies still enforce it **on the form**; a REST or Table-API write is unguarded.
+- **No stored-state display rule** (#1): the `before_display` normalisation of the case's stored state does not
+  run, so the form shows the raw stored value.
+- **No client-side Closed-case read-only enforcement** (#6 and #12): a Closed case's writable fields are
+  presented as editable. The server guard **does** ship — `x_casemgmt_block_terminal_closed` (order 100,
+  `before` update) is one of the package's 7 business rules — so the write is still refused with the verbatim
+  "Closed cases are terminal and cannot be modified."; what is lost is the form stating the restriction up
+  front instead of inviting an edit the server then rejects.
+- **No stale mandatory-field banner flush** (#7): a mandatory-field message can persist on the form after the
+  named field has been filled.
+- **No party opposite-reference clear** (#8): changing `party_type` leaves the previously-populated
+  `person` / `organization` reference in place, which is what the integrity guard at #5 would otherwise refuse.
+- **No `query_range` grants on `x_casemgmt_case.opened_date`, `x_casemgmt_case.closed_date` and
+  `x_casemgmt_case_task.due_date`** (#9-#11). On an instance whose default `query_range` posture is deny, a
+  RANGE or relative-date predicate (`>`, `<`, BETWEEN, "at or after", "last 30 days") from a non-admin persona
+  is **dropped from the query** rather than refused, so the caller is silently answered a different question —
+  the list renders `0` rows with a banner naming the operation, and the Table API answers HTTP 403. Each ACL
+  file's own header records that measurement and the reasoning behind the grant;
+  [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) carries the register entry.
+
+#### Installing them natively — OPTIONAL, post-commit
+
+This is the platform's own XML record import: the same upload processor §2 and §4.2 already use for
+`sys_remote_update_set`, pointed at each record's target table. It writes only into the `x_casemgmt` scope and
+runs no script. Do it **after** the commit and after the post-commit sequence (§5h, then §5g), so the tables,
+roles and choices the records reference already exist.
+
+**In a browser:** open the target list (`sys_script_list.do`, `sys_script_client_list.do`,
+`sys_security_acl_list.do`, `sys_ui_policy_list.do`), right-click the list header → **Import XML**, choose the
+repository file, and repeat per file.
+
+**Scripted, in this guide's own idiom** — establish the UI session per Section 3 first:
+
+```bash
+SN="$SERVICENOW_INSTANCE_URL"
+: "${SNRUN:?run Section 1.1 first, or export SNRUN=<the path it printed>}"
+CJ="$SNRUN/cookies.txt"
+REPO="servicenow-case-management-poc"
+
+# One file, one target table. The four steps are §4.2's, unchanged: prime the session, GET the
+# upload form for THAT target, scrape the form's OWN sysparm_ck, POST the file as multipart.
+# The token is single-use and belongs to the form it came from, so it is re-minted per file.
+import_record_xml() {   # $1 = sysparm_target table, $2 = repository file
+  target="$1"; file="$2"
+  [ -f "$file" ] || { echo "MISSING $file"; return 2; }
+  curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -o /dev/null \
+    "$SN/api/now/table/${target}?sysparm_limit=1"
+  curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" -o "$SNRUN/upload_form.html" \
+    "$SN/upload.do?sysparm_target=${target}"
+  CK=$(grep -oE 'sysparm_ck"[^>]*value="[^"]{32,}"' "$SNRUN/upload_form.html" \
+       | grep -oE 'value="[^"]{32,}"' | sed 's/value="//;s/"//' | head -1)
+  [ -z "$CK" ] && { echo "NO_CK on the $target upload form - re-run Section 3, then retry"; return 2; }
+  curl -s -K "$SNRUN/sn_curl.cfg" -c "$CJ" -b "$CJ" \
+    -F "sysparm_ck=${CK}" -F "sysparm_target=${target}" \
+    -F "attachFile=@${file};type=text/xml" \
+    "$SN/sys_upload.do" -o "$SNRUN/import_result.html" \
+    -w "$(basename "$file") -> ${target}: HTTP %{http_code}\n"
+}
+
+# sys_script - the 5 business rules (#1-#5)
+for n in case_display_stored_state validate_case_mandatory_fields validate_case_text_lengths \
+         validate_case_task_integrity validate_case_party_integrity; do
+  import_record_xml sys_script "$REPO/business_rules/x_casemgmt_$n.xml"
+done
+
+# sys_script_client - the 3 client scripts (#6-#8)
+for n in case_closed_readonly_enforce case_flush_stale_messages case_party_clear_opposite_reference; do
+  import_record_xml sys_script_client "$REPO/client_scripts/x_casemgmt_$n.xml"
+done
+
+# sys_security_acl - the 3 field-level query_range ACLs (#9-#11)
+for n in case_query_range_opened_date case_query_range_closed_date case_task_query_range_due_date; do
+  import_record_xml sys_security_acl "$REPO/acl/x_casemgmt_$n.xml"
+done
+
+# sys_ui_policy - one file, one policy record PLUS its 10 policy actions (#12). The file is an
+# <unload>, so the importer inserts each record under its own element name and sysparm_target
+# only selects the form; the sys_ui_policy_action rows arrive with it.
+import_record_xml sys_ui_policy "$REPO/ui_policy/x_casemgmt_case_closed_readonly.xml"
+```
+
+**Three normalisations the import does not do for you.** Check each one on the record form before you treat any
+of these rows as in force:
+
+1. **`Application` on every imported row must read *Case Management*.** All 12 files carry the source PDI's
+   scope `sys_id` in `<sys_scope>`, which does not exist on your instance, so a row whose scope did not resolve
+   is stranded in Global — and will not appear in the scoped counts below. Re-set the field on the form if so.
+2. **`Operation` on the three ACLs must read `query_range`.** Those files carry the operation's human-readable
+   **name**, not its `sys_id`, deliberately: AAP §0.7.2 forbids a hard-coded `sys_id` in a reference field. An
+   unresolved row renders a blank *Operation* and simply does not participate — inert rather than dangerous.
+   Set it from the reference lookup on the ACL form.
+3. **Each of the three ACLs needs its three role links.** This release stores ACL role grants in the
+   `sys_security_acl_role` m2m table, and the files carry no m2m rows — the `<roles>` element in them is a
+   human-readable statement of intent. Add `x_casemgmt_case_manager`, `x_casemgmt_case_agent` and
+   `x_casemgmt_case_viewer` on each ACL's **Requires role** list: 3 roles × 3 ACLs takes the scoped link count
+   from 27 to 36.
+
+**Verify by count, before and after.** Run this once before the imports and again after; the *before* column is
+the package's own payload census, measured from the XML with the `grep` block above and not from any instance,
+so a mismatch there is a commit problem rather than something this section can fix:
+
+```bash
+SN="$SERVICENOW_INSTANCE_URL"
+for t in sys_script sys_script_client sys_security_acl sys_security_acl_role \
+         sys_ui_policy sys_ui_policy_action; do
+  printf '%-24s ' "$t"
+  curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
+    "$SN/api/now/table/$t?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=sys_id&sysparm_limit=200" \
+    | grep -o '"sys_id"' | wc -l
+done
+```
+
+| Table | From the commit alone (the package's payload census) | After all 12 are imported |
+|---|---|---|
+| `sys_script` | 7 | 12 |
+| `sys_script_client` | 0 | 3 |
+| `sys_security_acl` | 26 | 29 |
+| `sys_security_acl_role` | 27 | 36 — **only** after normalisation 3 above; the import alone leaves it at 27 |
+| `sys_ui_policy` | 2 | 3 |
+| `sys_ui_policy_action` | 2 | 12 |
+
+**What importing them means for the package.** An instance carrying these 12 records **diverges from the
+shipped package**: a later re-preview of the same XML sees rows the package does not describe, and no checksum
+or block count in this guide changes. A deployer who wants them *in the package* must restore them at source —
+install them on the instance the package is exported from and re-export under the packaging procedure, then
+re-run the full gate on the new bytes — and must **not** hand-edit the deliverable XML to add payload blocks.
 
 ---
 
@@ -1474,6 +1707,23 @@ curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
 curl -s -K "$SNRUN/sn_curl.cfg" -H "Accept: application/json" \
   "$SN/api/now/table/sys_hub_flow?sysparm_query=sys_scope.scope=x_casemgmt&sysparm_fields=internal_name,active,status&sysparm_limit=20"
 ```
+
+**CENSUS PASS CONDITION — the role grants. ADDED 2026-09-09 (code review CR5, finding F10).** This census does
+not pass unless **`sys_user_has_role` filtered to the three demo personas and the three scoped roles returns
+EXACTLY 3 rows.** That is the `sys_user_has_role` call above, and the three rows are
+`x_casemgmt_demo_manager` → `x_casemgmt_case_manager`, `x_casemgmt_demo_agent` → `x_casemgmt_case_agent` and
+`x_casemgmt_demo_viewer` → `x_casemgmt_case_viewer`, each `inherited=false`. It is a **pass condition of this
+census**, not a troubleshooting hint: anything other than 3 is a census failure, and you stop here rather than
+continuing to §6.2.
+
+- **0 rows** — every persona holds no role, every impersonation check in §6.3 reports `F/F/F/F`, and the ATF
+  suite in §6.4 fails wholesale at its first persona step. Run **§5h** (step 7, the first post-commit action),
+  then re-run this census.
+- **More than 3 rows** on that filter — a persona holds a scoped role it should not; remove the extra through
+  the same *Edit Members* screen. The `inherited=true` `snc_required_script_writer_permission` companion row
+  the platform derives alongside each native grant is **not** counted by this filter (its role name does not
+  start `x_casemgmt_case`), so six rows on the wider `user.user_nameSTARTSWITHx_casemgmt_demo` query is the
+  healthy native-route signature, not a surplus.
 
 Expected from the last call: seven rows — `general_inquiry_state_machine`, `complaint_state_machine`,
 `validate_open_transition`, `validate_in_progress_transition`, `validate_pending_transition`,
@@ -1552,8 +1802,9 @@ it is the fastest way to know the install is sound.
 - **A browser-attached client runner is required here.** `sn_atf.headless.enabled` is `false` on this instance and
   could not be enabled, so open `/atf_test_runner.do?sysparm_nostack=true` in a second tab **before** launching
   the suite and select it under "Pick a Browser". Three of the tests drive a real form.
-- **Run steps 4-8 of the primary procedure first.** Without physical tables and the ACL role links the suite
-  fails wholesale and tells you nothing about the application; without **step 8's three role grants (§5h)** it
+- **Run steps 4-8 of the primary procedure first**, and note that since 2026-09-09 (CR5 F10) the **role grants
+  are step 7** and the seed pass is step 8. Without physical tables and the ACL role links the suite
+  fails wholesale and tells you nothing about the application; without **step 7's three role grants (§5h)** it
   fails just as wholesale for a different reason — 16 of 20 tests fail on the step *after* `Impersonate`
   succeeds, because a persona with no role cannot read the rows the test then asks for (Step 5-6 §6 of
   [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md)).
@@ -1608,7 +1859,7 @@ suite by hand if an instance refuses the serialized records.
 | New cases get no `CASE…` number, or get `CASE1` instead of `CASE0000001` | **Package integrity, not the platform.** Both halves of auto-numbering ship in the package: `default_value = javascript:global.getNextObjNumberPadded();` on the `number` dictionary entry (the `global.` qualifier is mandatory for a scoped table) and `maximum_digits = 7` on the counter | Verify those two values landed, then re-run the remediation in Global — §5b re-asserts both. If they are absent from the *artifacts*, the package is wrong and no amount of instance work fixes it |
 | All REST calls return HTTP 400 | **Package integrity:** `sys_ws_definition.service_id` is the URL path segment and it is empty | The package carries both `service_id` values; verify they committed, then re-run the remediation — §5d re-asserts them. Also confirm the base path is `/api/x_casemgmt/…` |
 | Anonymous REST call returns 401 rather than 201/200/404 | The endpoint's anonymous access flag did not land, or you are hitting the **Table** API instead of the scripted REST path | Only `/api/x_casemgmt/case_submit` and `/api/x_casemgmt/case_status_lookup` are anonymous. The Table API is *not* anonymous and rejecting it is correct behaviour, not a defect |
-| Manager/agent/viewer denied everything | **Check the role grants first, then the ACL role-links.** A demo persona holds no role until §5h has been run — the package cannot carry `sys_user_has_role` on this release — and a user with no role matches no ACL. Missing ACL role-links (Defect 9) produce the same symptom for a user who *does* hold a role | Run the `sys_user_has_role` check in §6.1: it must return **exactly 3** scoped grants. If it returns 0, do **§5h**. If the grants are present, run **5f** — step 6 of the primary procedure — then confirm **exactly 27** links, distributed manager 14 / agent 10 / viewer 3 |
+| Manager/agent/viewer denied everything | **Check the role grants first, then the ACL role-links.** A demo persona holds no role until §5h has been run — the package cannot carry `sys_user_has_role` on this release — and a user with no role matches no ACL. Missing ACL role-links (Defect 9) produce the same symptom for a user who *does* hold a role | Run the `sys_user_has_role` check in §6.1: it must return **exactly 3** scoped grants — that is a pass condition of the census, not an optional probe. If it returns 0, do **§5h**, which since 2026-09-09 (CR5 F10) is **step 7 of the primary procedure and the first post-commit action**, so on a correctly-followed install this symptom should not arise. If the grants are present, run **5f** — step 6 of the primary procedure — then confirm **exactly 27** links, distributed manager 14 / agent 10 / viewer 3 |
 | Resolve allowed with open tasks, or any precondition not blocking | **Check the enforcement chain, in this order.** (1) Are the 7 flows `active=true` and `status=published`? They were measured so; a Draft flow enforces nothing. (2) Is the before-update Business Rule **`x_casemgmt_enforce_forward_transitions` (order 250)** present and active? It is the component that calls the subflow and then issues `gs.addErrorMessage()` + `setAbortAction(true)` — **without it the flows still run but nothing blocks**. (3) Is `CaseTransitionValidator` present? The rule and the flows both call it | The earlier "flow guards are dead shells" (Defect F) diagnosis applied to a previous revision and no longer describes this package — see `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` for that history |
 | Dashboards open but show no widgets | **Fixed in the current package** — if you see this, you are installing an older export whose dashboard artifacts named three child tables this release does not have (`pa_tab`, `pa_dashboard_widgets`, `pa_dashboard_role`) | Not remediable by installing differently. Use the current export, whose dashboards carry `sys_portal_page` / `sys_grid_canvas` / `pa_tabs` / `pa_m2m_dashboard_tabs` / `sys_portal` + `sys_portal_preferences` + `sys_grid_canvas_pane` / `pa_dashboards_permissions` (register §0.5) |
 | A dashboard opens with *"has not been shared with you"* | Expected for two persona/dashboard pairs **by design** — the agent is not granted Manager View, and the viewer is granted neither. Unexpected for anyone else, in which case the share records did not land | Confirm `pa_dashboards_permissions` rows exist (type `1` = Role) **and** that `pa_dashboards.restrict_to_roles` names the role. Both are required; the sibling column `pa_dashboards.roles` is labelled *"Requires Roles"* and only narrows (register §4 item 18) |
