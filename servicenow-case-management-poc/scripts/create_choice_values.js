@@ -4,10 +4,12 @@
  * ---------------------------------------------------------------------------
  * WHAT THIS SCRIPT DOES
  * ---------------------------------------------------------------------------
- * Idempotently reconciles the twenty-four `sys_choice` value rows that the
- * three scoped tables' seven Choice fields require, and nothing else. It is a
- * CHOICE-ONLY mechanism: `sys_choice` is the only table it writes, and every
- * row it writes is one of the twenty-four the specification below names.
+ * VERIFIES the twenty-four `sys_choice` value rows that the three scoped
+ * tables' seven Choice fields require, and - only in a run an operator has
+ * explicitly authorized to write (ALLOW_WRITES below, which defaults to FALSE)
+ * - reconciles the ones that are absent or wrong. It is a CHOICE-ONLY
+ * mechanism: `sys_choice` is the only table it can write, and every row it
+ * could write is one of the twenty-four the specification below names.
  *
  *   x_casemgmt_case.type            2 values
  *   x_casemgmt_case.status          6 values
@@ -22,11 +24,15 @@
  * queries `sys_choice` by the natural key `(name = table, element = field,
  * value = value)` and then:
  *
- *   - inserts the row when it is absent;
- *   - repairs it IN PLACE when it exists but its `label`, `sequence`,
- *     `language` or `inactive` flag disagrees with the specification;
- *   - leaves it untouched when it already agrees;
- *   - never inserts a second row for a key that already has one.
+ *   - leaves it untouched when it already agrees with the specification;
+ *   - in an AUTHORIZED run (ALLOW_WRITES = true) inserts the row when it is
+ *     absent, and repairs it IN PLACE when it exists but its `label`,
+ *     `sequence`, `language` or `inactive` flag disagrees;
+ *   - in the DEFAULT verification-only run (ALLOW_WRITES = false) writes
+ *     nothing and instead reports the exact write it did not make as a
+ *     BLOCKED problem, which fails the verdict;
+ *   - never knowingly inserts a second row for a key it has just observed to
+ *     have one.
  *
  * A re-run therefore leaves exactly twenty-four rows and writes nothing. The
  * verification pass afterwards fails on a SURPLUS as loudly as on a shortfall:
@@ -41,7 +47,8 @@
  *   1. COUNTS. Per field and in total, against the specification, including the
  *      surplus classification above.
  *   2. PERSISTED ATTRIBUTES. Every one of the twenty-four rows is re-read from
- *      the database by its natural key AFTER the writes, and its stored `label`,
+ *      the database by its natural key AFTER the reconciliation pass - after
+ *      the writes, in a run that made any - and its stored `label`,
  *      `sequence`, `language` and `inactive` are compared again. Existence is
  *      not correctness, and a write that was partially applied, normalized by
  *      the platform or overwritten by a business rule looks identical to a
@@ -69,11 +76,14 @@
  * platform-native, app-scoped `sys_choice_set` composites in place of the seven
  * direct children, measured taking `sys_choice` from 0 to 24 rows). This script
  * is the independent, mechanism-agnostic guarantee that stands beside it: run
- * after any import, it proves the twenty-four rows are present and correct, and
- * creates or repairs exactly the ones that are not. On an instance where the
- * package already delivered them it writes nothing and reports twenty-four
- * already-correct rows, which is itself the evidence that the dropdowns will
- * render.
+ * after any import, it proves whether the twenty-four rows are present and
+ * correct, names to the column any that are not, and - in a run explicitly
+ * authorized to write - creates or repairs exactly those. On an instance where
+ * the package already delivered them it writes nothing in either mode and
+ * reports twenty-four already-correct rows with verdict=OK, which is itself the
+ * evidence that the dropdowns will render. That verification case is the one
+ * this script is expected to serve most often, which is why it is the case that
+ * needs no authorization.
  *
  * ---------------------------------------------------------------------------
  * WHERE THE VALUES COME FROM
@@ -96,6 +106,14 @@
  * platform completes in any other scope - Global included - is REFUSED
  * outright, with a FAILED verdict and not one row read for reconciliation, let
  * alone written.
+ *
+ * AS SHIPPED THE RUN IS VERIFICATION-ONLY. `ALLOW_WRITES` is declared `false`
+ * below, so a run pasted straight out of the repository reads, checks and
+ * reports and mutates nothing. Authorizing the writes is a deliberate, visible
+ * act: edit that one declaration to `true` for the run, having first
+ * established the single-writer precondition the next section describes. Every
+ * run states which mode it is in on its own `MODE|` output line, so a
+ * verification run can never be mistaken in evidence for a repair run.
  *
  *   1. In the browser: System Definition -> Scripts - Background, with the
  *      application picker set to "x_casemgmt Case Management", paste this file
@@ -163,27 +181,53 @@
  * verdict-bearing assertion rather than a claim.
  *
  * ---------------------------------------------------------------------------
- * SINGLE-WRITER PRECONDITION (a named capability gap, not an oversight)
+ * SINGLE-WRITER PRECONDITION - UNENFORCEABLE, WHICH IS WHY WRITES ARE OFF
  * ---------------------------------------------------------------------------
- * Run exactly one instance of this script at a time against an instance. The
- * script cannot enforce that with a lock, and the reason is a platform gap
- * rather than a design choice: `GlideMutex` and `sleep()` are unavailable
- * inside a scoped application, `global.Mutex` is unreachable from a custom
- * scope, and the two substitutes are both barred here - a `sys_properties`
- * claim row is a global write (AAP 0.3.2) and a dedicated lock table is an
- * artifact the AAP does not enumerate (AAP 0.7.2). There is therefore no
- * platform-supported mutual-exclusion primitive available to this script.
+ * The reconciliation needs exactly one writer on these choice lists for the
+ * duration of a run, AND THIS SCRIPT CANNOT ENFORCE THAT. The reason is a
+ * platform gap rather than a design choice: `GlideMutex` and `sleep()` are
+ * unavailable inside a scoped application, `global.Mutex` is unreachable from a
+ * custom scope, and the substitutes are all barred here - a `sys_properties`
+ * claim row is a global write (AAP 0.3.2), a dedicated lock table is an
+ * artifact the AAP does not enumerate (AAP 0.7.2), and `sys_choice` carries
+ * `delete_access = false` for a scoped app, so even a compensating rollback of
+ * a row this script itself inserted is not reliably available. There is no
+ * mutual-exclusion or atomic-uniqueness primitive this script may use.
  *
- * It is FAIL-CLOSED BY CONSTRUCTION instead of mutually exclusive by lock.
- * Before every single mutating call it re-asserts the executing scope and
- * re-resolves the application scope record; immediately before an insert it
- * re-queries the natural key and treats a row that appeared since its first
- * query as a detected concurrent writer; immediately after its own insert it
- * reads the natural key back and treats anything other than exactly one row as
- * a race. Any of those aborts all further writes for the rest of the run and
- * forces a FAILED verdict. A raced run therefore FAILS rather than duplicates,
- * and the duplicate it detects is REPORTED, never deleted - deleting a row is
- * outside this script's mandate.
+ * A PRECONDITION THE SCRIPT CANNOT ENFORCE IS NOT A SAFEGUARD, so it is not
+ * relied upon as one: `ALLOW_WRITES` DEFAULTS TO FALSE and the default run
+ * mutates nothing at all. That is the honest resolution of the gap - the read
+ * side of this script is complete and safe, so it is the part that runs
+ * unconditionally, and the part that cannot be made safe is the part that has
+ * to be asked for.
+ *
+ * WHAT THE RACE GUARDS ACTUALLY DO, ON AN AUTHORIZED RUN. Before every single
+ * mutating call the script re-asserts the executing scope and re-resolves the
+ * application scope record; immediately before an insert it re-queries the
+ * natural key and treats a row that appeared since its first query as a
+ * detected concurrent writer; immediately after its own insert it reads the
+ * natural key back and treats anything other than exactly one row as a race.
+ * Any of those closes writing for the rest of the run and forces a FAILED
+ * verdict. State the guarantee precisely, because it is easy to overstate:
+ *
+ *   - The pre-write revalidation and the pre-insert re-query PREVENT the write
+ *     they guard. A row already visible is never inserted over.
+ *   - The post-insert read-back DETECTS ONLY. By the time it runs, this run's
+ *     row is already committed, so if a simultaneous writer inserted the same
+ *     natural key the duplicate HAS ALREADY PERSISTED. The read-back stops all
+ *     further writes and fails the verdict; it does not prevent, reverse or
+ *     delete the duplicate, and the duplicate is REPORTED and left in place -
+ *     deleting a row is outside this script's mandate and `sys_choice` refuses
+ *     a scoped delete in any case.
+ *   - So an AUTHORIZED run accepts a RESIDUAL WINDOW: two concurrent writers
+ *     can each pass every check and each persist a row, and the outcome is a
+ *     loud failure over a detected duplicate rather than no duplicate. The
+ *     guards narrow that window and make a raced run unmistakable; they do not
+ *     eliminate it.
+ *
+ * Setting `ALLOW_WRITES = true` is therefore an operator ASSERTION that the
+ * precondition holds, not a request the script can validate. What is being
+ * asserted is spelled out at the declaration itself.
  *
  * ---------------------------------------------------------------------------
  * OUTPUT CONTRACT (quotable as evidence)
@@ -191,6 +235,14 @@
  * Every line is emitted through gs.info() with the prefix `U2CHOICE|`, so the
  * run is readable both in the Background Script response and afterwards from
  * `syslog` (messageSTARTSWITHU2CHOICE).
+ *
+ * MODE - the first line of every run, before the gates, so the mode is on the
+ * record whatever else the run does. Exactly two states:
+ *
+ *   U2CHOICE|MODE|allow_writes=false|VERIFICATION ONLY: no sys_choice insert or
+ *                 update will be attempted ...
+ *   U2CHOICE|MODE|allow_writes=true|WRITES AUTHORIZED: ... the operator has
+ *                 asserted the single-writer precondition ...
  *
  * GATES AND REFUSALS - each of the three is an unconditional early return, and
  * each ends the run at its own SUMMARY line with nothing written:
@@ -205,7 +257,9 @@
  *                                            gate 3: the application scope
  *                                            record is absent or ambiguous
  *
- * RECONCILIATION - one line per row acted on, none for a row already correct:
+ * RECONCILIATION - one line per row acted on, none for a row already correct.
+ * The `created` and `repaired` lines can only appear in an AUTHORIZED run; the
+ * `BLOCKED` lines can only appear in a verification-only run:
  *
  *   U2CHOICE|SCOPE|application=...|executing_scope=...|in_application_scope=...
  *                                            |sys_choice_cross_scope_access=...
@@ -215,10 +269,25 @@
  *   U2CHOICE|<table>.<element>=<value>|repair update REFUSED ...|cause=...
  *   U2CHOICE|DUPLICATE|<key>|N rows share this key ...
  *   U2CHOICE|RECONCILE|created=N|repaired=N|already_correct=N|insert_refused=N
- *                     |update_refused=N|duplicate_keys=N|race_aborts=N
- *                     |skipped_after_abort=N
+ *                     |update_refused=N|insert_blocked=N|repair_blocked=N
+ *                     |duplicate_keys=N|race_aborts=N|skipped_after_abort=N
  *
- * RACE DETECTION - any of these closes writing for the rest of the run:
+ * BLOCKED - the verification-only default reached a row it would have written
+ * and did not. Each one is a problem and each one fails the verdict, so a
+ * shortfall is never reported as an OK run:
+ *
+ *   U2CHOICE|BLOCKED|<key>|insert NOT ATTEMPTED|would have inserted this
+ *                    natural key (name=..., element=..., value=...) with
+ *                    label=..., sequence=..., language=..., inactive=...
+ *                    |not_authorized=ALLOW_WRITES is false ...|remedy=...
+ *   U2CHOICE|BLOCKED|<key>|repair update NOT ATTEMPTED|would have repaired
+ *                    <column>:<stored>-><wanted>,... on sys_id=...
+ *                    |not_authorized=ALLOW_WRITES is false ...|remedy=...
+ *
+ * RACE DETECTION - authorized runs only, since only they write. Any of these
+ * closes writing for the rest of the run and fails the verdict. The first three
+ * and the pre-insert re-query PREVENT the write they guard; the post-insert
+ * read-back DETECTS a duplicate that has already persisted and reports it:
  *
  *   U2CHOICE|<key>|<operation> NOT ATTEMPTED|the executing scope is now ...
  *   U2CHOICE|<key>|<operation> NOT ATTEMPTED|the sys_scope query ... now returns
@@ -251,25 +320,33 @@
  *
  * VERDICT - one line, always last but for the problem list:
  *
- *   U2CHOICE|SUMMARY|verdict=OK|FAILED|reason=<reason>|values=N/24|created=N
- *                   |repaired=N|already_correct=N|surplus=N|duplicates=N
- *                   |race_aborts=N|problems=N|ms=N
+ *   U2CHOICE|SUMMARY|verdict=OK|FAILED|reason=<reason>|allow_writes=true|false
+ *                   |values=N/24|created=N|repaired=N|already_correct=N
+ *                   |writes_blocked=N|surplus=N|duplicates=N|race_aborts=N
+ *                   |problems=N|ms=N
  *   U2CHOICE|PROBLEM[n/N]|...                every problem, numbered, after the
  *                                            summary, on every exit path
  *
  * verdict=OK requires ALL of: the counts agree, every one of the 24 rows
  * re-reads correctly by natural key, all 7 export composites exist exactly once
- * and are app-owned, zero duplicate natural keys, no abort, and an empty
- * problem list. The reason vocabulary on FAILED is closed, and one of:
+ * and are app-owned, zero duplicate natural keys, zero blocked writes, no
+ * abort, and an empty problem list. A VERIFICATION-ONLY run can therefore still
+ * reach OK - on an instance that is already correct, "nothing needed writing"
+ * is a true and useful result - but it can never reach OK on an instance that
+ * needed a write, because the write it declined to make is itself a problem.
+ * The reason vocabulary on FAILED is closed, and one of:
  *
  *   inconsistent specification                         (gate 1)
  *   out-of-scope execution                             (gate 2)
  *   unresolved application scope                       (gate 3)
+ *   writes not authorized (verification-only default)  (ALLOW_WRITES = false
+ *                                                       met a needed write)
  *   out-of-scope execution mid-run                     (pre-write revalidation)
  *   application scope record unresolved mid-run        (pre-write revalidation)
  *   application scope record changed identity mid-run  (pre-write revalidation)
  *   concurrent writer detected on the natural key      (pre-insert re-query)
- *   duplicate row detected after insert                (post-insert read-back)
+ *   duplicate row detected after insert                (post-insert read-back;
+ *                                                       already persisted)
  *   inserted row not readable after insert             (post-insert read-back)
  *   duplicate natural keys on sys_choice
  *   platform refused a sys_choice write in scope (BLOCKED capability gap)
@@ -287,8 +364,10 @@
  *   - No PII. Every value and label is a synthetic classification term.
  *   - No email or SMTP interaction: no gs.eventQueue(), no event.queue(), no
  *     notification of any kind. Email is disabled on the PDI and stays that way.
- *   - `sys_choice` is the ONLY table written. `sys_scope`, `sys_db_object` and
- *     `sys_choice_set` are read for verification and reporting only.
+ *   - `sys_choice` is the ONLY table this script can write, and it writes
+ *     nothing at all unless ALLOW_WRITES has been set to true for the run.
+ *     `sys_scope`, `sys_db_object` and `sys_choice_set` are read for
+ *     verification and reporting only, in either mode.
  *   - Zero global-scope writes, and zero global-scope EXECUTION: the run is
  *     refused before its first write unless gs.getCurrentScopeName() is
  *     `x_casemgmt`, and the refusal is re-asserted before every later write.
@@ -296,6 +375,58 @@
  *   - No table, dictionary, ACL, role, number-counter, sys_property,
  *     sys_scope_privilege or data-model change of any kind.
  */
+
+// ============================================================================
+// Write authorization
+// ============================================================================
+
+/*
+ * WHETHER THIS RUN MAY WRITE TO sys_choice AT ALL. Declared false, and shipped
+ * false.
+ *
+ * WHAT IT MEANS. `false` - the default and the shipped state - makes the run
+ * VERIFICATION-ONLY: the three gates, the reconciliation survey, the live-row
+ * audit and all three verification passes execute exactly as they otherwise
+ * would, and not one `insert()` or `update()` is issued. Every row the run
+ * would have created or repaired is reported instead, as a BLOCKED problem
+ * naming the precise write that was not made, and the run FAILS with
+ * `reason=writes not authorized (verification-only default)`. `true` restores
+ * the full reconciliation - insert what is missing, repair what has drifted -
+ * with every race guard in this file still in force.
+ *
+ * WHY IT DEFAULTS OFF. The reconciliation is a check-then-act sequence, and
+ * this script has no primitive with which to make it atomic: no scoped mutual
+ * exclusion exists (see the SINGLE-WRITER PRECONDITION block in the header),
+ * and `sys_choice` refuses a scoped delete, so a write that turns out to have
+ * raced cannot even be compensated afterwards. The precondition that would make
+ * writing safe - one writer at a time - is therefore something the script can
+ * state but cannot enforce, and an unenforceable precondition is not a
+ * safeguard. Defaulting to `false` means the mode that cannot be made safe is
+ * never entered by accident, by a copy-paste, or by an operator who did not
+ * know a lock was missing.
+ *
+ * WHAT AN OPERATOR ASSERTS BY SETTING IT TRUE. Not a request the script
+ * validates - an assertion the script trusts, on this operator's authority,
+ * that for the duration of the run:
+ *
+ *   - no other instance of this script is executing against the instance;
+ *   - no Update Set commit, import or preview that touches these seven choice
+ *     lists is in flight;
+ *   - no application teardown (`deleteApplication`, a scope delete, an app
+ *     uninstall) is running or about to run;
+ *   - no other operator or job is authoring these choice lists natively.
+ *
+ * If any of those is untrue the guards in this file will most likely turn the
+ * run into a loud failure, but "most likely" is the honest strength of the
+ * claim: the post-insert read-back detects a duplicate that has ALREADY
+ * persisted rather than preventing it. An authorized run accepts that residual
+ * window knowingly; a default run does not run the risk at all.
+ *
+ * The preferred remedy for a shortfall remains the platform's own native
+ * in-scope authoring path - see nativeAuthoringRemedy(), which every BLOCKED
+ * line prints - because the platform serializes that path itself.
+ */
+var ALLOW_WRITES = false;
 
 // ============================================================================
 // Specification
@@ -373,6 +504,11 @@ var STATS = {
     already: 0,
     insertRefused: 0,
     updateRefused: 0,
+    // A write this run did not attempt because ALLOW_WRITES is false. These are
+    // the verification-only mode's shortfall: each one is a problem, each one
+    // fails the verdict, and each one names the write that was withheld.
+    insertBlocked: 0,
+    updateBlocked: 0,
     duplicateKeys: 0,
     surplusRows: 0,
     // A write this run declined to attempt because the pre-write revalidation,
@@ -388,11 +524,15 @@ var STATS = {
  * Whether writing is still permitted for the remainder of this run.
  *
  * There is no lock available to this script (see the SINGLE-WRITER
- * PRECONDITION block in the header), so the abort flag is the mechanism that
- * makes a raced run fail instead of duplicate: the first detection of a moved
+ * PRECONDITION block in the header), so the abort flag is what makes a raced
+ * authorized run fail LOUDLY and stop writing: the first detection of a moved
  * state sets it, every later mutating path checks it, and the verdict reads it.
- * Verification still completes after an abort - a failed run is more useful
- * with its evidence than without it - but nothing further is written.
+ * It does not undo a write that already landed - where the detection is the
+ * post-insert read-back, the duplicate has already persisted and the flag's
+ * effect is to withhold the writes that would have followed, not the one that
+ * was just made. Verification still completes after an abort - a failed run is
+ * more useful with its evidence than without it - but nothing further is
+ * written.
  */
 var RUN_STATE = {
     abort: false,
@@ -447,6 +587,11 @@ function logProblemList() {
  * inserted the row first, or a read-back found the wrong number of rows. The
  * first reason wins, because it is the one that explains the run.
  *
+ * This closes writing FORWARD only. It is not a rollback and it is not a
+ * duplicate-prevention mechanism for the write that triggered it: a row this
+ * run already inserted stays inserted, and a duplicate the read-back found is
+ * reported and left in place.
+ *
  * @param {string} reason a short machine-readable reason for the summary line
  */
 function abortWrites(reason) {
@@ -456,7 +601,8 @@ function abortWrites(reason) {
         RUN_STATE.abortReason = reason;
     }
     log('ABORT|writing is closed for the remainder of this run|reason=' + reason +
-        '|verification continues, no further row is written');
+        '|verification continues, no further row is written, and no row already written is' +
+        ' reverted or deleted');
 }
 
 /**
@@ -591,6 +737,34 @@ function nativeAuthoringRemedy() {
         ' gap, do not substitute an out-of-scope workaround). FORBIDDEN, and therefore not offered as' +
         ' alternatives: re-running this script in the GLOBAL scope, editing the global sys_db_object row' +
         ' for sys_choice, and adding a sys_scope_privilege to the application.';
+}
+
+/**
+ * Why a write was withheld by the verification-only default, and what to do
+ * about it, as a single clause every BLOCKED line prints.
+ *
+ * It is deliberately explicit about the cause being an ABSENT SAFEGUARD rather
+ * than an absent permission: an operator who reads "not authorized" and nothing
+ * more will simply flip the flag, and the one thing that must travel with the
+ * flag is what flipping it accepts. Both remedies are offered in the order they
+ * should be preferred - the platform's native path first, because the platform
+ * serializes it, and an operator-asserted authorized run second.
+ *
+ * @param {string} operation 'insert' or 'repair update', for the message
+ * @return {string} the cause and the two remedies
+ */
+function writeNotAuthorizedDiagnosis(operation) {
+    return 'not_authorized=ALLOW_WRITES is false, so this run is verification-only and did not attempt' +
+        ' the ' + operation + '. The write is withheld because this script cannot enforce the' +
+        ' single-writer precondition its reconciliation depends on: no mutual-exclusion or' +
+        ' atomic-uniqueness primitive is available to a scoped application, and sys_choice refuses a' +
+        ' scoped delete, so a raced write could be neither prevented beforehand nor compensated' +
+        ' afterwards|remedy=' + nativeAuthoringRemedy() + ' ALTERNATIVELY, an operator who has' +
+        ' established that nothing else writes these choice lists for the duration of the run - no' +
+        ' other instance of this script, no Update Set commit or import touching these lists, no' +
+        ' application teardown - may set ALLOW_WRITES = true and re-run, which asserts that' +
+        ' precondition on the operator\'s own authority and accepts the residual race window the' +
+        ' header describes.';
 }
 
 /**
@@ -800,24 +974,33 @@ function choiceMismatches(gr, spec) {
 /**
  * Ensure one choice row exists and matches its specification.
  *
+ * TWO MODES. With ALLOW_WRITES false - the default - this function is a SURVEY:
+ * it reads the row, classifies it, and where it would have written it emits a
+ * BLOCKED problem naming the exact withheld write, its cause and its remedy.
+ * Nothing is set, nothing is inserted, nothing is updated, and the run fails.
+ * With ALLOW_WRITES true it reconciles, under every guard below.
+ *
  * Idempotency: the row is addressed by its natural key (name, element, value),
  * so a re-run finds the row it created last time and writes nothing. A second
- * row for the same key is never inserted; if the instance already holds more
- * than one, that is reported as a duplicate rather than compounded.
+ * row for the same key is never inserted for a key this run has observed to
+ * have one; if the instance already holds more than one, that is reported as a
+ * duplicate rather than compounded.
  *
  * Concurrency: check-then-act is unavoidable here, because no mutual-exclusion
  * primitive is available to a scoped application (see the SINGLE-WRITER
- * PRECONDITION block in the header). So the window is closed by narrowing it
- * and by refusing to guess about it, in four places:
+ * PRECONDITION block in the header). The default verification-only mode is the
+ * response to that; an authorized run instead NARROWS the window - it cannot
+ * close it - in four places:
  *
  *   1. nothing is written once RUN_STATE.abort is set;
  *   2. the executing scope and the application scope record are re-validated
  *      immediately before the update and immediately before the insert;
  *   3. the natural key is re-queried immediately before the insert, so a row a
  *      concurrent writer created in the meantime is detected and NOT duplicated;
- *   4. the natural key is read back immediately after the insert, so a
- *      duplicate that a simultaneous insert produced is detected here rather
- *      than surviving as two selectable values.
+ *   4. the natural key is read back immediately after the insert, which DETECTS
+ *      a duplicate a simultaneous insert produced. That duplicate has already
+ *      persisted by the time this reads it: 4 is detection and escalation, not
+ *      prevention, and the surviving duplicate is reported and left in place.
  *
  * Any of 2, 3 or 4 failing ends writing for the whole run and fails the
  * verdict. None of them deletes anything.
@@ -854,13 +1037,26 @@ function reconcileChoice(spec, scopeSysId, access) {
             STATS.already++;
             return;
         }
+        // Describe the repair before deciding whether it may be made, so the
+        // BLOCKED line and the applied line name exactly the same columns and
+        // the same stored->wanted transitions. Nothing here is set on the
+        // record: setValue() belongs to the authorized branch alone.
+        var repaired = [];
+        for (var d = 0; d < drift.length; d++) {
+            repaired.push(drift[d].column + ':' + drift[d].stored + '->' + drift[d].wanted);
+        }
+        if (!ALLOW_WRITES) {
+            STATS.updateBlocked++;
+            logProblem('BLOCKED|' + key + '|repair update NOT ATTEMPTED|would have repaired ' +
+                repaired.join(',') + ' on sys_id=' + existing.getUniqueValue() + '|' +
+                writeNotAuthorizedDiagnosis('repair update'));
+            return;
+        }
         if (!revalidateWriteContext('repair update', key, scopeSysId)) {
             return;
         }
-        var repaired = [];
-        for (var d = 0; d < drift.length; d++) {
-            existing.setValue(drift[d].column, drift[d].wanted);
-            repaired.push(drift[d].column + ':' + drift[d].stored + '->' + drift[d].wanted);
+        for (var a = 0; a < drift.length; a++) {
+            existing.setValue(drift[a].column, drift[a].wanted);
         }
         if (!existing.update()) {
             STATS.updateRefused++;
@@ -872,6 +1068,15 @@ function reconcileChoice(spec, scopeSysId, access) {
         return;
     }
 
+    if (!ALLOW_WRITES) {
+        STATS.insertBlocked++;
+        logProblem('BLOCKED|' + key + '|insert NOT ATTEMPTED|would have inserted this natural key (name=' +
+            spec.table + ', element=' + spec.element + ', value=' + spec.value + ') with label=' +
+            spec.label + ', sequence=' + spec.sequence + ', language=' + CHOICE_LANGUAGE + ', inactive=' +
+            CHOICE_INACTIVE + '|' + writeNotAuthorizedDiagnosis('insert'));
+        return;
+    }
+
     if (!revalidateWriteContext('insert', key, scopeSysId)) {
         return;
     }
@@ -880,7 +1085,10 @@ function reconcileChoice(spec, scopeSysId, access) {
     // above may be milliseconds or seconds old, and in that window another
     // writer of this same script can have created the row. Inserting anyway is
     // precisely how a check-then-act sequence produces the duplicate the
-    // specification forbids, so a row found here ends writing instead.
+    // specification forbids, so a row found here ends writing instead. This
+    // narrows the window rather than closing it: a writer that commits between
+    // this query and the insert below is not visible here, and only the
+    // post-insert read-back will see what that produced.
     var appeared = queryNaturalKey(spec);
     if (appeared.getRowCount() > 0) {
         logProblem('RACE|' + key + '|insert NOT ATTEMPTED|' + appeared.getRowCount() + ' row(s) for this' +
@@ -921,12 +1129,22 @@ function reconcileChoice(spec, scopeSysId, access) {
     // Read the natural key back from the database, not from gr. Two writers
     // that both passed the re-query above both insert, and the only place that
     // is visible is here. Exactly one row is the only acceptable answer.
+    //
+    // This is DETECTION AFTER THE FACT, and it is not claimed as anything more:
+    // the insert above has already committed, so a duplicate this finds has
+    // already persisted. What the read-back buys is that the raced outcome is
+    // loud instead of silent and that the remaining specs are not written -
+    // not that the duplicate was avoided, and not that it can be undone here,
+    // because deleting a row is outside this script's mandate and sys_choice
+    // refuses a scoped delete anyway.
     var readBack = queryNaturalKey(spec);
     var readBackCount = readBack.getRowCount();
     if (readBackCount !== 1) {
         logProblem('RACE|' + key + '|post-insert read-back found ' + readBackCount + ' rows for this natural' +
             ' key where exactly 1 is required' + (readBackCount > 1
-                ? ', so a simultaneous writer inserted the same value. The duplicate is REPORTED, not deleted'
+                ? ', so a simultaneous writer inserted the same value. The duplicate ALREADY PERSISTED' +
+                  ' before this read - the read-back detects it, it does not prevent it - and it is' +
+                  ' REPORTED and left in place, not deleted'
                 : ', so this run\'s own insert did not persist') +
             '. sys_id returned by the insert=' + id + '.');
         abortWrites(readBackCount > 1
@@ -1349,6 +1567,15 @@ function verdictReason(countsOk, persistedOk, choiceSetsOk) {
     if (RUN_STATE.abort) {
         return RUN_STATE.abortReason;
     }
+    // Ranked immediately below an abort, and above every count and attribute
+    // term, because when the verification-only default meets a row that needs
+    // writing every one of those terms fails as a CONSEQUENCE of the withheld
+    // write. Reporting the consequence would send a reader looking for drift on
+    // an instance whose only problem is that this run was not allowed to fix
+    // it. Unreachable on an authorized run, where both counters stay zero.
+    if (STATS.insertBlocked > 0 || STATS.updateBlocked > 0) {
+        return 'writes not authorized (verification-only default)';
+    }
     if (STATS.duplicateKeys > 0) {
         return 'duplicate natural keys on sys_choice';
     }
@@ -1368,12 +1595,33 @@ function verdictReason(countsOk, persistedOk, choiceSetsOk) {
 }
 
 /**
- * Reconcile the twenty-four choice values and verify the result.
+ * Verify the twenty-four choice values, and reconcile them when this run is
+ * authorized to write.
+ *
+ * The read side is unconditional: the three gates, the reconciliation survey,
+ * the live-row audit and all three verification passes run in both modes, so a
+ * verification-only run is a complete assessment of the instance and not a
+ * degraded one. Only the insert and the repair are conditional on ALLOW_WRITES,
+ * and a write withheld by the default is a BLOCKED problem that fails the
+ * verdict rather than a silent omission.
  *
  * @return {string} the single-line summary, also emitted through gs.info()
  */
 function createChoiceValues() {
     var started = new GlideDateTime();
+
+    // The mode goes on the record first, ahead of the gates, so that even a run
+    // the first gate refuses is unambiguous afterwards about whether it could
+    // have written anything at all.
+    log('MODE|allow_writes=' + ALLOW_WRITES + '|' + (ALLOW_WRITES
+        ? 'WRITES AUTHORIZED: missing rows will be inserted and drifted rows repaired, under every race' +
+          ' guard in this script. The operator has asserted the single-writer precondition this script' +
+          ' cannot enforce, and accepts the residual window in which two concurrent writers can both' +
+          ' persist a row that only the post-insert read-back would catch.'
+        : 'VERIFICATION ONLY: no sys_choice insert or update will be attempted. Every write this run' +
+          ' would have made is reported as a BLOCKED problem and fails the verdict, because the' +
+          ' single-writer precondition a safe reconciliation needs cannot be enforced by this script.' +
+          ' Verification itself is unaffected and runs in full.'));
 
     // GATE 1 - the specification must describe what it claims to describe
     // before any row is written from it.
@@ -1382,7 +1630,8 @@ function createChoiceValues() {
         logProblem('SPEC|CHOICE_SPECS describes ' + CHOICE_SPECS.length + ' values across ' + index.fields.length +
             ' lists, but the invariant is ' + EXPECTED_CHOICE_VALUES + ' across ' + EXPECTED_CHOICE_LISTS +
             '; refusing to write from an inconsistent specification');
-        var refused = 'SUMMARY|verdict=FAILED|reason=inconsistent specification|problems=' + PROBLEMS.length;
+        var refused = 'SUMMARY|verdict=FAILED|reason=inconsistent specification|allow_writes=' +
+            ALLOW_WRITES + '|problems=' + PROBLEMS.length;
         log(refused);
         logProblemList();
         return LOG_PREFIX + refused;
@@ -1393,9 +1642,9 @@ function createChoiceValues() {
     // resolved and long before the reconciliation loop, so no insert or update
     // is attempted from a global session. Unconditional early return.
     if (!assertExecutionScope()) {
-        var outOfScope = 'SUMMARY|verdict=FAILED|reason=out-of-scope execution|executing_scope=' +
-            currentScopeName() + '|required_scope=' + SCOPE_NAME + '|created=0|repaired=0|problems=' +
-            PROBLEMS.length;
+        var outOfScope = 'SUMMARY|verdict=FAILED|reason=out-of-scope execution|allow_writes=' + ALLOW_WRITES +
+            '|executing_scope=' + currentScopeName() + '|required_scope=' + SCOPE_NAME +
+            '|created=0|repaired=0|problems=' + PROBLEMS.length;
         log(outOfScope);
         logProblemList();
         return LOG_PREFIX + outOfScope;
@@ -1412,8 +1661,9 @@ function createChoiceValues() {
             ' rows or a malformed sys_id, so the application scope is unresolved or ambiguous. Refusing' +
             ' to reconcile: nothing may be written to sys_choice while the owning application cannot be' +
             ' identified. Expected exactly one row whose sys_id matches ^[0-9a-f]{32}$.');
-        var unresolved = 'SUMMARY|verdict=FAILED|reason=unresolved application scope|scope_rows=' +
-            scope.count + '|created=0|repaired=0|problems=' + PROBLEMS.length;
+        var unresolved = 'SUMMARY|verdict=FAILED|reason=unresolved application scope|allow_writes=' +
+            ALLOW_WRITES + '|scope_rows=' + scope.count + '|created=0|repaired=0|problems=' +
+            PROBLEMS.length;
         log(unresolved);
         logProblemList();
         return LOG_PREFIX + unresolved;
@@ -1428,7 +1678,8 @@ function createChoiceValues() {
 
     log('RECONCILE|created=' + STATS.created + '|repaired=' + STATS.repaired +
         '|already_correct=' + STATS.already + '|insert_refused=' + STATS.insertRefused +
-        '|update_refused=' + STATS.updateRefused + '|duplicate_keys=' + STATS.duplicateKeys +
+        '|update_refused=' + STATS.updateRefused + '|insert_blocked=' + STATS.insertBlocked +
+        '|repair_blocked=' + STATS.updateBlocked + '|duplicate_keys=' + STATS.duplicateKeys +
         '|race_aborts=' + STATS.raceAborts + '|skipped_after_abort=' + STATS.skippedAfterAbort);
 
     // Verification. Three independent passes, each returning a boolean that the
@@ -1440,20 +1691,27 @@ function createChoiceValues() {
     var choiceSetsOk = verifyChoiceSets(index, scope.sysId);
 
     var elapsed = new GlideDateTime().getNumericValue() - started.getNumericValue();
-    // Every term is explicit. A duplicate key and a race abort each fail the run
-    // on their own account rather than only through the problem list, so that
-    // neither can be lost if a future edit changes what reaches PROBLEMS.
+    // Every term is explicit. A duplicate key, a race abort and a withheld
+    // write each fail the run on their own account rather than only through the
+    // problem list, so that none of them can be lost if a future edit changes
+    // what reaches PROBLEMS. The blocked-write terms are what stop the
+    // verification-only default from failing OPEN: a run that found a shortfall
+    // it was not allowed to fix must never certify the instance as correct.
     var passed = countsOk &&
         persistedOk &&
         choiceSetsOk &&
         STATS.duplicateKeys === 0 &&
+        STATS.insertBlocked === 0 &&
+        STATS.updateBlocked === 0 &&
         !RUN_STATE.abort &&
         PROBLEMS.length === 0;
     var verdict = passed ? 'OK' : 'FAILED';
     var summary = 'SUMMARY|verdict=' + verdict +
         '|reason=' + (passed ? 'none' : verdictReason(countsOk, persistedOk, choiceSetsOk)) +
+        '|allow_writes=' + ALLOW_WRITES +
         '|values=' + live.total + '/' + EXPECTED_CHOICE_VALUES +
         '|created=' + STATS.created + '|repaired=' + STATS.repaired + '|already_correct=' + STATS.already +
+        '|writes_blocked=' + (STATS.insertBlocked + STATS.updateBlocked) +
         '|surplus=' + STATS.surplusRows + '|duplicates=' + STATS.duplicateKeys +
         '|race_aborts=' + STATS.raceAborts +
         '|problems=' + PROBLEMS.length + '|ms=' + elapsed;

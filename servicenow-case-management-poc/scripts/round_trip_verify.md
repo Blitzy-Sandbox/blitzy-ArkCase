@@ -37,7 +37,7 @@ Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7
 > | Artifact | Identity, as measured 2026-09-08 | Status |
 > | --- | --- | --- |
 > | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE** | **926** `<sys_update_xml>` blocks · **3,781,097** bytes · SHA-256 **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** · 26 `sys_security_acl` · descriptor `sys_id` `9929f50df18ccec91ea13b2a3bccfc90` · `xmllint --noout` clean | **THE EXACT, UNTOUCHED ELECTED PACKAGE**, and `cmp` against `…FALLBACK.xml` reports no difference. **NOT GATE-VERIFIED** — these bytes have never been uploaded or previewed on any instance |
-> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE**, corrected 2026-09-08 | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED — by a same-instance reset-and-reimport, not by an independent second PDI.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a proven zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) |
+> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE**, corrected 2026-09-08 | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED — by a same-instance reset-and-reimport, not by an independent second PDI.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a recorded zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 > | `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` — **the elected package, retained** | **926** blocks · **3,781,097** bytes · SHA-256 **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** · 26 `sys_security_acl` · `xmllint` clean | Retained. Modified after election by the three commits below, then **restored to the elected bytes 2026-09-05T04:45Z**. Byte-identical to the deliverable again — which is D3's intended end state, not the defect: the defect was this file tracking edits made to the deliverable, and those edits now live in the separate `…AMENDED-NOT-GATED.xml` |
 > | The two candidate packages this consolidation superseded — `…REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks · 4,062,067 bytes · `e109e1d1…`) and `…AMENDED-NOT-GATED.xml` (935 blocks · 3,973,569 bytes · `9f3ea74c…`) | Both **deleted** from `update-set/` in this consolidation; their bytes remain recoverable from git history | Superseded: each was hand-authored rather than platform-exported, and neither was ever gated through a teardown-and-reimport commit. Provenance recorded in [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 >
@@ -106,10 +106,15 @@ Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7
 > Management V2 owns that table on this release and refuses those payloads from any update set, stamped Global
 > or stamped `x_casemgmt` alike. AAP §0.7.1 / Gate 7 — the zero-preview-error round trip — is **met on these
 > bytes by a same-instance reset-and-reimport, not by an independent second instance**: the instance was torn
-> down to a proven zero-state, the exact candidate bytes were uploaded and previewed to 0 `type=error` and 0
+> down to a recorded zero-state, the exact candidate bytes were uploaded and previewed to 0 `type=error` and 0
 > `type=warning` problems, and one native commit followed with nothing running in between. The residual risk is
 > named rather than waved away — caches, indexes, retained update history and any metadata a scope teardown does
-> not reach were neither re-created nor tested, and provisioning a second PDI was out of scope.
+> not reach were neither re-created nor tested, provisioning a second PDI was out of scope, and **the pre-commit
+> zero-state is *recorded* rather than proven** (corrected 2026-09-09, CR2 finding F06): its ten checks ran and
+> their normalized results were transcribed, but the verbatim requests, statuses and response bodies for that
+> pre-commit pass are not retained in this repository, so that precondition cannot now be independently
+> re-verified. The preview-and-commit measurements are evidenced and unchanged, and the later teardown's own ten
+> checks do retain their verbatim commands and bodies. That is what "recorded zero-state" means below.
 > **Directive D48's identity comparison HOLDS.** It was raised and reported for as long as the
 > mismatch existed (recorded checksum `7292a6fe…` against deliverable bytes `9f3ea74c…`) and was closed first by
 > remedy **(a)**: the elected bytes were copied back from `…FALLBACK.xml`, verified by `sha256sum` on all four
@@ -596,7 +601,7 @@ onto unrelated deployments.
 
 > **CORRECTED 2026-09-08 — this table was measured on the superseded hand-authored candidates, not on the
 > package that ships.** On the consolidated 522-block platform export, one commit onto an instance torn down
-> to a proven zero-state produced all three tables with physical storage (`sys_dictionary` and
+> to a recorded zero-state produced all three tables with physical storage (`sys_dictionary` and
 > `sys_documentation` 21 / 14 / 13 each), the **24** `sys_choice` values across all **7** lists, working
 > auto-numbering, the three roles with **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3)
 > over its 26 scoped ACLs, and the demo rows 10 / 10 / 8 with their parent linkage resolving — with nothing
@@ -893,7 +898,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > `Found a local update that is newer than this one`, ZERO `Could not find a record`** (63 → 0), with all 31
 > targets confirmed to hold a local `sys_update_version` in state `current`. **Phases 1-3 were re-executed in
 > full on 2026-09-08 on the bytes that ship** — the consolidated 522-block export, `b2217224…`: uploaded to an
-> instance torn down to a proven zero-state, `state=loaded` with the child count asserted at exactly **522**,
+> instance torn down to a recorded zero-state, `state=loaded` with the child count asserted at exactly **522**,
 > preview **0 `type=error` and 0 `type=warning`**, then one native-UI commit reaching `state=committed`, with
 > nothing run in between — a same-instance reset-and-reimport, not an independent second instance. They remain
 > un-executed on `e49a7654…`, on the 926-block `7292a6fe…` package, on the superseded `a9204411…` revision and
@@ -986,7 +991,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > committed); the seven choice children they shared had their own upload, preview and native commit on
 > 2026-09-03. What ships today was gated on its own bytes instead — the consolidated 522-block export,
 > `b2217224…`, uploaded, previewed to **0 problems of any type** and committed natively on 2026-09-08 against
-> an instance torn down to a proven zero-state — consistent with the
+> an instance torn down to a recorded zero-state — consistent with the
 > *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 1a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — item 1a is that round trip, closed on 2026-09-08 by the same-instance reset-and-reimport recorded above; item 0's wake of the retired `dev379024` is superseded and gates nothing.
 
 ### Fail Criteria (Any One Triggers Fail)

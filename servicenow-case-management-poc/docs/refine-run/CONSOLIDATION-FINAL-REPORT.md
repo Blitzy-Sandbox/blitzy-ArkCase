@@ -132,9 +132,12 @@ same instance. There is no second instance against which a genuine first-time im
 observed.
 
 **Verification in this task is therefore a same-instance reset-and-reimport, not an independent
-second instance.** The instance is torn down to a proven zero-state immediately before the
+second instance.** The instance is torn down to a **recorded** zero-state immediately before the
 candidate bytes are imported, with no intervening patch — the closest achievable proxy for a clean
-first-time install. Readers must know the residual risk this leaves: anything the platform holds
+first-time install. *(Wording corrected 2026-09-09, CR2 F06 second pass: "recorded", not "proven".
+The pre-commit teardown's ten checks were run and their results recorded, but their verbatim
+request-and-body captures are not retained — Step 5-6 §3.)* Readers must know the residual risk this
+leaves: anything the platform holds
 outside the artifacts a teardown removes — instance-level caches, indexes, retained update
 history, or metadata a scope deletion does not reach — is not fully eliminated by a reset, and a
 result obtained this way cannot claim everything a truly independent instance would prove.
@@ -671,6 +674,22 @@ before any write, when the executing scope is not `x_casemgmt` or when the appli
 does not resolve to exactly one well-formed row. See the correction under §4's run table for how that
 changes the verdicts recorded there.)*
 
+*(CORRECTED AGAIN 2026-09-09, CR2 finding F05 on independent re-verification — and this is the most
+consequential change to the script, so it is stated before the detail: **as it now ships the script
+does not write. Its default run is verification-only.** The reconciliation described above — insert
+what is missing, repair a drifted row in place — is gated behind an `ALLOW_WRITES` flag that ships
+`false`, because the script cannot enforce the single-writer precondition its check-then-act
+reconciliation depends on: no mutual-exclusion or atomic-uniqueness primitive is available to a scoped
+application, and `sys_choice` refuses a scoped delete, so a raced write could be neither prevented
+beforehand nor compensated afterwards. A default run that finds a shortfall or a drift therefore
+reports a `BLOCKED` problem naming exactly what it would have written and why it did not, and ends
+`FAILED`; it reaches `OK` only when nothing needed writing. The preferred remedy for a shortfall is
+the platform's own native in-scope Choices-list authoring path, which the platform serializes itself.
+An operator who has established that nothing else writes these choice lists for the duration of the
+run may set the flag and re-run, which is an assertion of a precondition the script cannot check.
+Everything the paragraphs above say about idempotency, in-place repair and surplus detection describes
+that authorized run.)*
+
 **Write-path discovery that the script now documents and diagnoses.** `sys_db_object` for
 `sys_choice` reports `create_access=false, update_access=false, delete_access=false,
 read_access=true, sys_scope=global`: a **scoped** session may read `sys_choice` but may not write it,
@@ -782,6 +801,17 @@ the state and repairing it (all probes reverted):
 > Nothing measured in the table is withdrawn. What is withdrawn is the inference that an `OK` recorded
 > here is an `OK` under the present contract — it is the weaker predecessor of one. The script's own
 > header comment is the authority on the current contract.
+>
+> **Added 2026-09-09 on independent re-verification (CR2 F05, second pass): as it now ships the script
+> would not have performed the writes in this table at all.** Writing is gated behind an `ALLOW_WRITES`
+> flag that ships `false`, because the single-writer precondition the reconciliation depends on is not
+> something the script can enforce. Against the runs above that means: runs 4, 6 and 7 are refused at
+> the scope gate before the flag is even consulted; runs 3 and 5 — the in-scope runs that found a
+> shortfall and a drift — would today report a `BLOCKED` problem naming the write they withheld and end
+> `FAILED`, rather than attempting a write for the platform to refuse; and runs 1, 2 and 8, which had
+> nothing to write, would behave exactly as recorded and still reach `OK`. Reproducing runs 4-7's
+> *repairs* now requires either the native in-scope Choices-list path or an operator explicitly setting
+> the flag for a run, having established that nothing else is writing these choice lists.
 
 Final state proven equal to baseline, not merely equal in count: a tuple diff of
 `(name, element, value, label, sequence, inactive, language)` across all 24 rows is **identical** to
@@ -887,8 +917,37 @@ directly), so they were known first-hand to be direct inserts.
 **Per-row audit of the 27 original links — added 2026-09-09 (code review CR2, finding F08).** The
 three tests above were applied to every row, but they were tabulated one row per *test*, which
 classified all 27 only in aggregate. Directive L87 forbids skipping the per-record trace, so the trace
-is written out here, one row per record, with an explicit verdict on each. Legend for the evidence
-column:
+is written out here, one row per record, with an explicit verdict on each — and with the boundary of
+what that trace can and cannot establish stated immediately below it, so the enumeration is not taken
+as more than it is.
+
+> **HOW STRONG THIS TABLE IS, stated before it rather than left to be inferred — added 2026-09-09
+> (CR2 F08, second pass; re-opened by independent verification).** The **DIRECT INSERT verdict on this
+> set is established at SET LEVEL, not at row level**, and the distinction is real enough to be worth
+> the sentence:
+>
+> - **What the retained evidence does establish.** The three tests were applied to the whole 27-row
+>   cluster and all 27 rows share the same creator, the same two-second `sys_created_on` window,
+>   `sys_mod_count=0`, and none carries the installer's composite-`sys_id` shape; a run record names
+>   the batch explicitly as a direct insert of all 27. **All 27 were direct-inserted and none was
+>   authored natively** — that conclusion stands on the retained material, and it is the conclusion
+>   this section acts on.
+> - **What it does not establish: per-record identity.** The table carries each row's old `sys_id`,
+>   its ACL target and its role, but **no ACL `operation` column**, and its timestamp is the
+>   two-second window with the per-row second not retained (see the two declarations that follow the
+>   legend). So where a `(table, role)` pair repeats — and several do — **nothing in retained material
+>   ties a given old `sys_id` to its specific `create` / `read` / `write` / `delete` operation.** The
+>   aggregate read 9 / write 9 / create 6 / delete 3 reconciles the *set*; it does not attribute an
+>   operation to a row. **That dimension is UNPROVEN and no operation column is fabricated to fill
+>   it.** A reader should not take this table for a row-level trace of *which link did what*; it is a
+>   row-level enumeration of the set, with a set-level authoring verdict.
+> - **The recreated-link table in §8 is stronger, and the asymmetry is deliberate to show.** That
+>   table carries a per-row `Op` **and** a full `2026-09-08 HH:MM:SS` `sys_created_on` distinct for
+>   every one of its 27 rows, so its **NATIVE verdict is genuinely per-record** — each row's own
+>   timestamp and operation are in the document. This table cannot match that, because the evidence it
+>   would need was never captured and the instance that held the rows is gone.
+
+Legend for the evidence column:
 
 - **T1 — timestamp clustering.** The row's `sys_created_on` falls inside the two-second window
   `2026-09-02 19:09:55`–`19:09:56` with `sys_mod_count=0`. 27 interactive form submissions cannot land
@@ -919,7 +978,13 @@ The `Created by (role)` column records the **role** the authoring session held, 
 the notable part is what it did *not* hold — `security_admin` — because a server-side background script
 is not ACL-gated and so wrote these rows without the elevation the native path would have required.
 
-| # | Old `sys_id` | ACL (table / field) | Role | Created by (role) | Created on (UTC) | Evidence | Verdict |
+Column headers carry their own evidence limits, so the limit travels with the table (CR2 F08, second
+pass): there is deliberately **no ACL-operation column**, because no retained material attributes an
+operation to an individual `sys_id`; the timestamp column is a two-second **window**, not a per-row
+reading; and the verdict column is the **set-level** authoring verdict described above, applied to each
+row of the set it was established on.
+
+| # | Old `sys_id` | ACL (table / field) — *ACL operation: **UNPROVEN per row**, not retained (CR2 F08)* | Role | Created by (role) | Created on (UTC) — *window only; per-row second not retained* | Evidence | Verdict — *authoring, established at **set level*** |
 |---|---|---|---|---|---|---|---|
 | 1 | `bfd9ec9a938b435009aa70d19dba10d1` | `x_casemgmt_case.assigned_agent` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
 | 2 | `f3d9ec9a938b435009aa70d19dba10cc` | `x_casemgmt_case.assigned_agent` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
@@ -963,10 +1028,10 @@ and counting it here would inflate 27 to 28.
 
 | Set | Count | Per role | Per table | Verdict |
 |---|---|---|---|---|
-| Original `sys_security_acl_role` links | **27** | manager 14 · agent 10 · viewer 3 | `x_casemgmt_case` 11 (8 on the table + 3 on its fields: `assigned_agent` 2, `assigned_group` 1) · `_case_task` 8 · `_case_party` 8 | **DIRECT INSERT** — all 27, per row above |
-| Recreated `sys_security_acl_role` links | **27** | manager 14 · agent 10 · viewer 3 | `x_casemgmt_case` 11 · `_case_task` 8 · `_case_party` 8 | **NATIVE** — all 27, per row in §8 |
-| Original `sys_user_has_role` grants | **3** | one per role | n/a | **DIRECT INSERT** — all 3, per row in §8 |
-| Recreated `sys_user_has_role` grants | **3** | one per role | n/a | **NATIVE** — all 3, per row in §8 |
+| Original `sys_security_acl_role` links | **27** | manager 14 · agent 10 · viewer 3 | `x_casemgmt_case` 11 (8 on the table + 3 on its fields: `assigned_agent` 2, `assigned_group` 1) · `_case_task` 8 · `_case_party` 8 | **DIRECT INSERT** — all 27, enumerated row by row above, with the authoring verdict established at **set level** and the per-row ACL operation **unproven** (CR2 F08) |
+| Recreated `sys_security_acl_role` links | **27** | manager 14 · agent 10 · viewer 3 | `x_casemgmt_case` 11 · `_case_task` 8 · `_case_party` 8 | **NATIVE** — all 27, **per record**: each row in §8 carries its own operation and its own full `2026-09-08 HH:MM:SS` timestamp |
+| Original `sys_user_has_role` grants | **3** | one per role | n/a | **DIRECT INSERT** — all 3, per row in §8; author known first-hand, not inferred |
+| Recreated `sys_user_has_role` grants | **3** | one per role | n/a | **NATIVE** — all 3, **per record**, each with its own full timestamp in §8 |
 | Native probe link (not this application's) | 1 | n/a — `x_casemgmt.qa5_probe_role` | `x_casemgmt_qa5_probe_table` | **NATIVE**, and **excluded** from every figure above |
 
 The two per-role splits and the two per-table splits were derived independently: the 14 / 10 / 3 and
@@ -975,9 +1040,12 @@ live on the 27 new rows in §8. Nothing is missing and nothing is double-counted
 27 new rows created, 3 old grants deleted, 3 new grants created.
 
 **Verdict: all 30 records failed the native-authoring trace and every one was deleted and
-recreated.** Per INTERP-R1 the breakdown is reported on both dimensions: per role **manager 14 /
+recreated** — a verdict on the **set**, established by the three tests applied to the whole cluster
+(CR2 F08, second pass), not a row-by-row derivation from 27 independent readings. Per INTERP-R1 the breakdown is reported on both dimensions: per role **manager 14 /
 agent 10 / viewer 3 = 27**; per table **`x_casemgmt_case` 11 / `x_casemgmt_case_task` 8 /
-`x_casemgmt_case_party` 8**; per operation read 9 / write 9 / create 6 / delete 3. (The instance's
+`x_casemgmt_case_party` 8**; per operation read 9 / write 9 / create 6 / delete 3 — **the operation
+split is a property of the set only; it is not attributed to individual `sys_id`s and no retained
+material would support doing so.** (The instance's
 2026-09-05 measurement of 36 links / 17-13-6 is not this task's number; the acceptance number is 27.)
 
 ### 8. Native recreation (D4.3, D4.4)
@@ -996,7 +1064,12 @@ verified before batching: the deleted row answered HTTP 404 and was captured as 
 row as an `INSERT_OR_UPDATE`, both in the app's Default set.
 
 **Per-row NATIVE verdict — evidence legend, added 2026-09-09 (CR2 F08).** Every row below carries an
-explicit verdict, and the four checks behind it are per-row rather than aggregate:
+explicit verdict, and the four checks behind it are per-row rather than aggregate. **This table is
+therefore stronger than §7's, and the difference is stated rather than implied (CR2 F08, second
+pass): each row here carries its own ACL `operation` and its own full `2026-09-08 HH:MM:SS`
+`sys_created_on`, all 27 of them distinct, so the NATIVE verdict is established per record. §7's
+table has no operation column and only a two-second window, so its DIRECT INSERT verdict is
+established at set level.** The four checks:
 
 - **N1 — brand-new `sys_id`.** The row's `sys_id` appears in none of the 27 direct-inserted `sys_id`s
   audited in §7, so it is a new record and not a survivor of the audited set. (New `sys_id`s are
@@ -1063,16 +1136,29 @@ no-op.
 Per-row, for both the old and the new row of each grant — **columns and verdicts added 2026-09-09
 (CR2 F08)**, because the table previously carried neither a creator nor a verdict:
 
+> **Timestamp form completed 2026-09-09 (CR2 F08, second pass).** The three new rows previously
+> carried a bare time (`19:43:56` / `19:44:18` / `19:44:39`) with no date, which left a reader unable
+> to place them. The date **is** recoverable from this report's own text, so it is stated rather than
+> dropped: this Step 3-4 section opens "Owner: unit U2. Executed **2026-09-08**, 18:38Z–19:56Z. Every
+> figure below was measured fresh against the live instance during that window", and these three
+> *Edit Members* saves are that same §8 session — they fall inside that window, after the last
+> natively recreated link at `2026-09-08 19:26:54` and before the Step 5c commit at
+> `2026-09-08 21:27:27`. All three are therefore written in full `2026-09-08 HH:MM:SS` form below.
+> The **old** rows' timestamps were checked the same way and needed no completion: they already read
+> `2026-09-08 18:58:04` in full, corroborated twice in this section — by the `seed_demo_data.js` run
+> record above and by legend entry **D1** below — and they too fall inside the section's window.
+
 | User | Role | New `sys_id` | New: created by (role) | New: created (UTC) | New: evidence | New verdict | Old direct-insert `sys_id` | Old: created by (role) | Old: created (UTC) | Old: evidence | Old verdict |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `x_casemgmt_demo_manager` | `x_casemgmt_case_manager` | `203beb4093df0b1009aa70d19dba1011` | `security_admin` (elevated), `admin` | 19:43:56 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `20b02f48935f0b1009aa70d19dba102b` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
-| `x_casemgmt_demo_agent` | `x_casemgmt_case_agent` | `3d4b6f4093df0b1009aa70d19dba10bc` | `security_admin` (elevated), `admin` | 19:44:18 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `30b02f48935f0b1009aa70d19dba1032` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
-| `x_casemgmt_demo_viewer` | `x_casemgmt_case_viewer` | `c35ba38093df0b1009aa70d19dba103d` | `security_admin` (elevated), `admin` | 19:44:39 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `70b02f48935f0b1009aa70d19dba1037` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
+| `x_casemgmt_demo_manager` | `x_casemgmt_case_manager` | `203beb4093df0b1009aa70d19dba1011` | `security_admin` (elevated), `admin` | 2026-09-08 19:43:56 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `20b02f48935f0b1009aa70d19dba102b` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
+| `x_casemgmt_demo_agent` | `x_casemgmt_case_agent` | `3d4b6f4093df0b1009aa70d19dba10bc` | `security_admin` (elevated), `admin` | 2026-09-08 19:44:18 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `30b02f48935f0b1009aa70d19dba1032` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
+| `x_casemgmt_demo_viewer` | `x_casemgmt_case_viewer` | `c35ba38093df0b1009aa70d19dba103d` | `security_admin` (elevated), `admin` | 2026-09-08 19:44:39 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `70b02f48935f0b1009aa70d19dba1037` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
 
 Evidence legend for the grants:
 
 - **G1 — its own `sys_created_on` from a separate save.** The three new rows carry three distinct
-  timestamps ~22 s apart (19:43:56 / 19:44:18 / 19:44:39), one per *Edit Members* save.
+  timestamps ~22 s apart (`2026-09-08 19:43:56` / `19:44:18` / `19:44:39`), one per *Edit Members*
+  save. The date is this section's own execution date (see the note above the table).
 - **G2 — the platform re-derived a companion row at the moment of the grant.** Alongside each new
   grant the platform wrote an `inherited=true` `snc_required_script_writer_permission` row with
   `sys_created_by=system` (`603beb40…1015`, `7d4b6f40…10c0`, `075ba380…1041`). That is the strongest
@@ -1181,7 +1267,8 @@ Structurally guaranteed too: the viewer role's only 3 ACL links are all `operati
 
 **Agent** — identity `g_user.userName=x_casemgmt_demo_agent`, roles `…, x_casemgmt_case_agent`. The
 case list returns **exactly 9 rows, CASE9000002–CASE9000010, with CASE9000001 absent** — matching
-the "assigned only" set computed independently beforehand as admin (`assigned_agent = Demo Agent` on
+the "assigned only" set computed independently beforehand in the privileged `<configured
+administrator>` session (`assigned_agent = Demo Agent` on
 7 cases ∪ `assigned_group = x_casemgmt_demo_team` on 9; CASE9000001 has neither). The list footer
 reads "1 to 9 of 9". Opening CASE9000001 directly answers *"Security constraints prevent access to
 requested page"*. On assigned `CASE9000003` the Update control renders and 9 fields are editable
@@ -1199,7 +1286,7 @@ Screenshots: `u2-persona-viewer-case-list.png`, `u2-persona-viewer-case-form.png
 **Known accepted limitation, reproduced and deliberately not "fixed".** `/core_company_list.do`
 answers **both** scoped personas *"Security constraints prevent access to requested page"*, and in
 consequence the party list's `organization` column is blank in all 8 rows for both — while the same
-list shows real company names to admin (§6). This is the project's recorded **ADV-1**:
+list shows real company names in the privileged `<configured administrator>` session (§6). This is the project's recorded **ADV-1**:
 `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` ~L922, restated ~L2052–2057 and N8 ~L2242 — closing it
 would need a global ACL or a stock-role grant, both forbidden (AAP §0.3.2 names `core_company`
 explicitly). **No global ACL was created here, and this work granted no stock role.** What must be
@@ -1212,7 +1299,8 @@ empty self-closing `<includes_roles/>` — and it **is** effective on each perso
 readings above show. See the **CR2 F10 correction in §8**: that is a **BLOCKING capability gap** of the
 platform's native role-grant path, reported rather than accepted, because removing it would require
 writing global `sys_user_has_role` rows AAP §0.3.2 forbids this package to own. D3.5 was verified
-as admin, which is what the directive's wording asks for.
+in the privileged `<configured administrator>` session rather than under a persona, which is what the
+directive's wording asks for.
 
 ### 10. Collateral: what changed, and nothing else
 
@@ -1296,7 +1384,8 @@ candidate package — they are not the post-commit remediation the "single clean
 ## Step 5-6 — Gated reimport and canonical replacement
 
 This step is the gate. Everything Steps 1-4 built was exported as a candidate package, the instance was
-emptied to a proven zero-state, that exact candidate was re-imported and committed **once**, and only
+emptied to a **recorded** zero-state — recorded, not proven: §3's ten checks were run and their results
+transcribed, but their verbatim captures are not retained (CR2 F06) — that exact candidate was re-imported and committed **once**, and only
 after all of it passed was the canonical file in the repository replaced. Every number below was measured
 freshly against this specific export; nothing is carried over from an earlier section's verification.
 
@@ -1421,7 +1510,13 @@ F05 named each of them. Corrected:
   every ACL condition, every flow script and the seed script resolve their targets by `name`,
   `user_name`, `number` or `role_label`, so nothing a human wrote carries an id literal.
 
-### 3. Step 5b — teardown to a proven zero-state
+### 3. Step 5b — teardown to a zero-state that was measured but is evidence-unproven at raw level
+
+*(Heading restated 2026-09-09, CR2 F06 second pass — re-opened by independent verification. It previously
+read "teardown to a **proven** zero-state", which the correction after §3's ten-check table withdraws:
+the ten checks were run and their results recorded, but the verbatim request-and-body captures for this
+pass are not retained, so this teardown is **reported as recorded at the time** rather than proven. The
+guard evidence, the mechanism and the residue ledger below are unaffected and are in this document.)*
 
 **The guard, re-verified fresh.** A prior successful teardown grants nothing here, so the check was run
 again from scratch. Raw:
@@ -1525,7 +1620,7 @@ minus it.
 > of the three teardowns (§3 here, §3 of Step 1-2, §2 of Step 8), the explicit residue ledger above, and
 > the collateral totals in §7 of Step 1-2 and §8 of Step 8.
 
-Beyond the ten, also proven zero: `sys_update_version` by application and by name, `sys_metadata`,
+Beyond the ten, also **recorded** zero (same evidence status as the ten — CR2 F06): `sys_update_version` by application and by name, `sys_metadata`,
 `sys_metadata_delete`, orphan `sys_update_xml`, and the demo base rows. The collision preconditions were
 cleared too — the candidate's descriptor `sys_id` returned 0 records, and 120 sampled child `sys_id`s
 from the export returned 0. The FALLBACK record was confirmed still present and untouched by an
@@ -1973,10 +2068,14 @@ impersonates one fails at its first persona-context step.** Four independent mea
 1. **The grants are absent.** `sys_user_has_role` filtered on `user.user_name STARTSWITH x_casemgmt_demo`
    returns **0 rows** — the personas hold no roles at all. The three scoped **roles** themselves
    transported and exist, and so did the **27** ACL role links; it is only the three *grants* that are
-   missing. `docs/acl-matrix.md` § *Measured evidence (read-only Table API as `admin`)* records the
-   expected state as "Exactly **3** grant rows".
+   missing. `docs/acl-matrix.md` § *Measured evidence (read-only Table API as the configured
+   administrator)* records the expected state as "Exactly **3** grant rows". *(Citation updated
+   2026-09-09, CR2 F11, together with the heading it quotes — that document's heading previously
+   carried the administrator login identifier and now names the role-bearing account instead, so the
+   quotation and its source still match character for character.)*
 2. **The failure lands exactly at the impersonation boundary.** In every failing test, step 1 (fixture
-   setup, run as admin) **succeeded** and step 2 `Impersonate` **succeeded** — its output reads
+   setup, run in the privileged `<configured administrator>` session) **succeeded** and step 2
+   `Impersonate` **succeeded** — its output reads
    `Impersonated Demo Manager` — and the failure is always the *next* step, the first one performed as the
    persona. Nothing fails before impersonation; nothing that avoids impersonation fails at all.
 3. **A persona cannot read a case that exists** — measured by ATF 04's own step 3, a `Record Query` by
@@ -1986,7 +2085,8 @@ impersonates one fails at its first persona-context step.** Four independent mea
    to find" rather than as a denial — the mechanism `ATF_MANUAL_TEST_PLAN.md` **§6.1** already records for
    the historical `TES0001013` ATF 03 failure. It equally explains ATF 15 / 16 / 17: a form opened by a
    user who cannot read the record renders no form, so `g_form` never exists.
-4. **The browser is not the cause of the `g_form` error.** In the *same* Chrome session, as **admin**, the
+4. **The browser is not the cause of the `g_form` error.** In the *same* Chrome session, in the
+   privileged **`<configured administrator>`** session rather than a persona, the
    same table's form (`x_casemgmt_case`, CASE9000003) rendered with `typeof g_form === "object"`,
    `g_form.getValue('number') = "CASE9000003"` and `g_form.getValue('status') = "In Progress"`. The client
    error appears only under the role-less persona.
@@ -2483,11 +2583,26 @@ matching the value Step 6 recorded, character for character. `ls update-set/` sh
 one and the untouched package named in §14. `xmllint --noout` parses it cleanly, and every payload block
 carries a `<payload_hash>`, as a genuine platform export does.
 
-**(2) Proven by a real preview and commit, on this instance reset to a genuine zero-state immediately before
-that exact import, with no intervening patch.** Cited from the Step 5-6 section, which measured it:
+**(2) Proven by a real preview and commit, on this instance emptied immediately before that exact import,
+with no intervening patch — with the pre-commit zero-state itself evidence-unproven at raw level.** Cited
+from the Step 5-6 section, which measured it. *(Restated 2026-09-09, CR2 F06 second pass — re-opened by
+independent verification. This item previously read "on this instance reset to a **genuine** zero-state"
+and asserted that Step 5b's zero-state "was **proven the same way this step's was**". It was not: Step 8's
+verbatim captures are Step 8's, and they cannot retrospectively evidence the distinct Step 5b teardown that
+preceded the single commit. What is true is below.)*
 
-- Step 5b emptied the instance first, and its zero-state was proven the same way this step's was — all three
-  table endpoints HTTP 400, `sys_scope` empty, no `x_casemgmt` update-set records.
+- Step 5b emptied the instance first. It ran **the same ten zero-state checks** as this step and recorded
+  **the same normalized results** — all three table endpoints HTTP 400, `sys_scope` empty, no `x_casemgmt`
+  update-set records, and zero on every remaining class in that section's ten-check table. But **only this step's (Step 8's) pass
+  retains the verbatim request-and-body evidence**; Step 5b's verbatim captures went to an agent scratch
+  directory the repository does not retain, so Step 5b is **evidence-unproven at raw level** and this
+  conclusion rests on a precondition that **cannot now be independently re-verified** — the instance is
+  torn down, so the pass cannot be re-run either. See the Step 5-6 section, §3, `CORRECTION 2026-09-09
+  (CR2 F06)`.
+- What that does **not** touch, because it is evidenced in this document: the preview-and-commit facts
+  below — 522 children loaded, 0 `type=error` and 0 `type=warning`, one native commit, and the post-commit
+  census — and, for Step 5b itself, the fresh line-34 guard, the `deleteApplication` mechanism and the
+  residue ledger.
 - The package was uploaded and located by **its own descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`,
   never by a name-ordered locator, with the loaded child count asserted at **522 = the file's own block count,
   exactly**.
@@ -2549,7 +2664,8 @@ against the artifacts this package's commit created, after that commit and again
 requires it to be unmissable.**
 
 **(5) Nothing carried forward.** Per directive lines 199-200, no part of this exit condition rests on a prior
-report's verification. Every Step 5 check — the zero-state proof, the upload, the descriptor lookup, the child
+report's verification. Every Step 5 check — the ten zero-state checks (recorded, and evidence-unproven at raw
+level for that pass — CR2 F06), the upload, the descriptor lookup, the child
 count, the preview problem counts by type, the single commit, and the entire post-commit census — was freshly
 re-run by the order-2 unit against **this specific, final export**, and it is those fresh checks that are
 cited above. The ATF suite and the transition harness were likewise re-measured against this package rather
@@ -2560,14 +2676,16 @@ commit rather than taken from any prior report, because both changed when the pa
 
 **Verification used a same-instance reset-and-reimport, not an independent second instance.** There is one
 Personal Developer Instance available to this task and provisioning a second one is out of scope, so the
-closest achievable proxy for a clean-instance import was used: the instance was torn down to a proven
-zero-state and the exact candidate bytes were then uploaded, previewed and committed onto it.
+closest achievable proxy for a clean-instance import was used: the instance was torn down to a recorded
+zero-state (CR2 F06 — recorded, not proven: see Step 5-6 §3) and the exact candidate bytes were then uploaded, previewed and committed onto it.
 
 The residual risk this leaves is not fully eliminated: **instance-level cache, index or metadata that a full
 teardown might not reset** could, in principle, have contributed to the clean preview and the successful
 install. Specifically — platform metadata caches, table-descriptor and dictionary caches, security-manager
 caches, and any residual index or database artifact that survives a scope deletion — were never independently
-proven absent, only proven not to be visible to the ten record-level checks that Step 5b and this step ran. A
+proven absent, only recorded as not visible to the ten record-level checks that Step 5b and this step ran —
+and, for the Step 5b pass specifically, that recording is itself evidence-unproven at raw level (CR2 F06;
+Step 8's ten checks do carry their verbatim requests and bodies). A
 genuinely independent second PDI is the only thing that closes that gap, and this task did not have one.
 Whoever reads this report should treat the Update Set gate as **met on these exact bytes, on this instance, by
 this method**, and should treat an install onto a different instance as the remaining unproven case.
@@ -2603,7 +2721,7 @@ aggregate `git status` / `git diff --stat` evidence named in the same sentence.)
 
 | Script | Run? | Why |
 |---|---|---|
-| `scripts/create_choice_values.js` | **RUN** | newly authored for this task — ES5, idempotent, keyed on the natural key `(name, element, value)`: it inserts only what is missing, repairs a wrong `label`/`sequence`/`language`/`inactive` in place, never duplicates, reports a surplus as a failure exactly as it reports a shortfall, and prints a per-field expected-vs-found line plus a total and a verdict. No standalone choice-only script existed, and an Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively before the Step 5a export. *(CORRECTED 2026-09-09, CR2: a line count stood in this cell and has been removed — a line count in prose goes stale the moment the file is edited. The script's behaviour, described here, is what a reader needs; its header comment is the authority on how to run it.)* *(CORRECTED 2026-09-09, CR2 findings F01-F05: the description above is now the count-based part of a larger contract. The script refuses to write at all — before resolving the scope record — unless it is executing in the `x_casemgmt` scope and the `sys_scope` query for it resolves to exactly one well-formed row; it re-reads all 24 rows from the database after writing and fails on any attribute that did not persist; it verifies exactly one app-owned `sys_choice_set` composite per field, ownership included, and fails on a missing, duplicated, mis-owned or surplus one; and it detects a concurrent writer, stops writing and fails rather than duplicating a value. See §3 and the correction under §4's run table.)* |
+| `scripts/create_choice_values.js` | **RUN** | newly authored for this task — ES5, idempotent, keyed on the natural key `(name, element, value)`: it inserts only what is missing, repairs a wrong `label`/`sequence`/`language`/`inactive` in place, never duplicates, reports a surplus as a failure exactly as it reports a shortfall, and prints a per-field expected-vs-found line plus a total and a verdict. No standalone choice-only script existed, and an Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively before the Step 5a export. *(CORRECTED 2026-09-09, CR2: a line count stood in this cell and has been removed — a line count in prose goes stale the moment the file is edited. The script's behaviour, described here, is what a reader needs; its header comment is the authority on how to run it.)* *(CORRECTED 2026-09-09, CR2 findings F01-F05: the description above is now the count-based part of a larger contract. The script refuses to write at all — before resolving the scope record — unless it is executing in the `x_casemgmt` scope and the `sys_scope` query for it resolves to exactly one well-formed row; it re-reads all 24 rows from the database after writing and fails on any attribute that did not persist; it verifies exactly one app-owned `sys_choice_set` composite per field, ownership included, and fails on a missing, duplicated, mis-owned or surplus one; and it detects a concurrent writer, stops writing and fails rather than duplicating a value. See §3 and the correction under §4's run table.)* *(CORRECTED AGAIN 2026-09-09, CR2 F05 second pass: **as it now ships the script's default run does not write at all** — reconciliation is gated behind an `ALLOW_WRITES` flag shipping `false`, because the single-writer precondition it depends on is not enforceable by the script. A default run reports a `BLOCKED` problem naming any write it withheld and ends `FAILED`, reaching `OK` only when nothing needed writing. The 24 values were created during this task by a run made before that gate existed; recreating them now means the native in-scope Choices-list path or an operator explicitly authorizing a run. See §3.)* |
 | `scripts/seed_demo_data.js` | **RUN**, unmodified | the case/task/party linkage fix; it contains no `sys_choice` handling |
 | `scripts/post_import_remediation.js` and its Fix Script twin `scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` | **NOT RUN** | not choice-only: its `ensureTable`, dictionary, ACL and number branches — including a destructive table delete — would have mutated the Step 2 natively-committed rebuild output, which the directive classifies as a CRITICAL trigger. The five measured reasons are recorded in the Step 3-4 section |
 | `scripts/pre_delete_collateral_guard.js` | **RUN**, unmodified, read-only | used here in §4 to bound the blast radius before the teardown |
@@ -2621,7 +2739,7 @@ username, password or session token — written into any repository file.
 **CORRECTED 2026-09-09 (CR2, finding F11) — the last item was not fully true when written, and the
 redaction rule now applied is stated here so a reader can audit it.** No password, no instance URL and
 no session token appeared anywhere; the **configured administrator's login identifier** did, tied to
-Basic authentication and to live session identity. Every such occurrence has been replaced with
+Basic authentication and to live session identity. Such occurrences have been replaced with
 `<configured administrator>` or with the environment-variable name
 `SERVICENOW_INSTANCE_ADMIN_USERNAME`. The rule, applied surgically:
 
@@ -2633,11 +2751,51 @@ Basic authentication and to live session identity. Every such occurrence has bee
   (role)` columns in §7-§8, which now carry `admin` / `security_admin` as roles.
 - **Left as written** wherever the token denotes a **role name or a platform mechanism** rather than a
   login: `hasRole('admin')`, `admin_overrides`, the elevated `security_admin` session, a role column in
-  an ACL table, another document's section title quoted verbatim, and the privilege-level comparisons
-  in Step 3-4 §9 and Step 7 §6 that contrast what an `admin`-level user sees with what a scoped-role
-  persona sees. Redacting those would destroy the statement being made.
+  an ACL table, and role names that merely contain the string (`user_admin`, `ai_user_admin`).
+  Redacting those would destroy the statement being made.
 - **Not touched at all:** `sys_created_by` values inside exported XML payloads, which live in files
   this correction does not own.
+
+> **CORRECTED AGAIN 2026-09-09 (CR2 F11, second pass — re-opened by independent verification). The
+> sentence above previously read "Every such occurrence has been replaced", and that was untrue when
+> written: six occurrences survived it.** They are named here rather than summarised, because the
+> claim that failed was a claim of completeness:
+>
+> - Two of the four "left as written" categories in the rule above were **wrong**, and are withdrawn:
+>   *"another document's section title quoted verbatim"* and *"the privilege-level comparisons in
+>   Step 3-4 §9 and Step 7 §6"*. A section title and a privilege-level comparison still name **the
+>   account the work authenticated as**; contrasting a privileged session with a persona needs the
+>   *privilege level*, which `<configured administrator>` states exactly, and not the login. Both
+>   categories now fall under **Redacted**.
+> - The six survivors, all now redacted: Step 3-4 §9's three comparisons (the independently computed
+>   "assigned only" set; the company names the privileged session sees; the D3.5 verification note),
+>   and Step 7 §6's three (the citation of `acl-matrix.md`'s section heading, the ATF fixture-setup
+>   step, and the same-Chrome-session `g_form` control reading).
+> - **The citation's root cause was in the cited document, not here.** `../acl-matrix.md`'s own
+>   heading carried the identifier, so redacting only the quotation would have made the citation
+>   inaccurate. That heading was corrected at source — it now reads *Measured evidence (read-only
+>   Table API as the configured administrator, 2026-09-05T17:30Z)* — and the quotation of it in
+>   Step 7 §6 was updated to match. It is the only citation of that heading in the project.
+> - **The rule as it now stands, in one line:** redact wherever the token identifies the
+>   *authenticated account or session*, including inside a quotation (fixing the quoted source too);
+>   keep it only where it is a **role name**, an **ACL/platform attribute** (`admin_overrides`), a
+>   role name containing the string, or **row metadata** (`sys_created_by` as a recorded field value,
+>   which this finding excludes).
+> - **The re-check that backs this claim, so it is auditable rather than asserted.** This command was
+>   re-run over both files after the edits — and note that the pattern text quoted here is itself the
+>   **only** thing it now matches inside this report, which is the expected artefact of writing the
+>   audit command into the audited file:
+>
+>   ```
+>   grep -rnE "as \*?\*?admin|to admin|as \`admin\`" \
+>     docs/refine-run/CONSOLIDATION-FINAL-REPORT.md docs/acl-matrix.md
+>   ```
+>
+>   Result: **no session-identity hit in this report**. The hits that remain are in `../acl-matrix.md`
+>   only, and are the pre-adjudicated legitimate uses — the caption of a retained screenshot whose
+>   **filename** encodes the token (redacting the caption would misdescribe the artifact), and the
+>   ArkCase-legacy "admin/manager URLs" mechanism note. No password, instance URL or session token is
+>   present in either file.
 
 **CORRECTED 2026-09-09 (CR2, finding F10) — the "no stock-role grants" item needs its boundary stated.**
 This work authored no stock-role grant and no `roles/*.xml` inherits one (all three carry an empty

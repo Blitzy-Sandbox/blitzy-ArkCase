@@ -319,7 +319,15 @@ This widens the read-only symptom already disclosed as **ADV-1** in [`PDI_LIMITA
 
 `x_casemgmt_case_agent` and `x_casemgmt_case_viewer` are affected identically on every read row, and the agent additionally on every create/update row: none of the three holds a gating role, so the outcome is a property of the role set and not of the matrix cell.
 
-#### Measured evidence (read-only Table API as `admin`, 2026-09-05T17:30Z)
+#### Measured evidence (read-only Table API as the configured administrator, 2026-09-05T17:30Z)
+
+*(Heading corrected 2026-09-09, CR2 F11: it previously named the administrator login identifier. The
+account is `SERVICENOW_INSTANCE_ADMIN_USERNAME`, resolved from the environment at run time and not
+written here. Every citation of this heading elsewhere in the project was updated with it — the only
+one is in `refine-run/CONSOLIDATION-FINAL-REPORT.md`. The `admin` **role** references below, the
+`admin_overrides` ACL attribute, the `user_admin` / `ai_user_admin` role names and the retained
+screenshot filenames are role names, platform mechanisms and artifact identifiers rather than session
+identities, and are deliberately left as written.)*
 
 | Fact | Observed value |
 | --- | --- |

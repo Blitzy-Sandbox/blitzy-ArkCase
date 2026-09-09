@@ -49,7 +49,7 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 >
 > | Artifact | Identity, as measured 2026-09-08 | Status |
 > | --- | --- | --- |
-> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE** | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED — by a same-instance reset-and-reimport, not by an independent second PDI.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a proven zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) |
+> | `update-set/x_casemgmt_case_management_update_set.xml` — **THE DELIVERABLE** | **522** `<sys_update_xml>` blocks · **3,114,377** bytes · SHA-256 **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** · descriptor `sys_id` `8ebb770493534b1009aa70d19dba102a` · `xmllint --noout` clean | **GATED — by a same-instance reset-and-reimport, not by an independent second PDI.** These exact bytes were uploaded, previewed to **0** `type=error` and **0** `type=warning` problems, and committed **once** through the native Commit Update Set action on 2026-09-08, onto this instance reset to a recorded zero-state immediately beforehand with no intervening patch. Post-commit it installed 3 tables (rows 10/10/8), `sys_dictionary`/`sys_documentation` 21/21 · 14/14 · 13/13, 3 roles, 26 ACLs, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) and **24** `sys_choice` values, with task and party linkage resolving. The residual risk of same-instance verification, and the two deltas it did not carry, are recorded in [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 > | `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` — **the elected base** | **926** blocks · **3,781,097** bytes · SHA-256 **`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`** · 26 `sys_security_acl` · `xmllint` clean | Retained. Modified after election by the three commits below, then **restored to the elected bytes 2026-09-05T04:45Z**. Deliberately **no longer** byte-identical to the deliverable — a fallback that tracks the deliverable is not a fallback |
 > | The two candidate packages this consolidation superseded — `…REBUILT-DEPENDENCY-ORDERED.xml` (988 blocks · 4,062,067 bytes · `e109e1d1…`) and `…AMENDED-NOT-GATED.xml` (935 blocks · 3,973,569 bytes · `9f3ea74c…`) | Both **deleted** from `update-set/` in this consolidation; their bytes remain recoverable from git history | Superseded: each was hand-authored rather than platform-exported, and neither was ever gated through a teardown-and-reimport commit. Provenance recorded in [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 >
@@ -85,7 +85,7 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 > bind a canvas cell to a `sys_portal` widget instance and are not application files. AAP §0.7.1 / Gate 7 — the
 > zero-preview-error round trip — is **met on these bytes by a same-instance reset-and-reimport, not by an
 > independent second instance**: only one PDI is available to this project, so the instance was torn down to a
-> proven zero-state and the exact candidate bytes were then imported and committed with nothing running in
+> recorded zero-state and the exact candidate bytes were then imported and committed with nothing running in
 > between. The residual risk that leaves is named rather than waved away: anything the platform holds outside the
 > records a teardown removes — caches, indexes, retained update history, metadata a scope deletion does not
 > reach — was not re-created by the exercise and was not tested by it. Directive **D48's stop condition is
@@ -192,9 +192,16 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > The two candidate packages were superseded and deleted in this consolidation, so there is no rebuilt artifact
 > to promote; and what ships is the consolidated platform export — **522** blocks, **3,114,377** bytes, SHA-256
 > `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` — on whose exact bytes the gate was run and
-> **MET** on 2026-09-08: uploaded to an instance torn down to a proven zero-state, loaded with **522** children,
+> **MET** on 2026-09-08: uploaded to an instance torn down to a recorded zero-state, loaded with **522** children,
 > previewed to **0 `type=error` and 0 `type=warning`** with no problem row marked skipped or ignored, then
-> committed once through the native **Commit Update Set** action, with nothing run in between. It was a
+> committed once through the native **Commit Update Set** action, with nothing run in between. **The
+> pre-commit zero-state that "torn down to a recorded zero-state" refers to is *recorded* rather than proven**
+> (corrected 2026-09-09, CR2 finding F06): its ten checks ran and their normalized results were transcribed,
+> but the verbatim requests, statuses and response bodies for that pre-commit pass are not retained in this
+> repository, so that precondition cannot now be independently re-verified. The measurements the MET verdict
+> otherwise rests on are evidenced and unchanged — the 522-child load, **0 `type=error` / 0 `type=warning`**
+> with nothing skipped or ignored, the single native commit, and the post-commit census. Every later use of
+> "recorded zero-state" in this document carries that same meaning. It was a
 > same-instance reset-and-reimport rather than an independent second instance, so instance-level cache, index
 > and metadata a full teardown may not reset remain untested. D48's identity comparison is settled: the
 > recorded checksum and the bytes both read `b2217224…`. One commit of those bytes yields the physical schema,
@@ -234,12 +241,12 @@ The concrete scope identifier `x_casemgmt_` is used consistently throughout this
 > | `eee9fabd91fb5dfe94657c22e71a4cfa448c46e4dc7d35189ed6bb6361e4d4ae` | 988 | 4,062,436 | **0 `type=error` / 0 `type=warning`** | committed `2026-09-02T20:53:14Z` | no file on disk — export 3 (snapshot `0b3b7452934f435009aa70d19dba100d`) | historical — **the only complete round trip this run** |
 > | `90ee024968f29a36f420eeeea908676054bc0d79067ff8d26e826662d78d35d7` | 988 | 4,062,436 | none | none | no file on disk — the §0.5.2-reordered sequence as it stood at commit `3671901b5b`, superseded by the choice-materialization fix at `f8454fb078` | historical — **superseded; matches no file in this tree, so never verify or promote against it** |
 > | `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` | 988 | 4,062,067 | **none on the complete file**; the same seven choice children previewed **0 problems of any type** as their own delta, 2026-09-03 | seven-child delta committed natively 2026-09-03; complete file never committed | no file on disk — **deleted in the 2026-09-08 consolidation** after serving as the baseline the application was rebuilt from; bytes in git history | retained, not shipped — **static evidence plus exact-child runtime proof** |
-> | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | 522 | 3,114,377 | **0 `type=error` / 0 `type=warning`** on an instance torn down to a proven zero-state, 2026-09-08 | committed once through the native UI action, 2026-09-08 21:27:27 UTC | `update-set/x_casemgmt_case_management_update_set.xml` — **on disk** | **THE CURRENT DELIVERABLE — genuine platform export; Update Set gate MET on these exact bytes by a same-instance reset-and-reimport, not by an independent second instance; 26 `sys_security_acl` + 27 `sys_security_acl_role`** |
+> | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | 522 | 3,114,377 | **0 `type=error` / 0 `type=warning`** on an instance torn down to a recorded zero-state, 2026-09-08 | committed once through the native UI action, 2026-09-08 21:27:27 UTC | `update-set/x_casemgmt_case_management_update_set.xml` — **on disk** | **THE CURRENT DELIVERABLE — genuine platform export; Update Set gate MET on these exact bytes by a same-instance reset-and-reimport, not by an independent second instance; 26 `sys_security_acl` + 27 `sys_security_acl_role`** |
 >
 > Read the table as the rule INTERP-9 states: a runtime measurement belongs to the byte sequence it was taken on.
 > **CORRECTED 2026-09-08 — the sentence that follows is retained as written.** The tree now holds the
 > 522-block platform export as the deliverable, whose complete bytes **do** carry a preview and a commit
-> result (0 problems of any type, then one native commit, on an instance reset to a proven zero-state), plus
+> result (0 problems of any type, then one native commit, on an instance reset to a recorded zero-state), plus
 > the retained base file named below; the two candidate packages were superseded and deleted in this
 > consolidation.
 > **Three** on-disk artifacts exist — the `9f3ea74c…` deliverable, the `7292a6fe…` elected base retained at
@@ -375,7 +382,7 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
 
 > **CORRECTED 2026-09-08 — on the package that ships, a single commit DOES reach this walkthrough's state for
 > everything an update set can carry.** Measured after one commit of the 522-block platform export onto an
-> instance torn down to a proven zero-state, with no script run and no second commit: three tables at HTTP 200
+> instance torn down to a recorded zero-state, with no script run and no second commit: three tables at HTTP 200
 > with physical storage (`sys_dictionary` and `sys_documentation` 21 / 14 / 13 each), the three roles, 26
 > scoped ACLs carrying **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3), **24**
 > `sys_choice` values across 7 lists, 3 `sys_number` counters, 7 flows active and published, 8 reports, 2
@@ -512,7 +519,7 @@ This is the **final** deliverable. Per AAP Section 0.7.1, no additional artifact
 > on the deliverable's byte sequence — `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`, 522
 > blocks / 3,114,377 bytes — because the complete file was uploaded, previewed to **0 `type=error` and 0
 > `type=warning`** and committed once through the native UI action on 2026-09-08, against an instance torn
-> down to a proven zero-state immediately beforehand with nothing run in between. The qualification is the
+> down to a recorded zero-state immediately beforehand with nothing run in between. The qualification is the
 > route: this was a **same-instance reset-and-reimport**, not an independent second PDI, so instance-level
 > cache, index and metadata that a full teardown may not reset were not eliminated as variables; only one PDI
 > is available to this project. Directive **D48's stop condition is closed** — the checksum recorded for the
