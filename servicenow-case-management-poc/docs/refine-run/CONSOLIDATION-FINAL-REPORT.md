@@ -10,8 +10,8 @@ longer the ones §1 and §8 below measure**:
 | Property | Pre-amendment (what §1/§8 measure) | Shipping now |
 | --- | --- | --- |
 | Payload blocks | 522 | **522** (four removed, four added) |
-| Bytes | 3,114,377 | **2,989,530** |
-| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+| Bytes | 3,114,377 | **2,994,341** |
+| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
 
 The seven amendments, each traceable to the finding it answers:
 
@@ -32,7 +32,8 @@ The seven amendments, each traceable to the finding it answers:
    bundles that also carry the eight `sys_portal` widget instances they reference (see the correction
    in §6 fix (2) below).
 4. **F06** — the anonymous-submission ceiling in `CasePortalService` is no longer a count-then-insert
-   check. It ranks the persisted row and withdraws it when the row is over the ceiling, and it now has
+   check. It counts the window with the persisted row among it and withdraws that row when the count is
+   over the ceiling, and it now has
    a per-requester fairness cap.
 5. **F07** — the anonymous lookup gained strict `^CASE[0-9]{7}$` validation ahead of any query,
    per-session sliding-window throttling, an HTTP 429 path through the REST operation and the widget,
@@ -45,6 +46,34 @@ The seven amendments, each traceable to the finding it answers:
    subflows → parent flows → business rules → UI → REST → rate limits → portal → reports → dashboard
    graph → ATF → seed data). No payload byte changed in the reorder: the sha256 over the sorted set of
    payload texts is identical before and after.
+
+8. **F06 (fix review)** — the admission ceiling now **counts** the window with the inserted row among
+   it rather than ranking that row inside it. A rank bounds the window only for a caller whose query
+   sees all of it: a caller seeing a prefix ranks itself near the front and admits, and a run of
+   inserts in descending `sys_id` order admitted 14 of 14 against a ceiling of 10 when measured. A
+   count cannot do that — of any set of survivors, the one that counted last necessarily saw every
+   other survivor. Re-verified on the shipped payload body across 3,000 random schedules under both
+   delete-visibility models (29 of 29 assertions).
+9. **F03 (fix review)** — the two pane bundles added in item 4 were sorting at their *first* record's
+   tier (`sys_portal`), which put them ahead of the `sys_grid_canvas` rows their panes reference. A
+   bundle applies as one unit and now sorts at its most dependent member's tier, and the ordering
+   check was strengthened into a real reference check that resolves every in-package reference against
+   the block defining it.
+10. **F05 (fix review)** — the two `sys_rate_limit_rules` artifacts no longer describe the stock `guest`
+    `sys_id` they carry as "a considered exception"; it is stated as a violation of AAP §0.7.2 and
+    counted inside the blocking gap in `../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.CR1.2.
+11. **F07 (fix review)** — the lookup guard's own concurrency residue (an unlocked read-append-write on
+    session client data) and its cookie-rotation bypass are now recorded in the code, in
+    `../portal-pages.md` and in the limitations register, with the native rate-limit rule named as the
+    perimeter and its effectiveness marked unverified.
+
+**The eight `sys_portal` rows the pane bundles carry are value-identical to the ones already nested in
+the two `sys_portal_page` composites** — same `sys_id`s, same ten fields, same values, verified
+field-for-field — so the second `INSERT_OR_UPDATE` of each is a no-op update rather than a conflicting
+write. The bundles omit the 96 `sys_portal_preferences` children, which the page composites already
+carry. The bundles were assembled from the exported records rather than captured from a re-configured
+instance, which is why the pane restoration is listed among the items the mandatory pre-release gate in
+`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.CR1.6 has to settle.
 
 Two consequences a reader must carry into everything below:
 
@@ -1047,7 +1076,8 @@ F05 named each of them. Corrected:
   inside the platform's own export**, and it is reported as blocking under the AAP §0.7.2
   Minimal-Change Clause rather than redefined — see
   [`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). What the project
-  does deliver against the rule's intent is unchanged and remains true: every authored artifact,
+  does deliver against the rule's intent is unchanged and remains true of everything except the two
+  `sys_rate_limit_rules` artifacts named in `PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.CR1.2: every other authored artifact,
   every ACL condition, every flow script and the seed script resolve their targets by `name`,
   `user_name`, `number` or `role_label`, so nothing a human wrote carries an id literal.
 
@@ -1320,8 +1350,8 @@ At the end of this consolidation,
 
 | Property | Value (as of this consolidation) | Shipping now (after the CR1 amendment) |
 | --- | --- | --- |
-| **SHA-256** | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
-| Bytes | 3,114,377 | **2,989,530** |
+| **SHA-256** | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
+| Bytes | 3,114,377 | **2,994,341** |
 | Payload blocks | 522 | **522** |
 | `xmllint --noout` | PASS | **PASS** |
 | Gated by upload → preview → commit | **yes**, §4 | **no** — the recipient's first step, per [`../deployment.md`](../deployment.md) |

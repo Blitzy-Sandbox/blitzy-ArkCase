@@ -297,6 +297,17 @@ This section documents how each ServiceNow widget semantically corresponds to an
 > payload. This is verified statically only (8 pane records present; every `portal_widget` and `grid_canvas`
 > target resolves inside the package); the instance-side confirmation is the procedure below plus
 > `GET /api/now/stats/sys_grid_canvas_pane?sysparm_count=true&sysparm_query=sys_scope.scope=x_casemgmt` → 8.
+>
+> **CR1 fix review — 2026-09-09.** Two corrections to the paragraph above. The eight `sys_portal` rows the
+> bundles carry are **value-identical** to the ones nested in the page composites — same `sys_id`s, same ten
+> fields, same values, checked field-for-field — so the second `INSERT_OR_UPDATE` of each is a no-op update
+> rather than a conflicting write, and the 96 preference rows travel once, with the page composites. And the
+> bundles originally sorted **ahead** of the two `sys_grid_canvas` rows their panes reference, because a bundle
+> was being classified by its first record; a bundle applies as one unit and now sorts at its most dependent
+> member's tier. Both dashboards rendering 3 of 3 and 5 of 5 widgets remains a **post-commit** check — step 8
+> of the mandatory pre-release gate in
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.CR1.6 — and the bundles
+> were assembled from the exported records rather than captured from a re-configured instance.
 
 The following row is preserved verbatim from AAP Section 0.7.3.
 

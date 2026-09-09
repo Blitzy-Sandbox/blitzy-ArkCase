@@ -353,33 +353,47 @@ denying the endpoint to every legitimate requester for the rest of the window.
 `CasePortalService._admitAnonymousSubmission()` now decides **after** the row exists:
 
 1. `submitCase()` inserts the row and re-queries it (it already did both, to read the auto-generated number);
-2. the guard ranks **our own row** among the rows the *same creator* made inside the 60-second window, ordered
-   `sys_created_on` then `sys_id` — a **total** order, because `sys_created_on` has one-second resolution and ties
-   between simultaneous inserts are normal;
-3. a row at or beyond the **global ceiling of 10**, or at or beyond the **per-requester ceiling of 4** counted over
-   the rows in the window sharing its normalised `requester_email` bucket, is **deleted again** and the submission
-   is refused with `{ error, throttled: true }` → **HTTP 429**.
+2. the guard **counts** the rows the *same creator* made inside the 60-second window, **with our own row among
+   them**;
+3. a count above the **global ceiling of 10**, or above the **per-requester ceiling of 4** taken over the rows in
+   the window sharing its normalised `requester_email` bucket, **deletes our row again** and the submission is
+   refused with `{ error, throttled: true }` → **HTTP 429**.
 
-Every concurrent caller computes the same order over the same rows and therefore agrees on every row's rank, so at
-most ten rows survive a window with no lock, no counter and no serialisation.
+**Why counting bounds the window absolutely.** Of any set of rows that survive the guard, consider the one whose
+count query ran *last*. Every other survivor had already inserted by then — a survivor's insert commits before its
+own query, and its query ran before the last one — so that caller's query saw every other survivor plus its own
+row. Had more than ten survived, it would have counted more than ten and refused itself. At most ten therefore
+survive a window, with no lock, no counter table and no serialisation, **whatever the interleaving**.
+
+A **rank** — our row's position in the window under a total order — was the previous shape of this fix and is not
+sufficient, which is why it was replaced: rank can only be computed over the rows a query can *see*, so a caller
+whose query sees only part of the window ranks itself near the front and admits. A run of inserts arriving in
+descending `sys_id` order admits *every one of them*, however far past the ceiling it goes. Counting has no such
+hole, because a partial view can only **under**-count and the last caller's complete view corrects it.
 
 | Property | Behaviour |
 | --- | --- |
-| Global ceiling | **10 rows per creator per 60 s.** Rows are ranked against *their own creator's* rows, so a flood through the endpoint cannot throttle case creation on the native form, and vice versa |
+| Global ceiling | **10 rows per creator per 60 s.** Rows are counted against *their own creator's* rows, so a flood through the endpoint cannot throttle case creation on the native form, and vice versa |
 | Per-requester ceiling | **4 rows per normalised `requester_email` bucket per 60 s** — strictly below the global ceiling, so no single bucket can consume the whole allowance. The address is trimmed and lower-cased; an absent or empty address is its **own** bucket, shared by all address-less submissions. `requester_email` is used because it is the only caller-identifying value AAP §0.5.7 puts on this path, and AAP §0.7.2's Minimal-Change Clause refuses a new table, field or property to carry a better one |
-| Direction of error | **Over-rejection is possible, over-admission is not.** Under a genuine flood a row can exist briefly, rank badly and be withdrawn. That is the safe direction and it is deliberate |
-| **Limit — read visibility** | Rank can only be computed over rows a query can **see**. Callers whose inserts are each still invisible to the other's query all rank themselves first and all survive, so the honest guarantee is *the ceiling holds across every caller that can see the rows already committed*, not *the ceiling holds absolutely*. Same residual window the duplicate-collapse documents; closing it needs a lock or counter the AAP forbids adding. The native per-hour rule below is the defence-in-depth layer for it |
+| Direction of error | **Over-rejection is possible, over-admission is not.** Under a genuine flood a row can exist briefly, be counted over the ceiling and be withdrawn. That is the safe direction and it is deliberate |
+| **Cost of counting — a simultaneous burst can be refused whole** | How many of a burst are refused depends only on how much of the withdrawal each caller's query can already see: from **just the excess**, when refusals are visible to the callers that follow, to **the whole burst**, when every caller queried before any withdrawal committed. Both ends were measured; both are inside the ceiling. The answer is a retryable 429 and the next window admits normally, and legitimate traffic here never approaches ten submissions in sixty seconds |
 | **Limit — a varied address defeats the bucket** | An abuser who changes `requester_email` on every request is counted in a new bucket each time. The per-requester ceiling is a **fairness** dimension, not an identity: what still bounds that abuser is the global ceiling and the native per-hour rule |
 | Case-number gaps | A refused submission **consumes a case number** — the platform allocates it during the insert, and the row is withdrawn afterwards. Already true of the round-trip refusal, of a collapsed duplicate and of every form load, so gaps carry no meaning here, but expect them |
 | Response surface | Unchanged: **429** with only `{ error }`. No count, ceiling or window is ever returned, so a caller cannot calibrate a sweep against the limit |
 | What an operator watches | `gs.warn` / `gs.error` lines beginning `X_CASEMGMT_PORTAL_SUBMIT_ABUSE|` — see [Abuse monitoring and the native rate-limit rules](#abuse-monitoring-and-the-native-rate-limit-rules) |
 
-Verified by driving the extracted method against an in-memory `GlideRecord` stub (40 assertions, all passing):
-fourteen simultaneous inserts sharing one `sys_created_on` leave **exactly ten** rows and the **same** ten in both
-evaluation orders; the 11th-ranked row is withdrawn and the 10th is kept; the fifth row of one email bucket is
-refused while a different bucket's first row is admitted at the same instant; rows created by another user and rows
-older than the window are not ranked; an empty `sys_created_by` declines the guard, admits, and logs; a failed
-cleanup still refuses and escalates to `gs.error` naming the row for manual removal.
+Verified by driving the method body **as it ships inside the Update Set payload** against an in-memory
+`GlideRecord` stub that models what each caller's query may see (29 assertions, all passing): **3,000 randomly
+generated schedules** — arbitrary interleavings of insert and count, under both delete-visibility models — left
+no window over ten rows and no `requester_email` bucket over four; the prefix-visibility run in descending
+`sys_id` order, which the earlier rank implementation admitted **in full (14 of 14)**, leaves exactly ten; a
+simultaneous burst of fourteen leaves ten at one end of the range above and zero at the other, never more than
+ten; the fifth row of one email bucket is refused while a different bucket's row is admitted at the same
+instant; address-less submissions share their own bucket without diluting an addressed one; rows created by
+another user and rows older than the window are not counted; an empty `sys_created_by` declines the guard,
+admits, and logs; a failed cleanup still refuses and escalates to `gs.error` naming the row for manual removal;
+and no log line carries an address. What an offline harness cannot establish is the platform's own commit
+visibility, which only a deployed instance shows — see [`validation-gates.md`](./validation-gates.md) Gate 7.
 
 #### Identical submissions inside 90 seconds collapse onto one case
 

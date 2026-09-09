@@ -134,23 +134,32 @@
 
       <user> therefore carries 5136503cc611227c0183e96598c4f706, the stock
       guest user's sys_id, verified on the development instance by a
-      read-only lookup of sys_user?user_name=guest. This is the ONE
-      element in this file that is a sys_id reference literal rather than
-      a key, and it is a considered exception rather than an oversight:
+      read-only lookup of sys_user?user_name=guest. That literal VIOLATES
+      AAP Section 0.7.2's no-hardcoded-sys_id constraint, and this file
+      claims no exception to it. No override in force supersedes Section
+      0.7.2, and nothing written here may narrow it.
 
-        - A record-definition is DATA, not script. The AAP Section 0.7.2
-          no-hardcoded-sys_id constraint is satisfied elsewhere by
-          performing a GlideRecord lookup against a human-readable key
-          (`name`, `user_name`, `number`, `role_label`), and an Update Set
-          payload has no script layer in which such a lookup could run. A
-          `user_name=guest` lookup is impossible here by construction.
-        - The value is PORTABLE in the way the constraint exists to
-          protect: 5136503cc611227c0183e96598c4f706 is the platform's own
-          stock guest record, shipped with the same sys_id on every
-          ServiceNow instance - a well-known platform constant, not an
-          instance-specific identifier.
+      It is one more instance of the capability gap that Section 0.7.2
+      cannot be met in this transport at all - reported, and counted with
+      the rest, in ../../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md Section
+      0.CR1.2. An Update Set payload field holds a literal value; there is
+      no script layer inside it in which a `user_name=guest` lookup could
+      run; and the platform offers no by-key form of a reference field.
+      What follows bounds the damage and is mitigation, NOT authorization:
+
+        - 5136503cc611227c0183e96598c4f706 is the platform's own stock
+          guest record and carries that same sys_id on every ServiceNow
+          instance, so unlike an instance-specific identifier it does not
+          break on a fresh PDI.
         - display_value="guest" carries the human-readable key alongside
-          it, so a reader never has to resolve the hex by hand.
+          it, so a reader - and a maintainer re-pointing the rule - never
+          has to resolve the hex by hand.
+        - An unresolved reference makes the rule inert rather than wrong:
+          the ceiling would then apply to nobody, which the post-commit
+          verification prescribed above detects.
+
+      The human decision recorded in Section 0.CR1.2 for Section 0.7.2 as
+      a whole settles this row along with it.
 
       If a future maintainer prefers this repo's key-in-the-text-node
       convention (as used by

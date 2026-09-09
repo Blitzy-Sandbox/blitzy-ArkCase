@@ -25,8 +25,8 @@
 > never against a number quoted here.
 >
 > **CR1 AMENDMENT — 2026-09-09. The bytes changed again, and these are the current three:**
-> **522** blocks · **2,989,530** bytes · SHA-256
-> **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`**. Code review checkpoint CR1 removed
+> **522** blocks · **2,994,341** bytes · SHA-256
+> **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`**. Code review checkpoint CR1 removed
 > four payloads (the three `sys_user_has_role` records this release refuses — §5h now delivers those grants —
 > and the Global-stamped `sys_script_fix` record), added four (the two dashboard-pane bundles restoring the
 > eight `sys_grid_canvas_pane` placements, and two scoped `sys_rate_limit_rules` records), hardened the two

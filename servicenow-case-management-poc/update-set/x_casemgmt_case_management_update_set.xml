@@ -7,7 +7,7 @@
 <collisions>0</collisions>
 <commit_date/>
 <deleted>0</deleted>
-<description>Step 5a candidate package: platform publish of the x_casemgmt Case Management application plus native capture of its demo data and the global-table rows it references. Exported for the same-instance teardown-and-reimport gate. AMENDED AFTER EXPORT to resolve code-review checkpoint CR1: the three sys_user_has_role payloads Role Management V2 refuses to install and the Global-packaged sys_script_fix payload were removed (F01, F04); the eight sys_grid_canvas_pane dashboard placements were restored, bundled with the eight sys_portal widget instances they reference (F02); the CasePortalService, Case Status Lookup GET and case-lookup widget payloads were hardened against the anonymous-submission race and the lookup-enumeration sweep and two scoped sys_rate_limit_rules payloads were added (F06, F07); and every block was reordered into the AAP Section 0.5.2 dependency tiers (F03). Block count is 522. The amended bytes have NOT been re-previewed on an instance - see docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md and docs/deployment.md.</description>
+<description>Step 5a candidate package: platform publish of the x_casemgmt Case Management application plus native capture of its demo data and the global-table rows it references. Exported for the same-instance teardown-and-reimport gate. AMENDED AFTER EXPORT to resolve code-review checkpoint CR1: the three sys_user_has_role payloads Role Management V2 refuses to install and the Global-packaged sys_script_fix payload were removed (F01, F04); the eight sys_grid_canvas_pane dashboard placements were restored, bundled with the eight sys_portal widget instances they reference (F02); the CasePortalService, Case Status Lookup GET and case-lookup widget payloads were hardened against the anonymous-submission race and the lookup-enumeration sweep and two scoped sys_rate_limit_rules payloads were added (F06, F07); and every block was reordered into the AAP Section 0.5.2 dependency tiers (F03). AMENDED AGAIN after the CR1 fix review: the anonymous-submission ceiling now COUNTS the window with the inserted row among it instead of ranking the row inside it, which bounds the window under every interleaving rather than only when a caller sees the whole window (F06); the lookup guard records its own concurrency and cookie-rotation residue and names the native rate-limit rule as the perimeter (F07); and the two restored dashboard pane bundles now load AFTER the sys_grid_canvas rows they reference, which the first amendment had them preceding (F03). Block count is 522. The amended bytes have NOT been previewed or committed on an instance: this checkpoint was scoped to make no instance writes, and the mandatory pre-release gate is specified in docs/validation-gates.md Gate 7 and docs/deployment.md.</description>
 <inserted>522</inserted>
 <name>x_casemgmt_case_management v1.0.0 (gate candidate)</name>
 <origin_sys_id/>
@@ -6115,7 +6115,7 @@ CaseTransitionValidator.prototype = {
 <category>customer</category>
 <comments/>
 <name>sys_script_include_95e90fa18471e42875f5f956ec7949d1</name>
-<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_script_include"&gt;&lt;sys_script_include action="INSERT_OR_UPDATE"&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;active&gt;true&lt;/active&gt;&lt;api_name&gt;x_casemgmt.CasePortalService&lt;/api_name&gt;&lt;caller_access/&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;description&gt;Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - an admission ceiling evaluated AFTER the insert bounds the unauthenticated write path (the inserted row is ranked among the same caller's rows inside a 60-second window under a total order of sys_created_on then sys_id, and a row at or beyond the global ceiling of 10, or at or beyond the per-requester ceiling of 4 counted over the rows sharing its normalised requester_email bucket, is deleted again and refused with throttled=true; ranking published rows rather than counting before the insert is what stops parallel callers all reading the same below-ceiling count and all being admitted), and an identical submission received inside a 90-second window is collapsed onto the surviving case (same five values, still Draft, same caller) so a retry or a simultaneous double-post yields one case rather than two - the duplicate row is deleted and its case number is consumed, leaving a gap in the CASE sequence; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the admission ceiling refuses it, or {error} when the insert fails; lookupCase normalises and strictly validates the supplied number against ^CASE[0-9]{7}$ before any query, throttles the read path per session in the GlideSession client-data store, and warns under the stable marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE| when a session crosses the soft miss threshold or is throttled; it returns the whitelisted record on match, {throttled} when the session is over its ceiling (the REST operation answers HTTP 429), or null on no-match - which a malformed, empty or absent number produces identically and without a query (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). The hit-versus-miss distinction is inherent to the single-factor number-only lookup the AAP mandates and is compensated rather than removed; the residual risk is recorded in docs/portal-pages.md. Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.&lt;/description&gt;&lt;mobile_callable&gt;false&lt;/mobile_callable&gt;&lt;name&gt;CasePortalService&lt;/name&gt;&lt;sandbox_callable&gt;false&lt;/sandbox_callable&gt;&lt;script&gt;&lt;![CDATA[var CasePortalService = Class.create();
+<payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_script_include"&gt;&lt;sys_script_include action="INSERT_OR_UPDATE"&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;active&gt;true&lt;/active&gt;&lt;api_name&gt;x_casemgmt.CasePortalService&lt;/api_name&gt;&lt;caller_access/&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;description&gt;Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - an admission ceiling evaluated AFTER the insert bounds the unauthenticated write path (the same caller's rows inside a 60-second window are counted with the inserted row among them, and a count above the global ceiling of 10, or above the per-requester ceiling of 4 taken over the rows sharing its normalised requester_email bucket, deletes the row again and refuses it with throttled=true; counting published rows after the insert bounds the window absolutely - the last caller to count necessarily sees every row that survives - whereas a count taken before the insert bounds nothing and a rank taken after it admits any caller whose query sees only part of the window), and an identical submission received inside a 90-second window is collapsed onto the surviving case (same five values, still Draft, same caller) so a retry or a simultaneous double-post yields one case rather than two - the duplicate row is deleted and its case number is consumed, leaving a gap in the CASE sequence; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the admission ceiling refuses it, or {error} when the insert fails; lookupCase normalises and strictly validates the supplied number against ^CASE[0-9]{7}$ before any query, throttles the read path per session in the GlideSession client-data store, and warns under the stable marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE| when a session crosses the soft miss threshold or is throttled; it returns the whitelisted record on match, {throttled} when the session is over its ceiling (the REST operation answers HTTP 429), or null on no-match - which a malformed, empty or absent number produces identically and without a query (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). The hit-versus-miss distinction is inherent to the single-factor number-only lookup the AAP mandates and is compensated rather than removed; the residual risk is recorded in docs/portal-pages.md. Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.&lt;/description&gt;&lt;mobile_callable&gt;false&lt;/mobile_callable&gt;&lt;name&gt;CasePortalService&lt;/name&gt;&lt;sandbox_callable&gt;false&lt;/sandbox_callable&gt;&lt;script&gt;&lt;![CDATA[var CasePortalService = Class.create();
 CasePortalService.prototype = {
     /**
      * No-arg initializer. The class holds no per-instance state across
@@ -6275,8 +6275,8 @@ CasePortalService.prototype = {
         }
 
         // The admission decision. Our row is published, so every concurrent
-        // caller now ranks the same candidate set under the same total order
-        // and at most the ceiling's worth of rows survive the window. A
+        // caller now counts a window that already contains it, and the last
+        // caller to count cannot miss a row that survives. A
         // refused submission has already removed its own row inside
         // _admitAnonymousSubmission, so nothing is left behind here; the
         // response carries no count, limit or window, only the throttle flag
@@ -6704,6 +6704,31 @@ CasePortalService.prototype = {
      * field value, name or address is ever logged (AAP Section 0.7.2
      * no-PII).
      *
+     * WHAT THIS GUARD IS AND IS NOT. The window lives in the session's
+     * client-data store, which this method READS, appends to and WRITES
+     * BACK - three steps with no lock around them. Two requests of the same
+     * session that interleave inside those steps can both read the same
+     * array, and the later write then drops the earlier increment, so a
+     * caller issuing its lookups in parallel can get more of them through
+     * than the ceiling names. A caller that discards its session cookie is
+     * not slowed at all, because the next request arrives with a fresh
+     * session and therefore an empty window (recorded on lookupCase under
+     * ENUMERATION EXPOSURE).
+     *
+     * This guard is therefore defence-in-depth against a naive sequential
+     * sweep, plus the telemetry an operator needs - it is NOT the
+     * enumeration perimeter. The perimeter is the platform-native per-hour
+     * ceiling shipped beside this endpoint
+     * (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml),
+     * whose binding to a scoped resource for an unauthenticated caller is
+     * unverified on this release and is recorded as a capability gap in
+     * ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, together with the
+     * miss-threshold warning below. Closing either hole inside this file
+     * would need an atomic counter in a new table or system property, or a
+     * control at the edge in front of the instance: AAP Section 0.7.2's
+     * Minimal-Change Clause refuses the first and a PDI does not offer the
+     * second, so the residue is reported rather than worked around.
+     *
      * @return {Object} { allowed: Boolean } - and nothing else, so no
      *     count, ceiling or window can escape into a response.
      */
@@ -7002,35 +7027,75 @@ CasePortalService.prototype = {
      * the ceiling said.
      *
      * The decision is now taken from the row itself. submitCase() inserts
-     * first and calls this method with the persisted row, and the row's RANK
-     * inside the window - not a count read before it existed - decides. Rank
-     * is computed under a TOTAL order: sys_created_on ascending, then sys_id
-     * ascending as the tiebreak, because sys_created_on has one-second
-     * resolution so ties between simultaneous inserts are normal and must be
-     * broken deterministically. Every concurrent caller evaluates the same
-     * order over the same rows and therefore agrees on every row's rank, so
-     * at most GLOBAL_LIMIT rows survive a window with no lock, no counter
-     * and no serialization. A row ranking at or beyond the ceiling deletes
-     * itself and its caller is answered with the throttle.
+     * first and calls this method with the persisted row, and what decides
+     * is a COUNT of the rows the same caller created inside the trailing
+     * window, taken with our own row already among them. A count above
+     * GLOBAL_LIMIT deletes our row and answers its caller with the
+     * throttle.
      *
-     * The trade is deliberate and it is the safe direction: a caller can be
-     * over-REJECTED under a genuine flood (its row existed briefly, ranked
-     * badly and was withdrawn) and cannot be over-ADMITTED. The same
+     * WHY COUNTING AFTER THE INSERT BOUNDS THE WINDOW ABSOLUTELY. Take any
+     * set of rows that survive this guard and consider the one whose count
+     * query ran LAST. Every other survivor had already inserted when that
+     * query ran: a survivor's insert commits before that survivor's own
+     * query, and its query ran before the last one. So the last caller's
+     * query saw every other survivor, and its own row besides. Had more
+     * than GLOBAL_LIMIT rows survived, that caller would have counted more
+     * than GLOBAL_LIMIT and refused itself - a contradiction. At most
+     * GLOBAL_LIMIT rows therefore survive a window, with no lock, no
+     * counter table and no serialization, and the bound holds whatever the
+     * interleaving.
+     *
+     * WHY THE TWO OBVIOUS ALTERNATIVES DO NOT. A count taken BEFORE the
+     * insert bounds nothing, because nothing bound the insert that followed
+     * it: every parallel caller read the same below-ceiling number and
+     * every one of them was admitted (CWE-367). A RANK taken after the
+     * insert - our row's position among the window's rows under a total
+     * order - fails differently and less visibly: rank can only be computed
+     * over the rows a query can SEE, so a caller whose query sees only part
+     * of the window ranks itself near the front and admits, and a run of
+     * inserts arriving in descending sys_id order admits every one of them
+     * however far past the ceiling it goes. Counting has no such hole,
+     * because a partial view can only UNDER-count, and an under-count is
+     * exactly what the last caller's complete view corrects.
+     *
+     * THE ONE COST, AND IT IS THE SAFE DIRECTION. A caller can be
+     * over-REJECTED and can never be over-ADMITTED. Under a burst that is
+     * genuinely simultaneous - every request inserting before any of them
+     * counts - each caller sees a window already past the ceiling, and how
+     * many are refused depends only on how much of the withdrawal each
+     * caller's query can already see: the range runs from JUST THE EXCESS,
+     * when refusals are visible to the callers that follow, to THE WHOLE
+     * BURST, when every caller queried before any withdrawal committed.
+     * Both ends are inside the ceiling and both were measured (see the
+     * offline harness cited under VERIFICATION below). That is deliberate:
+     * the answer is a retryable throttle, the next window admits normally,
+     * legitimate traffic on this endpoint never approaches ten submissions
+     * in sixty seconds, and an abuser gains nothing by racing. The same
      * insert-then-reconcile shape is already how this file verifies the
      * round trip and collapses duplicate submissions.
      *
-     * HONEST LIMIT ON THE CEILING. Rank can only be computed over the rows
-     * the query can SEE. Two callers whose inserts are each still invisible
-     * to the other's query both rank themselves first and both survive, so
-     * the guarantee is "the ceiling holds across every caller that can see
-     * the rows already committed", not "the ceiling holds absolutely". This
-     * is the same residual visibility window that any after-the-fact
-     * reconciliation carries, it is a property of that approach rather than
-     * of this implementation, and closing it would need a lock or a counter
-     * table that AAP Section 0.7.2's Minimal-Change Clause refuses. The
-     * platform-native per-hour ceiling shipped beside this endpoint
+     * VERIFICATION. The bound above is a claim about interleavings, which
+     * no single-threaded reading of this file can settle, so it was
+     * exercised offline against this exact method body with a stubbed
+     * GlideRecord that models what each caller's query may see: 3,000
+     * randomly generated schedules (arbitrary interleavings of insert and
+     * count, under both delete-visibility models), the prefix-visibility
+     * run in descending sys_id order that the earlier RANK implementation
+     * admitted in full, and the simultaneous burst at both ends of the
+     * range above. No schedule left more than GLOBAL_LIMIT rows in the
+     * window or more than PER_REQUESTER_LIMIT in one bucket. What that
+     * cannot establish is the platform's own commit visibility, which only
+     * a deployed instance shows; the mandatory pre-release gate recorded in
+     * ../docs/validation-gates.md is where that is settled.
+     *
+     * WHAT THIS CEILING IS NOT. It is a rate control on one endpoint, not
+     * an identity check and not the security perimeter: it cannot tell two
+     * anonymous callers apart (see PER-REQUESTER FAIRNESS below), and a
+     * caller that keeps its traffic under the ceiling is not slowed at all.
+     * The platform-native per-hour ceiling shipped beside this endpoint
      * (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_submit.xml) is
-     * the defence-in-depth layer for exactly that residue.
+     * the defence-in-depth layer for that residue, and its own file records
+     * that its binding and effectiveness are unverified on this release.
      *
      * PER-REQUESTER FAIRNESS. One global allowance is a denial-of-service
      * lever in its own right: a single abuser consuming all ten submissions
@@ -7052,7 +7117,7 @@ CasePortalService.prototype = {
      * user, and the refusal log below, which names the ceiling that fired so
      * an operator can alert on a sustained flood.
      *
-     * WHOSE ROWS ARE RANKED. The window is scoped to OUR OWN row's
+     * WHOSE ROWS ARE COUNTED. The window is scoped to OUR OWN row's
      * sys_created_by rather than to the literal 'guest', so it is correct
      * for whatever user the platform runs an unauthenticated call as, and an
      * internal user's cases are never ranked against an anonymous caller's:
@@ -7066,7 +7131,7 @@ CasePortalService.prototype = {
      * collapsed duplicate and of every form load, so gaps carry no meaning
      * here, but a reader comparing counts should expect them.
      *
-     * NO PII IS LOGGED. The refusal log carries the marker, the rank, the
+     * NO PII IS LOGGED. The refusal log carries the marker, the count, the
      * ceilings and our own row's sys_id - never the address that formed the
      * bucket, never any submitted field value (AAP Section 0.7.2 no-PII).
      *
@@ -7074,8 +7139,8 @@ CasePortalService.prototype = {
      *     row, already positioned on it.
      * @param {String} newSysId - the sys_id returned by insert().
      * @return {Object} { allowed: Boolean } - true when our row is inside
-     *     both ceilings and survives; false when it ranked at or beyond one
-     *     of them, in which case the row has ALREADY been removed. No count,
+     *     both ceilings and survives; false when the window count exceeded
+     *     one of them, in which case the row has ALREADY been removed. No count,
      *     limit or window is returned, so no caller can leak one to an
      *     anonymous requester.
      */
@@ -7102,10 +7167,12 @@ CasePortalService.prototype = {
 
         var ourBucket = this._requesterEmailBucket(savedGr.getValue('requester_email'));
 
-        // Only the first GLOBAL_LIMIT + 1 rows of the window's total order
-        // can change the answer: if our row is not among them then at least
-        // GLOBAL_LIMIT rows precede it and it is refused whatever follows.
-        // The limit keeps this query bounded during a flood.
+        // GLOBAL_LIMIT + 1 rows are enough to decide and reading no more
+        // keeps this query bounded during a flood: a window already holding
+        // that many rows is past the ceiling whatever else it holds. The
+        // order does not enter the decision - a count does not depend on it
+        // - and is kept only so the rows read during a flood are the
+        // window's oldest, which makes a refusal reproducible from the log.
         var rows = new GlideRecord('x_casemgmt_case');
         rows.addQuery('sys_created_by', creator);
         rows.addQuery('sys_created_on', '&gt;=', windowStart);
@@ -7114,49 +7181,43 @@ CasePortalService.prototype = {
         rows.setLimit(GLOBAL_LIMIT + 1);
         rows.query();
 
-        var globalRank = 0;
-        var bucketRank = 0;
-        var foundOurRow = false;
+        var windowCount = 0;
+        var bucketCount = 0;
+        var sawOurRow = false;
         while (rows.next()) {
+            windowCount++;
             if (String(rows.getValue('sys_id') || '') === newSysId) {
-                // Our row. Everything counted so far precedes it, because
-                // the iteration follows the total order, so globalRank and
-                // bucketRank ARE its ranks.
-                foundOurRow = true;
-                break;
+                sawOurRow = true;
             }
-            globalRank++;
             if (this._requesterEmailBucket(rows.getValue('requester_email')) === ourBucket) {
-                bucketRank++;
-            }
-            if (globalRank &gt;= GLOBAL_LIMIT) {
-                // GLOBAL_LIMIT rows already precede ours; the answer cannot
-                // change and the remaining rows need not be read.
-                break;
+                bucketCount++;
             }
         }
 
-        if (globalRank &gt;= GLOBAL_LIMIT) {
+        if (!sawOurRow) {
+            // Our row exists - this method only runs after an insert that
+            // succeeded and a re-query that found it - so it counts even
+            // when this query could not return it, which is what happens
+            // when the window already held GLOBAL_LIMIT + 1 older rows and
+            // the limit truncated ours away. Counting it keeps the decision
+            // on the safe side in that case instead of guessing.
+            windowCount++;
+            bucketCount++;
+        }
+
+        if (windowCount &gt; GLOBAL_LIMIT) {
             return this._discardOverflowSubmission(newSysId, LOG_MARKER, 'global_window_ceiling',
-                'rank=' + globalRank + ' limit=' + GLOBAL_LIMIT +
+                'count=' + windowCount + ' limit=' + GLOBAL_LIMIT +
                 ' window_seconds=' + SUBMIT_WINDOW_SECONDS);
         }
 
-        if (bucketRank &gt;= PER_REQUESTER_LIMIT) {
+        // The bucket count is exact whenever the global count is inside its
+        // ceiling, because the query then returned every row of the window
+        // rather than a truncated prefix of it.
+        if (bucketCount &gt; PER_REQUESTER_LIMIT) {
             return this._discardOverflowSubmission(newSysId, LOG_MARKER, 'per_requester_ceiling',
-                'rank=' + bucketRank + ' limit=' + PER_REQUESTER_LIMIT +
+                'count=' + bucketCount + ' limit=' + PER_REQUESTER_LIMIT +
                 ' window_seconds=' + SUBMIT_WINDOW_SECONDS);
-        }
-
-        if (!foundOurRow) {
-            // Our own row should always be visible to this query - the same
-            // session inserted it. When it is not, fewer than GLOBAL_LIMIT
-            // rows preceded it so admitting is the correct answer, but the
-            // visibility gap is worth a log line: it is the one condition
-            // under which two callers can both believe they are inside the
-            // ceiling (see HONEST LIMIT ON THE CEILING above).
-            gs.warn(LOG_MARKER + 'rank_incomplete reason=own_row_not_visible sys_id=' + newSysId +
-                ' rows_seen=' + globalRank);
         }
 
         return { allowed: true };
@@ -7193,8 +7254,8 @@ CasePortalService.prototype = {
     },
 
     /**
-     * Withdraw the row this request inserted because it ranked at or beyond
-     * one of the admission ceilings, and report the refusal.
+     * Withdraw the row this request inserted because the window count
+     * exceeded one of the admission ceilings, and report the refusal.
      *
      * The row is removed rather than left in place because an admitted
      * submission and a refused one must not both persist a case: the caller
@@ -7204,7 +7265,7 @@ CasePortalService.prototype = {
      * gs.error and names the sys_id an administrator has to remove by hand.
      *
      * Every line starts with the caller-supplied STABLE MARKER so an
-     * operator can alert on the prefix alone. The lines carry ranks,
+     * operator can alert on the prefix alone. The lines carry counts,
      * ceilings and our own row's sys_id, and no submitted value, no address
      * and no client identifier, so the log stays free of PII.
      *
@@ -12417,6 +12478,58 @@ function serverSetPending() {
 </sys_update_xml>
 <sys_update_xml action="INSERT_OR_UPDATE">
 <action>INSERT_OR_UPDATE</action>
+<application display_value="">82b99028936f74320d74d6f88357a5af</application>
+<category>customer</category>
+<comments/>
+<name>sys_grid_canvas_0067e3c7959400dbfeb4219bfb91b895</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_grid_canvas"><sys_grid_canvas action="INSERT_OR_UPDATE"><legacy_page display_value="Overview">23795850fe7318a525ef56edf43dbfff</legacy_page><name>x_casemgmt_agent_workspace_canvas</name><sys_class_name>sys_grid_canvas</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2025-01-01 00:00:00</sys_created_on><sys_id>0067e3c7959400dbfeb4219bfb91b895</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_casemgmt_agent_workspace_canvas</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy/><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_grid_canvas_x_casemgmt_agent_workspace_canvas</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2025-01-01 00:00:00</sys_updated_on></sys_grid_canvas></record_update>]]></payload>
+<payload_hash>1852664183</payload_hash>
+<remote_update_set display_value="x_casemgmt_case_management v1.0.0 (gate candidate)">8ebb770493534b1009aa70d19dba102a</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-08 20:56:09</sys_created_on>
+<sys_id>1abb770493534b1009aa70d19dba10c6</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a082cb49020000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-08 20:56:09</sys_updated_on>
+<table/>
+<target_name>x_casemgmt_agent_workspace_canvas</target_name>
+<type>Grid Canvas</type>
+<update_domain>global</update_domain>
+<update_guid>2cd7df44a91f0b103c29b4c8d13c5bce</update_guid>
+<update_guid_history>2cd7df44a91f0b103c29b4c8d13c5bce:0,0f24d304a5db0b101b4acf50682492e2:529033835,e8cd741af74f4350bf6b9b1993ff430f:0,3e7cebc619834350c4dca68e045d6a6d:0,7db52f06be434350d0cf1aa18c20a613:0</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
+<application display_value="">82b99028936f74320d74d6f88357a5af</application>
+<category>customer</category>
+<comments/>
+<name>sys_grid_canvas_a183a0df5e2a825dc294773e61a1e6f3</name>
+<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_grid_canvas"><sys_grid_canvas action="INSERT_OR_UPDATE"><legacy_page display_value="Operational KPIs">be68df051d089c2fdf72ae0e5f704750</legacy_page><name>x_casemgmt_manager_view_canvas</name><sys_class_name>sys_grid_canvas</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2025-01-01 00:00:00</sys_created_on><sys_id>a183a0df5e2a825dc294773e61a1e6f3</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_casemgmt_manager_view_canvas</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy/><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_grid_canvas_x_casemgmt_manager_view_canvas</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2025-01-01 00:00:00</sys_updated_on></sys_grid_canvas></record_update>]]></payload>
+<payload_hash>405826014</payload_hash>
+<remote_update_set display_value="x_casemgmt_case_management v1.0.0 (gate candidate)">8ebb770493534b1009aa70d19dba102a</remote_update_set>
+<replace_on_upgrade>false</replace_on_upgrade>
+<sys_created_by>admin</sys_created_by>
+<sys_created_on>2026-09-08 20:56:09</sys_created_on>
+<sys_id>5ebb770493534b1009aa70d19dba10c6</sys_id>
+<sys_mod_count>0</sys_mod_count>
+<sys_recorded_at>1a082cb58a60000001</sys_recorded_at>
+<sys_updated_by>admin</sys_updated_by>
+<sys_updated_on>2026-09-08 20:56:09</sys_updated_on>
+<table/>
+<target_name>x_casemgmt_manager_view_canvas</target_name>
+<type>Grid Canvas</type>
+<update_domain>global</update_domain>
+<update_guid>d4d7df44671f0b10d43998811f7d531d</update_guid>
+<update_guid_history>d4d7df44671f0b10d43998811f7d531d:0,fb449b44dedb0b10b66b2e6758f30634:-292618798,d8cd341af44f435030903ccbbcaae363:0,6a7cabc64f83435084ff2a2a2af11ace:0,61b5eb06e5434350e15b368b87f62678:0</update_guid_history>
+<update_set display_value=""/>
+<view/>
+</sys_update_xml>
+<sys_update_xml action="INSERT_OR_UPDATE">
+<action>INSERT_OR_UPDATE</action>
 <application display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</application>
 <category>customer</category>
 <comments>Dashboard widget placement restored for finding F02: the eight sys_grid_canvas_pane rows that bind each dashboard canvas cell to its report widget instance, bundled with the sys_portal widget-instance rows they reference so the reference resolves inside this payload at preview time.</comments>
@@ -12634,58 +12747,6 @@ function serverSetPending() {
 <update_domain>global</update_domain>
 <update_guid>7a41c65b2f0e4b1088d7e2c4a9f3b511</update_guid>
 <update_guid_history/>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>INSERT_OR_UPDATE</action>
-<application display_value="">82b99028936f74320d74d6f88357a5af</application>
-<category>customer</category>
-<comments/>
-<name>sys_grid_canvas_0067e3c7959400dbfeb4219bfb91b895</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_grid_canvas"><sys_grid_canvas action="INSERT_OR_UPDATE"><legacy_page display_value="Overview">23795850fe7318a525ef56edf43dbfff</legacy_page><name>x_casemgmt_agent_workspace_canvas</name><sys_class_name>sys_grid_canvas</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2025-01-01 00:00:00</sys_created_on><sys_id>0067e3c7959400dbfeb4219bfb91b895</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_casemgmt_agent_workspace_canvas</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy/><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_grid_canvas_x_casemgmt_agent_workspace_canvas</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2025-01-01 00:00:00</sys_updated_on></sys_grid_canvas></record_update>]]></payload>
-<payload_hash>1852664183</payload_hash>
-<remote_update_set display_value="x_casemgmt_case_management v1.0.0 (gate candidate)">8ebb770493534b1009aa70d19dba102a</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-08 20:56:09</sys_created_on>
-<sys_id>1abb770493534b1009aa70d19dba10c6</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a082cb49020000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-08 20:56:09</sys_updated_on>
-<table/>
-<target_name>x_casemgmt_agent_workspace_canvas</target_name>
-<type>Grid Canvas</type>
-<update_domain>global</update_domain>
-<update_guid>2cd7df44a91f0b103c29b4c8d13c5bce</update_guid>
-<update_guid_history>2cd7df44a91f0b103c29b4c8d13c5bce:0,0f24d304a5db0b101b4acf50682492e2:529033835,e8cd741af74f4350bf6b9b1993ff430f:0,3e7cebc619834350c4dca68e045d6a6d:0,7db52f06be434350d0cf1aa18c20a613:0</update_guid_history>
-<update_set display_value=""/>
-<view/>
-</sys_update_xml>
-<sys_update_xml action="INSERT_OR_UPDATE">
-<action>INSERT_OR_UPDATE</action>
-<application display_value="">82b99028936f74320d74d6f88357a5af</application>
-<category>customer</category>
-<comments/>
-<name>sys_grid_canvas_a183a0df5e2a825dc294773e61a1e6f3</name>
-<payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_grid_canvas"><sys_grid_canvas action="INSERT_OR_UPDATE"><legacy_page display_value="Operational KPIs">be68df051d089c2fdf72ae0e5f704750</legacy_page><name>x_casemgmt_manager_view_canvas</name><sys_class_name>sys_grid_canvas</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2025-01-01 00:00:00</sys_created_on><sys_id>a183a0df5e2a825dc294773e61a1e6f3</sys_id><sys_mod_count>0</sys_mod_count><sys_name>x_casemgmt_manager_view_canvas</sys_name><sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package><sys_policy/><sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope><sys_update_name>sys_grid_canvas_x_casemgmt_manager_view_canvas</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2025-01-01 00:00:00</sys_updated_on></sys_grid_canvas></record_update>]]></payload>
-<payload_hash>405826014</payload_hash>
-<remote_update_set display_value="x_casemgmt_case_management v1.0.0 (gate candidate)">8ebb770493534b1009aa70d19dba102a</remote_update_set>
-<replace_on_upgrade>false</replace_on_upgrade>
-<sys_created_by>admin</sys_created_by>
-<sys_created_on>2026-09-08 20:56:09</sys_created_on>
-<sys_id>5ebb770493534b1009aa70d19dba10c6</sys_id>
-<sys_mod_count>0</sys_mod_count>
-<sys_recorded_at>1a082cb58a60000001</sys_recorded_at>
-<sys_updated_by>admin</sys_updated_by>
-<sys_updated_on>2026-09-08 20:56:09</sys_updated_on>
-<table/>
-<target_name>x_casemgmt_manager_view_canvas</target_name>
-<type>Grid Canvas</type>
-<update_domain>global</update_domain>
-<update_guid>d4d7df44671f0b10d43998811f7d531d</update_guid>
-<update_guid_history>d4d7df44671f0b10d43998811f7d531d:0,fb449b44dedb0b10b66b2e6758f30634:-292618798,d8cd341af44f435030903ccbbcaae363:0,6a7cabc64f83435084ff2a2a2af11ace:0,61b5eb06e5434350e15b368b87f62678:0</update_guid_history>
 <update_set display_value=""/>
 <view/>
 </sys_update_xml>

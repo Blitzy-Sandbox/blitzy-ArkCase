@@ -73,8 +73,8 @@ retained as the record of the package this one replaced.
 | Property | Pre-CR1 (measured 2026-09-08) | Shipping now (measured 2026-09-09) |
 | --- | --- | --- |
 | Payload blocks | 522 | **522** (4 removed, 4 added) |
-| Bytes | 3,114,377 | **2,989,530** |
-| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+| Bytes | 3,114,377 | **2,994,341** |
+| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
 | Fix Script payloads | 1 (`sys_package`/`sys_scope` = `global`) | **0** |
 | `sys_user_has_role` payloads | 3 (all refused at commit) | **0** |
 | `sys_grid_canvas_pane` payloads | 0 | **8** (in 2 bundles, with the 8 `sys_portal` widget instances they reference) |
@@ -100,12 +100,21 @@ in any reference field," resolved instead by `GlideRecord` lookup on `name`, `us
 field as the target's `sys_id`; the platform offers no by-key alternative inside a payload, and the preview
 validator resolves references by `sys_id` alone. Measured on the shipping bytes:
 
-| Measure | Shipping bytes (`8160ed16…`) | Pre-CR1 bytes (`b2217224…`) |
+| Measure | Shipping bytes (`751ceb61…`) | Pre-CR1 bytes (`b2217224…`) |
 | --- | --- | --- |
-| 32-hex occurrences outside their own record's `<sys_id>` element | **4,343** | 4,314 |
-| Blocks carrying at least one | **515 of 522** | 515 of 522 |
+| 32-hex occurrences outside their own record's `<sys_id>` element (counting rule A) | **4,343** | 4,314 |
+| Blocks carrying at least one, rule A | **515 of 522** | 515 of 522 |
+| Occurrences excluding also every id the same block defines (counting rule B) | **2,676** | 2,655 |
+| Blocks carrying at least one, rule B | **514 of 522** | 514 of 522 |
 | Distinct ids the package does **not** own (platform records) | **115**, in **983** occurrences | 114, in 981 occurrences |
 | Record `sys_id`s the package does own | 1,411 | 1,405 |
+
+Both counting rules are stated because the total depends entirely on which occurrences are called "the
+record's own": rule A excludes only an element's literal `<sys_id>` text, while rule B also excludes a
+reference that points at a record the same block carries (a composite child, for instance a flow's own action
+instances). Rule A is the wider reading and is the one the review used. Neither reading changes the
+conclusion, and the external-id figures — the only ones that speak to portability across instances — are
+identical under both.
 
 The shipping figures are two higher on external ids and 29 higher overall than the pre-CR1 bytes because the
 CR1 additions carry references of their own: the two `sys_rate_limit_rules` records name the platform's stock
@@ -118,10 +127,21 @@ not change the conclusion either way.
 The consolidation report previously narrowed the rule to "authored artifacts" to reconcile it. That narrowing
 was unauthorised and has been withdrawn. **Reported, not redefined, per the AAP §0.7.2 Minimal-Change Clause:
 this is a PDI capability gap.** What the project does deliver against the rule's intent is unaffected and
-remains true — every authored artifact, every ACL condition script, every flow script and
-`../scripts/seed_demo_data.js` resolve their targets by stable human-readable key, so nothing a human wrote
-carries an id literal, and the package is portable because the ids it carries are its own records' identities
-plus stock platform records whose ids are identical on every instance.
+remains largely true — every ACL condition script, every flow script and `../scripts/seed_demo_data.js`
+resolve their targets by stable human-readable key, and the package is portable because the ids it carries are
+its own records' identities plus stock platform records whose ids are identical on every instance.
+
+**One authored artifact carries a literal, and it is counted here rather than excused.** The two
+`sys_rate_limit_rules` record-definitions added for F06/F07
+(`../portal/rest/sys_rate_limit_rules_x_casemgmt_case_submit.xml` and
+`..._case_status_lookup.xml`) name the platform's stock `guest` user by `sys_id`
+(`5136503cc611227c0183e96598c4f706`) in their `<user>` element, because that is the only value that addresses
+an unauthenticated caller on this table — `type` offers only All, Role or User, an anonymous caller holds no
+role, and `All` would bound internal callers too. A payload field holds a literal value and has no script
+layer in which a `user_name=guest` lookup could run, so the constraint cannot be met there either. Those two
+files previously described this as a "considered exception"; that framing was self-authorised and has been
+removed from both. The literal is one of the 115 external ids counted above and falls under the same human
+decision below.
 
 **What a human must decide:** either accept a native platform export as the deliverable (and with it the
 `sys_id` references inherent to the format), or replace the deliverable with a by-key installer — a scoped
@@ -153,7 +173,7 @@ expecting exactly 3 rows. Until it is run the three demo personas have **no acce
 | F02 | The package carried none of the 8 `sys_grid_canvas_pane` placements, so both dashboards install empty; the recorded reason ("`sys_portal` rows are not application files, no publish can ever include them") was false — the package embeds 8 `sys_portal` widget instances and 96 preference rows. The real cause is that the preview validator resolves a reference only against a local record or a **standalone** block in the same set, and the widget instances travelled as composite children of `sys_portal_page`. | 8 pane rows restored as 2 self-contained bundles carrying the widget instances they reference; [`dashboards.md`](./dashboards.md) and [`validation-gates.md`](./validation-gates.md) Gate 6 corrected |
 | F03 | Block order was capture order, not the AAP §0.5.2 dependency order, and the consolidation report waived the requirement on the strength of a passing preview. No override supersedes §0.5.2, and preview cannot detect an ordering defect because it resolves references set-wide. | every block reordered into the §0.5.2 tiers, payload bytes proven unchanged |
 | F04 | The sole `sys_script_fix` payload was stamped `sys_package`/`sys_scope` = `global` — the only global stamp in the package — while the report claimed "zero global stamps … no global-scope artifacts". The stamp also achieved nothing: the commit engine rewrites a committed record's scope to the application, so the installed record could never make its `GlideTableDescriptor`/`GlideSecurityManager` calls (measured: `verified=false`, `tables_built=0`, `acl_links_created=0`, `errors=121`). | payload removed from the package; `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` re-stamped `x_casemgmt` and marked a retained, unshipped reference; the working route is unchanged — paste `../scripts/post_import_remediation.js` into a **Global** Background Script |
-| F06 | `CasePortalService._admitAnonymousSubmission()` counted rows and then inserted (CWE-367), so parallel anonymous callers all read the same below-ceiling count and all were admitted; the single global bucket also let one caller deny service to every other requester for the rest of the window. | the ceiling is now decided **after** the insert, by ranking the persisted row under a total order and withdrawing it when it is over the ceiling, plus a per-requester fairness cap; mirrored into the package payload |
+| F06 (see also §0.CR1.6) | `CasePortalService._admitAnonymousSubmission()` counted rows and then inserted (CWE-367), so parallel anonymous callers all read the same below-ceiling count and all were admitted; the single global bucket also let one caller deny service to every other requester for the rest of the window. | the ceiling is now decided **after** the insert, by ranking the persisted row under a total order and withdrawing it when it is over the ceiling, plus a per-requester fairness cap; mirrored into the package payload |
 | F07 | The anonymous lookup accepted any input, queried on every call, logged nothing and answered 200-vs-404 over sequential `CASE0000001` numbers — an enumeration oracle the widget's comments and `<description>` explicitly denied. | strict `^CASE[0-9]{7}$` validation ahead of any query, per-session sliding-window throttling in the `GlideSession` client-data store, an HTTP 429 path through the REST operation and the widget, `gs.warn` abuse monitoring under a stable marker, two scoped `sys_rate_limit_rules` payloads as the native per-hour ceiling, and the false claims replaced with the honest statement of the exposure |
 
 ### 0.CR1.5 Four pre-existing conditions CR1 established but did not change
@@ -186,6 +206,113 @@ expecting exactly 3 rows. Until it is run the three demo personas have **no acce
    artifacts carry longer text (359 characters for the lookup GET operation after CR1), which the platform
    truncates on import — the pre-CR1 export shows the previous value already truncated to exactly 80. The
    export payload now carries a 76-character value that fits. Cosmetic, and disclosed rather than reconciled.
+
+### 0.CR1.6 CR1 fix review (2026-09-09) — what independent re-verification raised, and what changed again
+
+The CR1 remediation above was re-examined before release. It confirmed F01's treatment and raised seven items:
+two were defects introduced or left by the remediation itself, one was a new unauthorised exception, and four
+turn on a deployment gate this checkpoint is not permitted to run. All of the first three were fixed; the
+fourth set is stated here as the release precondition it is.
+
+**Fixed — the admission ceiling was still bypassable (F06).** The first remediation replaced the pre-insert
+count with a post-insert **rank**: the row's position among the window's rows under a total order. That bounds
+the window only for a caller whose query sees the whole window. A caller whose query sees a *prefix* ranks
+itself near the front and admits, so a run of inserts arriving in descending `sys_id` order admits every one of
+them however far past the ceiling it goes — measured, 14 of 14 admitted against a ceiling of 10. The guard now
+**counts** the window with its own row among it and refuses above the ceiling, which bounds it under every
+interleaving: of any set of survivors, the one whose count query ran last necessarily saw every other survivor,
+so more than the ceiling surviving is a contradiction. Re-verified against the method body **as it ships in the
+payload**: 3,000 randomly generated schedules under both delete-visibility models, plus the prefix-visibility
+and simultaneous-burst cases, left no window over 10 rows and no `requester_email` bucket over 4 (29 of 29
+assertions). The cost is a documented over-refusal range under a simultaneous burst — from just the excess to
+the whole burst — never an over-admission.
+
+**Fixed — the restored pane bundles preceded the canvases they reference (F03).** The two bundles added for F02
+carry `sys_portal` widget instances first and `sys_grid_canvas_pane` rows second, so classifying each bundle by
+its *first* record put them at the `sys_portal` tier — ahead of the two `sys_grid_canvas` rows every pane's
+`grid_canvas` field points at. A bundle applies as one unit, so it must sort at its **most dependent** member's
+tier; it now does, and the ordering checker was strengthened from a tier assertion into a real reference check
+that resolves every in-package reference against the block that defines it. That check reproduced the inversion
+independently before the fix and reports it clean after.
+
+**Fixed — the two new rate-limit artifacts claimed an exception to a frozen rule (F05).** Their headers
+described the stock `guest` `sys_id` in `<user>` as "a considered exception rather than an oversight". Nothing
+authorises an exception to AAP §0.7.2, and no artifact in this repository may narrow it. Both headers now state
+the literal as a violation and as one more instance of the capability gap in §0.CR1.2, where it is counted with
+the rest; the mitigating facts are kept, labelled as mitigation rather than authorisation.
+
+**Documented, because it cannot be fixed inside the AAP — the lookup throttle is not the perimeter (F07).**
+`_admitAnonymousLookup()` reads the session's client-data window, appends to it and writes it back with no lock,
+so parallel requests in one session can drop each other's increments; and a caller that discards its cookie gets
+a fresh session with an empty window. Both are now recorded in the method's own docblock, in
+[`portal-pages.md`](./portal-pages.md), and here: the custom throttle is defence-in-depth plus telemetry, and
+the perimeter is the native `sys_rate_limit_rules` ceiling whose binding for an unauthenticated caller on a
+scoped resource is **unverified**. Closing either hole needs an atomic counter in a new table or property — AAP
+§0.7.2's Minimal-Change Clause refuses it — or a control at the edge, which a PDI does not offer. Reported, not
+worked around.
+
+#### The residual dependency cycles AAP §0.5.2 cannot linearise
+
+The strengthened reference check reports **30** in-package references that resolve to a record defined by a
+later block, in three classes, none of which a different block order can fix:
+
+| Class | Count | Why no order satisfies it |
+| --- | --- | --- |
+| `sys_db_object.number_ref` → `sys_number` | 3 | A genuine cycle: the table row points at its number counter, and the counter's `category` points back at the table. AAP §0.4.1 orders numbers *after* tables, so that is the side this package takes. |
+| `sys_hub_flow.copied_from` → another flow | 6 (2 per flow, 3 flows) | Provenance metadata, not a load dependency: the field records which flow this one was copied from and nothing reads it at import. The three flows also reference each other, so no total order removes it. |
+| `sys_atf_step` step-input `value` → seed rows / demo users | 21 | Test *inputs* naming the fixtures a test acts on. AAP §0.5.2 puts seed data last and ATF before it; reversing that would put the tests after the data they are ordered before. Unread at import — a step input is data for the runner. |
+
+Every reference that a preview's reference validator can fail on — table, dictionary, choice, role, ACL, flow,
+report, dashboard, canvas, pane, widget-instance and seed parent — resolves to an earlier block.
+
+#### MANDATORY PRE-RELEASE GATE — the one deployment cycle this checkpoint could not run
+
+Four items (F02's restoration, F03's re-sequencing, F04's removal, and the ATF/harness currency the staged
+directive requires) are validated by exactly one thing: the exact shipping bytes going through a real
+deployment. **This checkpoint made no instance writes and could not run it.** Why, stated plainly so the
+decision is reviewable: the checkpoint's own scope confines it to read-only API queries with no upload, preview
+or commit; AAP override R2 makes the empty instance the correct end state and it is empty; the PDI is shared
+with concurrent agents under a one-writer-at-a-time rule this run cannot coordinate; and the only documented
+teardown is `deleteApplication`, which the environment forbids outright — so an install could not be undone.
+Evidence from the pre-CR1 bytes (`b2217224…`) does **not** transfer: four payloads were removed, four added,
+three amended and every block moved.
+
+Run this, in order, on a proven-empty instance, against the bytes at the canonical path:
+
+| # | Step | Pass condition |
+| --- | --- | --- |
+| 1 | Re-derive the identity from the file (`sha256sum`, `stat -c %s`, `grep -c '<sys_update_xml action='`) | matches the row in §0.CR1.1 |
+| 2 | Prove the target empty | `sys_scope?scope=x_casemgmt` → `[]`; `x_casemgmt_case` → HTTP 400 |
+| 3 | Upload via `/sys_upload.do` (multipart; the Table API POST returns 400 on this table) | `state=loaded`, 522 children |
+| 4 | Preview via `xmlhttp.do` `UpdateSetPreviewAjax` | **0** `type=error` **and 0** `type=warning`, none skipped or ignored |
+| 5 | Commit — native "Commit Update Set" UI action only | `state=committed`, "Succeeded 100%" |
+| 6 | Post-commit census | 3 tables HTTP 200; 3 roles; 26 ACLs / 27 role links; 7 flows active; **8** `sys_grid_canvas_pane` rows; 2 `sys_rate_limit_rules` rows; 24 choices; 10/10/8 seed rows |
+| 7 | Role grants — [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5h | `sys_user_has_role` query returns exactly 3 rows (§0.CR1.3 — the commit cannot do this) |
+| 8 | Dashboards render | agent workspace **3 of 3** widgets, manager view **5 of 5** — this is what F02 was about |
+| 9 | Rate-limit rules bind | both rows present, `active=true`, and a deliberate over-ceiling anonymous sweep produces HTTP 429 plus a `sys_rate_limit_violation` row (§0.CR1.6 — currently unverified) |
+| 10 | ATF suite `x_casemgmt Case Management POC` (20 tests / 180 steps), in a real browser — `sn_atf.headless.enabled=false` | run recorded against **these** bytes; classify every failure |
+| 11 | Transition harness `../scripts/transition_logic_regression_assertions.js` via `sys.scripts.do` with `sys_scope=x_casemgmt` | `TOTAL=13 PASSED=13 FAILED=0` in `syslog` under `U1ASSERT` |
+| 12 | Teardown, if the instance must be returned empty | scope query `[]` and all three tables HTTP 400 again |
+
+Until steps 3-11 are recorded against the shipping bytes, AAP §0.7.1's round-trip requirement and §0.7.3's
+Gate 7 are **unsatisfied for this artifact**, and [`validation-gates.md`](./validation-gates.md) says so.
+
+#### The ATF suite and the transition harness are stale against these bytes
+
+The staged directive requires both to be current against the exact final package. They are not, and no static
+check substitutes for either: the last recorded ATF run (`TES0001005`, 17 success / 3 failure / 0 error /
+0 skip) and the last `13/13` transition-harness run were both taken on the pre-CR1 install. CR1 and this fix
+review changed the script include, the lookup REST operation, the lookup widget, the pane graph, the rate-limit
+rows and every block's position, so both must be re-run at steps 10-11 above.
+
+What *was* checked statically, for the specific risk that the new ceilings would break the existing tests: ATF
+18 makes one anonymous submission per run, which cannot reach a ceiling of 10 per 60 s or 4 per bucket; its 48
+`atf-fixture@example.invalid` rows are created as the ATF runner user, and the window is counted per
+`sys_created_by`, so fixtures cannot crowd the anonymous window; ATF 19 looks up `CASE9000019` and ATF 20
+`CASE9999999`, both of which match the new strict `^CASE[0-9]{7}$` pattern, so the 200-with-three-keys and the
+verbatim-404 contracts are unaffected; and total lookup volume per run is far below 12 per 60 s. The three
+known pre-existing failures (ATF 17's form lock on Closed cases, ATF 18/19's seven-hour `opened_date` offset)
+are untouched by anything in CR1.
 
 ## 0. Current state of the package — the authoritative block
 

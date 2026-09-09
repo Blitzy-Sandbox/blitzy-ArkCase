@@ -9,15 +9,15 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 > payloads** — the three `sys_user_has_role` records this release's Role Management V2 refuses to install, and the
 > Global-stamped `sys_script_fix` record — and **added four**: the two dashboard-pane bundles that restore the eight
 > `sys_grid_canvas_pane` widget placements, and two scoped `sys_rate_limit_rules` records. It also hardened the two
-> anonymous portal endpoints in place (post-insert admission ranking on submit; strict number validation,
+> anonymous portal endpoints in place (post-insert admission counting on submit; strict number validation,
 > per-session throttling, an HTTP 429 path and abuse monitoring on lookup) and reordered every block into the
 > AAP §0.5.2 dependency tiers.
 >
 > | Property | Pre-amendment (the rows below) | **Shipping now** |
 > | --- | --- | --- |
 > | Payload blocks | 522 | **522** |
-> | Bytes | 3,114,377 | **2,989,530** |
-> | SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+> | Bytes | 3,114,377 | **2,994,341** |
+> | SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`751ceb61215f1207a7496693820007b5cd6ab1b43ce4cceed4e80f3208e72d4a`** |
 >
 > Re-derive all three from the file itself — `sha256sum`, `stat -c %s`, `grep -c '<sys_update_xml action='` —
 > rather than trusting any quoted figure. **The amended bytes have not been previewed or committed on an
@@ -28,6 +28,17 @@ This document captures the four-step deployment procedure for the ServiceNow sco
 > ES5-conformant, every reference in the restored pane bundles resolves inside the package, and the AAP §0.5.2
 > dependency-order assertion passes. Every identity figure elsewhere in this document describes the
 > pre-amendment bytes and is retained as provenance. Full amendment ledger: [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](refine-run/CONSOLIDATION-FINAL-REPORT.md).
+>
+> **CR1 FIX REVIEW — 2026-09-09.** The bytes changed again (the identity row above is current): the
+> anonymous-submit ceiling now counts the window instead of ranking the inserted row inside it, the two restored
+> pane bundles now load after the `sys_grid_canvas` rows they reference, and the two `sys_rate_limit_rules`
+> artifacts no longer claim an AAP §0.7.2 exception for the stock `guest` reference they carry. **The complete
+> ordered release gate for these bytes — upload, preview to zero errors AND zero warnings, native commit,
+> post-commit census including the 8 pane rows and the 2 rate-limit rows, the mandatory §5h role grants, both
+> dashboards rendering 3/3 and 5/5, rate-limit verification, the 20-test ATF suite and the 13-assertion
+> transition harness — is enumerated as a numbered table in
+> [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.CR1.6.** Run it in that
+> order; the steps below are the mechanics for steps 3-5 of it.
 
 > **DELIVERABLE IDENTITY — read this before comparing, verifying or asserting any digest, byte size or block count anywhere in these documents.**
 > Re-measured **2026-09-08** from the file on disk (`sha256sum`, `stat -c %s`,
