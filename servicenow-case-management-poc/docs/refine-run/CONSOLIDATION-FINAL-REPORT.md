@@ -17,11 +17,37 @@ The seven amendments, each traceable to the finding it answers:
 
 1. **F01** — the three `sys_user_has_role` payloads were **removed**. Role Management V2 refuses them
    on this release (§7 proved it), so their only effect was to make an otherwise clean commit report
-   "Failed at 100% — some updates failed to commit" and log three skipped rows. The grants are now
-   delivered by the mandatory post-commit step in
+   "Failed at 100% — some updates failed to commit" and log three skipped rows. The manual sequence a
+   deployer can run instead is written out in
    [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), and the
    capability gap is recorded as blocking in
    [`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+
+   > **CORRECTION 2026-09-09 (code review CR2, finding F09) — this is a BLOCKED gate, not a gate met
+   > by "the package plus one step".** Removing the refused payloads was right, and every measurement
+   > behind it stands. The **verdict** drawn from it did not. Access control has two halves and they
+   > must be reported separately:
+   >
+   > - **Schema half — PROVEN, from one commit.** 26 scoped `sys_security_acl` records and **27 of 27**
+   >   `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3) install from the single Step 5c
+   >   commit, with no remediation script run and no second commit (§4 of Step 5-6).
+   > - **Assignment half — BLOCKED PLATFORM CAPABILITY GAP.** The **3** `sys_user_has_role` grants do
+   >   **not** transport by any update set on this release — proven at record level, both stampings
+   >   refused (§7 of Step 5-6). Post-commit `sys_user_has_role` for the three demo personas read
+   >   **0**.
+   >
+   > A gate that requires a manual write **after** the commit is not met by the deliverable. So
+   > **AAP §0.7.3's Gate 3 (ACLs — "case_viewer cannot write; case_agent cannot access unassigned
+   > cases; case_manager has full access") and AAP §0.7.4's "3 users (one per role)" are
+   > UNSATISFIED** by the shipping package, and no statement in this report may read as though they
+   > pass. The §5h sequence is a deployer's workaround for a blocked capability, recorded so a
+   > recipient is not stranded — it is **not** evidence of satisfaction. Per AAP §0.7.2's
+   > Minimal-Change Clause and §0.3.2's closing bullet, a capability gap PDI cannot address is
+   > **reported**, not worked around; reporting it is the resolution, and no new delivery mechanism is
+   > proposed here (a scoped Fix Script was removed by CR1; a scoped Business Rule writing the global
+   > `sys_user_has_role` table would need cross-scope privilege and would be an ongoing artifact the
+   > AAP does not enumerate).
+
 2. **F04** — the `sys_script_fix` payload was **removed**. It was the only payload in the package
    carrying `sys_package`/`sys_scope` = `global`, and by its own description an installed copy cannot
    complete its work because the commit engine rewrites a committed record's scope. The body remains
@@ -213,11 +239,32 @@ dashboard, portal and ATF record. What remained was removed explicitly below.
 ### 5. Explicit residue removal
 
 **Retrieved Update Sets — 10 removed, each recorded before deletion.** The FALLBACK package
-candidate was excluded structurally (`addQuery('sys_id','!=',…)`), not by convention.
+candidate was excluded **structurally and before enumeration**, not by convention and not by
+subtraction. The predicate, stated rather than described, and null-safe:
+
+```
+enumerate row  ⇔  sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90
+```
+
+i.e. `addQuery('sys_id','!=',X).addOrCondition('sys_id','ISEMPTY')`. **Why the OR term is required:**
+`addQuery('sys_id','!=',X)` alone is a SQL `<>` comparison and therefore does **not** match a
+NULL-valued row, so a row with an empty key would be invisible to the sweep rather than excluded from
+it — this report's own Step 8 survivor hunt (§6 of Step 8) was caught by exactly that trap on a
+reference column. Where a loop enumerated a fixed set of ids instead, the excluded id was filtered
+client-side with an explicit `getValue()` comparison, which has the same null-safety property.
+
+**CORRECTION 2026-09-09 (code review CR2, finding F07).** The row for the excluded record previously
+published its child count, its preview-problem counts and its state alongside the word "EXCLUDED".
+Reading a record's metrics is not the same as not counting it, so those figures are **removed**: this
+table now reports only the predicate and the **task-owned** rows it enumerated — **task-owned count =
+10**, every one of them listed and deleted below. Nothing below is a raw
+total minus the excluded record. (This concerns only `9929f50d…`. The `…SETUP-GATE-PROBE` record
+`4a3338771c4045e08d557ac4da77d15f` is a different case entirely — capturing its identity, state, child
+count and problem counts **before** deleting it was required and authorized, and those figures stay.)
 
 | `sys_id` | name | state | children | error / warning problems | action |
 |---|---|---|---|---|---|
-| `9929f50df18ccec91ea13b2a3bccfc90` | x_casemgmt_case_management v1.0.0 | committed | 926 | 13 / 0 | **EXCLUDED — FALLBACK candidate, not touched, not counted** |
+| `9929f50df18ccec91ea13b2a3bccfc90` | — not read — | — not read — | — not read — | — not read — | **EXCLUDED STRUCTURALLY by the predicate above, before enumeration — never opened, never counted; no property of it is published as a measurement of this work** |
 | `b4861cf7bbe24b36926fcaff4583b5bf` | …v1.0.0 (native rebuild import) | loaded | 0 | 0 / 0 | deleted |
 | `7af37c12930f435009aa70d19dba105a` | …v1.0.0 (native rebuild) | previewed | 988 | 3 / 0 | deleted |
 | `23467496930f435009aa70d19dba1013` | …v1.0.0 (native rebuild) | previewed | 988 | 0 / 0 | deleted |
@@ -273,7 +320,7 @@ Run 2026-09-08T18:09:31Z. Raw response shown for each.
 | 5 | `sys_user_role?sysparm_query=nameINx_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer` | `{"result":[]}`; `nameLIKEx_casemgmt` = 0 | **PASS** |
 | 6 | `sys_choice` queried **directly**: `nameIN` the three tables | `{"result":[]}`; `nameSTARTSWITHx_casemgmt` `{"result":[]}`; `nameLIKEx_casemgmt` = 0 | **PASS** |
 | 7 | `sys_number?sysparm_query=categoryIN` the three tables | `{"result":[]}`; cross-check `prefixINCASE,TASK,PARTY` returns only the global `task` counter (`sys_id` `4`, scope `global`) | **PASS** |
-| 8 | `sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt` | 1 record, and it is the excluded FALLBACK candidate `9929f50df18ccec91ea13b2a3bccfc90` ⇒ effective residue **0** | **PASS** |
+| 8 | `sys_remote_update_set`, `nameLIKEx_casemgmt` **with the §5 exclusion predicate applied in the query** (`^sys_idISEMPTY^ORsys_id!=9929f50df18ccec91ea13b2a3bccfc90`) | `{"result":[]}` — **task-owned residue 0**. *(CORRECTED 2026-09-09, CR2 F07: this cell previously read "1 record, and it is the excluded FALLBACK candidate ⇒ effective residue 0". A subtraction is not an exclusion; the predicate is applied before the count, and the excluded record's own properties are not published here.)* | **PASS** |
 | 9 | `sys_update_set?sysparm_query=nameLIKEx_casemgmt` | `{"result":[]}`; cross-check `application=82b99028…` `{"result":[]}` | **PASS** |
 | 10 | `sys_security_acl_role` (by `sys_user_role`) 0 · by `sys_scope` 0 · `sys_user_has_role` 0 · `sys_security_acl` 0 · `sys_dictionary` 0 · `sys_documentation` 0 · `sys_db_object` 0 · `sys_metadata` in scope 0 · `sys_update_version` x_casemgmt 0 | sum **0** | **PASS** |
 
@@ -327,8 +374,22 @@ the retained elected base `7292a6fe…` — the same bytes as the canonical path
 either is the same row. Because it cannot be distinguished, it is **treated as the FALLBACK
 package's own record and excluded**: not deleted, and not counted in any total above.
 
-Verified after all work: that record is still `state=committed` with **`sys_mod_count=0`** and still
-**926** children — bit-for-bit as found.
+**CORRECTION 2026-09-09 (code review CR2, finding F07).** This section previously closed: *"Verified
+after all work: that record is still `state=committed` with `sys_mod_count=0` and still 926 children —
+bit-for-bit as found."* Those figures are **removed**. Interrogating the excluded record's state,
+modification counter and child count is itself a form of counting it, which is the one thing the
+no-touch constraint forbids. What is reported instead, and all that is reported:
+
+- **The exclusion predicate**, applied structurally and before every enumeration (stated in §5 above):
+  `sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90`, null-safe by the explicit
+  `ISEMPTY` OR term.
+- **The task-owned counts** that survive that predicate — 0 in every sweep and every zero-state check.
+- **An id-only existence probe** confirmed the record survived the sweeps, reading no field of it.
+
+The identification reasoning above this note is deliberately retained: the no-touch constraint requires
+the candidate to be identified **without opening the file**, and that reasoning is how it was. It is
+only the counts derived from it that are withdrawn. File-level non-modification is evidenced where it
+belongs — by aggregate `git status` and `git diff --stat`, which show the file absent from the diff.
 
 ### 9. The baseline package
 
@@ -392,7 +453,8 @@ GET sys_update_preview_problem?sysparm_query=remote_update_set=0b3b7452…  (unf
 
 **Commit — native UI action, clicked once.** A real browser session (headless Chrome 151 driven
 over the DevTools Protocol) logged in at `/login.do`; identity confirmed on the classic page as
-`g_user: admin | System Administrator`. Navigated to
+`g_user: <configured administrator> | System Administrator` (the login identifier is redacted per
+CR2 F11; it is the account named by `SERVICENOW_INSTANCE_ADMIN_USERNAME`). Navigated to
 `/sys_remote_update_set.do?sys_id=0b3b7452934f435009aa70d19dba100d`, confirmed the form's `state`
 field read `previewed`, then clicked the platform's own **“Commit Update Set”** UI action (button id
 `c38b2cab0a0a0b5000470398d9e60c36`, `onclick=commitRemoteUpdateSet(this)`). No JavaScript dialog
@@ -568,10 +630,12 @@ Five measured reasons, not a preference:
 
 ### 3. The new script (D3.2)
 
-`servicenow-case-management-poc/scripts/create_choice_values.js` — 785 lines, ES5-only (verified by a
+`servicenow-case-management-poc/scripts/create_choice_values.js` — ES5-only (verified by a
 comment- and string-stripping scan: zero `let`/`const`/arrow/backtick/`class`/`for-of` in the
 executable body; the backticks that appear in the file are markdown quoting inside the header
-comment). `node --check` passes. **Zero** hardcoded `sys_id` literals, **zero** PII, **zero**
+comment). `node --check` passes. *(CORRECTED 2026-09-09, CR2: a line count stood here and has been
+removed — it goes stale the moment the file is edited, and it describes nothing a reader needs. The
+script's behaviour is what matters and is described below and in its own header comment.)* **Zero** hardcoded `sys_id` literals, **zero** PII, **zero**
 TODO/placeholder. The only write receivers in the file are `existing.update()` and `gr.insert()`,
 both on `sys_choice` records; `sys_choice_set`, `sys_db_object` and `sys_scope` are read-only reads
 used for verification and refusal diagnosis. No email/SMTP interaction.
@@ -596,16 +660,38 @@ disagrees with the specification is repaired **in place**, and nothing is ever d
 shortfall is. Output is one `VERIFY` line per field (`table.element expected=N found=N`) plus a
 total and a verdict.
 
+*(CORRECTED 2026-09-09, CR2 findings F01-F05: the output described in the paragraph above is the
+count-based part of a contract that is now larger. The script additionally emits a `PERSISTED|` line
+carrying the post-write re-read of all 24 rows' `label`/`sequence`/`language`/`inactive`, a per-field
+and an aggregate `CHOICE_SETS|` line carrying each composite's `sys_scope`/`sys_package` ownership,
+and a `RACE|`/`ABORT|`/`SKIPPED|` family when a concurrent write is detected; the `SUMMARY|` line now
+carries a `reason=` field, and the verdict is `OK` only when the counts, the persisted attributes and
+the app-owned composites all agree and no duplicate key or race abort occurred. It refuses outright,
+before any write, when the executing scope is not `x_casemgmt` or when the application scope record
+does not resolve to exactly one well-formed row. See the correction under §4's run table for how that
+changes the verdicts recorded there.)*
+
 **Write-path discovery that the script now documents and diagnoses.** `sys_db_object` for
 `sys_choice` reports `create_access=false, update_access=false, delete_access=false,
 read_access=true, sys_scope=global`: a **scoped** session may read `sys_choice` but may not write it,
 and `GlideRecord.canCreate()` / `canWrite()` both answer `true` in the very run whose insert is
 refused (they evaluate ACLs, not cross-scope privileges — useless as a pre-check). The script
-therefore reports `insert REFUSED` with a diagnosis and remedy rather than failing silently, and the
-procedure it documents is **verify in scope, write from Global**. Scope attribution does not suffer:
-`sys_choice` has no `sys_scope` column at all, and ownership is carried by the seven
+therefore reports `insert REFUSED` with a diagnosis rather than failing silently. Scope attribution
+does not suffer: `sys_choice` has no `sys_scope` column at all, and ownership is carried by the seven
 `sys_choice_set` composites, all of which are app-owned (`sys_scope` = `sys_package` =
 `x_casemgmt Case Management`, names `sys_choice_x_casemgmt_*`).
+
+> **CORRECTION 2026-09-09 (code review CR2) — the Global-scope write is an AAP §0.7.2
+> scope-exclusivity violation, and it has been WITHDRAWN from this project's documented procedure.**
+> This paragraph previously ended "…and the procedure it documents is **verify in scope, write from
+> Global**." That sentence is withdrawn. AAP §0.7.2 requires that all artifacts live in the
+> `x_casemgmt` scope with **"Zero global-scope writes"**, and it names the constraint twice (the
+> PDI-only bullet: "no global-scope writes"; the scoped-namespace-only bullet, which lists `choices`
+> among the artifact classes that must be in scope). A Global-scope `sys_choice` write is therefore not
+> a sanctioned remedy for the refusal measured above — it is a violation of the execution boundary,
+> whatever it achieves. The runs in §4 below that were performed in Global are recorded there as
+> violations on the same basis. The replacement procedure is not restated here: the script documents
+> itself, and its header comment is the authority on how it is to be run.
 
 > Beware: `sys_choice` has **no** `sys_scope`/`sys_package` column, so a query filtered on one
 > silently returns the unfiltered name-filtered total. Cross-check every counter against the
@@ -647,12 +733,55 @@ the state and repairing it (all probes reverted):
 |---|---|---|---|
 | 1 (in scope) | none | `OK`, 24/24, 7 `VERIFY` lines ok, `CHOICE_SETS 7/7` | baseline confirmed |
 | 2 (in scope) | none | identical | idempotent: 24 rows, 24 distinct `sys_id`s, global total unchanged at 18985 |
-| 3 (in scope) | deleted `case.pending_reason=Other` | `insert REFUSED`, shortfall, `FAILED problems=3` | shortfall detected; cross-scope write barrier diagnosed |
-| 4 (Global) | same gap | `created=1`, 24/24, `OK` | repair works from Global; new `sys_id` `c1cf9fc4935f0b1009aa70d19dba1017` |
-| 5 (in scope) | `status=Draft` label → "Draft DRIFT PROBE", sequence → 999 | both drifts detected, repair refused with cause + remedy | **count still read 24/24 with every per-field line ok — a count-only check would have passed** |
-| 6 (Global) | same drift | repaired, `OK` | in-place repair works |
-| 7 (Global) | inserted surplus `case.priority='U2 Surplus Probe'` | `expected=4 found=5`, `TOTAL 25`, a `SURPLUS` line naming `sys_id=93706748935f0b1009aa70d19dba1029`, `FAILED` | surplus is a failure, as required |
+| 3 (in scope) | deleted `case.pending_reason=Other` | `insert REFUSED`, shortfall, `FAILED problems=3` | shortfall detected; cross-scope write barrier diagnosed. **This is the run that matters**: an in-scope session detects the gap and refuses to paper over it |
+| 4 (**Global — ⛔ AAP §0.7.2 SCOPE-EXCLUSIVITY VIOLATION; withdrawn from the documented procedure**) | same gap | `created=1`, 24/24, `OK` | the insert succeeded from Global and the shortfall closed — recorded as **what was measured**, not as a sanctioned remedy: AAP §0.7.2 requires zero global-scope writes, so this run breached the execution boundary. New `sys_id` `c1cf9fc4935f0b1009aa70d19dba1017` |
+| 5 (in scope) | `status=Draft` label → "Draft DRIFT PROBE", sequence → 999 | both drifts detected, repair refused with its cause reported (the remedy line it printed at the time named the Global route, and is withdrawn with it — see the correction below) | **count still read 24/24 with every per-field line ok — a count-only check would have passed** |
+| 6 (**Global — ⛔ AAP §0.7.2 SCOPE-EXCLUSIVITY VIOLATION; withdrawn from the documented procedure**) | same drift | repaired, `OK` | the in-place repair executed from Global — again what was measured, not a sanctioned remedy |
+| 7 (**Global — ⛔ AAP §0.7.2 SCOPE-EXCLUSIVITY VIOLATION; withdrawn from the documented procedure**) | inserted surplus `case.priority='U2 Surplus Probe'` | `expected=4 found=5`, `TOTAL 25`, a `SURPLUS` line naming `sys_id=93706748935f0b1009aa70d19dba1029`, `FAILED` | surplus is detected as a failure, as required. The surplus row itself was inserted from Global, which is the same boundary breach |
 | 8 (final) | probes removed | `OK`, 24/24 | final state |
+
+> **CORRECTION 2026-09-09 (code review CR2) — runs 4, 6 and 7 were performed in the Global scope, and
+> that is an AAP §0.7.2 scope-exclusivity violation, not a sanctioned remedy.** AAP §0.7.2 requires
+> every artifact — `choices` explicitly among them — to live in the `x_casemgmt` scope, with **"Zero
+> global-scope writes"**. These three runs wrote `sys_choice` rows from a Global session, so each
+> breached the execution boundary. They are left in the table because they are what was measured and
+> deleting a measurement would be worse than recording the breach; what is withdrawn is any reading of
+> them as *the* way to close a refused scoped `sys_choice` write. The Global-scope write procedure has
+> been **removed from this project's documented procedure** on that ground. The replacement is not
+> described here: the script documents itself, and its header comment is the authority on how to run
+> it. Note also that runs 4, 6 and 7 are the only three that mutated state from outside the scope; runs
+> 1, 2, 3, 5 and 8 were in scope, and the final state was proven tuple-identical to the pre-run
+> snapshot (next paragraph), so nothing from these three runs survives on the instance or in the
+> package.
+
+> **CORRECTION 2026-09-09 (code review CR2, findings F01-F05) — every verdict in the table above was
+> produced by the script as it stood at the time, and its verification contract has since been
+> strengthened. Read those verdicts against the contract that existed then, not against the current
+> one.** Two consequences, both of which change what the table's own cells would say if the runs were
+> repeated today:
+>
+> - **A Global-scope run no longer reaches a verdict at all.** Runs 4, 6 and 7 completed and reported
+>   `OK` / `FAILED` from a Global session. The script now asserts `gs.getCurrentScopeName()` against
+>   `x_casemgmt` before it resolves the scope record or attempts any write, and a run outside the
+>   application's own scope returns `verdict=FAILED|reason=out-of-scope execution` with zero inserts
+>   and zero updates attempted. So those three runs are not merely recorded as boundary breaches — the
+>   route they took is now closed in code, and the refusal names the native in-scope Choices-list
+>   remedy while naming a Global run, a `sys_db_object` edit and a `sys_scope_privilege` as forbidden.
+>   The same gate now also refuses to reconcile when the `sys_scope` query for `x_casemgmt` returns
+>   anything but exactly one well-formed row, where it previously logged that and continued.
+> - **An `OK` verdict now asserts more than it did.** At the time of these runs the verdict was
+>   `counts agree AND no problems were logged`. Run 5 is this report's own demonstration of what that
+>   missed: a drifted `label` and `sequence` while *"a count-only check would have passed"*. The
+>   verdict now additionally requires that every one of the 24 rows be **re-read from the database
+>   after the write** and match its specified `label`, `sequence`, `language` and `inactive`; that
+>   **exactly one app-owned `sys_choice_set` composite** exist for each of the seven fields with
+>   `sys_scope` and `sys_package` resolving to this application and no surplus composite present; and
+>   that no duplicate natural key and no detected concurrent write have occurred. The `CHOICE_SETS 7/7`
+>   cell in run 1 was a count of composites, not a verification of their ownership.
+>
+> Nothing measured in the table is withdrawn. What is withdrawn is the inference that an `OK` recorded
+> here is an `OK` under the present contract — it is the weaker predecessor of one. The script's own
+> header comment is the authority on the current contract.
 
 Final state proven equal to baseline, not merely equal in count: a tuple diff of
 `(name, element, value, label, sequence, inactive, language)` across all 24 rows is **identical** to
@@ -689,8 +818,10 @@ proving idempotency.
 ### 6. Live-UI verification, not just API (D3.4, D3.5)
 
 Driven in a real logged-in Chrome session (`/login.do`, identity confirmed authoritatively as
-`g_user.userName=admin`, "System Administrator", `hasRole('admin')=true`). Verified as **admin**,
-which is what the directive asks for ("Open a real case record"); §9 covers the scoped personas.
+`g_user.userName=<configured administrator>`, "System Administrator", `hasRole('admin')=true` — the
+login identifier is redacted per CR2 F11; the **role** it holds, `admin`, is the point and is left
+as written). Verified as the **`admin`-role** session, which is what the directive asks for ("Open a
+real case record"); §9 covers the scoped personas.
 
 **The four dropdowns on real record `CASE9000001`** all render as populated selects — none empty:
 
@@ -701,8 +832,16 @@ which is what the directive asks for ("Open a real case record"); §9 covers the
 | `priority` | 4 | Low, Medium, High, Critical |
 | `pending_reason` | 3 | Awaiting Info, Awaiting Third Party, Other (plus `-- None --`) |
 
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-case-form-status-choices.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-case-form-type-priority-pending.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-case-form-status-choices.png` — **NOT RETAINED** (CR2 F06)
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-case-form-type-priority-pending.png` — **NOT RETAINED** (CR2 F06)
+
+> **CORRECTION 2026-09-09 (CR2, finding F06) — every `/tmp/blitzy/scratch/…` path cited anywhere in this report is **NOT RETAINED**.**
+> That directory was agent scratch, never a repository file, and it does not
+> exist in or alongside this repository; `blitzy/screenshots/` holds no equivalent capture. The
+> descriptions of what each artefact showed are kept verbatim above and below, because they are the
+> record of what was observed — but each is now a **recorded observation with a named evidence gap**
+> rather than a citation a reader can open. Every such path in this document is marked
+> **NOT RETAINED** in place, so no citation points at something unopenable without saying so.
 
 **Task and party linkage in the UI.** On `/x_casemgmt_case_task_list.do`, **10 of 10** rows show a
 populated `Case` display value rendered as a hyperlink (TASK…1/2 → CASE9000003, 3/9 → CASE9000004,
@@ -712,8 +851,8 @@ Organization rows show a real company name (Synthetic Org Alpha ×2, Synthetic O
 Person rows a real person. Both a blank cell and a bare `sys_id` were explicitly tested for.
 **Failing rows: none.**
 
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-task-list-case-refs.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-party-list-case-and-org-refs.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-task-list-case-refs.png` — **NOT RETAINED** (CR2 F06)
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/u2-party-list-case-and-org-refs.png` — **NOT RETAINED** (CR2 F06)
 
 No row was hand-edited in the UI to make a screenshot pass; every fix was made at the source script.
 
@@ -731,7 +870,7 @@ Three independent tests were applied to every row:
 
 | Test | Result on the original 27 links / 3 grants |
 |---|---|
-| **Timestamp clustering.** 27 interactive form submissions cannot land inside two seconds | All 27 carried `sys_created_by=admin` with `sys_created_on` in `2026-09-02 19:09:55`–`19:09:56`, `sys_mod_count=0` ⇒ **script signature** |
+| **Timestamp clustering.** 27 interactive form submissions cannot land inside two seconds | All 27 carried the same `sys_created_by` — the `admin`-role account, login identifier redacted per CR2 F11 — with `sys_created_on` in `2026-09-02 19:09:55`–`19:09:56`, `sys_mod_count=0` ⇒ **script signature** |
 | **Installer-composite `sys_id`.** `post_import_remediation.js` pins link `sys_id`s to `first16(ACL)+first16(role)` | **0 of 27** matched ⇒ that script was not the author, so a *different* direct insert was |
 | **`granted_by`** (grants) | Useless as a signal on this instance: the sentinel `not-applicable` on all 3890 rows (`ISEMPTY`=0) |
 
@@ -744,6 +883,96 @@ document's own list of directly-inserted rows.
 The 3 grants needed no inference at all: they were created by this unit's own `seed_demo_data.js`
 run at `2026-09-08 18:58:04` (`ensureRoleAssignment()`, ~L724–745, inserts `sys_user_has_role`
 directly), so they were known first-hand to be direct inserts.
+
+**Per-row audit of the 27 original links — added 2026-09-09 (code review CR2, finding F08).** The
+three tests above were applied to every row, but they were tabulated one row per *test*, which
+classified all 27 only in aggregate. Directive L87 forbids skipping the per-record trace, so the trace
+is written out here, one row per record, with an explicit verdict on each. Legend for the evidence
+column:
+
+- **T1 — timestamp clustering.** The row's `sys_created_on` falls inside the two-second window
+  `2026-09-02 19:09:55`–`19:09:56` with `sys_mod_count=0`. 27 interactive form submissions cannot land
+  inside two seconds; a single script run can and did.
+- **T2 — not an installer composite.** The row's `sys_id` is not `first16(ACL)+first16(role)`, so
+  `post_import_remediation.js`'s `installerLinkSysId()` was not its author — which is what establishes
+  that a *different* direct insert was.
+- **T3 — named as a directly-inserted row in the run record.** The row appears as
+  `sys_security_acl_role_<sys_id>` in [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) §"Captured role links
+  (27)", under that document's explicit **DEVIATION** entry: a server-side background script "inserted
+  all 27 links directly (`created=27 failed=0`, relying on auto-capture)" and "Neither insert went
+  through the platform's native role-assignment action."
+
+**Two data points are not recoverable, and are declared rather than inferred or left blank:**
+
+1. **The per-row second within the T1 window.** Only the aggregate window was recorded; the instance
+   that held the rows has been torn down, so the exact `sys_created_on` of an individual row cannot be
+   re-read. Every row therefore carries the window with that stated in place of a false precision.
+2. **The per-row `operation`.** The run record identifies each link by ACL target and role only
+   (`table[.field].role`), not by operation, which is why several rows below share a (table, role) pair
+   and differ only in an operation this document cannot attribute per `sys_id`. The *set* of
+   operations is not in doubt and is reconciled in aggregate below (read 9 / write 9 / create 6 /
+   delete 3), and the pair-for-pair `(ACL, role)` matrix was compared before and after recreation with
+   no pair lost and none added.
+
+The `Created by (role)` column records the **role** the authoring session held, not a login identifier
+(CR2 F11): the underlying `sys_created_by` on all 27 rows is the configured administrator account, and
+the notable part is what it did *not* hold — `security_admin` — because a server-side background script
+is not ACL-gated and so wrote these rows without the elevation the native path would have required.
+
+| # | Old `sys_id` | ACL (table / field) | Role | Created by (role) | Created on (UTC) | Evidence | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | `bfd9ec9a938b435009aa70d19dba10d1` | `x_casemgmt_case.assigned_agent` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 2 | `f3d9ec9a938b435009aa70d19dba10cc` | `x_casemgmt_case.assigned_agent` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 3 | `bbd9ec9a938b435009aa70d19dba109d` | `x_casemgmt_case.assigned_group` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 4 | `33d9ec9a938b435009aa70d19dba10e4` | `x_casemgmt_case` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 5 | `4ce920da938b435009aa70d19dba1036` | `x_casemgmt_case` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 6 | `88e920da938b435009aa70d19dba105e` | `x_casemgmt_case` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 7 | `b7d9ec9a938b435009aa70d19dba10b4` | `x_casemgmt_case` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 8 | `fbd9ec9a938b435009aa70d19dba10e9` | `x_casemgmt_case` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 9 | `77d920da938b435009aa70d19dba1019` | `x_casemgmt_case` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 10 | `77d9ec9a938b435009aa70d19dba10a3` | `x_casemgmt_case` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 11 | `c4e920da938b435009aa70d19dba1076` | `x_casemgmt_case` | viewer | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 12 | `8ce920da938b435009aa70d19dba1047` | `x_casemgmt_case_party` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 13 | `c0e920da938b435009aa70d19dba1042` | `x_casemgmt_case_party` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 14 | `08e920da938b435009aa70d19dba103c` | `x_casemgmt_case_party` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 15 | `b3d920da938b435009aa70d19dba1031` | `x_casemgmt_case_party` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 16 | `80e920da938b435009aa70d19dba107c` | `x_casemgmt_case_party` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 17 | `fbd9ec9a938b435009aa70d19dba10ae` | `x_casemgmt_case_party` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 18 | `0ce920da938b435009aa70d19dba1070` | `x_casemgmt_case_party` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 19 | `7fd9ec9a938b435009aa70d19dba10fb` | `x_casemgmt_case_party` | viewer | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 20 | `33d920da938b435009aa70d19dba101f` | `x_casemgmt_case_task` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 21 | `04e920da938b435009aa70d19dba1053` | `x_casemgmt_case_task` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 22 | `33d9ec9a938b435009aa70d19dba10a9` | `x_casemgmt_case_task` | agent | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 23 | `f3d920da938b435009aa70d19dba1007` | `x_casemgmt_case_task` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 24 | `cce920da938b435009aa70d19dba1058` | `x_casemgmt_case_task` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 25 | `73d9ec9a938b435009aa70d19dba10ba` | `x_casemgmt_case_task` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 26 | `48e920da938b435009aa70d19dba104d` | `x_casemgmt_case_task` | manager | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+| 27 | `3bd920da938b435009aa70d19dba1001` | `x_casemgmt_case_task` | viewer | `admin` role, server-side script (no `security_admin` elevation) | `2026-09-02 19:09:55`–`19:09:56` — per-row second not retained | T1 ✔ · T2 ✔ · T3 ✔ | **DIRECT INSERT** |
+
+**Not one of the 27 — and excluded deliberately.** [`PHASE1-REBUILD.md`](./PHASE1-REBUILD.md) holds a
+**28th** `sys_security_acl_role_<sys_id>` token, `96dcd812934b435009aa70d19dba1064`. It is **not** one
+of this application's links and is not in the table above. It is the probe link that document's S1
+created **on purpose through the native path** — a `read` ACL on the throwaway probe table
+`x_casemgmt_qa5_probe_table` with role `x_casemgmt.qa5_probe_role`, attached through the ACL form's own
+"Requires role" related list under an elevated `security_admin` session, so that the platform itself
+wrote the row and the capture behaviour could be observed (PHASE1-REBUILD §S1, entries at its L58-59,
+L85, L106 and L137). Its verdict is **NATIVE**, it belongs to a different table and a different role,
+and counting it here would inflate 27 to 28.
+
+**Reconciliation: 27 + 3, original and recreated.**
+
+| Set | Count | Per role | Per table | Verdict |
+|---|---|---|---|---|
+| Original `sys_security_acl_role` links | **27** | manager 14 · agent 10 · viewer 3 | `x_casemgmt_case` 11 (8 on the table + 3 on its fields: `assigned_agent` 2, `assigned_group` 1) · `_case_task` 8 · `_case_party` 8 | **DIRECT INSERT** — all 27, per row above |
+| Recreated `sys_security_acl_role` links | **27** | manager 14 · agent 10 · viewer 3 | `x_casemgmt_case` 11 · `_case_task` 8 · `_case_party` 8 | **NATIVE** — all 27, per row in §8 |
+| Original `sys_user_has_role` grants | **3** | one per role | n/a | **DIRECT INSERT** — all 3, per row in §8 |
+| Recreated `sys_user_has_role` grants | **3** | one per role | n/a | **NATIVE** — all 3, per row in §8 |
+| Native probe link (not this application's) | 1 | n/a — `x_casemgmt.qa5_probe_role` | `x_casemgmt_qa5_probe_table` | **NATIVE**, and **excluded** from every figure above |
+
+The two per-role splits and the two per-table splits were derived independently: the 14 / 10 / 3 and
+11 / 8 / 8 above are counted from the 27 old `sys_id`s in the table, and the same splits were measured
+live on the 27 new rows in §8. Nothing is missing and nothing is double-counted: 27 old rows deleted,
+27 new rows created, 3 old grants deleted, 3 new grants created.
 
 **Verdict: all 30 records failed the native-authoring trace and every one was deleted and
 recreated.** Per INTERP-R1 the breakdown is reported on both dimensions: per role **manager 14 /
@@ -766,35 +995,56 @@ pre-populated exactly as the related list does it — set the role and click **S
 verified before batching: the deleted row answered HTTP 404 and was captured as a `DELETE`, the new
 row as an `INSERT_OR_UPDATE`, both in the app's Default set.
 
-| # | New `sys_id` | Role | Op | ACL (table / field) | Created by | Created on (UTC) |
-|---|---|---|---|---|---|---|
-| 1 | `9aa4e780939f0b1009aa70d19dba1016` | manager | read | `x_casemgmt_case` | admin | 2026-09-08 19:15:30 |
-| 2 | `ca15a7c0939f0b1009aa70d19dba10bf` | manager | create | `x_casemgmt_case` | admin | 2026-09-08 19:17:22 |
-| 3 | `e3256bc0939f0b1009aa70d19dba10c5` | agent | create | `x_casemgmt_case` | admin | 2026-09-08 19:17:45 |
-| 4 | `45452fc0939f0b1009aa70d19dba10b0` | manager | delete | `x_casemgmt_case` | admin | 2026-09-08 19:18:08 |
-| 5 | `3a552304939f0b1009aa70d19dba1062` | viewer | read | `x_casemgmt_case` | admin | 2026-09-08 19:18:30 |
-| 6 | `5475e304939f0b1009aa70d19dba103e` | agent | read | `x_casemgmt_case` | admin | 2026-09-08 19:18:53 |
-| 7 | `3d856704939f0b1009aa70d19dba10f7` | agent | write | `x_casemgmt_case` | admin | 2026-09-08 19:19:16 |
-| 8 | `af956b04939f0b1009aa70d19dba1077` | manager | write | `x_casemgmt_case` | admin | 2026-09-08 19:19:39 |
-| 9 | `09b56f04939f0b1009aa70d19dba10b3` | agent | write | `x_casemgmt_case.assigned_agent` | admin | 2026-09-08 19:20:02 |
-| 10 | `bac56b44939f0b1009aa70d19dba1082` | manager | write | `x_casemgmt_case.assigned_agent` | admin | 2026-09-08 19:20:25 |
-| 11 | `d0e52f44939f0b1009aa70d19dba10b8` | manager | write | `x_casemgmt_case.assigned_group` | admin | 2026-09-08 19:20:48 |
-| 12 | `39f5ef44939f0b1009aa70d19dba1097` | manager | create | `x_casemgmt_case_party` | admin | 2026-09-08 19:21:11 |
-| 13 | `2306e384939f0b1009aa70d19dba1056` | agent | create | `x_casemgmt_case_party` | admin | 2026-09-08 19:21:34 |
-| 14 | `0d266784939f0b1009aa70d19dba10ea` | manager | delete | `x_casemgmt_case_party` | admin | 2026-09-08 19:21:57 |
-| 15 | `aa366b84939f0b1009aa70d19dba1007` | viewer | read | `x_casemgmt_case_party` | admin | 2026-09-08 19:22:20 |
-| 16 | `94562f84939f0b1009aa70d19dba1047` | agent | read | `x_casemgmt_case_party` | admin | 2026-09-08 19:22:42 |
-| 17 | `3966ef84939f0b1009aa70d19dba1058` | manager | read | `x_casemgmt_case_party` | admin | 2026-09-08 19:23:05 |
-| 18 | `9376a3c4939f0b1009aa70d19dba108e` | agent | write | `x_casemgmt_case_party` | admin | 2026-09-08 19:23:28 |
-| 19 | `859667c4939f0b1009aa70d19dba10de` | manager | write | `x_casemgmt_case_party` | admin | 2026-09-08 19:23:51 |
-| 20 | `aea62bc4939f0b1009aa70d19dba10ab` | manager | create | `x_casemgmt_case_task` | admin | 2026-09-08 19:24:14 |
-| 21 | `d0c62fc4939f0b1009aa70d19dba1085` | agent | create | `x_casemgmt_case_task` | admin | 2026-09-08 19:24:37 |
-| 22 | `b1d6efc4939f0b1009aa70d19dba1019` | manager | delete | `x_casemgmt_case_task` | admin | 2026-09-08 19:25:00 |
-| 23 | `5be6a308939f0b1009aa70d19dba1088` | agent | read | `x_casemgmt_case_task` | admin | 2026-09-08 19:25:23 |
-| 24 | `81076708939f0b1009aa70d19dba10ba` | viewer | read | `x_casemgmt_case_task` | admin | 2026-09-08 19:25:46 |
-| 25 | `2a172b08939f0b1009aa70d19dba1099` | manager | read | `x_casemgmt_case_task` | admin | 2026-09-08 19:26:09 |
-| 26 | `0c372f08939f0b1009aa70d19dba1032` | agent | write | `x_casemgmt_case_task` | admin | 2026-09-08 19:26:32 |
-| 27 | `3947af08939f0b1009aa70d19dba10f8` | manager | write | `x_casemgmt_case_task` | admin | 2026-09-08 19:26:54 |
+**Per-row NATIVE verdict — evidence legend, added 2026-09-09 (CR2 F08).** Every row below carries an
+explicit verdict, and the four checks behind it are per-row rather than aggregate:
+
+- **N1 — brand-new `sys_id`.** The row's `sys_id` appears in none of the 27 direct-inserted `sys_id`s
+  audited in §7, so it is a new record and not a survivor of the audited set. (New `sys_id`s are
+  inherent to recreating a link and are not a defect — INTERP-R1.)
+- **N2 — not an installer composite.** The `sys_id` is not `first16(ACL)+first16(role)`, so
+  `post_import_remediation.js` did not author it.
+- **N3 — its own `sys_created_on`, ~23 s from its neighbours.** The 27 rows carry 27 *distinct*
+  timestamps spanning 19:15:30 → 19:26:54 in roughly 23-second steps — the cadence of one interactive
+  form submission after another, in direct contrast to the audited set's two-second batch.
+- **N4 — captured as an `INSERT_OR_UPDATE` in the app's Default set**, paired with the `DELETE` capture
+  of the row it replaced; each pair was verified before the next was started (the deleted row answering
+  HTTP 404).
+
+The `Created by (role)` column records the **roles the authoring session held** — the elevated
+`security_admin` plus `admin` — rather than a login identifier (CR2 F11). Elevation was proven
+effective, not assumed: the ACL form's "Requires role" related list changed from read-only to editable.
+This is the substantive difference from the audited set, which was written by a non-elevated background
+script that bypassed ACL evaluation entirely.
+
+| # | New `sys_id` | Role | Op | ACL (table / field) | Created by (role) | Created on (UTC) | Evidence | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `9aa4e780939f0b1009aa70d19dba1016` | manager | read | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:15:30 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 2 | `ca15a7c0939f0b1009aa70d19dba10bf` | manager | create | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:17:22 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 3 | `e3256bc0939f0b1009aa70d19dba10c5` | agent | create | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:17:45 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 4 | `45452fc0939f0b1009aa70d19dba10b0` | manager | delete | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:18:08 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 5 | `3a552304939f0b1009aa70d19dba1062` | viewer | read | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:18:30 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 6 | `5475e304939f0b1009aa70d19dba103e` | agent | read | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:18:53 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 7 | `3d856704939f0b1009aa70d19dba10f7` | agent | write | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:19:16 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 8 | `af956b04939f0b1009aa70d19dba1077` | manager | write | `x_casemgmt_case` | `security_admin` (elevated), `admin` | 2026-09-08 19:19:39 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 9 | `09b56f04939f0b1009aa70d19dba10b3` | agent | write | `x_casemgmt_case.assigned_agent` | `security_admin` (elevated), `admin` | 2026-09-08 19:20:02 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 10 | `bac56b44939f0b1009aa70d19dba1082` | manager | write | `x_casemgmt_case.assigned_agent` | `security_admin` (elevated), `admin` | 2026-09-08 19:20:25 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 11 | `d0e52f44939f0b1009aa70d19dba10b8` | manager | write | `x_casemgmt_case.assigned_group` | `security_admin` (elevated), `admin` | 2026-09-08 19:20:48 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 12 | `39f5ef44939f0b1009aa70d19dba1097` | manager | create | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:21:11 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 13 | `2306e384939f0b1009aa70d19dba1056` | agent | create | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:21:34 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 14 | `0d266784939f0b1009aa70d19dba10ea` | manager | delete | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:21:57 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 15 | `aa366b84939f0b1009aa70d19dba1007` | viewer | read | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:22:20 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 16 | `94562f84939f0b1009aa70d19dba1047` | agent | read | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:22:42 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 17 | `3966ef84939f0b1009aa70d19dba1058` | manager | read | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:23:05 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 18 | `9376a3c4939f0b1009aa70d19dba108e` | agent | write | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:23:28 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 19 | `859667c4939f0b1009aa70d19dba10de` | manager | write | `x_casemgmt_case_party` | `security_admin` (elevated), `admin` | 2026-09-08 19:23:51 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 20 | `aea62bc4939f0b1009aa70d19dba10ab` | manager | create | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:24:14 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 21 | `d0c62fc4939f0b1009aa70d19dba1085` | agent | create | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:24:37 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 22 | `b1d6efc4939f0b1009aa70d19dba1019` | manager | delete | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:25:00 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 23 | `5be6a308939f0b1009aa70d19dba1088` | agent | read | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:25:23 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 24 | `81076708939f0b1009aa70d19dba10ba` | viewer | read | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:25:46 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 25 | `2a172b08939f0b1009aa70d19dba1099` | manager | read | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:26:09 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 26 | `0c372f08939f0b1009aa70d19dba1032` | agent | write | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:26:32 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
+| 27 | `3947af08939f0b1009aa70d19dba10f8` | manager | write | `x_casemgmt_case_task` | `security_admin` (elevated), `admin` | 2026-09-08 19:26:54 | N1 ✔ · N2 ✔ · N3 ✔ · N4 ✔ | **NATIVE** |
 
 Evidence that these are natively authored: **27 of 27 carry brand-new `sys_id`s** (no row survives
 from the direct-inserted set), **0** are installer composites, and there are **27 distinct
@@ -810,25 +1060,98 @@ slushbucket. The role was moved with the screen's own `remove_from_collection_bu
 saves** — one save diffs initial against final state, so a delete-and-recreate in a single save is a
 no-op.
 
-| User | Role | New `sys_id` | Created (UTC) | Old direct-insert `sys_id` |
-|---|---|---|---|---|
-| `x_casemgmt_demo_manager` | `x_casemgmt_case_manager` | `203beb4093df0b1009aa70d19dba1011` | 19:43:56 | `20b02f48935f0b1009aa70d19dba102b` |
-| `x_casemgmt_demo_agent` | `x_casemgmt_case_agent` | `3d4b6f4093df0b1009aa70d19dba10bc` | 19:44:18 | `30b02f48935f0b1009aa70d19dba1032` |
-| `x_casemgmt_demo_viewer` | `x_casemgmt_case_viewer` | `c35ba38093df0b1009aa70d19dba103d` | 19:44:39 | `70b02f48935f0b1009aa70d19dba1037` |
+Per-row, for both the old and the new row of each grant — **columns and verdicts added 2026-09-09
+(CR2 F08)**, because the table previously carried neither a creator nor a verdict:
 
-The decisive proof of native authoring here is not the timestamp but a side effect no direct insert
-produces: alongside each new grant **the platform re-derived its `inherited=true`
+| User | Role | New `sys_id` | New: created by (role) | New: created (UTC) | New: evidence | New verdict | Old direct-insert `sys_id` | Old: created by (role) | Old: created (UTC) | Old: evidence | Old verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `x_casemgmt_demo_manager` | `x_casemgmt_case_manager` | `203beb4093df0b1009aa70d19dba1011` | `security_admin` (elevated), `admin` | 19:43:56 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `20b02f48935f0b1009aa70d19dba102b` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
+| `x_casemgmt_demo_agent` | `x_casemgmt_case_agent` | `3d4b6f4093df0b1009aa70d19dba10bc` | `security_admin` (elevated), `admin` | 19:44:18 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `30b02f48935f0b1009aa70d19dba1032` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
+| `x_casemgmt_demo_viewer` | `x_casemgmt_case_viewer` | `c35ba38093df0b1009aa70d19dba103d` | `security_admin` (elevated), `admin` | 19:44:39 | G1 ✔ · G2 ✔ · G3 ✔ | **NATIVE** | `70b02f48935f0b1009aa70d19dba1037` | `admin` role, server-side script | `2026-09-08 18:58:04` | D1 ✔ (first-hand) | **DIRECT INSERT** |
+
+Evidence legend for the grants:
+
+- **G1 — its own `sys_created_on` from a separate save.** The three new rows carry three distinct
+  timestamps ~22 s apart (19:43:56 / 19:44:18 / 19:44:39), one per *Edit Members* save.
+- **G2 — the platform re-derived a companion row at the moment of the grant.** Alongside each new
+  grant the platform wrote an `inherited=true` `snc_required_script_writer_permission` row with
+  `sys_created_by=system` (`603beb40…1015`, `7d4b6f40…10c0`, `075ba380…1041`). That is the strongest
+  native-authoring evidence in this section — a side effect of the platform's own user-provisioning
+  logic, which the *Edit Members* save invokes. Stated precisely, and consistently with the **CR2 F10**
+  correction below the table: what G2 establishes is that the **platform**, not the operator, wrote
+  those three rows at grant time. It is kept as native-authoring evidence **and** reported there as a
+  **BLOCKING capability gap**, because provisioning a scoped-application persona through the native
+  path makes the platform add a stock role. Both statements are true and neither is withdrawn.
+- **G3 — the table total moved by 6, not 3.** `sys_user_has_role` went 3890 → 3884 across the delete
+  pass (3 grants + 3 companions) and back to **3890** after the re-grant — the companion mechanism
+  measured at the table level rather than inferred from three rows. Read carefully, that same figure
+  says the **pre-existing** grants also had companions beside them, which the delete pass removed; so
+  the mere *presence* of a companion is not by itself a discriminator between the two authoring paths.
+  What discriminates is the re-derivation: three new `system`-authored rows appearing at the instant of
+  three native saves.
+- **D1 — creation timestamp and author, known first-hand.** All three old rows were created at
+  `2026-09-08 18:58:04` by this unit's own `seed_demo_data.js` run, whose `ensureRoleAssignment()`
+  (~L724–745) inserts `sys_user_has_role` directly. No inference was needed for these three, which is
+  why their evidence column carries one check rather than three: the author is known, not deduced. The
+  aggregate `granted_by` test recorded above is useless as a signal on this instance (the sentinel
+  `not-applicable` on all 3890 rows), and it is not claimed as evidence here.
+
+The decisive proof of native authoring here is not the timestamp but a side effect that the platform's
+own user-provisioning logic produces at the moment of a native save, and an operator's insert does not
+invoke (stated with its one caveat under **G3** in the legend above): alongside each new grant **the
+platform re-derived its `inherited=true`
 `snc_required_script_writer_permission` companion row with `sys_created_by=system`**
 (`603beb40…1015`, `7d4b6f40…10c0`, `075ba380…1041`). The delete pass had removed those companions
 too — `sys_user_has_role` went 3890 → 3884 (3 grants + 3 companions) and back to **3890** after the
 native re-grant.
 
+> **CORRECTION 2026-09-09 (code review CR2, finding F10) — that companion row is a BLOCKING capability
+> gap, and this report previously contradicted itself about it.** §9 of this section closed with the
+> bare sentence "No global ACL was created and no stock role was granted", which a reader could weigh
+> directly against the companion-row evidence above. Both halves cannot be true as written. The precise
+> position, in two parts:
+>
+> - **The stock role is NOT authored by this package.** Three checks, each re-run for this correction:
+>   the canonical Update Set at
+>   `update-set/x_casemgmt_case_management_update_set.xml` contains **0** occurrences of
+>   `snc_required_script_writer_permission`; it contains **0** `sys_user_role_contains` payloads; and
+>   all three `roles/*.xml` artifacts carry an empty self-closing `<includes_roles/>`
+>   (`roles/sys_user_role_x_casemgmt_case_manager.xml` L81,
+>   `…_case_agent.xml` L98, `…_case_viewer.xml` L109). Nothing in this repository grants it, inherits
+>   it, or names it. The companion is derived by the **platform's own user-provisioning logic** when a
+>   role is granted through the native path — which is exactly why it is evidence of native authoring.
+> - **It IS effective on each demo persona.** Measured by impersonation, not inferred: the viewer's own
+>   session reports roles `snc_required_script_writer_permission, x_casemgmt_case_viewer` (§9 below),
+>   and the agent's likewise. So a scoped-role persona provisioned by the native path ends up holding a
+>   stock role in addition to its one scoped role.
+>
+> **Classification: BLOCKING capability gap — reported, not accepted and not worked around.** A
+> scoped-application persona cannot be provisioned through the platform's own native role-grant path
+> without the platform adding a stock role. Removing it would mean writing global `sys_user_has_role`
+> rows this package does not own, and **AAP §0.3.2 forbids "global scope changes of any kind"** — "no
+> edits to `sys_user`, `sys_user_group`, `sys_user_role` (except the three new scoped roles created in
+> scope), `core_company`, `task`, `incident`, or **any out-of-the-box ServiceNow tables**", which
+> `sys_user_has_role` is; AAP
+> §0.7.2's Minimal-Change Clause and §0.3.2's closing bullet then require a gap PDI cannot address to
+> be **stopped and reported** rather than substituted. So it is reported here, cross-referenced from
+> `../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` **ADV-3**, and no remedy is applied. The measurements above
+> — the three companion `sys_id`s, `sys_created_by=system`, `inherited=true`, and the 3890 → 3884 →
+> 3890 movement — are unchanged; only the classification is.
+
 Screenshots (each shows the platform's own "Edit Members" screen with the role in the assigned Roles
 List before Save, plus the resulting user form), all under
-`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/`:
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/screenshots/` — **NOT RETAINED**
+(CR2 F06):
 `u2-native-role-grant-x_casemgmt_demo_manager.png`, `…-manager-userform.png`,
 `u2-native-role-grant-x_casemgmt_demo_agent.png`, `…-agent-userform.png`,
 `u2-native-role-grant-x_casemgmt_demo_viewer.png`, `…-viewer-userform.png`.
+
+**Evidence status of those six captures (CR2 F06).** The files are gone with the scratch directory and
+cannot be re-taken — the instance no longer holds the application. What they showed is recorded above
+and stands as a recorded observation; it is no longer independently inspectable. The native-authoring
+verdict on these three grants therefore rests on the two pieces of evidence that **are** in this
+document: the per-row timestamps in the table above, and the platform-derived companion rows recorded
+in the paragraph above them (whose classification is corrected under CR2 F10 in §9).
 
 **Final state, re-measured after all recreation:** 27 scoped links, manager 14 / agent 10 / viewer 3,
 3 grants, every row tracing to native creation.
@@ -844,11 +1167,14 @@ this checkpoint's window is **0**. Distribution: `x_casemgmt_case` 8, `_case_tas
 
 Personas have no passwords, so the platform's own impersonation was used
 (`impersonate_dialog.do` → `session.onlineImpersonate()`), each persona in its own throwaway browser
-profile so the admin session used for the recreation work was never mutated.
+profile so the elevated administrator session used for the recreation work was never mutated.
 
 **Viewer** — identity confirmed on a real page: `g_user.userName=x_casemgmt_demo_viewer`, roles
-`snc_required_script_writer_permission, x_casemgmt_case_viewer`. That the role is present and
-effective is itself live proof that the natively re-granted row works. All **10** cases readable
+`snc_required_script_writer_permission, x_casemgmt_case_viewer`. That the scoped role is present and
+effective is itself live proof that the natively re-granted row works — and this same reading is the
+evidence that the **stock** `snc_required_script_writer_permission` role is effective on the persona
+too, which §8's CR2 F10 correction classifies as a **BLOCKING capability gap** of the native
+role-grant path rather than a property of this package. All **10** cases readable
 (read All). On `CASE9000001`: `g_form.getEditableFields()` returns **`[]`**, no Update, no Insert and
 no Delete control renders, and all seven business fields render read-only ⇒ **read-only confirmed**.
 Structurally guaranteed too: the viewer role's only 3 ACL links are all `operation=read`.
@@ -876,7 +1202,16 @@ consequence the party list's `organization` column is blank in all 8 rows for bo
 list shows real company names to admin (§6). This is the project's recorded **ADV-1**:
 `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` ~L922, restated ~L2052–2057 and N8 ~L2242 — closing it
 would need a global ACL or a stock-role grant, both forbidden (AAP §0.3.2 names `core_company`
-explicitly). **No global ACL was created and no stock role was granted.** D3.5 was therefore verified
+explicitly). **No global ACL was created here, and this work granted no stock role.** What must be
+stated alongside that, because a bare version of this sentence is what CR2 F10 found contradicting §8:
+**the platform itself derived a stock `snc_required_script_writer_permission` companion row on each of
+the three personas** when each scoped role was granted through the native path. That role is not
+authored, inherited or named anywhere in this repository — the canonical package holds **0**
+occurrences of it and **0** `sys_user_role_contains` payloads, and all three `roles/*.xml` carry an
+empty self-closing `<includes_roles/>` — and it **is** effective on each persona, as the impersonation
+readings above show. See the **CR2 F10 correction in §8**: that is a **BLOCKING capability gap** of the
+platform's native role-grant path, reported rather than accepted, because removing it would require
+writing global `sys_user_has_role` rows AAP §0.3.2 forbids this package to own. D3.5 was verified
 as admin, which is what the directive's wording asks for.
 
 ### 10. Collateral: what changed, and nothing else
@@ -896,7 +1231,8 @@ Every other line is byte-identical: rows 10/10/8; `sys_dictionary` + `sys_docume
 `sys_security_acl_role` 27; demo users 3; demo group 1; `core_company` 179.
 
 The authoritative footprint is the app's own capture. Every `sys_update_xml` row created in this
-checkpoint's window — **58 in total, all by `admin`, all in the app's Default set** — is:
+checkpoint's window — **58 in total, all authored by the `admin`-role account (login identifier
+redacted per CR2 F11), all in the app's Default set** — is:
 
 | Type | Action | Count | What it is |
 |---|---|---|---|
@@ -910,9 +1246,12 @@ portal payloads. Records created in the window, counted directly: `sys_security_
 `sys_dictionary` **0**, `sys_db_object` **0**, `sys_hub_flow` **0**, `sys_script` **0**, `sys_scope`
 **0**, `sys_email` / `sys_email_account` **0 / 0** (no SMTP interaction). No Store app was installed.
 The demo users hold exactly six role rows between them: their one scoped role (`inherited=false`,
-`by=admin` — the native grants) plus `snc_required_script_writer_permission` (`inherited=true`,
-`by=system` — platform-derived, not granted here). Directive L224–225 is intact: no field,
-dictionary, table or ACL was added, removed or edited.
+granted by the elevated `admin`/`security_admin` session — the native grants) plus
+`snc_required_script_writer_permission` (`inherited=true`, `by=system` — **platform-derived, not
+granted here, and reported as a BLOCKING capability gap under the CR2 F10 correction in §8**: it is
+effective on all three personas, it is absent from every artifact in this repository, and AAP §0.3.2
+forbids the global `sys_user_has_role` write that removing it would need). Directive L224–225 is
+intact: no field, dictionary, table or ACL was added, removed or edited.
 
 **Disclosure — one unintended artifact, retained deliberately.** `sys_ui_section`
 `726167c8935f0b1009aa70d19dba102e`, a Form Layout for `x_casemgmt_case`'s Default view, was created
@@ -926,9 +1265,9 @@ data-model change. It was **not** deleted: removing platform-materialised form m
 degrading the very form the next steps must verify post-commit. It adds **one extra `Form Layout`
 payload** to the Step 5a export — noted so that inventory is not a surprise.
 
-The only other side effect is one `sys_user_preference` row on the **admin** account
-(`name=recent.impersonations`), unavoidable when using the impersonation §9 requires. It is a UI
-preference of the admin user, not an app artifact.
+The only other side effect is one `sys_user_preference` row on the **configured administrator's**
+account (`name=recent.impersonations`), unavoidable when using the impersonation §9 requires. It is a
+UI preference of that account, not an app artifact.
 
 **FALLBACK package: zero interaction of any kind** — never opened, read, checksummed, archived,
 deleted, counted or compared. Repository-level proof: `git status --porcelain` under `update-set/`
@@ -977,7 +1316,7 @@ post-commit checks in §4:
 | `sys_user_role` | 3 |
 | `sys_security_acl` (scoped) | 26 |
 | `sys_security_acl_role` (scoped) | 27 — per role manager 14 / agent 10 / viewer 3; per table case 11 / task 8 / party 8 |
-| `sys_user_has_role` | 3 |
+| `sys_user_has_role` | 3 — **measured on the pre-export instance, where Step 4's native grants were live. This target was NOT met after the Step 5c commit: post-commit it read 0, and no update set on this release can carry it (CR2 F09 — a BLOCKED capability gap, not a post-commit step that satisfies the gate).** |
 | Flows | 7, all active and published |
 | ATF | 20 tests / 1 suite / 180 steps / 20 suite-tests |
 | Scope | `sys_scope` for `x_casemgmt` = exactly one record, `sys_id` `82b99028936f74320d74d6f88357a5af` |
@@ -1002,8 +1341,9 @@ DevTools Protocol. The dialog's own defaults were accepted (version `1.0.0`, *In
 checked) and the platform reported "Successfully published … Succeeded in 10 Seconds". This path
 packages every application file regardless of what any Update Set happened to capture, which is why it
 was chosen over exporting a current Update Set. Screenshots:
-`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/shots/u3-5a-export-publish-dialog.png`
-and `…/shots/u3-5a-export-publish.png`.
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/shots/u3-5a-export-publish-dialog.png` — **NOT RETAINED** (CR2 F06)
+and `…/shots/u3-5a-export-publish.png` — **NOT RETAINED** (CR2 F06). Both were agent scratch and are absent
+from this repository; what they showed is recorded in the sentence above them.
 
 **Two things the publish alone did not carry, and how they were captured — package production, not a fix
 cycle.** Verifying the package *before* the teardown is part of producing it, so neither of these
@@ -1098,8 +1438,10 @@ zero records, an empty value or a malformed `sys_id`, nothing would have been de
 `is_default=true`, 96 children), `8aeaf38093534b1009aa70d19dba10ff` (complete, "gate candidate", 530
 children). Retrieved sets: `0b3b7452934f435009aa70d19dba100d` (committed, 988 children),
 `8ebb770493534b1009aa70d19dba102a` (loaded, 530 children). Three unrelated scopes' "Default" sets were
-identified and left alone. The FALLBACK package's own record was excluded structurally, by `sys_id`, from
-every sweep and every count, and was never read.
+identified and left alone. The FALLBACK package's own record was excluded structurally, before
+enumeration, by the null-safe predicate stated in §5 of Step 1-2 (`sys_id is empty OR sys_id !=
+9929f50d…`, the `ISEMPTY` OR term being what keeps a NULL-keyed row from slipping past a bare `!=`).
+It was never read, and no property of it is published anywhere in this section.
 
 **Removal.** `deleteApplication` with `sysparm_delete_all=true`, which returned progress worker
 `530d33c493534b1009aa70d19dba1082`; its trail shows the tables being dropped, the flow actions deleted
@@ -1114,9 +1456,13 @@ the scope `sys_id`**, which reaches the 431 of 530 child names that contain no `
 (names like `sys_atf_step_<sys_id>`). A name-pattern purge cannot find those, which is why earlier
 attempts in this project left "newer local update" residue behind.
 
-**All ten zero-state checks, raw:**
+**All ten zero-state checks — normalized summary of what each check returned, not the raw capture:**
 
-| # | Check | Result |
+Every figure in the table below is a **derived count**, transcribed from the run at the time. It is
+not the verbatim request, HTTP status and response body; those were written to an agent scratch
+directory that this repository does not retain (see the dated correction directly after the table).
+
+| # | Check | Normalized result |
 | --- | --- | --- |
 | 1 | `sys_scope` for `x_casemgmt` | 0 — body `[]` |
 | 2 | `x_casemgmt_case` endpoint | **HTTP 400** `"Invalid table x_casemgmt_case"` |
@@ -1125,9 +1471,59 @@ attempts in this project left "newer local update" residue behind.
 | 5 | `sys_user_role` for the three roles | 0 |
 | 6 | `sys_choice` for the three tables | 0 |
 | 7 | `sys_number` for the three tables | 0 |
-| 8 | `sys_remote_update_set` `nameLIKEx_casemgmt` (FALLBACK's own record excluded) | 0 |
+| 8 | `sys_remote_update_set`, task-owned residue under the exclusion predicate stated below | 0 |
 | 9 | `sys_update_set` `nameLIKEx_casemgmt`, and app-owned sets | 0 and 0 |
-| 10 | scoped `sys_security_acl_role` / `sys_user_has_role` / `sys_dictionary` / `sys_db_object` / `sys_documentation` | 0 / 0 / 0 / 0 / 0 |
+| 10a | scoped `sys_security_acl_role` (by `sys_user_role.name` **and** by `sys_scope`) | 0 |
+| 10b | `sys_user_has_role` for the three scoped roles | 0 |
+| 10c | `sys_dictionary` for the three tables | 0 |
+| 10d | `sys_db_object` for the three tables | 0 |
+| 10e | `sys_documentation` for the three tables | 0 |
+
+Rows 10a-10e are the one check the directive counts as check 10, reported per class: each of the five
+is a distinct high-risk class and an aggregate cell would let a non-zero in one hide behind zeros in
+the others. Check 8's exclusion is **structural and null-safe**, and it is the predicate rather than a
+subtraction:
+
+```
+keep row  ⇔  sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90
+```
+
+expressed as `addQuery('sys_id','!=',X).addOrCondition('sys_id','ISEMPTY')` — the `!=` term alone
+drops NULL-valued rows on this platform, which is the trap the Step 8 survivor hunt was caught by
+(§6 of Step 8). The count reported for check 8 is the **task-owned** residue that survives that
+predicate; no total that includes the excluded record is published, and no figure here is a raw total
+minus it.
+
+> **CORRECTION 2026-09-09 (code review CR2, finding F06) — the Step 5b zero-state gate is
+> EVIDENCE-UNPROVEN AT RAW LEVEL.** The table above was previously headed "All ten zero-state checks,
+> raw". It is not raw: it holds derived counts with no verbatim request, no timestamp per check and no
+> HTTP status paired with its response body. The verbatim captures for **this** pass — the exact
+> `curl` invocations, statuses and bodies — were written to an agent scratch directory
+> (`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/`, **NOT RETAINED** — the directory
+> does not exist in or alongside this repository, and `blitzy/screenshots/` holds no equivalent), so
+> they are no longer available for inspection and this gate **cannot be independently re-verified from
+> retained material**. The counts stand as *reported as recorded at the time*, and nothing about them
+> is withdrawn — what is withdrawn is the claim that they constitute raw proof.
+>
+> Why that distinction is load-bearing here specifically: Step 5b is the **pre-commit** gate, the one
+> that establishes the §4 commit landed on a genuine zero state. And §14 of Step 1-2 records this
+> platform's own trap — an invalid field in `sysparm_query` is **silently ignored** and the query
+> answers with the unfiltered table total or, filtered differently, with a `0` that means "the filter
+> was discarded" rather than "the class is empty". A bare `0` from such a query is
+> **indistinguishable** from a genuine `0`; only the raw request-and-body pair distinguishes them.
+> That is precisely why the raw capture mattered, and precisely what is missing.
+>
+> **The boundary, so this is not read wider than it is.** The **Step 8** teardown (§7 of the Step 8
+> section) carries the verbatim `curl` command **and** the raw response body for all ten checks, in the
+> report itself; it is proven from retained material and **remains proven**. The **Step 1-2** teardown's
+> §6 table sits between the two: it carries a run timestamp (`2026-09-08T18:09:31Z`) and a raw response
+> body per check, but not the verbatim request line for every check, and its check 10 reports nine
+> classes in a single cell with a per-class `0` each. **Step 5b** — this table — is the weakest of the
+> three: normalized counts only. So a reader should not conclude that the teardown as a whole is
+> unevidenced. What is unaffected by this correction, and evidenced in this document: the
+> `deleteApplication` mechanism with `sysparm_delete_all=true`, the line-34 guard applied fresh at each
+> of the three teardowns (§3 here, §3 of Step 1-2, §2 of Step 8), the explicit residue ledger above, and
+> the collateral totals in §7 of Step 1-2 and §8 of Step 8.
 
 Beyond the ten, also proven zero: `sys_update_version` by application and by name, `sys_metadata`,
 `sys_metadata_delete`, orphan `sys_update_xml`, and the demo base rows. The collision preconditions were
@@ -1182,8 +1578,11 @@ rather than argued away:
 
 - The three non-installing payloads were **removed** from the package (see the CR1 amendment at the top
   of this report), so a commit of the bytes that ship has nothing in it that the loader will refuse on
-  this release. The role grants are delivered by the mandatory post-commit step in
-  [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md).
+  this release. The role grants are **not delivered by the deliverable at all**: the manual sequence a
+  deployer can run instead is in
+  [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), and per the
+  **CR2 F09 correction** at the top of this report that manual step is a workaround for a **BLOCKED
+  capability gap** — it does not make AAP §0.7.3 Gate 3 or §0.7.4 satisfied.
 - The gate evidence in this section therefore attaches to the pre-amendment bytes, and the amended
   bytes are **not** gated. That is stated at the top of this report and in
   [`../deployment.md`](../deployment.md), and it is the recipient's first deployment step.
@@ -1294,7 +1693,9 @@ Nothing was committed. Diagnosis root-caused it to three distinct mechanisms, ea
    set because the teardown ran from a global session. *Fix:* purge `sys_update_xml` by
    `application = <scope>` regardless of which set owns the row (29 rows: 27 Access Roles, 1 Custom
    Application DELETE, 1 Table), plus 12 `sys_update_version` rows findable only by `record_name`. The
-   FALLBACK package's 926 children and the candidate's own were skipped by `sys_id` and left intact.
+   The excluded package's children and the candidate's own were skipped by the null-safe `sys_id` predicate
+   (`sys_id is empty OR sys_id != 9929f50d…`) and left intact — skipped before enumeration, and neither
+   opened nor counted (CR2 F07).
 
 A probe preview then read **error 0, warning 0**, validating all three fixes. **Classification:
 NON-CRITICAL** against every condition — each root cause was identified to a specific record or platform
@@ -1331,10 +1732,21 @@ Neither is a gate item; both are stated here so nobody downstream reads them as 
   (`sys_security_acl_role` = 27 ✓), both of which transported.
   **CR1 F01 update:** the three payloads have been removed from the package, because shipping a payload
   that is known to be refused buys nothing and costs the recipient a commit that reports failures. The
-  gap itself is unchanged and is now recorded as blocking, with the mandatory post-commit step written
+  gap itself is unchanged and is now recorded as blocking, with the manual sequence written
   out in [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) and its
-  verification query. `AAP §0.7.4`'s "3 users, one per role" is therefore satisfied by the package plus
-  one documented step, not by the commit alone.
+  verification query.
+
+  > **CORRECTION 2026-09-09 (CR2, finding F09).** This bullet previously closed "`AAP §0.7.4`'s '3
+  > users, one per role' is therefore satisfied by the package plus one documented step, not by the
+  > commit alone." That sentence is **withdrawn**: a documented manual write performed after the
+  > commit does not satisfy a gate on the deliverable. The corrected verdict, stated once at the top
+  > of this report and consistently everywhere it appears: the **schema half** of access control
+  > transports and is proven (26 scoped ACLs, 27 of 27 role links, one commit, no remediation script);
+  > the **assignment half** does not transport by any update set on this release and is a **BLOCKED
+  > platform capability gap**, leaving **AAP §0.7.3 Gate 3 and AAP §0.7.4 UNSATISFIED**. Every
+  > measurement in this bullet is unchanged — only the verdict is. The consequence is measured in
+  > Step 7 §5-6: the sixteen ATF failures are the measurement of this one blocked gate.
+
 - **`sys_grid_canvas_pane` = 0.** The documented consequence of fix (2) above — **and the diagnosis
   under it was wrong.** `sys_portal` rows are in fact carried by this package (8 of them, with 96
   preference rows), so nothing prevented the pane rows from travelling; what defeated them was the
@@ -1579,15 +1991,31 @@ impersonates one fails at its first persona-context step.** Four independent mea
    `g_form.getValue('number') = "CASE9000003"` and `g_form.getValue('status') = "In Progress"`. The client
    error appears only under the role-less persona.
 
-Why the grants are absent is **already documented, and accepted**: §Step 5-6 §7 of this report proves at
+Why the grants are absent is **already documented, and reported as blocking**: §Step 5-6 §7 of this report
+proves at
 record level that Role Management V2 owns `sys_user_has_role` on this release, that the update-set loader's
 permission check therefore answers false and the platform logs "permission denied: no thrown error", and
 that the three payloads were refused when stamped `Global` *and* when stamped `x_casemgmt` — so **no update
-set can deliver these grants on this release**. Its native remedy is the role form's *Edit Members*, which
+set can deliver these grants on this release**. The manual sequence is the role form's *Edit Members*, which
 is what Step 4 did and what the Step 5b teardown then removed. The **cause** is thus a known limitation;
 the **symptom** — sixteen ATF failures — is new, which is why every row above is classified (b) rather
 than (a). It also explains the stale 17 / 3 baseline: `TES0001005` ran on the pre-teardown instance, where
 Step 4's native grants were still in place.
+
+> **CORRECTION 2026-09-09 (CR2, finding F09) — the sixteen failures are ONE measurement, and the gate they
+> measure is BLOCKED, not accepted.** Two things in the paragraph above must be read exactly:
+>
+> 1. **The sixteen are not sixteen defects.** They are the *measurement* of a single blocked gate — the
+>    three `sys_user_has_role` grants that no update set on this release can carry. Every one of them
+>    fails at the first step performed as an impersonated persona, and the four measurements above
+>    establish that root cause at record level. A reader must not conclude that the suite result is
+>    unexplained, nor that sixteen independent bugs exist in the application.
+> 2. **"Accepted" was the wrong classification.** The gap is **reported as a BLOCKED platform capability
+>    gap**, per AAP §0.7.2's Minimal-Change Clause and §0.3.2's closing bullet, which require a gap PDI
+>    cannot address to be stopped-and-reported rather than substituted. It leaves **AAP §0.7.3 Gate 3
+>    and AAP §0.7.4 UNSATISFIED** for the deliverable, and no statement anywhere in this project may
+>    present the role/grant gate as passing while this suite result stands. The corrected verdict is at
+>    the top of this report and in §7 of Step 5-6.
 
 **What was deliberately not done.** Granting those three roles would have turned all sixteen failures
 green in minutes. That is exactly the live patch this step forbids, so it was not done — no role grant, no
@@ -1596,9 +2024,13 @@ file. **Per the failure path, a fix for a (b) classification requires restarting
 fresh export, teardown, reimport, commit, re-run ATF — and never a live patch. That restart was not
 performed here, and per this project's policy ATF failures do not block shipping the Step 6 file.** The
 finding is escalated instead, with one caveat for whoever takes it: a Step 5a restart alone cannot close
-it, because §7 establishes that no update set on this release can carry `sys_user_has_role`. The real
-options are a documented post-commit native grant step or an explicitly accepted limitation — a decision
-outside this step's authority.
+it, because §7 establishes that no update set on this release can carry `sys_user_has_role`. **CORRECTED
+2026-09-09 (CR2 F09):** there is no third option to find and none is proposed here. A post-commit native
+grant step is a deployer's workaround, not gate satisfaction, and "an explicitly accepted limitation" is
+the wrong classification — this is a **BLOCKED platform capability gap** and reporting it is the
+resolution. The alternatives were evaluated and rejected on AAP grounds: the scoped Fix Script route was
+removed by CR1, and a scoped Business Rule writing the global `sys_user_has_role` table would need
+cross-scope privilege and would be an ongoing artifact the AAP does not enumerate.
 
 ### 7. Nothing persisted: the instance is as this step found it
 
@@ -1636,17 +2068,20 @@ from every count and comparison in this section.
 
 ### 8. Evidence artifacts
 
-Screenshots from the browser session (agent scratch, not repository files):
+Screenshots from the browser session (agent scratch, not repository files) — **all NOT RETAINED**
+(CR2 F06): the scratch directory does not exist in or alongside this repository, so none of the paths
+below can be opened, and the ATF result figures they backed are the recorded observations in §3 and §5
+of this step rather than inspectable artefacts.
 
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-01-login.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-02-post-login.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-03-suite-record.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-04-pick-a-browser.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-atf-suite-result.png`
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-06-admin-case-form-g_form-present.png`
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-01-login.png` — **NOT RETAINED**
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-02-post-login.png` — **NOT RETAINED**
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-03-suite-record.png` — **NOT RETAINED**
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-04-pick-a-browser.png` — **NOT RETAINED**
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-atf-suite-result.png` — **NOT RETAINED**
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/u4-06-admin-case-form-g_form-present.png` — **NOT RETAINED**
 
 One failure-detail screenshot per failing test, sixteen files, all in
-`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/`:
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u4/shots/` — **NOT RETAINED** (CR2 F06):
 
 - `u4-atf-failure-detail-atf02.png` (ATF 02) · `u4-atf-failure-detail-atf03.png` (ATF 03) ·
   `u4-atf-failure-detail-atf04.png` (ATF 04) · `u4-atf-failure-detail-atf05.png` (ATF 05)
@@ -1688,7 +2123,7 @@ Preflight, all three checks, 2026-09-08:
 | Check | Command | Result |
 |---|---|---|
 | Instance live (body content, not status code) | `GET /api/now/table/sys_remote_update_set?sysparm_limit=1` | HTTP 200 with a **JSON** body → live, not hibernating |
-| Credentials | same call, Basic auth as `admin` | HTTP 200 — no 401, no 403, so no BLOCKED stop |
+| Credentials | same call, Basic auth as the **configured administrator** (`SERVICENOW_INSTANCE_ADMIN_USERNAME`; login identifier redacted per CR2 F11, and no password or token appears anywhere in this repository) | HTTP 200 — no 401, no 403, so no BLOCKED stop |
 | Not mid-upgrade | `GET /api/now/table/sys_upgrade_history?sysparm_query=upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` | `{"result":[]}` |
 
 The instance's own `Date` response header at preflight read `Tue, 08 Sep 2026 22:36:17 GMT`. A read-only
@@ -1725,7 +2160,7 @@ Captured before anything was destroyed, because after the teardown it is unrecov
 | `sys_db_object` | 3 | `sys_choice` | **24** (case 15 · task 7 · party 2) |
 | `sys_number` | 3 | `sys_user_role` | 3 |
 | scoped `sys_security_acl` | 26 | `sys_security_acl_role` | **27** (manager 14 · agent 10 · viewer 3) |
-| `sys_user_has_role` (scoped roles) | **0** — the residual delta of §7, Step 5-6 | Flows | 7 (active + published) |
+| `sys_user_has_role` (scoped roles) | **0** — the residual delta of §7, Step 5-6; **CR2 F09: a BLOCKED capability gap, AAP §0.7.3 Gate 3 / §0.7.4 unsatisfied** | Flows | 7 (active + published) |
 | Business rules | 7 | Script includes | 2 |
 | UI actions | 6 | UI policies | 2 |
 | Reports | 8 | Dashboards | 2 |
@@ -1741,15 +2176,19 @@ principle requires:
 | Table | `sys_id` | `name` | `state` | Children | Preview problems | Disposition |
 |---|---|---|---|---|---|---|
 | `sys_remote_update_set` | `8ebb770493534b1009aa70d19dba102a` | `x_casemgmt_case_management v1.0.0 (gate candidate)` | `committed` | 522 | **0 error / 0 warning** | this task's — DELETED |
-| `sys_remote_update_set` | `9929f50df18ccec91ea13b2a3bccfc90` | `x_casemgmt_case_management v1.0.0` | `committed` | 926 | not queried | **the excluded package's own record — untouched, uncounted** |
+| `sys_remote_update_set` | `9929f50df18ccec91ea13b2a3bccfc90` | — not read — | — not read — | — not read — | not queried | **EXCLUDED STRUCTURALLY before enumeration by the null-safe predicate (`sys_id is empty OR sys_id != 9929f50d…`) — untouched, uncounted, and no property of it published here (CORRECTED 2026-09-09, CR2 F07: this row previously published its name, state and child count)** |
 | `sys_update_set` | `bce2c05c93934b1009aa70d19dba1042` | `x_casemgmt_case_management v1.0.0 (gate candidate)` | `complete` | 522 | n/a | this task's — DELETED |
 | `sys_update_set` | `5e2b48dc93d34b1009aa70d19dba108a` | `Default` (scope's own, `is_default`) | `in progress` | 0 → 438 at deletion | n/a | this task's — DELETED |
 | `sys_update_set` | `11226d84a56503108bb220b7a4d212b2` | `Default` (global) | `in progress` | 290, none `x_casemgmt`-named | n/a | global — left alone |
 | `sys_update_set` | `2f6d66b1938b8f1009aa70d19dba10f0`, `a2bda2f1938b8f1009aa70d19dba1047` | other scopes' `Default` sets | `in progress` | — | n/a | other scopes — left alone |
 
 `nameLIKE` and `descriptionLIKE` queries for the excluded package's marker text returned **0 rows on both
-tables**, so that record is textually unidentifiable; it was therefore excluded **structurally, by `sys_id`
-comparison**, in every deletion loop and every count in this section.
+tables**, so that record is textually unidentifiable; it was therefore excluded **structurally, before
+enumeration**, in every deletion loop and every count in this section, by the null-safe predicate
+`sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90` — the explicit `ISEMPTY` OR term being
+required because a bare `addQuery('sys_id','!=',X)` is a SQL `<>` comparison that does not match a
+NULL-valued row (§6 below hit that exact trap on a reference column). Every count in this section is
+therefore a **task-owned** count, never a raw total with the excluded record subtracted afterwards.
 
 ### 4. The collateral guard, run read-only before destroying anything
 
@@ -1815,14 +2254,23 @@ its children are absent from every line because the loops skipped it by `sys_id`
 
 **One survivor took three passes and is worth recording, because it is the exact class that produces "Found a
 local update that is newer than this one" on a later import.** After the first sweep,
-`sys_update_xml application=<scope>` read **927** rather than the excluded package's 926. A second sweep
+the **task-owned** `sys_update_xml application=<scope>` count read **1** rather than 0 under the exclusion
+predicate — one row this task owned had survived. *(CORRECTED 2026-09-09, CR2 F07: this sentence previously
+read "`sys_update_xml application=<scope>` read **927** rather than the excluded package's 926", which
+derives the figure by subtracting the excluded record's children from a raw total. The task-owned count is
+what is reported.)* A second sweep
 reported `found=0` for everything — because `addQuery(ref,'!=',id)` does **not** match rows whose reference is
 EMPTY (a SQL NULL comparison), so the row was invisible to it. Rewritten with encoded queries plus an in-loop
 `getValue()` check, the third sweep found and deleted it: `67e39c9493574b1009aa70d19dba10b2 |
 sys_app_82b99028936f74320d74d6f88357a5af | DELETE | Custom Application`, created **22:41:55 during the
 teardown itself** and captured into the **global** `Default` set — the teardown recording its own DELETE.
-Afterwards `sys_update_xml application=<scope>` = **926**, all of them the excluded package's children
-(`nameLIKEx_casemgmt` AND `remote_update_set != 9929f50d…` = **0**).
+Afterwards the **task-owned** residue was **0**: `sys_update_xml application=<scope>` with the exclusion
+applied in the query (`^remote_update_setISEMPTY^ORremote_update_set!=9929f50d…`, null-safe by the
+`ISEMPTY` OR term — without it the `!=` alone is the very SQL `<>` trap this paragraph is about) returns
+**0** rows, and so does the same predicate combined with `nameLIKEx_casemgmt`. *(CORRECTED 2026-09-09,
+CR2 F07: this sentence previously read "`sys_update_xml application=<scope>` = **926**, all of them the
+excluded package's children". That is a raw total attributed to the excluded record, which F07 forbids;
+the task-owned count is what is reported.)*
 
 A broad follow-up sweep returned **0** for `sys_app`, `sys_scope`, `sys_app_module`, `sys_app_application`,
 `sys_ui_list`, `sys_ui_section`, `sys_ui_related_list`, `sys_ui_policy`, `sys_script`, `sys_script_include`,
@@ -1892,16 +2340,23 @@ cross-check prefixINCASE,TASK,PARTY:
 The single row the cross-check returns is the out-of-box **global** `task` counter (`sys_id` `4`, scope
 `global`), which is not this application's and was deliberately preserved.
 
-**8. `sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt` → zero, the excluded package's own record aside**
+**8. `sys_remote_update_set` residue owned by this task → zero, with the exclusion applied in the query**
 
 ```
-$ ... "sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt&sysparm_fields=sys_id,name,state,sys_mod_count"
-{"result":[{"sys_id":"9929f50df18ccec91ea13b2a3bccfc90","name":"x_casemgmt_case_management v1.0.0","sys_mod_count":"0","state":"committed"}]}
-raw count=1  → excluding that record = 0
+$ ... "sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt%5Esys_idISEMPTY%5EORsys_id!%3D9929f50df18ccec91ea13b2a3bccfc90&sysparm_fields=sys_id,name,state"
+{"result":[]}
+task-owned count=0
 ```
 
-`sys_mod_count` = **0** on that row, before and after this step: it was never opened, never previewed, never
-loaded into, never modified. It is the one record the directive excludes, and it is excluded from this count.
+**CORRECTED 2026-09-09 (code review CR2, finding F07).** This check previously ran without the exclusion
+term, printed the excluded record's `sys_id`, `name`, `state` and `sys_mod_count` in its raw body, and then
+reported "raw count=1 → excluding that record = 0"; a following paragraph published `sys_mod_count = 0` as
+evidence of non-modification. All of that is withdrawn — a subtraction is not an exclusion, and reading the
+record's fields is not leaving it untouched. The predicate is now part of the query, applied **before** the
+count, and it is null-safe (`^sys_idISEMPTY^ORsys_id!=…`, because a bare `!=` is a SQL `<>` that does not
+match a NULL-valued row). What is reported is the **task-owned** count: **0**. The record's own continued
+existence was confirmed by an id-only existence probe that reads no field of it, and file-level
+non-modification is evidenced where it belongs — by aggregate `git status` / `git diff --stat`.
 
 **9. `sys_update_set?sysparm_query=nameLIKEx_casemgmt` → zero records**
 
@@ -1974,7 +2429,7 @@ observation below.
 
 | Observation | URL | What the page showed |
 |---|---|---|
-| Portal, authenticated as `admin` | `/x_casemgmt_case_portal` | **"Page not found — The page you are looking for could not be found."** |
+| Portal, authenticated as the **configured administrator** | `/x_casemgmt_case_portal` | **"Page not found — The page you are looking for could not be found."** |
 | Portal submit page, authenticated | `?id=x_casemgmt_case_submit` | same "Page not found" |
 | Portal, signed out | `/x_casemgmt_case_portal` | HTTP 302 → `/session_timeout.do` login page; no portal renders |
 | Custom Applications list | `/sys_app_list.do` | **"Unfiltered Custom Applications list showing 0 records … No records to display"**; page text contains neither `casemgmt` nor `case management` |
@@ -1983,11 +2438,11 @@ observation below.
 
 Screenshots (agent scratch, not repository files):
 
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-after-teardown-authenticated.png` — the portal URL, authenticated, "Page not found"
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-after-teardown.png` — the portal URL signed out, redirected to login
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-submit-after-teardown.png` — the submit page, "Page not found"
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-app-list-after-teardown.png` — Custom Applications, 0 records
-- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-scope-list-after-teardown.png` — Applications filtered on `scope=x_casemgmt`, 0 records
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-after-teardown-authenticated.png` — the portal URL, authenticated, "Page not found" — **NOT RETAINED** (CR2 F06)
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-after-teardown.png` — the portal URL signed out, redirected to login — **NOT RETAINED** (CR2 F06)
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-submit-after-teardown.png` — the submit page, "Page not found" — **NOT RETAINED** (CR2 F06)
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-app-list-after-teardown.png` — Custom Applications, 0 records — **NOT RETAINED** (CR2 F06)
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-scope-list-after-teardown.png` — Applications filtered on `scope=x_casemgmt`, 0 records — **NOT RETAINED** (CR2 F06)
 
 ### 10. Zero-state statement
 
@@ -2050,10 +2505,14 @@ that exact import, with no intervening patch.** Cited from the Step 5-6 section,
   and **data linkage resolving** — every seeded task and party pointing at its case, and the case references
   resolving by number.
 - Two residual deltas were reported rather than papered over (Step 5-6 §7): `sys_user_has_role` = 0 (Role
-  Management V2 refuses those payloads from any update set on this release; the native remedy is the role
-  form's *Edit Members* related list) and `sys_grid_canvas_pane` = 0 (those 8 rows point at `sys_portal`
-  widget instances, not application files). Both dashboards still render from the committed report and
-  placement records.
+  Management V2 refuses those payloads from any update set on this release; a deployer's manual sequence is
+  the role form's *Edit Members* related list) and `sys_grid_canvas_pane` = 0 (those 8 rows point at
+  `sys_portal` widget instances, not application files). Both dashboards still render from the committed
+  report and placement records. **CORRECTED 2026-09-09 (CR2 F09):** the first of those two is not merely a
+  "residual delta" — it is a **BLOCKED platform capability gap** that leaves **AAP §0.7.3 Gate 3 and
+  AAP §0.7.4 UNSATISFIED** for this deliverable. The schema half of access control is proven from this one
+  commit; the assignment half is not delivered by any update set on this release, and the *Edit Members*
+  sequence is a deployer's workaround rather than gate satisfaction.
 
 **(3) The ATF suite result is current against this exact file.** Cited from the Step 7 section, which ran it
 against the artifacts this package's commit created, after that commit and against nothing else:
@@ -2065,7 +2524,10 @@ against the artifacts this package's commit created, after that commit and again
   defect** rather than (a) — accepted-failure-register: they share **one root cause**, that the three demo
   personas hold no role grants, which is the same `sys_user_has_role` class the package cannot carry. None of
   the sixteen matches the project's accepted-failure register, and the stale `TES0001005` = 17 / 3 / 0 / 0
-  baseline is superseded and is not quoted as a result anywhere.
+  baseline is superseded and is not quoted as a result anywhere. **CORRECTED 2026-09-09 (CR2 F09):** the
+  sixteen are **one measurement, not sixteen defects** — they are how the blocked assignment half of
+  AAP §0.7.3 Gate 3 / §0.7.4 shows up in a test run. The suite result is therefore fully explained, and it
+  is explained by a gate that is **not met** rather than by one that passed.
 - The sixteen, by name — ATF 02 (manager full CRUD), ATF 03 (agent create / assigned-only read-write / no
   delete), ATF 04 (viewer read-only), ATF 05 (field-level ACLs on `assigned_group` and `assigned_agent`), ATF
   06 (RBAC mirror on task and party), ATF 07 (agent assigned-only on task and party), ATF 08 (Draft → Open
@@ -2129,15 +2591,19 @@ that replacement is what made the seven forward-looking documents stale (see §1
 was not opened, not read for reference, not checksummed, not diffed, not archived, not deleted, and not
 included in any count or comparison — by this unit or by any of the four units before it. It is proven
 unmodified by `git status` and `git diff --stat` alone, which show it absent from the diff. Its own instance
-record (`sys_remote_update_set` `9929f50df18ccec91ea13b2a3bccfc90`, `sys_mod_count` 0, `state=committed`) was
-excluded structurally by `sys_id` from every deletion loop and every count in this section, and it still
-carries `sys_mod_count` 0 after the teardown.
+record (`sys_remote_update_set` `9929f50df18ccec91ea13b2a3bccfc90`) was excluded **structurally, before
+enumeration**, from every deletion loop and every count in this section, by the null-safe predicate
+`sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90`. *(CORRECTED 2026-09-09, CR2 F07: this
+sentence previously published that record's `sys_mod_count` and `state`, and asserted its `sys_mod_count`
+again after the teardown. Those figures are withdrawn — reading them is a form of counting the record. Only
+the predicate and the resulting task-owned counts are reported, and file-level non-modification rests on the
+aggregate `git status` / `git diff --stat` evidence named in the same sentence.)*
 
 **Which scripts were run, and why** (from the Step 3-4 section, D3.6):
 
 | Script | Run? | Why |
 |---|---|---|
-| `scripts/create_choice_values.js` | **RUN** | newly authored for this task (785 lines, ES5, idempotent): no standalone choice-only script existed, and Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively via the Table API before the Step 5a export |
+| `scripts/create_choice_values.js` | **RUN** | newly authored for this task — ES5, idempotent, keyed on the natural key `(name, element, value)`: it inserts only what is missing, repairs a wrong `label`/`sequence`/`language`/`inactive` in place, never duplicates, reports a surplus as a failure exactly as it reports a shortfall, and prints a per-field expected-vs-found line plus a total and a verdict. No standalone choice-only script existed, and an Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively before the Step 5a export. *(CORRECTED 2026-09-09, CR2: a line count stood in this cell and has been removed — a line count in prose goes stale the moment the file is edited. The script's behaviour, described here, is what a reader needs; its header comment is the authority on how to run it.)* *(CORRECTED 2026-09-09, CR2 findings F01-F05: the description above is now the count-based part of a larger contract. The script refuses to write at all — before resolving the scope record — unless it is executing in the `x_casemgmt` scope and the `sys_scope` query for it resolves to exactly one well-formed row; it re-reads all 24 rows from the database after writing and fails on any attribute that did not persist; it verifies exactly one app-owned `sys_choice_set` composite per field, ownership included, and fails on a missing, duplicated, mis-owned or surplus one; and it detects a concurrent writer, stops writing and fails rather than duplicating a value. See §3 and the correction under §4's run table.)* |
 | `scripts/seed_demo_data.js` | **RUN**, unmodified | the case/task/party linkage fix; it contains no `sys_choice` handling |
 | `scripts/post_import_remediation.js` and its Fix Script twin `scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` | **NOT RUN** | not choice-only: its `ensureTable`, dictionary, ACL and number branches — including a destructive table delete — would have mutated the Step 2 natively-committed rebuild output, which the directive classifies as a CRITICAL trigger. The five measured reasons are recorded in the Step 3-4 section |
 | `scripts/pre_delete_collateral_guard.js` | **RUN**, unmodified, read-only | used here in §4 to bound the blast radius before the teardown |
@@ -2147,28 +2613,87 @@ carries `sys_mod_count` 0 after the teardown.
 was no Rule-versus-directive conflict anywhere in this task. The work was therefore held to enterprise-standard
 best practice plus the AAP's standing constraints that the directive does not touch and no override relaxes:
 no hardcoded `sys_id` in package artifacts, synthetic data only with no PII, scope-namespace exclusivity with
-zero global-scope writes, no global ACLs and no stock-role grants, no SMTP or email configuration, no
+zero global-scope writes, no global ACLs and no stock-role grants **authored or performed by this work**, no
+SMTP or email configuration, no
 ServiceNow Store apps, AAP §0.5.2 dependency ordering in the shipped package, and no secret — instance URL,
 username, password or session token — written into any repository file.
 
-**Outcome classification.** The run did **not** end CRITICAL or BLOCKED. Step 5c was a clean pass on the first
+**CORRECTED 2026-09-09 (CR2, finding F11) — the last item was not fully true when written, and the
+redaction rule now applied is stated here so a reader can audit it.** No password, no instance URL and
+no session token appeared anywhere; the **configured administrator's login identifier** did, tied to
+Basic authentication and to live session identity. Every such occurrence has been replaced with
+`<configured administrator>` or with the environment-variable name
+`SERVICENOW_INSTANCE_ADMIN_USERNAME`. The rule, applied surgically:
+
+- **Redacted** wherever the token named the *account this work authenticated as* — `g_user` readings,
+  `g_user.userName`, "Basic auth as …", the browser observation rows, and the `sys_user_preference`
+  account.
+- **Recorded as the required role instead** wherever the point was *provenance* — who or what authored
+  a row: `sys_created_by` on the audited links, the 58 `sys_update_xml` captures, and the `Created by
+  (role)` columns in §7-§8, which now carry `admin` / `security_admin` as roles.
+- **Left as written** wherever the token denotes a **role name or a platform mechanism** rather than a
+  login: `hasRole('admin')`, `admin_overrides`, the elevated `security_admin` session, a role column in
+  an ACL table, another document's section title quoted verbatim, and the privilege-level comparisons
+  in Step 3-4 §9 and Step 7 §6 that contrast what an `admin`-level user sees with what a scoped-role
+  persona sees. Redacting those would destroy the statement being made.
+- **Not touched at all:** `sys_created_by` values inside exported XML payloads, which live in files
+  this correction does not own.
+
+**CORRECTED 2026-09-09 (CR2, finding F10) — the "no stock-role grants" item needs its boundary stated.**
+This work authored no stock-role grant and no `roles/*.xml` inherits one (all three carry an empty
+self-closing `<includes_roles/>`, and the canonical package holds 0 occurrences of
+`snc_required_script_writer_permission` and 0 `sys_user_role_contains` payloads). But the **platform**
+derived an `inherited=true` `snc_required_script_writer_permission` companion row on each of the three
+demo personas when their scoped role was granted through the native path, and impersonation shows it
+effective. That is reported as a **BLOCKING capability gap** — §8 and §9 of Step 3-4 and **ADV-3** in
+`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` — and not as compliance: removing it would require writing
+global `sys_user_has_role` rows AAP §0.3.2 forbids this package to own.
+
+**Outcome classification.** The run did **not** end CRITICAL, and it did not take the directive's CRITICAL
+stop path. Step 5c was a clean pass on the first
 gated attempt after one earlier failure cycle (1 of the 2 permitted, recorded in the Step 5-6 section), the
 canonical file was replaced with the gated export, and the instance was then emptied. Had the run ended
 CRITICAL, this section would record that the canonical file had been left unchanged and why; it does not,
 because it did not.
 
+**CORRECTED 2026-09-09 (CR2, findings F09 and F10) — two BLOCKED capability gaps are reported against this
+deliverable, and the line above may not be read as denying them.** The run's *process* outcome and the
+deliverable's *gate* outcome are different things. Reported blocked:
+
+1. **The three `sys_user_has_role` grants do not transport** by any update set on this release. The
+   schema half of access control is proven from one commit (26 scoped ACLs, 27 of 27 role links, no
+   remediation script); the assignment half is a **BLOCKED platform capability gap**, leaving
+   **AAP §0.7.3 Gate 3 and AAP §0.7.4 UNSATISFIED**. The sixteen ATF failures are its measurement
+   (Step 7 §5-6, and the CR2 F09 correction at the top of this report).
+2. **A scoped-application persona cannot be provisioned through the platform's own native role-grant
+   path without the platform adding a stock role** — the `snc_required_script_writer_permission`
+   companion, recorded in §8 and §9 of Step 3-4 with the CR2 F10 correction there. Removing it would
+   mean writing global `sys_user_has_role` rows this package does not own, which **AAP §0.3.2**
+   forbids, so it is reported rather than accepted or worked around.
+
 ### 15. Evidence artifacts for this step
 
 Raw command-and-response captures and run logs (agent scratch, not repository files) in
-`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/`: `ten_checks.txt` (all ten checks with the
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/` — **all NOT RETAINED** (CR2 F06):
+`ten_checks.txt` (all ten checks with the
 exact curl command above each raw body), `ten_checks_final.txt` (the final full pass), `purge_log.txt` (the
 deletion ledger, `found`/`deleted` per class), `global_before.txt` / `global_after.txt` (the 28 collateral
 counters), `guard_out.html` (the collateral guard's enumeration), `browser_report.json` /
 `browser_report2.json` (the browser observations quoted in §9) and the five screenshots listed there.
 
-Because the instance no longer holds the application, these captures and the numbers in this section are the
-durable record of the teardown; there is nothing left on the instance to re-measure them against, which is the
-intended outcome.
+**CORRECTION 2026-09-09 (CR2, finding F06).** That scratch directory does not exist in or alongside this
+repository and none of the files above can be opened. This does **not** weaken this step's ten-check
+result, and the distinction matters: for **Step 8** the verbatim `curl` command and the raw response body
+of every one of the ten checks are transcribed into **§7 of this section**, in the report itself, so the
+Step 8 zero-state gate is proven from retained material and the lost scratch copies are a duplicate. The
+**Step 5b** pass is the one with no in-report raw capture at all, and it is marked evidence-unproven at
+raw level in its own section. The Step 1-2 pass sits between the two: its §6 table carries a run
+timestamp and a raw response body per check, but not the verbatim request line for every check, and its
+check 10 reports nine classes in one cell with a per-class `0` each.
+
+Because the instance no longer holds the application, the raw bodies quoted in §7 and the numbers in this
+section are the durable record of the teardown; there is nothing left on the instance to re-measure them
+against, which is the intended outcome.
 
 ### 16. Documentation impact of Step 6's two deletions — closed
 
@@ -2210,5 +2735,10 @@ endpoints, ATF definitions, seed data or update-set records of this application,
 state. The deliverable is the file at
 `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, SHA-256
 `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`. Installing it is a separate deployment
-step outside this task's scope; a reader doing that should note the one native step it cannot carry (the three
-`sys_user_has_role` grants, via each role form's *Edit Members* related list) and the caveat in §13.
+step outside this task's scope; a reader doing that should note the caveat in §13 and, **CORRECTED
+2026-09-09 (CR2 F09)**, that the three `sys_user_has_role` grants are **not a step the package carries and
+not a step that closes its gate**: no update set on this release can deliver them, so the deliverable leaves
+**AAP §0.7.3 Gate 3 and AAP §0.7.4 unsatisfied** and that is reported as a BLOCKED platform capability gap.
+The *Edit Members* sequence in
+[`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) is what a deployer must
+do to make the personas usable; it does not make the gate met.

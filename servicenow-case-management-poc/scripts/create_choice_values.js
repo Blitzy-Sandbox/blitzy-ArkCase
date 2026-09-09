@@ -35,6 +35,23 @@
  * reported rather than tolerated. The script reports surplus; it never deletes,
  * because deleting a row somebody else authored is not this script's mandate.
  *
+ * Verification is three read-only passes, and the verdict is the conjunction of
+ * all three - a run cannot report OK on the strength of one of them:
+ *
+ *   1. COUNTS. Per field and in total, against the specification, including the
+ *      surplus classification above.
+ *   2. PERSISTED ATTRIBUTES. Every one of the twenty-four rows is re-read from
+ *      the database by its natural key AFTER the writes, and its stored `label`,
+ *      `sequence`, `language` and `inactive` are compared again. Existence is
+ *      not correctness, and a write that was partially applied, normalized by
+ *      the platform or overwritten by a business rule looks identical to a
+ *      correct one until something re-reads it.
+ *   3. EXPORT COMPOSITES. Exactly one app-owned `sys_choice_set` per specified
+ *      field, no surplus composite on the three owned tables, and both
+ *      ownership columns resolving to this application - because "the rows
+ *      exist" and "the values are exportable as app-owned" are two different
+ *      claims and only the first is a row count.
+ *
  * ---------------------------------------------------------------------------
  * WHY THIS SCRIPT EXISTS
  * ---------------------------------------------------------------------------
@@ -74,9 +91,11 @@
  * ---------------------------------------------------------------------------
  * HOW TO RUN IT
  * ---------------------------------------------------------------------------
- * Run it in the `x_casemgmt` application scope. That is the scope in which the
- * application owns the verification, and it is the scope this script reports
- * and asserts.
+ * Run it in the `x_casemgmt` application scope. Nothing else is supported: the
+ * executing scope is asserted before anything at all is written, and a run the
+ * platform completes in any other scope - Global included - is REFUSED
+ * outright, with a FAILED verdict and not one row read for reconciliation, let
+ * alone written.
  *
  *   1. In the browser: System Definition -> Scripts - Background, with the
  *      application picker set to "x_casemgmt Case Management", paste this file
@@ -94,48 +113,170 @@
  *      Resolve `sys_scope` at run time (GET /api/now/table/sys_scope?sysparm_query=scope=x_casemgmt);
  *      never carry a literal sys_id from a prior run or report.
  *
- * ONE PLATFORM CONSTRAINT DECIDES WHICH SCOPE CAN WRITE, AND IT IS MEASURED,
- * NOT ASSUMED. `sys_choice` is a GLOBAL table, and on this platform its
- * `sys_db_object` row carries `create_access = false`, `update_access = false`
- * and `delete_access = false`. A scoped application may therefore only READ it:
- * an insert or a repair attempted from the `x_casemgmt` scope is refused by the
- * platform, silently returning no sys_id. Lifting that would take either an
- * edit to the global `sys_db_object` row or a `sys_scope_privilege` artifact in
- * the application - a global-scope change and an application-manifest change
- * respectively, both of which this project forbids.
+ * ---------------------------------------------------------------------------
+ * THE PLATFORM BOUNDARY, AND WHAT THIS SCRIPT DOES WHEN IT MEETS IT
+ * ---------------------------------------------------------------------------
+ * ONE PLATFORM CONSTRAINT DECIDES WHETHER THE WRITE CAN HAPPEN AT ALL, AND IT
+ * IS MEASURED, NOT ASSUMED. `sys_choice` is a GLOBAL table, and on this
+ * platform its `sys_db_object` row carries `create_access = false`,
+ * `update_access = false` and `delete_access = false`. A scoped application may
+ * therefore only READ it: an insert or a repair attempted from the `x_casemgmt`
+ * scope is refused by the platform, silently returning no sys_id.
  *
- * So: run this script IN SCOPE to verify, and - only when it reports a row
- * missing or drifted and the write refused - re-run it in the GLOBAL scope
- * (`sys_scope=` empty, or the application picker set to Global) to perform the
- * write, then in scope again to confirm. The script detects the refusal,
- * names this cause, and prints that remedy itself rather than failing quietly.
+ * THAT BOUNDARY IS NOT WORKED AROUND. Three routes past it exist and all three
+ * are forbidden, so none is taken and - just as importantly - none is suggested
+ * by this script's own output:
  *
- * THE ROWS REMAIN EXPORTABLE EITHER WAY, and this was verified on the instance
- * rather than reasoned about. What an Update Set carries is not the individual
- * `sys_choice` row - that table has no `sys_scope` column at all on this
- * release - but the platform-native `sys_choice_set` composite for each
- * (table, field), and all seven of those ARE owned by this application
- * (`sys_scope` = `sys_package` = x_casemgmt Case Management, update names
- * `sys_choice_x_casemgmt_*`). Measured: a `sys_choice` write performed from a
- * global session was still captured as `sys_update_xml` name
- * `sys_choice_x_casemgmt_case_pending_reason`, type "Choice list", into the
- * x_casemgmt application's own Default update set. reportChoiceSets() below
- * prints that ownership on every run so the claim stays checkable.
+ *   - re-running this script in the GLOBAL scope to perform the write. That is
+ *     a global-scope write, which AAP 0.3.2 ("global scope changes of any
+ *     kind") and AAP 0.7.2 ("zero global-scope writes") forbid outright.
+ *   - editing the global `sys_db_object` row for `sys_choice` to open its
+ *     access flags. A global-scope change to an out-of-the-box record.
+ *   - adding a `sys_scope_privilege` to the application to request the elevated
+ *     cross-scope access. An application artifact the AAP does not enumerate,
+ *     which the Minimal-Change Clause (AAP 0.7.2) forbids.
+ *
+ * So when the platform refuses an in-scope write, the outcome is a REPORTED
+ * BLOCKED capability gap - a FAILED verdict naming the refused row, the cause,
+ * and the one remedy that stays inside the constraints, which is the platform's
+ * own NATIVE IN-SCOPE AUTHORING PATH:
+ *
+ *      With the `x_casemgmt` application selected, author the values on the
+ *      field's own Choices list - the dictionary entry's Choices related list,
+ *      or Table Builder's Choices editor for that column. The platform then
+ *      creates the app-owned `sys_choice_set` composite and its value rows
+ *      itself, in scope, and captures them into the application's update set.
+ *
+ * That native path is how this application's seven `sys_choice_set` composites
+ * came to exist. This script's standing role beside it is to VERIFY, and to
+ * reconcile in any context where the platform does permit the write.
+ *
+ * WHAT AN UPDATE SET CARRIES IS THE COMPOSITE, NOT THE ROW, which is what
+ * makes ownership checkable at all. `sys_choice` has no `sys_scope` column on
+ * this release, so the exportable app-owned record for each (table, field) is
+ * the `sys_choice_set` composite (`sys_scope` = `sys_package` = the x_casemgmt
+ * Case Management application, update names `sys_choice_x_casemgmt_*`).
+ * verifyChoiceSets() below asserts, on every run, that exactly one such
+ * composite exists per specified field, that both ownership columns resolve to
+ * the resolved application scope, and that no unspecified composite exists on
+ * the three owned tables - so "these values are exportable as app-owned" is a
+ * verdict-bearing assertion rather than a claim.
+ *
+ * ---------------------------------------------------------------------------
+ * SINGLE-WRITER PRECONDITION (a named capability gap, not an oversight)
+ * ---------------------------------------------------------------------------
+ * Run exactly one instance of this script at a time against an instance. The
+ * script cannot enforce that with a lock, and the reason is a platform gap
+ * rather than a design choice: `GlideMutex` and `sleep()` are unavailable
+ * inside a scoped application, `global.Mutex` is unreachable from a custom
+ * scope, and the two substitutes are both barred here - a `sys_properties`
+ * claim row is a global write (AAP 0.3.2) and a dedicated lock table is an
+ * artifact the AAP does not enumerate (AAP 0.7.2). There is therefore no
+ * platform-supported mutual-exclusion primitive available to this script.
+ *
+ * It is FAIL-CLOSED BY CONSTRUCTION instead of mutually exclusive by lock.
+ * Before every single mutating call it re-asserts the executing scope and
+ * re-resolves the application scope record; immediately before an insert it
+ * re-queries the natural key and treats a row that appeared since its first
+ * query as a detected concurrent writer; immediately after its own insert it
+ * reads the natural key back and treats anything other than exactly one row as
+ * a race. Any of those aborts all further writes for the rest of the run and
+ * forces a FAILED verdict. A raced run therefore FAILS rather than duplicates,
+ * and the duplicate it detects is REPORTED, never deleted - deleting a row is
+ * outside this script's mandate.
  *
  * ---------------------------------------------------------------------------
  * OUTPUT CONTRACT (quotable as evidence)
  * ---------------------------------------------------------------------------
  * Every line is emitted through gs.info() with the prefix `U2CHOICE|`, so the
  * run is readable both in the Background Script response and afterwards from
- * `syslog` (messageSTARTSWITHU2CHOICE). The lines are:
+ * `syslog` (messageSTARTSWITHU2CHOICE).
  *
- *   U2CHOICE|SCOPE|...                       the scope this run executed in
- *   U2CHOICE|<table>.<element>=<value>|...   one per row created or repaired
+ * GATES AND REFUSALS - each of the three is an unconditional early return, and
+ * each ends the run at its own SUMMARY line with nothing written:
+ *
+ *   U2CHOICE|SPEC|CHOICE_SPECS describes N values across M lists ...
+ *                                            gate 1: the specification is
+ *                                            inconsistent with its invariants
+ *   U2CHOICE|SCOPE|REFUSED|executing_scope=...|required_scope=x_casemgmt|...
+ *                                            gate 2: the run is not executing
+ *                                            in the application's scope
+ *   U2CHOICE|SCOPE|REFUSED|sys_scope query for scope=x_casemgmt returned N ...
+ *                                            gate 3: the application scope
+ *                                            record is absent or ambiguous
+ *
+ * RECONCILIATION - one line per row acted on, none for a row already correct:
+ *
+ *   U2CHOICE|SCOPE|application=...|executing_scope=...|in_application_scope=...
+ *                                            |sys_choice_cross_scope_access=...
+ *   U2CHOICE|<table>.<element>=<value>|created|sys_id=...|read_back=1
+ *   U2CHOICE|<table>.<element>=<value>|repaired|<column>:<from>-><to>|...
+ *   U2CHOICE|<table>.<element>=<value>|insert REFUSED|cause=...|remedy=...
+ *   U2CHOICE|<table>.<element>=<value>|repair update REFUSED ...|cause=...
+ *   U2CHOICE|DUPLICATE|<key>|N rows share this key ...
+ *   U2CHOICE|RECONCILE|created=N|repaired=N|already_correct=N|insert_refused=N
+ *                     |update_refused=N|duplicate_keys=N|race_aborts=N
+ *                     |skipped_after_abort=N
+ *
+ * RACE DETECTION - any of these closes writing for the rest of the run:
+ *
+ *   U2CHOICE|<key>|<operation> NOT ATTEMPTED|the executing scope is now ...
+ *   U2CHOICE|<key>|<operation> NOT ATTEMPTED|the sys_scope query ... now returns
+ *   U2CHOICE|<key>|<operation> NOT ATTEMPTED|the application scope record
+ *                                            changed identity mid-run ...
+ *   U2CHOICE|RACE|<key>|insert NOT ATTEMPTED|N row(s) ... appeared between ...
+ *   U2CHOICE|RACE|<key>|post-insert read-back found N rows ...
+ *   U2CHOICE|ABORT|writing is closed for the remainder of this run|reason=...
+ *   U2CHOICE|<key>|SKIPPED|writing was closed earlier in this run|reason=...
+ *
+ * VERIFICATION - three independent read-only passes, all three verdict-bearing:
+ *
  *   U2CHOICE|VERIFY|<table>.<element> expected=N found=N ok|MISMATCH
- *                                            one per field, seven in all
- *   U2CHOICE|VERIFY|TOTAL expected=24 found=N lists=7 ...
- *   U2CHOICE|SURPLUS|...                     one per unexpected or duplicate row
- *   U2CHOICE|SUMMARY|verdict=OK|FAILED ...   the single-line verdict
+ *                                            counts, one per field, seven in all
+ *   U2CHOICE|VERIFY|TOTAL expected=24 found=N lists_expected=7 lists_found=N ...
+ *   U2CHOICE|SURPLUS|<key>|sys_id=...|<reason>. Reported, not deleted.
+ *   U2CHOICE|PERSISTED|<key>|NOT PERSISTED|DUPLICATED|SPEC COLLISION|...
+ *   U2CHOICE|PERSISTED|<key>|MISMATCH|column=...|stored=...|wanted=...
+ *                                            a post-write re-read of every one
+ *                                            of the 24 rows, by natural key
+ *   U2CHOICE|PERSISTED|checked=24|exactly_one=N|missing=N|duplicated=N
+ *                     |attribute_mismatches=N|columns=label,sequence,language,
+ *                      inactive|ok|MISMATCH|read_only_reread
+ *   U2CHOICE|CHOICE_SETS|name=<table> element=<element> composites=N
+ *                       [sys_id=... sys_scope=... sys_package=...] ok|MISMATCH
+ *   U2CHOICE|CHOICE_SETS|<field>|SHORTFALL|DUPLICATE|SURPLUS|...
+ *   U2CHOICE|CHOICE_SETS|<field>|OWNERSHIP UNVERIFIABLE|EMPTY|MISMATCH|...
+ *   U2CHOICE|CHOICE_SETS|expected=7|found=N|fields=...|app_owned=N
+ *                       |application_sys_id=...|ok|MISMATCH|read_only_report
+ *
+ * VERDICT - one line, always last but for the problem list:
+ *
+ *   U2CHOICE|SUMMARY|verdict=OK|FAILED|reason=<reason>|values=N/24|created=N
+ *                   |repaired=N|already_correct=N|surplus=N|duplicates=N
+ *                   |race_aborts=N|problems=N|ms=N
+ *   U2CHOICE|PROBLEM[n/N]|...                every problem, numbered, after the
+ *                                            summary, on every exit path
+ *
+ * verdict=OK requires ALL of: the counts agree, every one of the 24 rows
+ * re-reads correctly by natural key, all 7 export composites exist exactly once
+ * and are app-owned, zero duplicate natural keys, no abort, and an empty
+ * problem list. The reason vocabulary on FAILED is closed, and one of:
+ *
+ *   inconsistent specification                         (gate 1)
+ *   out-of-scope execution                             (gate 2)
+ *   unresolved application scope                       (gate 3)
+ *   out-of-scope execution mid-run                     (pre-write revalidation)
+ *   application scope record unresolved mid-run        (pre-write revalidation)
+ *   application scope record changed identity mid-run  (pre-write revalidation)
+ *   concurrent writer detected on the natural key      (pre-insert re-query)
+ *   duplicate row detected after insert                (post-insert read-back)
+ *   inserted row not readable after insert             (post-insert read-back)
+ *   duplicate natural keys on sys_choice
+ *   platform refused a sys_choice write in scope (BLOCKED capability gap)
+ *   choice row counts disagree with the specification
+ *   persisted choice rows disagree with the specification
+ *   choice values are not exportable as app-owned composites
+ *   see the PROBLEM lines
  *
  * ---------------------------------------------------------------------------
  * CONSTRAINTS HONORED
@@ -146,10 +287,14 @@
  *   - No PII. Every value and label is a synthetic classification term.
  *   - No email or SMTP interaction: no gs.eventQueue(), no event.queue(), no
  *     notification of any kind. Email is disabled on the PDI and stays that way.
- *   - `sys_choice` is the ONLY table written. `sys_scope`, `sys_dictionary` and
+ *   - `sys_choice` is the ONLY table written. `sys_scope`, `sys_db_object` and
  *     `sys_choice_set` are read for verification and reporting only.
- *   - No table, dictionary, ACL, role, number-counter or data-model change of
- *     any kind.
+ *   - Zero global-scope writes, and zero global-scope EXECUTION: the run is
+ *     refused before its first write unless gs.getCurrentScopeName() is
+ *     `x_casemgmt`, and the refusal is re-asserted before every later write.
+ *   - No deletion of any row, ever. A duplicate or a surplus value is reported.
+ *   - No table, dictionary, ACL, role, number-counter, sys_property,
+ *     sys_scope_privilege or data-model change of any kind.
  */
 
 // ============================================================================
@@ -229,7 +374,29 @@ var STATS = {
     insertRefused: 0,
     updateRefused: 0,
     duplicateKeys: 0,
-    surplusRows: 0
+    surplusRows: 0,
+    // A write this run declined to attempt because the pre-write revalidation,
+    // the pre-insert re-query or the post-insert read-back said the state had
+    // moved under it. Each one is a problem and each one is fatal to the run.
+    raceAborts: 0,
+    // Reconciliations skipped because an earlier abort closed writing for the
+    // rest of the run. Counted so the summary accounts for all 24 specs.
+    skippedAfterAbort: 0
+};
+
+/*
+ * Whether writing is still permitted for the remainder of this run.
+ *
+ * There is no lock available to this script (see the SINGLE-WRITER
+ * PRECONDITION block in the header), so the abort flag is the mechanism that
+ * makes a raced run fail instead of duplicate: the first detection of a moved
+ * state sets it, every later mutating path checks it, and the verdict reads it.
+ * Verification still completes after an abort - a failed run is more useful
+ * with its evidence than without it - but nothing further is written.
+ */
+var RUN_STATE = {
+    abort: false,
+    abortReason: ''
 };
 
 var PROBLEMS = [];
@@ -260,6 +427,39 @@ function logProblem(line) {
 }
 
 /**
+ * Print the accumulated problem list, numbered.
+ *
+ * Emitted after the summary line by every exit path, including the early
+ * refusals: a run that refuses to do anything still has to say why in the same
+ * quotable form as a run that completed.
+ */
+function logProblemList() {
+    for (var p = 0; p < PROBLEMS.length; p++) {
+        log('PROBLEM[' + (p + 1) + '/' + PROBLEMS.length + ']|' + PROBLEMS[p]);
+    }
+}
+
+/**
+ * Close writing for the rest of this run, and record why.
+ *
+ * Called when the state this run validated has moved under it: the executing
+ * scope changed, the application scope record disappeared, a concurrent writer
+ * inserted the row first, or a read-back found the wrong number of rows. The
+ * first reason wins, because it is the one that explains the run.
+ *
+ * @param {string} reason a short machine-readable reason for the summary line
+ */
+function abortWrites(reason) {
+    STATS.raceAborts++;
+    if (!RUN_STATE.abort) {
+        RUN_STATE.abort = true;
+        RUN_STATE.abortReason = reason;
+    }
+    log('ABORT|writing is closed for the remainder of this run|reason=' + reason +
+        '|verification continues, no further row is written');
+}
+
+/**
  * Glide booleans arrive as 'true'/'false'/'1'/'0'/''; normalize them.
  *
  * @param {*} value the stored value
@@ -284,6 +484,19 @@ function normalizeSequence(value) {
     }
     var n = parseInt(text, 10);
     return isNaN(n) ? '' : ('' + n);
+}
+
+/**
+ * Read a column as text, with an absent value reading as '' rather than as the
+ * string 'null'.
+ *
+ * @param {GlideRecord} gr a positioned record
+ * @param {string} column the column name
+ * @return {string} the stored text, or '' when the column holds nothing
+ */
+function readText(gr, column) {
+    var raw = gr.getValue(column);
+    return '' + (raw === null || raw === undefined ? '' : raw);
 }
 
 /**
@@ -356,40 +569,94 @@ function choiceTableAccess() {
 }
 
 /**
- * Report the scope this run is actually executing in, and what that scope is
- * permitted to do to sys_choice.
+ * The one remedy for a refused choice write that stays inside this project's
+ * constraints, as a single string every refusal path prints.
  *
- * The execution scope is read from gs.getCurrentScopeName(), NOT from
- * gs.getCurrentApplicationId(): measured on this instance, the latter reports
- * the session's application picker and answers with the application's sys_id
- * even in a run the platform completed in the global scope, which would make a
- * global run misreport itself as in-scope.
+ * It is the platform's own native in-scope authoring path, and it is how this
+ * application's seven sys_choice_set composites actually came to exist. The
+ * three routes it deliberately does NOT offer - a global-scope run of this
+ * script, an edit to the global sys_db_object row, and a sys_scope_privilege
+ * artifact - are named as forbidden here rather than left unmentioned, because
+ * an operator reading a refusal is exactly the person who would otherwise reach
+ * for one of them.
+ *
+ * @return {string} the remedy, and the routes that are not it
+ */
+function nativeAuthoringRemedy() {
+    return 'with the ' + SCOPE_NAME + ' application selected, author the values natively on the field\'s' +
+        ' own Choices list (the sys_dictionary entry\'s Choices related list, or Table Builder\'s Choices' +
+        ' editor for that column). The platform creates the app-owned sys_choice_set composite and its' +
+        ' value rows in scope and captures them into the application\'s update set. If the platform' +
+        ' refuses the write in scope, that is a BLOCKED capability gap to REPORT (AAP 0.3.2: report the' +
+        ' gap, do not substitute an out-of-scope workaround). FORBIDDEN, and therefore not offered as' +
+        ' alternatives: re-running this script in the GLOBAL scope, editing the global sys_db_object row' +
+        ' for sys_choice, and adding a sys_scope_privilege to the application.';
+}
+
+/**
+ * The scope this run is actually executing in.
+ *
+ * Read from gs.getCurrentScopeName(), NOT from gs.getCurrentApplicationId():
+ * measured on this instance, the latter reports the session's application
+ * picker and answers with the application's sys_id even in a run the platform
+ * completed in the global scope, which would make a global run misreport itself
+ * as in-scope.
+ *
+ * @return {string} the executing scope's name, e.g. 'x_casemgmt' or 'global'
+ */
+function currentScopeName() {
+    return '' + gs.getCurrentScopeName();
+}
+
+/**
+ * Assert that this run is executing in the application's own scope, and refuse
+ * the run outright when it is not.
+ *
+ * This is the first gate, and it is a hard one. A run the platform completed in
+ * any other scope - Global above all - is not a degraded run to be reported
+ * with a caveat: it is a global-scope execution that AAP 0.3.2 and 0.7.2
+ * forbid, so it must not reach a single reconciliation, let alone a single
+ * write. The caller returns immediately on false, before resolving the scope
+ * record and before the reconciliation loop, so no insert or update is even
+ * attempted.
+ *
+ * @return {boolean} true when this run is executing in SCOPE_NAME
+ */
+function assertExecutionScope() {
+    var scopeName = currentScopeName();
+    if (scopeName === SCOPE_NAME) {
+        return true;
+    }
+    logProblem('SCOPE|REFUSED|executing_scope=' + scopeName + '|required_scope=' + SCOPE_NAME +
+        '|this script writes only from the ' + SCOPE_NAME + ' application scope. Executing it in ' +
+        scopeName + ' would be a global-scope write, which AAP 0.3.2 and 0.7.2 forbid. No row was' +
+        ' read for reconciliation and no row was written.|remedy=' + nativeAuthoringRemedy());
+    return false;
+}
+
+/**
+ * Report the executing scope and what that scope is permitted to do to
+ * sys_choice. Reporting only - the decision belongs to assertExecutionScope(),
+ * which the caller has already applied by the time this runs, so this function
+ * returns nothing for a caller to discard.
  *
  * @param {string} scopeSysId the application scope resolved by name
  * @param {Object} access the output of choiceTableAccess()
- * @return {boolean} true when this run is executing in the application's scope
  */
 function reportExecutionScope(scopeSysId, access) {
-    var scopeName = '' + gs.getCurrentScopeName();
-    var inScope = (scopeName === SCOPE_NAME);
+    var scopeName = currentScopeName();
     log('SCOPE|application=' + SCOPE_NAME + '|application_sys_id=' + (scopeSysId || 'UNRESOLVED') +
-        '|executing_scope=' + scopeName + '|in_application_scope=' + inScope +
+        '|executing_scope=' + scopeName + '|in_application_scope=' + (scopeName === SCOPE_NAME) +
         '|sys_choice_cross_scope_access=' + (access.known
             ? ('create=' + access.create + ',update=' + access.update + ',delete=' + access.remove +
                ',read=' + access.read)
             : 'unreadable'));
-    if (!inScope) {
-        log('SCOPE|this run is executing in ' + scopeName + ' rather than ' + SCOPE_NAME +
-            '. Row writes are still captured against the application, because the record an Update Set' +
-            ' carries is the app-owned sys_choice_set composite (see CHOICE_SETS below), but the' +
-            ' verification is not attributed to the application. Prefer an in-scope run for verification.');
-    }
-    if (inScope && access.known && !access.create) {
+    if (access.known && !access.create) {
         log('SCOPE|sys_choice is a global table with create_access=false, so an INSERT from the ' +
-            SCOPE_NAME + ' scope will be refused by the platform. This run can verify and report, but a' +
-            ' missing row has to be written by a GLOBAL-scope run of this same script.');
+            SCOPE_NAME + ' scope is refused by the platform. This run can verify and report; a missing' +
+            ' row is a BLOCKED capability gap to be reported, NOT something to write from the global' +
+            ' scope. Remedy=' + nativeAuthoringRemedy());
     }
-    return inScope;
 }
 
 // ============================================================================
@@ -409,21 +676,82 @@ function reportExecutionScope(scopeSysId, access) {
  * @return {string} the diagnosis and the remedy
  */
 function refusalDiagnosis(operation, access) {
-    var scopeName = '' + gs.getCurrentScopeName();
+    var scopeName = currentScopeName();
     if (access && access.known && ((operation === 'create' && !access.create) ||
             (operation === 'update' && !access.update))) {
         return 'cause=sys_choice is a global table whose sys_db_object row carries ' + operation +
             '_access=false, so the platform refuses this ' + operation + ' from the ' + scopeName +
-            ' scope|remedy=re-run this same script in the GLOBAL scope (sys_scope empty, or the' +
-            ' application picker set to Global) to perform the write, then re-run it in ' + SCOPE_NAME +
-            ' to verify. The values stay exportable either way: the record an Update Set carries is the' +
-            ' app-owned sys_choice_set composite, not the row. Do NOT edit the global sys_db_object row' +
-            ' and do NOT add a sys_scope_privilege artifact to work around this.';
+            ' scope. This is the documented cross-scope restriction and it is a BLOCKED capability gap,' +
+            ' not a condition to work around|remedy=' + nativeAuthoringRemedy();
     }
     return 'cause=not the documented cross-scope restriction (sys_choice ' + operation + '_access=' +
         (access && access.known ? ('' + (operation === 'create' ? access.create : access.update)) : 'unreadable') +
         ' in the ' + scopeName + ' scope); investigate an ACL, a data policy or a business rule on' +
-        ' sys_choice before re-running';
+        ' sys_choice before re-running|remedy=' + nativeAuthoringRemedy();
+}
+
+/**
+ * Query sys_choice by the full natural key and report how many rows match.
+ *
+ * A fresh GlideRecord every time, deliberately: every caller here needs the
+ * state as it is NOW, not the state a record it already holds was fetched in.
+ * That is the whole point of the pre-insert re-query, the post-insert read-back
+ * and the persisted-attribute audit.
+ *
+ * @param {Object} spec one entry of CHOICE_SPECS
+ * @return {GlideRecord} the executed query, positioned before the first row
+ */
+function queryNaturalKey(spec) {
+    var gr = new GlideRecord('sys_choice');
+    gr.addQuery('name', spec.table);
+    gr.addQuery('element', spec.element);
+    gr.addQuery('value', spec.value);
+    gr.query();
+    return gr;
+}
+
+/**
+ * Re-assert, immediately before a single mutating call, that this run is still
+ * entitled to make it.
+ *
+ * Two facts were established once at the start of the run and can both stop
+ * being true while it is in flight: the executing scope, and the existence of
+ * the application scope record. A concurrent teardown - which this project runs
+ * routinely - deletes the scope record mid-run, and a write that lands after it
+ * writes rows nothing owns. Checking once for twenty-four writes is what makes
+ * that possible, so the check runs before EVERY write instead.
+ *
+ * @param {string} operation 'repair update' or 'insert', for the message
+ * @param {string} key the natural key being written, for the message
+ * @param {string} scopeSysId the scope sys_id resolved at the start of the run
+ * @return {boolean} true when the write may proceed
+ */
+function revalidateWriteContext(operation, key, scopeSysId) {
+    var scopeName = currentScopeName();
+    if (scopeName !== SCOPE_NAME) {
+        logProblem(key + '|' + operation + ' NOT ATTEMPTED|the executing scope is now ' + scopeName +
+            ' rather than ' + SCOPE_NAME + '. A write from another scope is a global-scope write (AAP' +
+            ' 0.3.2, 0.7.2) and is refused.');
+        abortWrites('out-of-scope execution mid-run');
+        return false;
+    }
+    var current = resolveScope();
+    if (current.sysId === '') {
+        logProblem(key + '|' + operation + ' NOT ATTEMPTED|the sys_scope query for scope=' + SCOPE_NAME +
+            ' now returns ' + current.count + ' rows or a malformed sys_id. The application scope record' +
+            ' resolved at the start of this run is gone or ambiguous - a concurrent teardown is the' +
+            ' likely cause - so the owning application can no longer be identified.');
+        abortWrites('application scope record unresolved mid-run');
+        return false;
+    }
+    if (current.sysId !== scopeSysId) {
+        logProblem(key + '|' + operation + ' NOT ATTEMPTED|the application scope record changed identity' +
+            ' mid-run: this run resolved one sys_id for scope=' + SCOPE_NAME + ' and now resolves a' +
+            ' different one, so the application was deleted and recreated underneath it.');
+        abortWrites('application scope record changed identity mid-run');
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -477,6 +805,23 @@ function choiceMismatches(gr, spec) {
  * row for the same key is never inserted; if the instance already holds more
  * than one, that is reported as a duplicate rather than compounded.
  *
+ * Concurrency: check-then-act is unavoidable here, because no mutual-exclusion
+ * primitive is available to a scoped application (see the SINGLE-WRITER
+ * PRECONDITION block in the header). So the window is closed by narrowing it
+ * and by refusing to guess about it, in four places:
+ *
+ *   1. nothing is written once RUN_STATE.abort is set;
+ *   2. the executing scope and the application scope record are re-validated
+ *      immediately before the update and immediately before the insert;
+ *   3. the natural key is re-queried immediately before the insert, so a row a
+ *      concurrent writer created in the meantime is detected and NOT duplicated;
+ *   4. the natural key is read back immediately after the insert, so a
+ *      duplicate that a simultaneous insert produced is detected here rather
+ *      than surviving as two selectable values.
+ *
+ * Any of 2, 3 or 4 failing ends writing for the whole run and fails the
+ * verdict. None of them deletes anything.
+ *
  * @param {Object} spec one entry of CHOICE_SPECS
  * @param {string} scopeSysId the application scope resolved by name, used only
  *                 where the platform actually defines a scope column on
@@ -487,11 +832,13 @@ function choiceMismatches(gr, spec) {
 function reconcileChoice(spec, scopeSysId, access) {
     var key = choiceKey(spec.table, spec.element, spec.value);
 
-    var existing = new GlideRecord('sys_choice');
-    existing.addQuery('name', spec.table);
-    existing.addQuery('element', spec.element);
-    existing.addQuery('value', spec.value);
-    existing.query();
+    if (RUN_STATE.abort) {
+        STATS.skippedAfterAbort++;
+        log(key + '|SKIPPED|writing was closed earlier in this run|reason=' + RUN_STATE.abortReason);
+        return;
+    }
+
+    var existing = queryNaturalKey(spec);
 
     var rowCount = existing.getRowCount();
     if (rowCount > 1) {
@@ -505,6 +852,9 @@ function reconcileChoice(spec, scopeSysId, access) {
         var drift = choiceMismatches(existing, spec);
         if (drift.length === 0) {
             STATS.already++;
+            return;
+        }
+        if (!revalidateWriteContext('repair update', key, scopeSysId)) {
             return;
         }
         var repaired = [];
@@ -522,6 +872,25 @@ function reconcileChoice(spec, scopeSysId, access) {
         return;
     }
 
+    if (!revalidateWriteContext('insert', key, scopeSysId)) {
+        return;
+    }
+
+    // Re-query the natural key with the insert about to happen. The first query
+    // above may be milliseconds or seconds old, and in that window another
+    // writer of this same script can have created the row. Inserting anyway is
+    // precisely how a check-then-act sequence produces the duplicate the
+    // specification forbids, so a row found here ends writing instead.
+    var appeared = queryNaturalKey(spec);
+    if (appeared.getRowCount() > 0) {
+        logProblem('RACE|' + key + '|insert NOT ATTEMPTED|' + appeared.getRowCount() + ' row(s) for this' +
+            ' natural key appeared between this run\'s first query and its insert, so another writer is' +
+            ' active on sys_choice. Inserting would duplicate the value. Nothing was written and nothing' +
+            ' was deleted; re-run this script alone once the other writer has finished.');
+        abortWrites('concurrent writer detected on the natural key');
+        return;
+    }
+
     var gr = new GlideRecord('sys_choice');
     gr.initialize();
     gr.setValue('name', spec.table);
@@ -533,7 +902,8 @@ function reconcileChoice(spec, scopeSysId, access) {
     gr.setValue('inactive', CHOICE_INACTIVE);
     // Only where the release defines them. On a release where sys_choice carries
     // no scope columns the application attribution comes from the executing
-    // scope instead, which reportExecutionScope() has already asserted.
+    // scope instead, which GATE 2 has already asserted and which
+    // revalidateWriteContext() has just re-asserted.
     if (gr.isValidField('sys_scope') && scopeSysId) {
         gr.setValue('sys_scope', scopeSysId);
     }
@@ -547,8 +917,27 @@ function reconcileChoice(spec, scopeSysId, access) {
         logProblem(key + '|insert REFUSED|' + refusalDiagnosis('create', access));
         return;
     }
+
+    // Read the natural key back from the database, not from gr. Two writers
+    // that both passed the re-query above both insert, and the only place that
+    // is visible is here. Exactly one row is the only acceptable answer.
+    var readBack = queryNaturalKey(spec);
+    var readBackCount = readBack.getRowCount();
+    if (readBackCount !== 1) {
+        logProblem('RACE|' + key + '|post-insert read-back found ' + readBackCount + ' rows for this natural' +
+            ' key where exactly 1 is required' + (readBackCount > 1
+                ? ', so a simultaneous writer inserted the same value. The duplicate is REPORTED, not deleted'
+                : ', so this run\'s own insert did not persist') +
+            '. sys_id returned by the insert=' + id + '.');
+        abortWrites(readBackCount > 1
+            ? 'duplicate row detected after insert'
+            : 'inserted row not readable after insert');
+        return;
+    }
+
     STATS.created++;
-    log(key + '|created|sys_id=' + id + '|label=' + spec.label + '|sequence=' + spec.sequence);
+    log(key + '|created|sys_id=' + id + '|label=' + spec.label + '|sequence=' + spec.sequence +
+        '|read_back=1');
 }
 
 // ============================================================================
@@ -559,23 +948,31 @@ function reconcileChoice(spec, scopeSysId, access) {
  * Index the specification by field and by natural key, so verification can ask
  * both "how many values does this field want" and "is this live row wanted".
  *
- * @return {Object} { byField: { 'table.element': {value: spec} }, byKey: {key: spec}, fields: [ 'table.element' ] }
+ * fieldMeta carries the (table, element) pair behind each field key, so a
+ * consumer that has to query by table and by element - the export-composite
+ * verification does - takes it from the specification rather than declaring a
+ * second list of the same seven fields that could drift out of step with it.
+ *
+ * @return {Object} { byField: { 'table.element': {value: spec} }, byKey: {key: spec},
+ *                    fields: [ 'table.element' ], fieldMeta: { 'table.element': {table, element} } }
  */
 function buildSpecIndex() {
     var byField = {};
     var byKey = {};
     var fields = [];
+    var fieldMeta = {};
     for (var i = 0; i < CHOICE_SPECS.length; i++) {
         var spec = CHOICE_SPECS[i];
         var fieldKey = spec.table + '.' + spec.element;
         if (!byField[fieldKey]) {
             byField[fieldKey] = {};
+            fieldMeta[fieldKey] = { table: spec.table, element: spec.element };
             fields.push(fieldKey);
         }
         byField[fieldKey][spec.value] = spec;
         byKey[choiceKey(spec.table, spec.element, spec.value)] = spec;
     }
-    return { byField: byField, byKey: byKey, fields: fields };
+    return { byField: byField, byKey: byKey, fields: fields, fieldMeta: fieldMeta };
 }
 
 /**
@@ -691,33 +1088,284 @@ function verifyCounts(index, live) {
 }
 
 /**
- * Report the platform-native choice-list composites that make these rows
- * exportable. Read-only: this script writes no sys_choice_set row.
+ * Re-read every specified row from the database AFTER the reconciliation loop
+ * and check its stored attributes against the specification.
  *
- * The composite is the record an Update Set actually carries - one
- * `sys_choice_set` per (table, field) owning that field's value rows - so its
- * absence is why a package can commit and still leave the dropdown empty. It is
- * reported here for the export inventory that follows this run, not repaired.
+ * This is the pass that separates "the write was issued" from "the right value
+ * is stored". Nothing before it re-reads a row: reconcileChoice() compares
+ * attributes on its FIRST query, which is by definition before it writes, and
+ * verifyCounts() only counts. Between those two a write can be partially
+ * applied, normalized by the platform (a sequence coerced, a label trimmed), or
+ * silently dropped by a business rule on sys_choice - and every one of those
+ * states passes a count check while the dropdown renders wrongly.
+ *
+ * Read-only, and a genuine re-read: queryNaturalKey() builds a new GlideRecord
+ * for every spec, so nothing here inherits the record an insert or an update
+ * went through.
+ *
+ * @param {Object} index the output of buildSpecIndex()
+ * @return {boolean} true when all EXPECTED_CHOICE_VALUES rows persist exactly
+ *                   once with exactly the specified attributes
  */
-function reportChoiceSets() {
-    var count = 0;
-    var names = [];
+function verifyPersistedAttributes(index) {
+    var ok = true;
+    var exactlyOne = 0;
+    var missing = 0;
+    var duplicated = 0;
+    var mismatched = 0;
+
+    for (var i = 0; i < CHOICE_SPECS.length; i++) {
+        var spec = CHOICE_SPECS[i];
+        var key = choiceKey(spec.table, spec.element, spec.value);
+
+        // The index must round-trip this spec. If two CHOICE_SPECS entries share
+        // a natural key they collapse into one index entry, and the instance can
+        // then hold 23 correct rows for 24 specs - a shortfall whose cause is the
+        // specification, not the instance. Saying so here beats leaving a reader
+        // to infer it from a count.
+        if (index.byKey[key] !== spec) {
+            ok = false;
+            logProblem('PERSISTED|' + key + '|SPEC COLLISION|this natural key does not resolve back to its' +
+                ' own CHOICE_SPECS entry, so two entries share it. The specification, not the instance,' +
+                ' is what needs correcting.');
+            continue;
+        }
+
+        var gr = queryNaturalKey(spec);
+        var found = gr.getRowCount();
+
+        if (found === 0) {
+            ok = false;
+            missing++;
+            logProblem('PERSISTED|' + key + '|NOT PERSISTED|no sys_choice row exists for this natural key' +
+                ' after reconciliation; expected exactly 1 (shortfall). The dropdown for ' + spec.table +
+                '.' + spec.element + ' will not offer "' + spec.label + '".');
+            continue;
+        }
+        if (found > 1) {
+            ok = false;
+            duplicated++;
+            logProblem('PERSISTED|' + key + '|DUPLICATED|' + found + ' sys_choice rows exist for this natural' +
+                ' key after reconciliation; expected exactly 1 (duplicate). Attributes are not compared,' +
+                ' because with more than one row there is no single stored value to compare. Reported,' +
+                ' not deleted.');
+            continue;
+        }
+
+        exactlyOne++;
+        gr.next();
+        var drift = choiceMismatches(gr, spec);
+        for (var d = 0; d < drift.length; d++) {
+            ok = false;
+            mismatched++;
+            logProblem('PERSISTED|' + key + '|MISMATCH|column=' + drift[d].column + '|stored=' +
+                drift[d].stored + '|wanted=' + drift[d].wanted + '|the row persists but this column does' +
+                ' not hold the specified value, so the write was partial, normalized or overwritten.');
+        }
+    }
+
+    log('PERSISTED|checked=' + CHOICE_SPECS.length + '|exactly_one=' + exactlyOne + '|missing=' + missing +
+        '|duplicated=' + duplicated + '|attribute_mismatches=' + mismatched +
+        '|columns=label,sequence,language,inactive|' + (ok ? 'ok' : 'MISMATCH') + '|read_only_reread');
+
+    return ok;
+}
+
+/**
+ * Verify the platform-native choice-list composites that make these rows
+ * exportable as application files. Read-only: this script writes no
+ * sys_choice_set row and repairs none.
+ *
+ * "The twenty-four rows exist" and "the twenty-four values are exportable as
+ * app-owned" are two different claims, and only the first is what a row count
+ * establishes. What an Update Set actually carries is one `sys_choice_set`
+ * composite per (table, field), owning that field's value rows - which is
+ * exactly why a package can commit cleanly and still leave a dropdown empty.
+ * So this pass asserts three things and fails the verdict on any of them:
+ *
+ *   - EXACTLY ONE composite per specified field. Zero means the values are not
+ *     carried by the application at all; more than one means the export is
+ *     ambiguous about which composite owns them.
+ *   - OWNERSHIP on each: `sys_scope` and `sys_package` both resolving to the
+ *     application scope this run resolved by name. An ownership column that is
+ *     unreadable or empty is a PROBLEM, never a silent pass - an ownership
+ *     claim nobody can check is precisely what this pass exists to reject.
+ *   - NO SURPLUS composite on the three owned tables. A composite for a field
+ *     the specification does not name is an export the application did not
+ *     authorize.
+ *
+ * The seven (table, element) pairs come from index.fieldMeta - the
+ * specification's own view - so there is no second list of fields here to drift
+ * out of step with CHOICE_SPECS.
+ *
+ * @param {Object} index the output of buildSpecIndex()
+ * @param {string} scopeSysId the application scope resolved by name at the
+ *                 start of this run; the value both ownership columns must hold
+ * @return {boolean} true when all EXPECTED_CHOICE_LISTS composites exist
+ *                   exactly once, are app-owned, and nothing else exists
+ */
+function verifyChoiceSets(index, scopeSysId) {
+    var ok = true;
+    var byFieldKey = {};
+    var order = [];
+    var total = 0;
+    var appOwned = 0;
+
+    // One query over the three owned tables rather than one per field: the
+    // surplus assertion needs the whole set anyway, and grouping it by
+    // (name, element) answers the per-field assertions from the same read.
     var gr = new GlideRecord('sys_choice_set');
     gr.addQuery('name', 'IN', OWNED_TABLES.join(','));
     gr.orderBy('name');
     gr.orderBy('element');
     gr.query();
     while (gr.next()) {
-        count++;
-        names.push(gr.getValue('name') + '.' + gr.getValue('element'));
+        total++;
+        var fieldKey = readText(gr, 'name') + '.' + readText(gr, 'element');
+        var row = {
+            sysId: '' + gr.getUniqueValue(),
+            scopeReadable: gr.isValidField('sys_scope'),
+            packageReadable: gr.isValidField('sys_package'),
+            scope: gr.isValidField('sys_scope') ? readText(gr, 'sys_scope') : '',
+            pkg: gr.isValidField('sys_package') ? readText(gr, 'sys_package') : ''
+        };
+        if (!byFieldKey[fieldKey]) {
+            byFieldKey[fieldKey] = [];
+            order.push(fieldKey);
+        }
+        byFieldKey[fieldKey].push(row);
     }
-    log('CHOICE_SETS|expected=' + EXPECTED_CHOICE_LISTS + '|found=' + count + '|' + names.join(',') +
-        '|read_only_report');
+
+    for (var f = 0; f < index.fields.length; f++) {
+        var specFieldKey = index.fields[f];
+        var meta = index.fieldMeta[specFieldKey];
+        var rows = byFieldKey[specFieldKey] || [];
+
+        if (rows.length === 0) {
+            ok = false;
+            log('CHOICE_SETS|name=' + meta.table + ' element=' + meta.element + ' composites=0 MISMATCH');
+            logProblem('CHOICE_SETS|' + specFieldKey + '|SHORTFALL|no sys_choice_set composite exists for' +
+                ' this field, so its values are not carried as application files by an Update Set. This' +
+                ' is the state in which a package commits cleanly and the dropdown still renders empty.' +
+                '|remedy=' + nativeAuthoringRemedy());
+            continue;
+        }
+        if (rows.length > 1) {
+            ok = false;
+            var ids = [];
+            for (var r = 0; r < rows.length; r++) {
+                ids.push(rows[r].sysId);
+            }
+            log('CHOICE_SETS|name=' + meta.table + ' element=' + meta.element + ' composites=' +
+                rows.length + ' MISMATCH');
+            logProblem('CHOICE_SETS|' + specFieldKey + '|DUPLICATE|' + rows.length + ' sys_choice_set' +
+                ' composites exist for this field (sys_ids=' + ids.join(',') + ') where exactly 1 is' +
+                ' required, so which composite owns the values on export is ambiguous. Reported, not' +
+                ' deleted.');
+            continue;
+        }
+
+        var only = rows[0];
+        var ownershipOk = true;
+        var columns = [
+            { column: 'sys_scope', readable: only.scopeReadable, stored: only.scope },
+            { column: 'sys_package', readable: only.packageReadable, stored: only.pkg }
+        ];
+        for (var c = 0; c < columns.length; c++) {
+            var col = columns[c];
+            if (!col.readable) {
+                ok = false;
+                ownershipOk = false;
+                logProblem('CHOICE_SETS|' + specFieldKey + '|OWNERSHIP UNVERIFIABLE|' + col.column +
+                    ' is not a readable field on sys_choice_set on this release, so this composite\'s' +
+                    ' application ownership cannot be established. An unverifiable ownership claim fails' +
+                    ' this check rather than passing it silently.');
+            } else if (col.stored === '') {
+                ok = false;
+                ownershipOk = false;
+                logProblem('CHOICE_SETS|' + specFieldKey + '|OWNERSHIP EMPTY|' + col.column + ' is empty on' +
+                    ' composite sys_id=' + only.sysId + ', so the composite belongs to no application and' +
+                    ' will not travel with this application\'s Update Set.|remedy=' + nativeAuthoringRemedy());
+            } else if (col.stored !== scopeSysId) {
+                ok = false;
+                ownershipOk = false;
+                logProblem('CHOICE_SETS|' + specFieldKey + '|OWNERSHIP MISMATCH|' + col.column + '=' +
+                    col.stored + ' on composite sys_id=' + only.sysId + ', but the ' + SCOPE_NAME +
+                    ' application resolved to ' + scopeSysId + '. The composite is owned by another' +
+                    ' application or by the global scope, so these values are not this application\'s to' +
+                    ' export.|remedy=' + nativeAuthoringRemedy());
+            }
+        }
+        if (ownershipOk) {
+            appOwned++;
+        }
+        log('CHOICE_SETS|name=' + meta.table + ' element=' + meta.element + ' composites=1 sys_id=' +
+            only.sysId + ' sys_scope=' + (only.scopeReadable ? (only.scope || 'EMPTY') : 'UNREADABLE') +
+            ' sys_package=' + (only.packageReadable ? (only.pkg || 'EMPTY') : 'UNREADABLE') + ' ' +
+            (ownershipOk ? 'ok' : 'MISMATCH'));
+    }
+
+    for (var s = 0; s < order.length; s++) {
+        if (!index.byField[order[s]]) {
+            ok = false;
+            var surplusRows = byFieldKey[order[s]];
+            var surplusIds = [];
+            for (var t = 0; t < surplusRows.length; t++) {
+                surplusIds.push(surplusRows[t].sysId);
+            }
+            logProblem('CHOICE_SETS|' + order[s] + '|SURPLUS|' + surplusRows.length + ' sys_choice_set' +
+                ' composite(s) (sys_ids=' + surplusIds.join(',') + ') exist for a field outside the ' +
+                EXPECTED_CHOICE_LISTS + ' the specification names, so the application would export a' +
+                ' choice list it never authorized. Reported, not deleted.');
+        }
+    }
+
+    log('CHOICE_SETS|expected=' + EXPECTED_CHOICE_LISTS + '|found=' + total + '|fields=' +
+        order.join(',') + '|app_owned=' + appOwned + '|application_sys_id=' + scopeSysId + '|' +
+        (ok ? 'ok' : 'MISMATCH') + '|read_only_report');
+
+    return ok;
 }
 
 // ============================================================================
 // Entry point
 // ============================================================================
+
+/**
+ * The single machine-readable reason a completed run FAILED.
+ *
+ * One line has to be enough for a grader or a report to act on, so the reason
+ * is the FIRST failing term in the order a reader cares about: a write that was
+ * abandoned mid-run outranks a count that came out wrong, which outranks a
+ * problem that only the numbered list explains. The full detail is always in
+ * the PROBLEM[n/N] lines that follow the summary.
+ *
+ * @param {boolean} countsOk the verdict of verifyCounts()
+ * @param {boolean} persistedOk the verdict of verifyPersistedAttributes()
+ * @param {boolean} choiceSetsOk the verdict of verifyChoiceSets()
+ * @return {string} the reason, never empty
+ */
+function verdictReason(countsOk, persistedOk, choiceSetsOk) {
+    if (RUN_STATE.abort) {
+        return RUN_STATE.abortReason;
+    }
+    if (STATS.duplicateKeys > 0) {
+        return 'duplicate natural keys on sys_choice';
+    }
+    if (STATS.insertRefused > 0 || STATS.updateRefused > 0) {
+        return 'platform refused a sys_choice write in scope (BLOCKED capability gap)';
+    }
+    if (!countsOk) {
+        return 'choice row counts disagree with the specification';
+    }
+    if (!persistedOk) {
+        return 'persisted choice rows disagree with the specification';
+    }
+    if (!choiceSetsOk) {
+        return 'choice values are not exportable as app-owned composites';
+    }
+    return 'see the PROBLEM lines';
+}
 
 /**
  * Reconcile the twenty-four choice values and verify the result.
@@ -727,8 +1375,8 @@ function reportChoiceSets() {
 function createChoiceValues() {
     var started = new GlideDateTime();
 
-    // The specification must describe what it claims to describe before any
-    // row is written from it.
+    // GATE 1 - the specification must describe what it claims to describe
+    // before any row is written from it.
     var index = buildSpecIndex();
     if (CHOICE_SPECS.length !== EXPECTED_CHOICE_VALUES || index.fields.length !== EXPECTED_CHOICE_LISTS) {
         logProblem('SPEC|CHOICE_SPECS describes ' + CHOICE_SPECS.length + ' values across ' + index.fields.length +
@@ -736,14 +1384,41 @@ function createChoiceValues() {
             '; refusing to write from an inconsistent specification');
         var refused = 'SUMMARY|verdict=FAILED|reason=inconsistent specification|problems=' + PROBLEMS.length;
         log(refused);
+        logProblemList();
         return LOG_PREFIX + refused;
     }
 
+    // GATE 2 - the executing scope. A run the platform completed outside the
+    // application's own scope is refused here, before the scope record is even
+    // resolved and long before the reconciliation loop, so no insert or update
+    // is attempted from a global session. Unconditional early return.
+    if (!assertExecutionScope()) {
+        var outOfScope = 'SUMMARY|verdict=FAILED|reason=out-of-scope execution|executing_scope=' +
+            currentScopeName() + '|required_scope=' + SCOPE_NAME + '|created=0|repaired=0|problems=' +
+            PROBLEMS.length;
+        log(outOfScope);
+        logProblemList();
+        return LOG_PREFIX + outOfScope;
+    }
+
+    // GATE 3 - the application scope record. Writing 24 rows of a global table
+    // while the application's own ownership is unresolved or ambiguous is the
+    // fail-open case: resolveScope() already refuses anything but exactly one
+    // well-formed 32-hex match, and this is the unconditional early return that
+    // makes its refusal binding.
     var scope = resolveScope();
     if (scope.sysId === '') {
-        logProblem('SCOPE|sys_scope query for scope=' + SCOPE_NAME + ' returned ' + scope.count +
-            ' rows or a malformed sys_id; the application is not installed on this instance');
+        logProblem('SCOPE|REFUSED|sys_scope query for scope=' + SCOPE_NAME + ' returned ' + scope.count +
+            ' rows or a malformed sys_id, so the application scope is unresolved or ambiguous. Refusing' +
+            ' to reconcile: nothing may be written to sys_choice while the owning application cannot be' +
+            ' identified. Expected exactly one row whose sys_id matches ^[0-9a-f]{32}$.');
+        var unresolved = 'SUMMARY|verdict=FAILED|reason=unresolved application scope|scope_rows=' +
+            scope.count + '|created=0|repaired=0|problems=' + PROBLEMS.length;
+        log(unresolved);
+        logProblemList();
+        return LOG_PREFIX + unresolved;
     }
+
     var access = choiceTableAccess();
     reportExecutionScope(scope.sysId, access);
 
@@ -753,25 +1428,37 @@ function createChoiceValues() {
 
     log('RECONCILE|created=' + STATS.created + '|repaired=' + STATS.repaired +
         '|already_correct=' + STATS.already + '|insert_refused=' + STATS.insertRefused +
-        '|update_refused=' + STATS.updateRefused + '|duplicate_keys=' + STATS.duplicateKeys);
+        '|update_refused=' + STATS.updateRefused + '|duplicate_keys=' + STATS.duplicateKeys +
+        '|race_aborts=' + STATS.raceAborts + '|skipped_after_abort=' + STATS.skippedAfterAbort);
 
+    // Verification. Three independent passes, each returning a boolean that the
+    // verdict consumes: the counts, the persisted attributes of every row, and
+    // the app-owned export composites. None of them writes anything.
     var live = auditLiveRows(index);
     var countsOk = verifyCounts(index, live);
-    reportChoiceSets();
+    var persistedOk = verifyPersistedAttributes(index);
+    var choiceSetsOk = verifyChoiceSets(index, scope.sysId);
 
     var elapsed = new GlideDateTime().getNumericValue() - started.getNumericValue();
-    var verdict = (countsOk && PROBLEMS.length === 0) ? 'OK' : 'FAILED';
+    // Every term is explicit. A duplicate key and a race abort each fail the run
+    // on their own account rather than only through the problem list, so that
+    // neither can be lost if a future edit changes what reaches PROBLEMS.
+    var passed = countsOk &&
+        persistedOk &&
+        choiceSetsOk &&
+        STATS.duplicateKeys === 0 &&
+        !RUN_STATE.abort &&
+        PROBLEMS.length === 0;
+    var verdict = passed ? 'OK' : 'FAILED';
     var summary = 'SUMMARY|verdict=' + verdict +
+        '|reason=' + (passed ? 'none' : verdictReason(countsOk, persistedOk, choiceSetsOk)) +
         '|values=' + live.total + '/' + EXPECTED_CHOICE_VALUES +
         '|created=' + STATS.created + '|repaired=' + STATS.repaired + '|already_correct=' + STATS.already +
         '|surplus=' + STATS.surplusRows + '|duplicates=' + STATS.duplicateKeys +
+        '|race_aborts=' + STATS.raceAborts +
         '|problems=' + PROBLEMS.length + '|ms=' + elapsed;
     log(summary);
-    if (PROBLEMS.length > 0) {
-        for (var p = 0; p < PROBLEMS.length; p++) {
-            log('PROBLEM[' + (p + 1) + '/' + PROBLEMS.length + ']|' + PROBLEMS[p]);
-        }
-    }
+    logProblemList();
     return LOG_PREFIX + summary;
 }
 
