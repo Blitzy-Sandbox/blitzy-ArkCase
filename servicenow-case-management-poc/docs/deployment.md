@@ -4,7 +4,7 @@
 
 This document captures the four-step deployment procedure for the ServiceNow scoped application POC, mapped 1:1 to Validation Gate 7 (Update Set integrity) defined in [`validation-gates.md`](./validation-gates.md). It is non-negotiable: every step MUST complete cleanly before delivery, and the Update Set XML MUST re-import on a fresh PDI with zero preview errors. The four steps — Export, Verify, Confirm, Deliver — are preserved verbatim from AAP Section 0.7.2 (User Example — Deployment steps) and are reproduced as quoted text within each section below so that any human operator (or future build agent) can execute the deployment using only this document plus the cross-referenced manual round-trip-verify procedure. **Standing note: this walkthrough has NOT been executed end-to-end on the deliverable's current byte sequence (935 blocks, 3,973,569 bytes, SHA-256 `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9`, measured 2026-09-05T04:45Z — MEASURED, NOT GATE-VERIFIED) — no preview of the complete file has been run on it, so the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until step 2 is run on it, and directive D48's stop condition is live because the checksum recorded for the shipping package was `7292a6fe…`. What those bytes do carry, added 2026-09-03, is seven platform-native choice composites with their own runtime proof: that exact seven-child delta was uploaded, previewed to 0 problems of any type and committed by the native commit action (commit worker `state=complete`, message "Update set committed"), taking `sys_choice` for the three tables from 0 to 24 rows with every option label rendering on the real forms. Choice creation is therefore no longer a post-import step. The delivery election has been made and the shipping package ships; the note below states which sequence carries which result and which artifact is retained as the upgrade path.** **[RE-DATED 2026-09-09 (CR3 F12, CR4 F02/F05): the identity this standing note calls "the deliverable's current byte sequence" is a 2026-09-05 measurement of a package that was superseded and deleted on 2026-09-08. It is not the file you hold, and its digest must not be checked against the canonical path. The shipping identity is 522 blocks / 2,985,822 bytes / `5a3c629f…` — CURRENT ARTIFACT STATE, immediately below, prevails. What the note gets right and what still stands: no preview of the complete file has been run on the bytes that ship, so the AAP §0.7.1 Update Set gate is NOT MET for the file a reader holds until Step 2 is run on it.]**
 
-## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed the same day for code review CR4, findings F02 and F05)
+## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed and items 8-9 added the same day for code review CR4, findings F01 / F02 / F05)
 
 **One identity, and it prevails over every other figure in this document.** Earlier revisions of this file
 present more than one package as "the deliverable". The eight statements below are what is on disk today and
@@ -52,6 +52,31 @@ revision, and where any of them disagrees with this block, **this block is corre
    moved), `xmllint --noout` clean, and all 522 payloads still parsing individually. **These exact bytes have
    never been previewed or committed on any instance**, so the package remains ungated and Gate 7 remains
    open, exactly as item 2 states.
+
+9. **RELEASE AUTHORIZATION — these bytes are a release-blocked CANDIDATE, not an approved shipping
+   artifact (added 2026-09-09, code review CR4 re-verification, findings F01 / F02 / F05).**
+   `update-set/x_casemgmt_case_management_update_set.xml` is the AAP §0.3.1 deliverable path and the only
+   candidate that exists, so it is the file a reader holds and the file Gate 7 must be run against. It is
+   **not** cleared for promotion, release, or a commit on an acceptance or production instance while any of
+   the three blockers below stands, and **no statement anywhere in this package may be read as clearing
+   it** — "the shipping artifact" throughout these documents means *the candidate that ships if and when
+   these blockers are closed*, never an artifact that has passed release.
+   - **Blocker 1 — Gate 7 has never been run on these exact bytes.** No upload, preview, commit, ATF-suite
+     or transition-harness result covers sha256 `5a3c629f…` / 2,985,822 bytes.
+   - **Blocker 2 — the package knowingly carries 18 references that resolve only on the source instance**
+     (8 `<snapshot>` and 10 `<block>` values inside Flow Designer's platform-generated compiled-plan rows;
+     census and remedy at [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.CR4.1 (`ADV-4`)). Closing it requires a **re-export from an instance where the
+     application is installed and published**, which regenerates those rows and captures them
+     consistently. That is a human action on a live instance, outside what a documentation checkpoint can
+     perform, and it does **not** close the AAP §0.5.2 literal `sys_id` rule, which no Update Set can meet.
+   - **Blocker 3 — the F02 and F05 corrections were applied as a post-export sanitization stage**, not by a
+     clean-source native export. The content result is verified byte by byte (item 8), but the route AAP
+     §0.7.1 contemplates is a native export that already carries empty login metadata and a neutral actor
+     identity. Adopting a post-export-sanitized package as the release artifact is a **packaging-stage
+     decision that requires explicit human authorization**; absent that authorization the candidate stays
+     release-blocked even once Gate 7 passes.
+   Promote only an identity that has completed Gate 7 end to end under an authorized packaging route, and
+   record that identity in this block when it does.
 
 ## SUPPORTED INSTALL ROUTE — 2026-09-09 (code review CR3, finding F16)
 

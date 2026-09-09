@@ -4,6 +4,18 @@
 > deployment of the `x_casemgmt` Case Management scoped application onto a ServiceNow Personal
 > Developer Instance (PDI).
 
+> **RELEASE AUTHORIZATION — 2026-09-09 (code review CR4 re-verification, findings F01 / F02 / F05).**
+> Running this procedure on the candidate is exactly what Gate 7 asks for, and a clean preview is the
+> evidence it produces. It is **not** a release clearance. `update-set/x_casemgmt_case_management_update_set.xml`
+> (sha256 `5a3c629f…`, 2,985,822 bytes) stays a **release-blocked candidate** until three blockers are
+> closed: **(1)** Gate 7 has never been run on these exact bytes; **(2)** the package knowingly carries 18
+> references that resolve only on the source instance — 8 `<snapshot>` and 10 `<block>` values in Flow
+> Designer's compiled-plan rows — which only a **re-export from an instance where the application is
+> installed and published** closes, and which no preview result discharges; and **(3)** the F02/F05
+> corrections were applied as a post-export sanitization stage rather than by a clean-source native export,
+> so adopting these bytes as the release artifact is a packaging-stage decision requiring **explicit human
+> authorization**. Promote only an identity that has completed Gate 7 under an authorized packaging route.
+
 ## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed the same day for code review CR4, findings F02 and F05)
 
 **One identity, and it prevails over every other figure in this document.** Earlier revisions of this file

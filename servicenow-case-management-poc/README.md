@@ -4,7 +4,7 @@ A proof-of-concept ServiceNow scoped application that re-platforms a subset of A
 
 This subdirectory contains the ServiceNow scoped application, delivered as a **single self-contained Update Set XML** at `update-set/x_casemgmt_case_management_update_set.xml`, accompanied by serialized record-definition artifacts and supporting documentation under this same subdirectory. It targets a ServiceNow Personal Developer Instance (PDI); the current validation instance is `dev306625`, running **Zurich Patch 10** (`glide-zurich-07-01-2025__patch10-05-22-2026_06-12-2026_2311`), where the 2026-09-02 run took its measurements. It was originally built and gate-measured on `dev379024` (**Australia Patch 3**), a host that is now **retired and not used** — figures dated to it are dated evidence from that host, never current state. It is fully isolated from the existing ArkCase Maven reactor at the repository root — the rest of the repo is read-only context. The concrete scope identifier `x_casemgmt` is used consistently throughout these documents and every artifact under this subdirectory.
 
-## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed and items 8-9 added 2026-09-09 by code review CR4, findings F01 / F02 / F05)
+## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed and items 8-10 added 2026-09-09 by code review CR4, findings F01 / F02 / F05)
 
 **One identity, and it prevails over every other figure in this document.** Earlier revisions of this file
 present more than one package as "the deliverable". The nine statements below are what is on disk today and
@@ -63,6 +63,31 @@ revision, and where any of them disagrees with this block, **this block is corre
    not resolve on a target instance and are the only residual risk. Full entry, census and human remedy:
    [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.CR4.1
    (`ADV-4`).
+
+10. **RELEASE AUTHORIZATION — these bytes are a release-blocked CANDIDATE, not an approved shipping
+   artifact (added 2026-09-09, code review CR4 re-verification, findings F01 / F02 / F05).**
+   `update-set/x_casemgmt_case_management_update_set.xml` is the AAP §0.3.1 deliverable path and the only
+   candidate that exists, so it is the file a reader holds and the file Gate 7 must be run against. It is
+   **not** cleared for promotion, release, or a commit on an acceptance or production instance while any of
+   the three blockers below stands, and **no statement anywhere in this package may be read as clearing
+   it** — "the shipping artifact" throughout these documents means *the candidate that ships if and when
+   these blockers are closed*, never an artifact that has passed release.
+   - **Blocker 1 — Gate 7 has never been run on these exact bytes.** No upload, preview, commit, ATF-suite
+     or transition-harness result covers sha256 `5a3c629f…` / 2,985,822 bytes.
+   - **Blocker 2 — the package knowingly carries 18 references that resolve only on the source instance**
+     (8 `<snapshot>` and 10 `<block>` values inside Flow Designer's platform-generated compiled-plan rows;
+     census and remedy at [`docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) §0.CR4.1 (`ADV-4`)). Closing it requires a **re-export from an instance where the
+     application is installed and published**, which regenerates those rows and captures them
+     consistently. That is a human action on a live instance, outside what a documentation checkpoint can
+     perform, and it does **not** close the AAP §0.5.2 literal `sys_id` rule, which no Update Set can meet.
+   - **Blocker 3 — the F02 and F05 corrections were applied as a post-export sanitization stage**, not by a
+     clean-source native export. The content result is verified byte by byte (item 8), but the route AAP
+     §0.7.1 contemplates is a native export that already carries empty login metadata and a neutral actor
+     identity. Adopting a post-export-sanitized package as the release artifact is a **packaging-stage
+     decision that requires explicit human authorization**; absent that authorization the candidate stays
+     release-blocked even once Gate 7 passes.
+   Promote only an identity that has completed Gate 7 end to end under an authorized packaging route, and
+   record that identity in this block when it does.
 
 ## SUPPORTED INSTALL ROUTE — 2026-09-09 (code review CR3, finding F16)
 

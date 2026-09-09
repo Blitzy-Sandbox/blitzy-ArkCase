@@ -59,7 +59,7 @@
 
 ---
 
-## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed and items 8-9 added 2026-09-09 by code review CR4, findings F01 / F02 / F05)
+## CURRENT ARTIFACT STATE — 2026-09-09 (code review CR3, finding F12; identity re-pointed and items 8-10 added 2026-09-09 by code review CR4, findings F01 / F02 / F05)
 
 **One identity, and it prevails over every other figure in this document.** Earlier revisions of this file
 present more than one package as "the deliverable". The nine statements below are what is on disk today and
@@ -114,6 +114,31 @@ revision, and where any of them disagrees with this block, **this block is corre
    (the three `sys_user_has_role` grants) and ADV-3 in §0.9 (the platform-derived stock role) as a reported
    gap rather than an accepted limitation, and no gate anywhere in this document may be scored as passing on
    account of it.
+
+10. **RELEASE AUTHORIZATION — these bytes are a release-blocked CANDIDATE, not an approved shipping
+   artifact (added 2026-09-09, code review CR4 re-verification, findings F01 / F02 / F05).**
+   `update-set/x_casemgmt_case_management_update_set.xml` is the AAP §0.3.1 deliverable path and the only
+   candidate that exists, so it is the file a reader holds and the file Gate 7 must be run against. It is
+   **not** cleared for promotion, release, or a commit on an acceptance or production instance while any of
+   the three blockers below stands, and **no statement anywhere in this package may be read as clearing
+   it** — "the shipping artifact" throughout these documents means *the candidate that ships if and when
+   these blockers are closed*, never an artifact that has passed release.
+   - **Blocker 1 — Gate 7 has never been run on these exact bytes.** No upload, preview, commit, ATF-suite
+     or transition-harness result covers sha256 `5a3c629f…` / 2,985,822 bytes.
+   - **Blocker 2 — the package knowingly carries 18 references that resolve only on the source instance**
+     (8 `<snapshot>` and 10 `<block>` values inside Flow Designer's platform-generated compiled-plan rows;
+     census and remedy at §0.CR4.1 (`ADV-4`) below). Closing it requires a **re-export from an instance where the
+     application is installed and published**, which regenerates those rows and captures them
+     consistently. That is a human action on a live instance, outside what a documentation checkpoint can
+     perform, and it does **not** close the AAP §0.5.2 literal `sys_id` rule, which no Update Set can meet.
+   - **Blocker 3 — the F02 and F05 corrections were applied as a post-export sanitization stage**, not by a
+     clean-source native export. The content result is verified byte by byte (item 8), but the route AAP
+     §0.7.1 contemplates is a native export that already carries empty login metadata and a neutral actor
+     identity. Adopting a post-export-sanitized package as the release artifact is a **packaging-stage
+     decision that requires explicit human authorization**; absent that authorization the candidate stays
+     release-blocked even once Gate 7 passes.
+   Promote only an identity that has completed Gate 7 end to end under an authorized packaging route, and
+   record that identity in this block when it does.
 
 ## SUPPORTED INSTALL ROUTE — 2026-09-09 (code review CR3, finding F16)
 
