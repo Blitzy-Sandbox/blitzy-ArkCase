@@ -622,7 +622,7 @@ Per AAP Section 0.7.2: "Re-import the exported XML on the same instance via Syst
 4. Open the imported record. State should be **Loaded**. If the state is anything else (e.g., **Failed to load**), open the Update Set log and resolve the underlying parse or schema issue on the source PDI, then restart from Step 1.
 5. Click **Preview Update Set**. Wait for preview to complete; this can take 1–5 minutes depending on the size of the Update Set and the load on the PDI.
 6. Examine the **Preview Problems** list:
-   - Zero rows = pass. Proceed to Step 3.
+   - Zero rows = pass. Proceed to [Step 2a](#step-2a-grant-the-three-demo-personas-their-scoped-roles), which is mandatory, and then to Step 3.
    - One or more rows = **fail**. Do not commit. Resolve the underlying issue in the source application and restart from Step 1.
 
 **One thing to expect at step 5, and not to treat as a fault.** Because `<payload_hash>` is empty on all 522
@@ -654,6 +654,88 @@ The remediation guidance below covers the most frequent preview-problem patterns
 - **"Skip"** rows in the preview — these are not errors but indicate the destination already has a newer version of the record. For a fresh PDI verification, every row should be **Insert** or **Update**, not **Skip**. If skips appear on a fresh PDI, the destination is not actually fresh — start over with a clean PDI.
 
 For the comprehensive manual round-trip verification procedure, see [`../scripts/round_trip_verify.md`](../scripts/round_trip_verify.md).
+
+## Step 2a: Grant the Three Demo Personas Their Scoped Roles
+
+> **MANDATORY ON EVERY INSTALL. NOT OPTIONAL, AND NOT SKIPPABLE ON A RE-INSTALL.** The package carries **no
+> `sys_user_has_role` payload at all**, so no user holds any scoped role when the commit finishes. Until these
+> three grants exist, **the three demo personas have no access whatsoever** and every persona-dependent check
+> below fails wholesale in a way that says nothing about the application (review finding F01).
+
+**Why the package cannot carry it.** `sys_user_has_role` is owned by Role Management V2 on this release, so the
+update-set loader's permission check on that table answers `false` and the commit **skips** the row rather than
+raising: the log reads `Skipping record for table sys_user_has_role and id <sys_id> - permission denied`. This
+was measured with the three payloads stamped `Global` **and** stamped `x_casemgmt` — both refused — so it is
+neither a capture defect nor a scope-stamping defect, and a package that carries them turns an otherwise clean
+commit into `Failed at 100%`. The three payloads were therefore removed from the package, and the authored
+record-definitions under [`../seed-data/role_assignments/`](../seed-data/role_assignments/) are the
+**specification of what this step must produce**, not payloads the commit applies. The two alternatives are
+forbidden: a Global-scope write to `sys_user_has_role` and a grant of any stock role both violate AAP Section
+0.3.2, and per Section 0.7.2's Minimal-Change Clause the gap is reported and performed natively rather than
+worked around.
+
+**What the commit does deliver.** The **three demo `sys_user` rows arrive with the commit itself** (as do the
+demo group and its membership), so nothing in this step waits on the seed pass or on any script — the users are
+already there to be granted.
+
+### When it runs
+
+The commit is [Step 3](#step-3-confirm-deployed-state) sub-step 1. **This step is the first action after that
+commit and a hard gate on everything after it.** It is numbered `2a` because Steps 1, 2, 3 and 4 reproduce AAP
+Section 0.7.2's verbatim deployment steps and are therefore never renumbered; it is placed here so that an
+operator working top-down meets it before any verification that assumes a persona. Run it **before**:
+
+- [Step 3](#step-3-confirm-deployed-state) sub-steps 9 and 10, which sign in as `x_casemgmt_demo_agent` and
+  `x_casemgmt_demo_manager` to open the two dashboards;
+- the seed pass ([`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5g, which is
+  step 8 of that document's primary procedure — this step is step 7);
+- any impersonation probe, any Gate 3 run in [`validation-gates.md`](./validation-gates.md), and any ATF suite
+  run. With `0` grants the suite fails at its first persona step in sixteen of twenty tests, and the failures
+  are one blocked gate measured sixteen times rather than sixteen defects.
+
+### What to produce
+
+Three grants, one per persona, each its own save:
+
+| # | User (`sys_user.user_name`) | Role to add (`sys_user_role.name`) |
+|---|---|---|
+| 1 | `x_casemgmt_demo_manager` | `x_casemgmt_case_manager` |
+| 2 | `x_casemgmt_demo_agent` | `x_casemgmt_case_agent` |
+| 3 | `x_casemgmt_demo_viewer` | `x_casemgmt_case_viewer` |
+
+### The route — a native platform action, and the only supported manual step here
+
+Use the platform's own **Edit Members** slushbucket: open the user in **User Administration → Users** and click
+**Edit…** on the form's **Roles** related list, or work from the other side and use each role form's **Edit
+Members** related list. Move the scoped role across and press the slushbucket's **Save** — **one save per
+grant**, because a save diffs initial against final state and three users are three different forms. The
+step-by-step click path, the elevation caveat and the measured behaviour are in
+[`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md); this step deliberately does
+not duplicate it. Nothing else in this document is a supported substitute: do **not** run
+`../scripts/post_import_remediation.js`, do **not** accept preview collisions, and do **not** commit the
+Update Set a second time — all three are marked ⛔ **NOT A SUPPORTED STEP** in SUPPORTED INSTALL ROUTE in
+[`validation-gates.md`](./validation-gates.md).
+
+### Verification — the acceptance criterion for this step
+
+```
+GET [instance URL]/api/now/table/sys_user_has_role
+    ?sysparm_query=user.user_nameSTARTSWITHx_casemgmt_demo%5Erole.nameSTARTSWITHx_casemgmt_case
+    &sysparm_fields=user.user_name,role.name,inherited&sysparm_limit=20
+```
+
+Pass condition: **exactly 3 rows**, one per scoped role, matching the table above, each with
+**`inherited=false`**. **0 rows** means this step has not been performed; **more than 3** on that filter means a
+persona holds a scoped role it should not, and the extra grant is removed through the same Edit Members screen.
+Alongside each grant the platform derives its own `inherited=true` `snc_required_script_writer_permission`
+companion row (`sys_created_by=system`) — that is the platform's bookkeeping and the signature of a natively
+authored assignment; do not delete it and do not count it as a demo grant.
+
+**This step does not turn a gate green.** It is a deployer workaround for a BLOCKED platform capability gap, so
+AAP Section 0.7.3's Gate 3 and Section 0.7.4's "3 users (one per role)" stay **UNSATISFIED** and Gate 3 remains
+**NOT MET on the assignment half** in [`validation-gates.md`](./validation-gates.md) whether or not the grants
+are made. What it changes is that the application becomes demonstrable; what it does not change is the
+deliverable's score.
 
 ## Step 3: Confirm Deployed State
 
@@ -762,6 +844,13 @@ Per AAP Section 0.7.2: "After successful preview, commit the Update Set. Verify 
 > measurements as forensic history, which is why those sections still contain the old numbers in past tense.
 
 ### Detailed Sub-Procedure
+
+**Precondition on sub-steps 2–12, enforced between sub-step 1 and sub-step 2:** as soon as sub-step 1's commit
+completes, perform [Step 2a](#step-2a-grant-the-three-demo-personas-their-scoped-roles) — the three
+`sys_user_has_role` grants — and confirm its acceptance query returns exactly 3 rows with `inherited=false`.
+The commit cannot install those grants on this release, sub-steps 9 and 10 sign in as two of the three demo
+personas, and a persona holding no role is denied everything, so running them before Step 2a produces a
+wholesale failure that measures the missing grants rather than the application (review finding F01).
 
 1. Click **Commit Update Set**. Wait for commit to complete. Commit can take 1–3 minutes; do not navigate away from the page until commit completes successfully.
 2. Open **App Engine Studio** (Now Platform → All → App Engine Studio). Confirm the scoped application appears in the Apps list. Open the application and confirm 3 tables are listed:

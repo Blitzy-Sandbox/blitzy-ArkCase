@@ -1,10 +1,10 @@
 # Workflow Tryout Guide — `x_casemgmt` Case Management POC
 
 > **Audience:** anyone who wants to try the deployed Case Management application on
-> `https://dev306625.service-now.com` and see the case lifecycle, role-based access, the external portal, and
+> `https://devXXXXXX.service-now.com` and see the case lifecycle, role-based access, the external portal, and
 > the dashboards in action.
 >
-> **Instance note.** `dev306625` is the reachable instance, running **Zurich Patch 10**; its Table API answered
+> **Instance note.** `devXXXXXX` is the reachable instance, running **Zurich Patch 10**; its Table API answered
 > read-only queries on 2026-09-03, and the application is installed, committed and seeded there. Two earlier
 > hosts appear in older revisions of this guide and in other documents in this repository and **neither is usable
 > now**: `dev379024` (Australia Patch 3) is **retired and is not used** — figures dated to it are dated evidence
@@ -62,7 +62,7 @@
 
 ## 1. Sign in and switch between the demo roles
 
-1. Sign in to `https://dev306625.service-now.com` as **`admin`**.
+1. Sign in to `https://devXXXXXX.service-now.com` as **`admin`**.
 2. The three demo users have **no passwords set**, so you cannot log in as them directly. Instead use
    **Impersonate** (the standard ServiceNow way to experience another user's access):
    - Click your **profile/avatar menu** (top-right) → **Impersonate user**.
@@ -259,7 +259,7 @@ Impersonate each demo user (Section 1) and observe the access posture (validated
 
 Open the public portal (incognito window, **not** logged in):
 
-**`https://dev306625.service-now.com/x_casemgmt_case_portal`**
+**`https://devXXXXXX.service-now.com/x_casemgmt_case_portal`**
 
 ### 7.1 Submit a case
 1. Go to the **Submit a Case** page.
@@ -276,7 +276,7 @@ Open the public portal (incognito window, **not** logged in):
 
 ### 7.3 The working route — the anonymous REST endpoints
 ```bash
-SN="${SERVICENOW_INSTANCE_URL:-https://dev306625.service-now.com}"   # your instance; the default is the current validation PDI
+SN="${SERVICENOW_INSTANCE_URL:-https://devXXXXXX.service-now.com}"   # export SERVICENOW_INSTANCE_URL, or replace the devXXXXXX placeholder with your own PDI host
 # submit (anonymous) -> 201 {number, "Your case has been submitted"}
 curl -s -H "Content-Type: application/json" -X POST \
   -d '{"subject":"Portal demo","type":"Complaint","description":"demo","requester_name":"Jane Public"}' \

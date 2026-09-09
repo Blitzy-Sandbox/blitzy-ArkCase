@@ -1446,7 +1446,7 @@ your own instance regardless** — that is what this document is for.
 > ⚠️ **Before you start, check the instance is awake.** Detect hibernation by CONTENT, not HTTP status: a
 > hibernating instance answers HTTP 200 with ServiceNow's "Instance Hibernating" page, and this procedure
 > cannot be executed at all until someone wakes it from the ServiceNow Developer Program account that owns it.
-> The PDI these notes were written against has been hibernating since 2026-08-11; the **existing `dev306625`
+> The PDI these notes were written against has been hibernating since 2026-08-11; the **existing `devXXXXXX`
 > PDI**, awake throughout and made clean by a targeted clean-state operation whose cascade exceeded the
 > destructive boundary it was authorized under, was used on 2026-09-02 — it was **not** newly provisioned:
 > it already held this application installed, committed and seeded. **The intended target was authorized
