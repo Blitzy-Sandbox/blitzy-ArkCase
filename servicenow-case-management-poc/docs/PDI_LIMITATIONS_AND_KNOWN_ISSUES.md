@@ -59,6 +59,134 @@
 
 ---
 
+## 0.CR1 Code review checkpoint CR1 (2026-09-09) — what changed in the package, and the two gaps now recorded as blocking
+
+CR1 — code review checkpoint on the canonical Update Set — raised seven findings. Six were defects in the
+shipped bytes; five were inaccurate or unauthorised statements in
+[`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md). **This section
+supersedes every statement anywhere below that describes the package as carrying a Fix Script, as carrying
+three `sys_user_has_role` payloads, or as carrying no `sys_grid_canvas_pane` rows.** Those statements are
+retained as the record of the package this one replaced.
+
+### 0.CR1.1 Package identity
+
+| Property | Pre-CR1 (measured 2026-09-08) | Shipping now (measured 2026-09-09) |
+| --- | --- | --- |
+| Payload blocks | 522 | **522** (4 removed, 4 added) |
+| Bytes | 3,114,377 | **2,989,530** |
+| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+| Fix Script payloads | 1 (`sys_package`/`sys_scope` = `global`) | **0** |
+| `sys_user_has_role` payloads | 3 (all refused at commit) | **0** |
+| `sys_grid_canvas_pane` payloads | 0 | **8** (in 2 bundles, with the 8 `sys_portal` widget instances they reference) |
+| `sys_rate_limit_rules` payloads | 0 | **2** (scope `x_casemgmt`) |
+| Payloads with a `global` scope stamp | 1 | **0** |
+| Block order | platform capture order | **AAP §0.5.2 dependency tiers** |
+| Gated by upload → preview → commit | yes, on those bytes | **no — the recipient's first step** |
+
+The amended bytes were verified statically, not on an instance: `xmllint --noout` clean; all 522 payloads
+parse individually; 522 unique block names, no duplicate payloads, no stray root `<sys_id>`; one descriptor
+whose `inserted`/`summary` both read 522; zero `global` scope stamps; all **122** embedded script bodies parse
+and contain no post-ES5 construct; every reference inside the restored pane bundles resolves to a record the
+same package carries; the sha256 over the sorted set of payload texts is identical before and after the
+reorder, proving the reorder changed no payload byte; and the dependency-order assertion passes. **The PDI is
+deliberately at its torn-down zero state and CR1 made no instance writes**, so the upload → preview →
+zero-problem gate in [`deployment.md`](./deployment.md) Step 2 is unrun on these bytes.
+
+### 0.CR1.2 BLOCKING GAP — no-hardcoded-`sys_id` cannot be met by a platform Update Set export (finding F05)
+
+AAP §0.7.2 states the constraint without exception: "No file in the Update Set may contain a literal `sys_id`
+in any reference field," resolved instead by `GlideRecord` lookup on `name`, `user_name`, `number` or
+`role_label`. **A ServiceNow Update Set cannot satisfy that.** The transport format encodes every reference
+field as the target's `sys_id`; the platform offers no by-key alternative inside a payload, and the preview
+validator resolves references by `sys_id` alone. Measured on the shipping bytes:
+
+| Measure | Shipping bytes (`8160ed16…`) | Pre-CR1 bytes (`b2217224…`) |
+| --- | --- | --- |
+| 32-hex occurrences outside their own record's `<sys_id>` element | **4,343** | 4,314 |
+| Blocks carrying at least one | **515 of 522** | 515 of 522 |
+| Distinct ids the package does **not** own (platform records) | **115**, in **983** occurrences | 114, in 981 occurrences |
+| Record `sys_id`s the package does own | 1,411 | 1,405 |
+
+The shipping figures are two higher on external ids and 29 higher overall than the pre-CR1 bytes because the
+CR1 additions carry references of their own: the two `sys_rate_limit_rules` records name the platform's stock
+`guest` user (`sys_user.user_name = guest`, the one new external id), and the restored pane bundles reference
+the canvases, widget instances and reports the package already owns. The review's own count for the pre-CR1
+bytes was 3,427 across 514 of 522 blocks with 94 external ids in 815 occurrences; the difference is the
+counting rule (which occurrences of an id inside a composite child count as "the record's own"), and it does
+not change the conclusion either way.
+
+The consolidation report previously narrowed the rule to "authored artifacts" to reconcile it. That narrowing
+was unauthorised and has been withdrawn. **Reported, not redefined, per the AAP §0.7.2 Minimal-Change Clause:
+this is a PDI capability gap.** What the project does deliver against the rule's intent is unaffected and
+remains true — every authored artifact, every ACL condition script, every flow script and
+`../scripts/seed_demo_data.js` resolve their targets by stable human-readable key, so nothing a human wrote
+carries an id literal, and the package is portable because the ids it carries are its own records' identities
+plus stock platform records whose ids are identical on every instance.
+
+**What a human must decide:** either accept a native platform export as the deliverable (and with it the
+`sys_id` references inherent to the format), or replace the deliverable with a by-key installer — a scoped
+script that creates every record through `GlideRecord` lookups — which is a different artifact from the one
+AAP §0.3.1 specifies and would forfeit the platform's own preview/commit gate. Nothing in the AAP authorises
+the second, so the first is what ships, disclosed here.
+
+### 0.CR1.3 BLOCKING GAP — the three demo role grants cannot be transported on this release (finding F01)
+
+Unchanged in substance from §7 of the consolidation report, and now recorded here as the register entry:
+Role Management V2 owns `sys_user_has_role` on this release (`glide.role_management.use.inh_count=true`, with
+`inherited` / `inh_count` / `inh_map` read-only in the dictionary), so the Update Set loader's permission check
+answers false and the platform logs "permission denied: no thrown error" rather than raising. Both stampings
+were measured refused — `Global` and `x_casemgmt`. **No Update Set can deliver these grants on this release.**
+
+CR1 removed the three payloads, because a payload known to be refused delivers nothing and costs the recipient
+a commit that reports "Failed at 100% — some updates failed to commit" plus three skipped-record log rows.
+The grants are now a **mandatory** post-commit step: the role form's *Edit Members*, written out for all three
+personas in [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5h, with the
+verification query
+`GET /api/now/table/sys_user_has_role?sysparm_query=user.user_nameSTARTSWITHx_casemgmt_demo^role.nameSTARTSWITHx_casemgmt_case`
+expecting exactly 3 rows. Until it is run the three demo personas have **no access at all**, so AAP §0.7.4's
+"3 users (one per role)" is satisfied by the package plus one documented step rather than by the commit alone.
+
+### 0.CR1.4 The other five findings, and where each landed
+
+| Finding | What was wrong | Where it is fixed |
+| --- | --- | --- |
+| F02 | The package carried none of the 8 `sys_grid_canvas_pane` placements, so both dashboards install empty; the recorded reason ("`sys_portal` rows are not application files, no publish can ever include them") was false — the package embeds 8 `sys_portal` widget instances and 96 preference rows. The real cause is that the preview validator resolves a reference only against a local record or a **standalone** block in the same set, and the widget instances travelled as composite children of `sys_portal_page`. | 8 pane rows restored as 2 self-contained bundles carrying the widget instances they reference; [`dashboards.md`](./dashboards.md) and [`validation-gates.md`](./validation-gates.md) Gate 6 corrected |
+| F03 | Block order was capture order, not the AAP §0.5.2 dependency order, and the consolidation report waived the requirement on the strength of a passing preview. No override supersedes §0.5.2, and preview cannot detect an ordering defect because it resolves references set-wide. | every block reordered into the §0.5.2 tiers, payload bytes proven unchanged |
+| F04 | The sole `sys_script_fix` payload was stamped `sys_package`/`sys_scope` = `global` — the only global stamp in the package — while the report claimed "zero global stamps … no global-scope artifacts". The stamp also achieved nothing: the commit engine rewrites a committed record's scope to the application, so the installed record could never make its `GlideTableDescriptor`/`GlideSecurityManager` calls (measured: `verified=false`, `tables_built=0`, `acl_links_created=0`, `errors=121`). | payload removed from the package; `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` re-stamped `x_casemgmt` and marked a retained, unshipped reference; the working route is unchanged — paste `../scripts/post_import_remediation.js` into a **Global** Background Script |
+| F06 | `CasePortalService._admitAnonymousSubmission()` counted rows and then inserted (CWE-367), so parallel anonymous callers all read the same below-ceiling count and all were admitted; the single global bucket also let one caller deny service to every other requester for the rest of the window. | the ceiling is now decided **after** the insert, by ranking the persisted row under a total order and withdrawing it when it is over the ceiling, plus a per-requester fairness cap; mirrored into the package payload |
+| F07 | The anonymous lookup accepted any input, queried on every call, logged nothing and answered 200-vs-404 over sequential `CASE0000001` numbers — an enumeration oracle the widget's comments and `<description>` explicitly denied. | strict `^CASE[0-9]{7}$` validation ahead of any query, per-session sliding-window throttling in the `GlideSession` client-data store, an HTTP 429 path through the REST operation and the widget, `gs.warn` abuse monitoring under a stable marker, two scoped `sys_rate_limit_rules` payloads as the native per-hour ceiling, and the false claims replaced with the honest statement of the exposure |
+
+### 0.CR1.5 Four pre-existing conditions CR1 established but did not change
+
+1. **The Fix Script wrapper's body is not byte-identical to the repository source.** `<script>` inside
+   `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` differs from
+   `../scripts/post_import_remediation.js`: 240 source lines absent from the snapshot, 31 snapshot-only lines,
+   and the snapshot carries `EXPECTED_ACL_COUNT = 26` / `EXPECTED_ACL_ROLE_LINKS = 27` where the source carries
+   29 / 36. §0.2's claim that the two "can never disagree" and the "VERIFIED … equals … exactly (172,520
+   characters)" row are therefore false and are corrected in place. Nothing installs or executes the snapshot —
+   the record is no longer shipped — so no deployed behaviour depends on it. **A human must settle the ACL
+   inventory (below) and then regenerate the wrapper in one step.**
+2. **The package carries 26 of the repository's 29 `acl/` artifacts.** The three omitted are the field-level
+   `query_range` ACLs on `x_casemgmt_case.opened_date`, `x_casemgmt_case.closed_date` and
+   `x_casemgmt_case_task.due_date`. This is **not** an AAP gap: §0.3.1 enumerates field-level ACLs for
+   `assigned_group` and `assigned_agent` only, and both ship (`x_casemgmt_case.assigned_agent` / write and
+   `x_casemgmt_case.assigned_group` / write). It is already handled honestly by the remediation script, which
+   branches on exactly this shortfall (`aclCount === EXPECTED_ACL_COUNT - 3`), names the three records and tells
+   the operator to import them from `../acl/` — it reports rather than accepts. Package inventory as it ships:
+   **26** `sys_security_acl` records, **27** `sys_security_acl_role` links (manager 14 / agent 10 / viewer 3;
+   case 11 / task 8 / party 8).
+3. **The repository's script artifacts are ahead of the copies inside the export.** `CasePortalService` is
+   58,107 characters in `../script_includes/` against 27,161 in the pre-CR1 export (the repository copy also
+   carries round-trip field verification and `_collapseDuplicateSubmission`); the Case Submit POST operation,
+   `CaseTransitionValidator` and all six widget template/client-script/server-script bodies differ likewise.
+   CR1 therefore applied the F06/F07 hardening to the export payloads as the **same edits** rather than
+   swapping the repository bodies in, so no logic that has never been gated was introduced. The divergence
+   itself is unchanged and is a re-export away from being closed.
+4. **`sys_ws_operation.short_description` is capped at 80 characters by the dictionary.** The repository
+   artifacts carry longer text (359 characters for the lookup GET operation after CR1), which the platform
+   truncates on import — the pre-CR1 export shows the previous value already truncated to exactly 80. The
+   export payload now carries a 76-character value that fits. Cosmetic, and disclosed rather than reconciled.
+
 ## 0. Current state of the package — the authoritative block
 
 > **DELIVERABLE IDENTITY — read this before comparing, verifying or asserting any digest, byte size or block count anywhere in this document.**
@@ -201,7 +329,9 @@ to the shipping deliverable:
 > business rules · 2 script includes · 6 UI actions · 2 UI policies · 8 reports · 2 dashboards · 1 portal + 2
 > pages + 3 widgets · 2 scripted REST APIs + 2 resources · **221** ATF blocks (20 `Test` + 1 `Test Suite` +
 > 180 `Test Step` + 20 `Test Suite Test`; a platform export embeds step inputs in the step payloads, so the
-> 540 standalone `Value` payloads the superseded candidates carried are not separate blocks) · 1 Fix Script ·
+> 540 standalone `Value` payloads the superseded candidates carried are not separate blocks) · 0 Fix Scripts
+> (1 in the pre-CR1 census; removed — §0.CR1) · 8 `sys_grid_canvas_pane` and 2 `sys_rate_limit_rules`
+> (0 and 0 pre-CR1; added — §0.CR1) ·
 > and the seed rows (10 case / 10 task / 8 party, 3 users, 1 group, 2 companies). Its exact bytes carry the
 > AAP §0.7.1 Update Set gate as of 2026-09-08, by a same-instance reset-and-reimport rather than an independent
 > second PDI. Full record: [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md). **Everything below in §0.1 and §0.2 is retained as written and
@@ -286,7 +416,7 @@ to the shipping deliverable:
 | Previous revisions | **`4e28acae…` · 935 blocks · 3,944,374 bytes** at commit `6efb13b141`, then **`a9204411…` · 926 blocks · 3,780,373 bytes** at commit `f8454fb078` before it — neither on disk. Before those, the **elected base: 926 blocks · 3,781,097 bytes · SHA-256 `7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`**, which **is** on disk, at `…FALLBACK.xml` (restored 2026-09-05T04:45Z). The `a9204411…` revision was identical to that base apart from its seven choice children, which the 2026-09-03 pass replaced with platform-native composites (§0.3d); 919 of the 926 blocks were unchanged between the two. Before that: **925 blocks · 3,698,577 bytes · SHA-256 `e49a7654f8990287cee459eb4bec0245dc3f40588ebd63344b80cf16e0508361`** — the bytes on which the reference-error class was measured to zero (§0.3b). The QA-findings pass that produced the `7292a6fe…` revision changed **13 payloads** (8 `sys_report`, 2 `Dashboard`, 3 `sp_widget`) and added **1 block** (the Related Lists definition), all recorded in §0.3c. Before that: **913 blocks · 3,643,389 bytes · SHA-256 `89638c17d328839d7b2cbba1525f9490c95b7f54434792fd732846126b3da13e`** — the bytes an independent QA pass previewed, which reported 120 `type=error` problems / 40 distinct, 21 of them package-intrinsic. The pass that turned those bytes into the 925-block `e49a7654…` revision re-shaped the 28 seed records (parent key moved into the `display_value` attribute for `x_casemgmt_case` and `core_company`, deterministic pinned numbers added) and added 12 blocks — the 8 `sp_container`/`sp_row`/`sp_column`/`sp_instance` rows that make the two portal pages render, 1 List Layout for the Cases default view, and 1 extra UI Policy with its 2 policy actions; measured preview effect, the 21 package-intrinsic `Could not find a record` problems went to **0**. Before all of those: **913 blocks · 3,618,378 bytes · SHA-256 `7272edfc6b2b1b365cee1b816e58f07993d62a748dee21a4814d9d94dbfb109e`** — the bytes the clean-slate round trip of §0.3 was run on, and the only bytes on which "0 preview problems of any type, then committed" has ever been measured. So the full chain, oldest first, is `7272edfc…` (913) → `89638c17…` (913) → `e49a7654…` (925) → `7292a6fe…` (926, the elected base, now at `…FALLBACK.xml`) → `a9204411…` (926, commit `f8454fb078`) → `4e28acae…` (935, commit `6efb13b141`) → **`9f3ea74c…` (935, ships today)**. |
 | Update names | Measured 2026-09-05T04:45Z over the 935 blocks: **925** are canonical `<table>_<32-hex sys_id>`; **7** are the choice composites under the platform's own canonical `sys_choice_<table>_<field>` form (`sys_choice_x_casemgmt_case_status` and its six siblings); the remaining **3** are the platform's own view-scoped names `sys_ui_list_x_casemgmt_case_null`, `sys_ui_related_x_casemgmt_case_null` and `sys_ui_section_x_casemgmt_case_null` (the Default-view list layout, related-lists definition and form layout). 925 + 7 + 3 = 935, and all **935** names are unique |
 | ATF range | **761 blocks** = 20 `sys_atf_test` + 180 `sys_atf_step` + **540** step-input rows (539 `Value` + 1 `Variable Value`) + 1 `sys_atf_test_suite` + 20 suite links. Unchanged by the QA-findings pass and by the two later remediation passes — 761 of the 935 blocks |
-| Installer records | **1 Fix Script** (`x_casemgmt Post-Import Remediation`, global-scoped by design). **No bootstrap Business Rule, and no auto-execute record of any kind.** |
+| Installer records | **0 — CORRECTED 2026-09-09 (§0.CR1, finding F04).** The package carried **1 Fix Script** (`x_casemgmt Post-Import Remediation`) stamped `sys_scope`/`sys_package` = `global`; that payload has been **removed**, because the stamp was the package's only global-scope write and the commit engine rewrites a committed record's scope anyway, so an installed copy could never do its work. The body is run from a **Global Background Script** instead (`../scripts/post_import_remediation.js`). **No bootstrap Business Rule, and no auto-execute record of any kind.** |
 | Other counts | 29 ACLs · 25 dictionary entries · 7 flows (2 parent + 5 subflows) + 1 Custom Action + 1 shared flow block · 11 Business Rules · 3 tables · 3 roles · 3 number counters · **7 Choice list records — one per Choice field, each a native app-scoped composite carrying one `x_casemgmt`-owned `sys_choice_set` and its authored value rows, 24 values in all (2 case type / 6 case status / 4 case priority / 3 case pending reason / 4 task type / 3 task status / 2 party type)** · 8 reports · 2 dashboards · 1 portal + 2 pages + 3 widgets · 2 scripted REST services + 2 operations · 2 Script Includes · 6 UI Actions · 28 seed-data rows · **1 List Layout** (`sys_ui_list` + 13 `sys_ui_list_element` rows, Cases default view) · **1 Related Lists definition** (`sys_ui_related_list` + 2 `sys_ui_related_list_entry` rows, Cases Default view — `x_casemgmt_case_task.case` and `x_casemgmt_case_party.case`) · **8 portal layout rows** (2 `sp_container` + 2 `sp_row` + 2 `sp_column` + 2 `sp_instance`) · **2 UI Policies + 2 UI Policy Actions** (the `case_party` conditional fields) |
 
 ### 0.2 Exactly what has been verified about these bytes, and what has not
@@ -294,7 +424,7 @@ to the shipping deliverable:
 | Claim | Status on the **current** bytes |
 |---|---|
 | Well-formed, internally consistent XML | **VERIFIED on today's bytes, re-measured 2026-09-05T04:45Z.** 935 of 935 embedded `<payload>` documents parse (nested CDATA terminators un-split first — the file carries 100 `]]]]><![CDATA[>` escapes); one `<unload>` root; one descriptor (`9929f50df18ccec91ea13b2a3bccfc90`); all 935 names unique; `xmllint --noout` clean. |
-| Fix Script body is the repository source, byte for byte | **VERIFIED.** The packaged `<script>` equals `../scripts/post_import_remediation.js` exactly (172,520 characters), as does the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper. |
+| Fix Script body is the repository source, byte for byte | **FALSE — CORRECTED 2026-09-09 (§0.CR1.5 item 1).** No Fix Script payload ships any more, and the standalone `../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` wrapper is **not** a byte-for-byte copy of `../scripts/post_import_remediation.js`: measured line-by-line, 240 source lines are absent from the wrapper's `<script>` and 31 wrapper lines are absent from the source, and the two disagree on `EXPECTED_ACL_COUNT` / `EXPECTED_ACL_ROLE_LINKS` (26/27 in the wrapper, 29/36 in the source). Nothing installs or executes the wrapper. |
 | **Clean-slate upload → preview → commit on these bytes** | **NOT on these bytes — do not read the §0.3 or §0.3b results as covering them.** The full teardown → upload → preview → commit trip (child count asserted at 913, preview to **0 problems of any type**, then `state=committed`) was measured on the earlier **913-block `7272edfc…`** revision (§0.3). The **925-block `e49a7654…`** revision was uploaded and previewed against this already-populated instance: **31 problems, all `Found a local update that is newer than this one`, ZERO `Could not find a record` problems** (63 → 0), every one of the 31 confirmed to have a local `sys_update_version` in state `current`; commit withheld because the verification instance is shared (§0.3b). **No preview has been run on today's complete 935-block / 3,973,569-byte `9f3ea74c…` bytes, nor on the superseded 926-block `a9204411…` revision before them.** What has been measured on them instead is recorded in §0.3c and §0.3d: every one of the 13 payloads and 1 added block that the `7292a6fe…` pass changed was applied to the live instance and read back field-for-field identical to its artifact, with every table and column each of them names checked to exist in `sys_db_object` / `sys_dictionary`; and the 7 choice composites that the 2026-09-03 pass changed were **uploaded, previewed to 0 problems of any type and committed natively as their own delta**, taking `sys_choice` from 0 to 24 rows. That is an exact-child round trip on 7 of the 935 blocks and static verification on the rest — and nothing at all has been measured on the 9 payloads commits `6efb13b141` and `8dfdbcb015` added — not a whole-file round trip. |
 | **Clean-slate upload → preview → commit — CORRECTED 2026-09-08** | **VERIFIED on the bytes that ship.** The consolidated 522-block export (`b2217224…`) was uploaded to this instance after a full teardown to a proven zero-state, loaded with 522 children = 522 payload blocks exactly, located by its own descriptor `sys_id`, previewed genuinely to **0 `type=error` and 0 `type=warning`** with nothing marked skipped or ignored, and committed **once** through the native **Commit Update Set** action at 2026-09-08 21:27:27 UTC with nothing running in between. Post-commit, with no script run: 3 tables HTTP 200 with rows 10 / 10 / 8; dictionary and documentation 21 / 14 / 13 each; 3 roles; 26 ACLs with 27 role links; 24 choice values; 3 number counters; 7 active flows; 8 reports; 2 dashboards; portal + 2 public pages + 3 widgets; 2 anonymous REST endpoints; ATF 20 / 1 / 180 / 20; linkage resolving. **What it does not establish** is an independent second instance: this was a same-instance reset-and-reimport, so caches, indexes, retained update history and metadata a scope teardown does not reach were neither re-created nor tested. The row above is retained as written and applies to the superseded packages. [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](./refine-run/CONSOLIDATION-FINAL-REPORT.md) |
 
@@ -995,9 +1125,11 @@ demo census behind all of the above is §9.8a.
 on commit was built, measured firing, measured failing with 121 `SecurityException`s, and then **deleted** —
 both because it could not succeed and because its condition matched the commit of **any** retrieved Update
 Set, not just this application's, so activating it would have dispatched privileged, partly destructive
-remediation on unrelated deployments (§9.4). The Fix Script travels in the package so the remediation body is
-auditable there, but **running it from the Fix Script UI does not work either**, because the commit engine
-rewrites the record's scope. The only measured route is a manual run from *System Definition → Scripts -
+remediation on unrelated deployments (§9.4). The Fix Script used to travel in the package so the remediation
+body was auditable there; **CR1 finding F04 removed that payload** (§0.CR1), because **running it from the Fix
+Script UI does not work either** — the commit engine rewrites the record's scope — and its `global` stamp was
+the package's only global-scope write. The body remains auditable in the repository at
+`../scripts/post_import_remediation.js`. The only measured route is a manual run from *System Definition → Scripts -
 Background* with **"In scope" = Global**. §9.5 is the procedure.
 
 ### 0.8 Four behaviours the QA-remediation pass disclosed rather than repaired
@@ -3352,7 +3484,9 @@ java.lang.SecurityException: GlideSecurityManager is not allowed in scoped appli
 ```
 
 **Why automation was not achievable.** The package shipped both the Fix Script and the bootstrap Business Rule
-with `sys_scope=global` — it still ships the Fix Script that way, and no longer ships the rule at all — but
+with `sys_scope=global` — as of CR1 (§0.CR1, finding F04) it ships **neither**: the rule was removed earlier and
+the Fix Script payload has now been removed too, with the repository's record definition re-stamped
+`x_casemgmt` and marked a retained, unshipped reference — but
 **the commit engine forces every committed record's `sys_scope` to the Update Set's application.** Reading the records back after commit confirms it: the Fix Script's `sys_scope` is
 `82b99028936f74320d74d6f88357a5af` — the scope `sys_id` read back on that instance, not a value to reuse (its
 `sys_package` is still global) — and the bootstrap rule is app-scoped,

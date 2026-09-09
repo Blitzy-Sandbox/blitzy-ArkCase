@@ -7,13 +7,14 @@
  * THIS IS A REQUIRED POST-IMPORT STEP, NOT AN AUTOMATIC ONE. Importing
  * update-set/x_casemgmt_case_management_update_set.xml previews and commits
  * cleanly, but the commit alone does NOT yield a functional application:
- * Defect C (physical tables/fields/choices) and Defect 9 (the 27 ACL -> role
+ * Defect C (physical tables/fields/choices) and Defect 9 (the ACL -> role
  * links) still need this script, and it must be executed BY HAND in the
- * **Global** scope. The packaged auto-execute trigger was measured firing and
- * then failing - see "HOW IT IS INVOKED" below and
- * ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 - so the acceptance
- * path for this deliverable is the disclosed manual path (b), and
- * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 is the procedure that
+ * **Global** scope. Nothing in the package runs it: the package carries no Fix
+ * Script and no auto-execute record at all. An auto-execute trigger was built,
+ * was measured firing and then failing, and has been removed - see "HOW IT IS
+ * INVOKED" below and ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 -
+ * so the acceptance path for this deliverable is the disclosed manual path (b),
+ * and ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 is the procedure that
  * actually works. Defects E and 7 need no script at all: they are carried by
  * the package artifacts, and this script only re-asserts them.
  *
@@ -99,21 +100,30 @@
  *   on the target PDI, and it is step 4 (and again step 6) of
  *   ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5.
  *
- *   ONE other copy of this body ships inside the package. It cannot perform
- *   Defect C or Defect 9, and it is shipped for disclosure and for reuse on an
- *   instance where the scope rewrite below does not apply - not as a working
- *   fallback:
+ *   NO COPY OF THIS BODY SHIPS INSIDE THE PACKAGE. The deliverable
+ *   update-set/x_casemgmt_case_management_update_set.xml carries no
+ *   `sys_script_fix` payload and no auto-execute record of any kind, so a commit
+ *   installs nothing that runs this body. The Background Script route above is
+ *   therefore not the preferred route among several - it is the route.
  *
- *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml - a Fix
- *      Script named "x_casemgmt Post-Import Remediation" whose `script` field is
- *      this file verbatim, byte for byte. The package declares it
- *      `sys_scope = global`, but **the Update Set commit engine rewrites every
- *      committed record's `sys_scope` to the Update Set's application**: read
- *      back after commit, the installed Fix Script is app-scoped. Running it
- *      from the Fix Script UI therefore executes in `x_casemgmt`, where
- *      `GlideTableDescriptor` and `GlideSecurityManager` are refused. Measured
- *      outcome: `verified=false`, `tables_built=0`, `acl_links_created=0`,
- *      `errors=121`, all 121 being those two SecurityExceptions.
+ *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml is a
+ *      RETAINED REFERENCE RECORD-DEFINITION of a Fix Script named "x_casemgmt
+ *      Post-Import Remediation", stamped wholly into the `x_casemgmt`
+ *      application like every other authored artifact here. It is kept for
+ *      review and is NOT shipped, for two measured reasons. First, an installed
+ *      Fix Script cannot do the work whatever it is stamped: **the Update Set
+ *      commit engine rewrites every committed record's `sys_scope` to the
+ *      Update Set's application**, so a committed copy reads back app-scoped and
+ *      running it from the Fix Script UI executes in `x_casemgmt`, where
+ *      `GlideTableDescriptor` and `GlideSecurityManager` are refused - measured
+ *      outcome `verified=false`, `tables_built=0`, `acl_links_created=0`,
+ *      `errors=121`, all 121 being those two SecurityExceptions. Second, safety:
+ *      this body performs a privileged, partly destructive remediation, and an
+ *      installed record offers a recipient a Run button whose only possible
+ *      result is those 121 errors. Its embedded copy of this body is a snapshot
+ *      that has drifted from this file and must be regenerated from it before
+ *      the record is ever created on an instance; the XML's own header states
+ *      the measured difference.
  *
  *   AN AUTO-EXECUTE TRIGGER WAS BUILT AND HAS BEEN REMOVED. An earlier revision
  *   also shipped a sys_script_x_casemgmt_post_import_bootstrap.xml artifact - a
@@ -224,9 +234,10 @@
  *     are resolved by name AND sys_scope AND sys_package with exactly one match
  *     required (this instance carries several same-named definitions in other
  *     scopes), and a legacy bootstrap Business Rule is only ever modified when
- *     its name, its `collection` and its `sys_update_name` all match this
- *     package's own payload and exactly one row does. A near-miss is reported and
- *     left alone rather than modified.
+ *     its name, its `collection` and its `sys_update_name` all match the payload
+ *     an earlier export of this package declared for that rule - the current
+ *     package carries no such payload - and exactly one row does. A near-miss is
+ *     reported and left alone rather than modified.
  *
  * CONSTRAINTS HONORED
  *   - Zero hard-coded foreign sys_ids. The application scope is resolved by
@@ -338,9 +349,12 @@ var QUERY_RANGE_OPERATION = 'query_range';
 
 // Name of the bootstrap Business Rule that WAS built to auto-execute this script
 // and has been REMOVED from the package (see the header) - kept here only so
-// deactivateBootstrapTrigger() can recognise a legacy copy - and of the Fix Script
-// that carries this body. Both are looked up by name, so this file carries no
-// sys_id for either.
+// deactivateBootstrapTrigger() can recognise a legacy copy - and the name of the
+// Fix Script record-definition that carries this body, which the package does not
+// ship either: it is recorded here so an operator can identify a legacy installed
+// copy on an inherited instance (nothing in this script looks it up, and it must
+// not be run - see "HOW IT IS INVOKED" in the header). Both are identified by
+// name, so this file carries no sys_id for either.
 //
 // IMPORTANT: `sys_script.name` and `sys_script_fix.name` are both max_length 40
 // on this release and the platform truncates silently. A longer name would still
@@ -3512,8 +3526,10 @@ function verifyRemediation(scopeSysId) {
  *   - name             = BOOTSTRAP_TRIGGER_NAME
  *   - collection       = sys_remote_update_set (the table the trigger ran on)
  *   - sys_update_name  = sys_script_x_casemgmt_post_import_bootstrap
- *                        (the update name the package's own payload declared, so
- *                        only a copy installed FROM this package matches)
+ *                        (the update name an earlier export of this package
+ *                        declared for that rule; the current package carries no
+ *                        such payload, so only a copy installed from an older
+ *                        export of this application matches)
  * and exactly one row matches. Two matches are reported and neither is touched.
  * A row that matches the name but not the identity is reported, never modified.
  */
@@ -3754,11 +3770,10 @@ function remediateUnderLease(scopeSysId, started) {
 // ============================================================================
 //
 // Calling the entry point from the bottom of the file keeps it drop-in runnable
-// with no extra boilerplate in the one route that was measured to work -
-// System Definition -> Scripts - Background with "In scope" = Global - and in the
-// two packaged copies, which run the same body but are forced into the
-// application scope by the commit engine and therefore cannot complete (see
-// "HOW IT IS INVOKED" in the header).
+// with no extra boilerplate in the one route that was measured to work and the
+// only route the documentation prescribes - System Definition -> Scripts -
+// Background with "In scope" = Global. The package installs no copy of this body
+// that could run it any other way (see "HOW IT IS INVOKED" in the header).
 //
 // The call is safe to repeat: see the idempotency and convergence guarantees in
 // the header.

@@ -2,6 +2,31 @@
 
 Manual verification gate for the Update Set fresh-PDI re-import (AAP Section 0.7.3, Gate 7)
 
+> **CR1 AMENDMENT — 2026-09-09. The canonical package's bytes changed after the identity rows below were written.**
+> Code review checkpoint CR1 raised seven findings against the shipped package. Resolving them **removed four
+> payloads** — the three `sys_user_has_role` records this release's Role Management V2 refuses to install, and the
+> Global-stamped `sys_script_fix` record — and **added four**: the two dashboard-pane bundles that restore the eight
+> `sys_grid_canvas_pane` widget placements, and two scoped `sys_rate_limit_rules` records. It also hardened the two
+> anonymous portal endpoints in place (post-insert admission ranking on submit; strict number validation,
+> per-session throttling, an HTTP 429 path and abuse monitoring on lookup) and reordered every block into the
+> AAP §0.5.2 dependency tiers.
+>
+> | Property | Pre-amendment (the rows below) | **Shipping now** |
+> | --- | --- | --- |
+> | Payload blocks | 522 | **522** |
+> | Bytes | 3,114,377 | **2,989,530** |
+> | SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+>
+> Re-derive all three from the file itself — `sha256sum`, `stat -c %s`, `grep -c '<sys_update_xml action='` —
+> rather than trusting any quoted figure. **The amended bytes have not been previewed or committed on an
+> instance:** the PDI is deliberately at its torn-down zero state and the CR1 checkpoint made no instance writes,
+> so the upload → preview → zero-problem gate in [`../docs/deployment.md`](../docs/deployment.md) is the recipient's first step, before commit. What was
+> verified statically: `xmllint` clean, all 522 payloads parse, 522 unique block names, one sane descriptor whose
+> `inserted`/`summary` equal 522, zero `global` scope stamps, all 122 embedded script bodies parse and are
+> ES5-conformant, every reference in the restored pane bundles resolves inside the package, and the AAP §0.5.2
+> dependency-order assertion passes. Every identity figure elsewhere in this document describes the
+> pre-amendment bytes and is retained as provenance. Full amendment ledger: [`../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`](../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md).
+
 > **DELIVERABLE IDENTITY — read this before comparing, verifying or asserting any digest, byte size or block count anywhere in these documents.**
 > Re-measured **2026-09-08** from the file on disk (`sha256sum`, `stat -c %s`,
 > `grep -c '<sys_update_xml action='`) after the Update Set consolidation replaced the canonical package. These

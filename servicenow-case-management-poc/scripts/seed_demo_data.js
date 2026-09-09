@@ -5,10 +5,38 @@
  * minimum demo dataset required to exercise all validation gates.
  *
  * Run from: System Definition -> Scripts - Background in the x_casemgmt
- * application scope. The body may also be installed as a Fix Script, but an
- * Update Set commit installs that record without executing it; an operator
- * must explicitly run the installed Fix Script. Once this file is evaluated,
+ * application scope. The shipped Update Set installs no Fix Script copy of
+ * this body - it carries no `sys_script_fix` payload at all - so the
+ * background-script route above is the route. Once this file is evaluated,
  * the bottom-of-file `seedDemoData()` invocation triggers the full pipeline.
+ *
+ * ---------------------------------------------------------------------------
+ * ROLE GRANTS - WHAT THIS SCRIPT DELIVERS THAT THE PACKAGE CANNOT
+ * ---------------------------------------------------------------------------
+ * Phase C's three `sys_user_has_role` grants are the one kind of row in this
+ * script that the Update Set commit does not also deliver. They are NOT
+ * carried in update-set/x_casemgmt_case_management_update_set.xml, and the
+ * omission is deliberate: `sys_user_has_role` is owned by Role Management V2
+ * on this release (`glide.role_management.use.inh_count=true`, with
+ * `inherited` / `inh_count` / `inh_map` read-only in the dictionary), so the
+ * update-set loader's permission check answers false and the commit SKIPS such
+ * a payload, logging "permission denied: no thrown error" and reporting
+ * "Failed at 100% - some updates failed to commit". Measured at record level
+ * with the payloads stamped Global and stamped `x_casemgmt`:
+ * ../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md, Step 5-6 section, §7.
+ *
+ * The SUPPORTED route for the three grants is the role form's Edit Members
+ * screen, written out step by step in
+ * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h. Phase C here is the
+ * scripted alternative recorded in that section: it was measured creating all
+ * three grants when this file was run in scope `x_casemgmt` on the target PDI
+ * (2026-09-08 18:58:04, CONSOLIDATION-FINAL-REPORT.md Step 3-4 §5 and §7).
+ * The difference that matters: Edit Members makes the platform derive each
+ * grant's `inherited=true` companion row, and a direct insert does not, so the
+ * scripted grant is functionally correct but is not a natively-authored role
+ * assignment. Prefer Edit Members when an audit trail of provenance matters.
+ * The record-definitions of the three grants are retained, for review, at
+ * ../seed-data/role_assignments/sys_user_has_role_x_casemgmt_demo_*.xml.
  *
  * Re-running this script is safe: every record creation is preceded by a
  * GlideRecord existence check; only missing records are inserted, and an
@@ -48,7 +76,8 @@
  *     validate_inprogress_transition flow subflow)
  *   - 3 role-to-user assignments (manager -> case_manager, agent ->
  *     case_agent, viewer -> case_viewer) per the role x CRUD matrix in
- *     ../docs/acl-matrix.md
+ *     ../docs/acl-matrix.md - the one kind of row the package cannot
+ *     carry, see ROLE GRANTS above
  *   - 10 demo cases spanning all 6 statuses (Draft, Open, In Progress,
  *     Pending, Resolved, Closed) and both case types (General Inquiry,
  *     Complaint), with cases 06 and 10 carrying explicit opened_date and
@@ -152,6 +181,19 @@ var DEMO = {
     GROUP: SCOPE_PREFIX + '_demo_team'
 };
 
+// The common prefix of the three demo user_names, used by
+// reportRoleAssignmentState() to count only synthetic personas' role grants -
+// the same selector as the documented REST verification in
+// ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h
+// (user.user_nameSTARTSWITHx_casemgmt_demo). Derived from SCOPE_PREFIX so it
+// cannot drift from the user_names above.
+var DEMO_USER_PREFIX = SCOPE_PREFIX + '_demo';
+
+// One grant per scoped role, per AAP Section 0.5.6, and the acceptance number
+// the post-commit role-grant step in
+// ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h is verified against.
+var EXPECTED_ROLE_GRANTS = 3;
+
 // COMPANIES holds the two synthetic company names used as
 // case_party.organization references. These values match the existing seed
 // XML records under ../seed-data/parties/ exactly.
@@ -238,10 +280,17 @@ var PINNED = {
 // column held a value that does not resolve to a row (see adoptReference()).
 // Both are normal on the commit path and both must fall to zero repairs on a
 // second consecutive run - that is the idempotency contract.
+// The `grants` bucket is reported unconditionally rather than silently, unlike
+// every other already-exists case in this script: the three sys_user_has_role
+// grants are the one thing the Update Set commit CANNOT deliver on this
+// platform release (see the header's ROLE GRANTS section), so an operator using
+// this script as the grant transport needs a positive statement of the end
+// state - "3 of 3 present" - and cannot read silence as success.
 var SEED_STATS = {
     cases:   { inserted: 0, adopted: 0, repaired: 0 },
     tasks:   { inserted: 0, adopted: 0, repaired: 0 },
-    parties: { inserted: 0, adopted: 0, repaired: 0 }
+    parties: { inserted: 0, adopted: 0, repaired: 0 },
+    grants:  { inserted: 0, present: 0, unresolved: 0 }
 };
 
 /**
@@ -709,13 +758,31 @@ function ensureGroupMembership(userName, groupName) {
  * Idempotent: ensures a sys_user_has_role row exists for the given (user,
  * role) pair. Both arguments are human-readable keys (user_name and role
  * name); the helper resolves them to sys_ids via lookupUserSysId() /
- * lookupRoleSysId() before the existence check.
+ * lookupRoleSysId() before the existence check, so no sys_id is ever
+ * hard-coded and the pair resolves identically on any instance.
  *
  * The three role assignments correspond exactly to the role x CRUD matrix
  * in ../docs/acl-matrix.md. No demo user is granted a role they don't
  * need - the manager user gets only x_casemgmt_case_manager, the agent
  * user gets only x_casemgmt_case_agent, the viewer user gets only
  * x_casemgmt_case_viewer.
+ *
+ * THIS IS THE ONLY PATH IN THIS SCRIPT THE UPDATE SET CANNOT SUBSTITUTE
+ * FOR. The shipped package deliberately carries no sys_user_has_role
+ * payload, because Role Management V2 owns that table on this release and
+ * the commit engine skips such a payload with "permission denied: no thrown
+ * error" (../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md, Step 5-6 §7).
+ * The supported route for the three grants is the role form's Edit Members
+ * screen, documented step by step in
+ * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h; this helper is the
+ * scripted alternative recorded there. Unlike Edit Members, a direct insert
+ * does not cause the platform to derive the grant's `inherited=true`
+ * companion row, so the resulting membership is functionally correct but its
+ * provenance is a script rather than a native role assignment.
+ *
+ * Every outcome is reported - inserted, already present, or unresolvable -
+ * because an operator running this as the grant transport must be able to
+ * tell "all three grants are in place" from "the phase did nothing".
  *
  * @param {String} userName - sys_user.user_name
  * @param {String} roleName - sys_user_role.name
@@ -725,8 +792,11 @@ function ensureRoleAssignment(userName, roleName) {
     var userSysId = lookupUserSysId(userName);
     var roleSysId = lookupRoleSysId(roleName);
     if (!userSysId || !roleSysId) {
+        SEED_STATS.grants.unresolved++;
         gs.warn('Cannot assign role; user or role missing: ' +
-                userName + ' / ' + roleName);
+                userName + ' / ' + roleName +
+                ' (user found=' + (userSysId ? 'yes' : 'no') +
+                ', role found=' + (roleSysId ? 'yes' : 'no') + ')');
         return null;
     }
     var r = new GlideRecord('sys_user_has_role');
@@ -734,14 +804,74 @@ function ensureRoleAssignment(userName, roleName) {
     r.addQuery('role', roleSysId);
     r.query();
     if (r.next()) {
+        SEED_STATS.grants.present++;
+        gs.info('Role already granted: ' + userName + ' -> ' + roleName);
         return r.getUniqueValue();
     }
     r.initialize();
     r.user = userSysId;
     r.role = roleSysId;
     var sysId = r.insert();
+    if (!sysId) {
+        SEED_STATS.grants.unresolved++;
+        gs.warn('Role grant REFUSED by the platform: ' + userName + ' -> ' +
+                roleName + '. sys_user_has_role is owned by Role Management ' +
+                'V2 on this release; use the role form\'s Edit Members screen ' +
+                '- ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h.');
+        return null;
+    }
+    SEED_STATS.grants.inserted++;
     gs.info('Granted role to user: ' + userName + ' -> ' + roleName);
     return sysId;
+}
+
+/**
+ * Reports the measured end state of the three demo role grants, and returns
+ * the number of demo grants found on the instance.
+ *
+ * This is deliberately a re-query rather than a replay of SEED_STATS: the
+ * grants are the one kind of row the Update Set cannot deliver on this
+ * release, so the operator gets a statement of what the instance actually
+ * holds after the phase, in the same terms as the documented REST check in
+ * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h.
+ *
+ * The query dot-walks `user.user_name` for the demo-persona prefix AND
+ * `role.name` for the three scoped role names, so it counts only synthetic
+ * personas, never a real user's memberships, and never the `inherited=true`
+ * companion row (`snc_required_script_writer_permission`) that the platform
+ * derives for itself when a grant is made through the native Edit Members
+ * screen - counting those would report 6 where 3 is correct. Both sides are
+ * resolved by name; no sys_id appears in the selector.
+ *
+ * A shortfall is a gs.warn() with the remedy, never a throw: the remaining
+ * seed phases still produce useful data without the grants.
+ *
+ * @return {Number} count of scoped-role grants held by the demo personas
+ */
+function reportRoleAssignmentState() {
+    var found = 0;
+    var g = new GlideRecord('sys_user_has_role');
+    g.addQuery('user.user_name', 'STARTSWITH', DEMO_USER_PREFIX);
+    g.addQuery('role.name', 'IN',
+               ROLES.MANAGER + ',' + ROLES.AGENT + ',' + ROLES.VIEWER);
+    g.query();
+    while (g.next()) {
+        found++;
+    }
+    gs.info('Phase C role grants: inserted=' + SEED_STATS.grants.inserted +
+            ' already_present=' + SEED_STATS.grants.present +
+            ' unresolved=' + SEED_STATS.grants.unresolved +
+            ' | scoped-role grants now held by demo personas=' + found +
+            ' of ' + EXPECTED_ROLE_GRANTS + ' expected.');
+    if (found < EXPECTED_ROLE_GRANTS) {
+        gs.warn('Phase C shortfall: ' + found + ' of ' + EXPECTED_ROLE_GRANTS +
+                ' demo role grants are present. The Update Set cannot carry ' +
+                'these rows on this release - grant them through each role\'s ' +
+                'Edit Members screen per ' +
+                '../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h, then ' +
+                're-verify with the sys_user_has_role query documented there.');
+    }
+    return found;
 }
 
 /**
@@ -1442,11 +1572,17 @@ function seedDemoData() {
     // No demo user receives more than one role - that would dilute the
     // intent of demonstrating role-based permission boundaries.
 
+    // The package carries no sys_user_has_role payload (see the header's ROLE
+    // GRANTS section), so this phase is a transport rather than a repair, and
+    // it reports its end state explicitly instead of relying on silence.
+
     gs.info('Phase C: ensuring 3 role assignments.');
 
     ensureRoleAssignment(DEMO.USERS.MANAGER, ROLES.MANAGER);
     ensureRoleAssignment(DEMO.USERS.AGENT, ROLES.AGENT);
     ensureRoleAssignment(DEMO.USERS.VIEWER, ROLES.VIEWER);
+
+    reportRoleAssignmentState();
 
     // ========================================================================
     // === Phase D: Demo Cases (10) ===
@@ -1982,7 +2118,10 @@ function seedDemoData() {
             ' repaired=' + SEED_STATS.tasks.repaired +
             ' | parties inserted=' + SEED_STATS.parties.inserted +
             ' adopted=' + SEED_STATS.parties.adopted +
-            ' repaired=' + SEED_STATS.parties.repaired + '.');
+            ' repaired=' + SEED_STATS.parties.repaired +
+            ' | role grants inserted=' + SEED_STATS.grants.inserted +
+            ' already_present=' + SEED_STATS.grants.present +
+            ' unresolved=' + SEED_STATS.grants.unresolved + '.');
 }
 
 // ============================================================================
@@ -1994,9 +2133,9 @@ function seedDemoData() {
 //
 //   - Scripts - Background paste: the entire file is evaluated; the call
 //     below dispatches the pipeline at the end.
-//   - Manually executed Fix Script: after an Update Set installs the Fix Script
-//     record, an operator explicitly runs it; the call below then dispatches
-//     the pipeline. Installing or committing the record alone does not run it.
+//   - A Fix Script an operator creates by hand from this body: the package
+//     ships no such record, but if one is created it must be run explicitly -
+//     installing or committing a Fix Script record never executes it.
 //   - Script Action / Inbound Action / scripted endpoint: same evaluation
 //     model.
 //

@@ -1,5 +1,30 @@
 # Validation Gates
 
+> **CR1 AMENDMENT — 2026-09-09. The canonical package's bytes changed after the identity rows below were written.**
+> Code review checkpoint CR1 raised seven findings against the shipped package. Resolving them **removed four
+> payloads** — the three `sys_user_has_role` records this release's Role Management V2 refuses to install, and the
+> Global-stamped `sys_script_fix` record — and **added four**: the two dashboard-pane bundles that restore the eight
+> `sys_grid_canvas_pane` widget placements, and two scoped `sys_rate_limit_rules` records. It also hardened the two
+> anonymous portal endpoints in place (post-insert admission ranking on submit; strict number validation,
+> per-session throttling, an HTTP 429 path and abuse monitoring on lookup) and reordered every block into the
+> AAP §0.5.2 dependency tiers.
+>
+> | Property | Pre-amendment (the rows below) | **Shipping now** |
+> | --- | --- | --- |
+> | Payload blocks | 522 | **522** |
+> | Bytes | 3,114,377 | **2,989,530** |
+> | SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+>
+> Re-derive all three from the file itself — `sha256sum`, `stat -c %s`, `grep -c '<sys_update_xml action='` —
+> rather than trusting any quoted figure. **The amended bytes have not been previewed or committed on an
+> instance:** the PDI is deliberately at its torn-down zero state and the CR1 checkpoint made no instance writes,
+> so the upload → preview → zero-problem gate in [`deployment.md`](deployment.md) is the recipient's first step, before commit. What was
+> verified statically: `xmllint` clean, all 522 payloads parse, 522 unique block names, one sane descriptor whose
+> `inserted`/`summary` equal 522, zero `global` scope stamps, all 122 embedded script bodies parse and are
+> ES5-conformant, every reference in the restored pane bundles resolves inside the package, and the AAP §0.5.2
+> dependency-order assertion passes. Every identity figure elsewhere in this document describes the
+> pre-amendment bytes and is retained as provenance. Full amendment ledger: [`refine-run/CONSOLIDATION-FINAL-REPORT.md`](refine-run/CONSOLIDATION-FINAL-REPORT.md).
+
 > **DELIVERABLE IDENTITY — read this before comparing, verifying or asserting any digest, byte size or block count anywhere in these documents.**
 > Re-measured **2026-09-08** from the file on disk (`sha256sum`, `stat -c %s`,
 > `grep -c '<sys_update_xml action='`) after the Update Set consolidation replaced the canonical package. These
@@ -39,10 +64,16 @@
 > **What an importer must do, and what the gate did and did not settle.** A single commit of the deliverable on
 > an empty instance **is** sufficient for the schema, the roles, the ACLs, the 27 role links and the 24 choice
 > values: all of them were measured present after one commit, with no remediation script and no second commit.
-> Two deltas the package cannot carry are reported rather than papered over — the **3** `sys_user_has_role`
-> grants, which Role Management V2 refuses to accept from any update set on this release (the native remedy is
-> the role form's *Edit Members*), and the **8** `sys_grid_canvas_pane` rows, which bind a canvas cell to a
-> `sys_portal` widget instance and are not application files, so no publish can include them. AAP §0.7.1 /
+> One delta the package cannot carry is reported rather than papered over: the **3** `sys_user_has_role`
+> grants, which Role Management V2 refuses to accept from any update set on this release. The native remedy is
+> the role form's *Edit Members*, written out step by step in
+> [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) §5h, and it is **mandatory** —
+> until it is done the three demo personas have no access (review finding F01, which also removed the three
+> non-installing payloads from the package).
+> A second delta was reported here and **was wrong**: the **8** `sys_grid_canvas_pane` rows were said to bind a
+> canvas cell to a `sys_portal` widget instance that "is not an application file, so no publish can include
+> them". Pane rows *are* application files, the package embeds the 8 `sys_portal` widget instances they point at,
+> and without the pane rows a committed dashboard renders empty. Review finding F02 restored them; see Gate 6. AAP §0.7.1 /
 > Gate 7 — the zero-preview-error round trip — is **met on these bytes by a same-instance reset-and-reimport,
 > not by an independent second instance**: only one PDI is available for this project, so the instance was torn
 > down to a proven zero-state and the exact candidate bytes were then imported and committed with nothing
@@ -171,10 +202,10 @@ interchangeable:**
   resolving to a real `core_company`. **No remediation script was run and there was no second commit**, so on
   these bytes neither the physical schema nor the ACL role links nor the choice values is a post-import step any
   longer, and the demo rows travel inside the package rather than needing `scripts/seed_demo_data.js`.
-  **What the gate did not settle, stated plainly:** two classes the package cannot carry — the **3**
+  **What the gate did not settle, stated plainly:** one class the package cannot carry — the **3**
   `sys_user_has_role` grants, which Role Management V2 refuses from any update set on this release (native
-  remedy: the role form's *Edit Members*), and the **8** `sys_grid_canvas_pane` rows, which bind a canvas cell
-  to a `sys_portal` widget instance and are not application files — and the fact that a same-instance reset
+  remedy: the role form's *Edit Members*, [`HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](./HUMAN_DEPLOYMENT_RECREATE_GUIDE.md)
+  §5h, mandatory) — and the fact that a same-instance reset
   cannot prove what an independent instance would: platform-level caches, indexes, retained update history and
   any metadata a scope teardown does not reach were not re-created by the exercise and were not tested by it.
   The full record, including the one failure cycle this gate produced and the three source-side fixes it forced,
@@ -466,6 +497,18 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
   `report_view` gate on this application's content: that message was verified absent on every dashboard load, and
   verified as a true negative rather than an unobserved one, because the same personas do receive it on the
   platform's own `task`-table homepage widgets in the same session.
+- **CR1 2026-09-09 (review finding F02) — the package could not have passed this gate, and now can.** The
+  8 `sys_grid_canvas_pane` placements had been dropped from the shipped package on the mistaken premise that
+  `sys_portal` widget instances cannot be packaged. They can, and the package embeds all 8 of them (with 96
+  `sys_portal_preferences`) inside its two `sys_portal_page` composites; the real cause of the preview error that
+  triggered the drop is that the preview validator resolves a reference only against a local record or a
+  *standalone* block in the same set, and the widget instances travelled as composite children. Without the pane
+  rows a committed dashboard has its canvas, tab, permissions, reports and configured widget instances but no
+  placements, so steps 2 and 6 of this procedure would have found 0 of 3 and 0 of 5 widgets on a fresh install.
+  The 8 rows are restored in the shipping bytes as two self-contained bundles that carry the widget instances
+  they reference. **Verified statically only** — 8 pane records present, every `portal_widget` and `grid_canvas`
+  target resolving inside the package — so on the next deployment run steps 2 and 6 are the confirmation, plus
+  `GET /api/now/stats/sys_grid_canvas_pane?sysparm_count=true&sysparm_query=sys_scope.scope=x_casemgmt` → 8.
 - **Failure Mode:** if a future revision regresses this, fix the artifacts and their payloads and re-export —
   **not** by hand-building the dashboards on the instance, which would leave the deliverable still broken. Per
   AAP Section 0.7.2 Minimal-Change Clause, if a gap requires adding widgets beyond the eight reports defined in
@@ -475,6 +518,19 @@ Each gate below follows the same shape: the verbatim Criterion and Pass Conditio
 
 - **Criterion:** Scoped app exported
 - **Pass Condition:** Update Set loads without errors on a fresh PDI instance
+- **CR1 2026-09-09 — this gate's verdict does NOT carry over to the bytes that ship now.** Every gate result
+  recorded for Gate 7 below was measured on the pre-amendment package (522 blocks / 3,114,377 bytes /
+  `b2217224…`). Resolving the CR1 findings changed the bytes — four payloads removed, four added, three payloads
+  amended in place, every block reordered — and the amended package has **not** been uploaded, previewed or
+  committed anywhere: the PDI is deliberately at its torn-down zero state and the CR1 checkpoint made no
+  instance writes. This gate is therefore **OPEN on the shipping bytes** and closing it is the first deployment
+  action ([`deployment.md`](./deployment.md) Step 2). What is established statically on those bytes:
+  `xmllint --noout` clean; all 522 payloads parse individually; 522 unique block names with no duplicate and no
+  stray root `sys_id`; exactly one descriptor, whose `inserted`/`summary` both read 522; zero `global` scope
+  stamps in any payload; every one of the 122 embedded script bodies parses and uses no post-ES5 construct;
+  every reference inside the restored pane bundles resolves to a record the same package carries; the payload
+  set is byte-identical before and after the reorder (sha256 over the sorted payload texts); and the AAP §0.5.2
+  dependency-order assertion passes, which the pre-amendment bytes failed.
 - **Detailed Verification Procedure:**
     1. On the source PDI: System Update Sets → Local Update Sets → locate the scoped application Update Set → set status to Complete → Export to XML.
     2. Provision a fresh PDI (or use a separate clean instance).

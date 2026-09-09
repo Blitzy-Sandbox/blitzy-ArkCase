@@ -160,6 +160,43 @@
       Include accidentally returned additional fields, this extraction
       drops anything not explicitly listed.
 
+    ANONYMOUS ABUSE CONTROLS (review finding F07):
+      The field whitelist above bounds WHAT one lookup can disclose. It
+      says nothing about HOW MANY lookups a caller may make, and the
+      identifier this endpoint accepts is sequential (CASE0000001 upward,
+      per ../../numbers/sys_number_x_casemgmt_case.xml). "HTTP 200 for a
+      real number, HTTP 404 for an unused one" is therefore inherently a
+      hit/miss oracle over that sequence: a script can walk it and harvest
+      three fields per existing case. That is a property of the
+      single-factor lookup contract AAP Section 0.7.4 mandates, not of
+      this implementation, and it cannot be removed without a second
+      factor the AAP does not define.
+
+      What bounds the abuse instead, and where each control lives:
+
+        1. Strict format validation before any query, in
+           x_casemgmt.CasePortalService.lookupCase() - a value that is not
+           ^CASE[0-9]{7}$ is answered identically to a miss and reaches no
+           database.
+        2. A per-session sliding-window request ceiling, also in the
+           Script Include, using the session's own client-data store. Over
+           the ceiling it returns { throttled: true } and THIS handler
+           answers HTTP 429.
+        3. Abuse monitoring: the Script Include emits gs.warn under the
+           stable marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE| with the client
+           IP and the miss/total counts when a session crosses the soft
+           miss threshold or is throttled, so an operator can alert on the
+           prefix and see a sweep in progress.
+        4. A platform-native per-hour ceiling on the guest user for this
+           exact resource, shipped as
+           ./sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml -
+           defence in depth behind the in-script controls, and the control
+           that covers a caller who discards its session between requests.
+
+      The residual risk - a slow sweep inside the ceiling, and a
+      distributed sweep across sessions - is recorded in
+      ../../docs/portal-pages.md rather than described as closed.
+
     HANDLER SCRIPT DESIGN (AAP Key Insights):
       The handler is INTENTIONALLY THIN - all business logic lives in
       the Script Include. The handler's only responsibilities are
@@ -168,6 +205,11 @@
         2. Call x_casemgmt.CasePortalService.lookupCase(caseNumber)
         3. Map the Script Include's return value to HTTP status codes
            and response bodies:
+             { throttled: true }
+                       -> HTTP 429 + { error: '<hardcoded throttle text>' }
+                          (checked FIRST: a throttled request learned
+                          nothing about the case table, so it must not be
+                          answered with the not-found statement)
              null      -> HTTP 404 + { error: 'No case found with that number.' }
              {status,
               subject,
@@ -178,7 +220,15 @@
           no-match (information-leakage hardening: don't differentiate
           "missing parameter" from "case not found"; if attackers
           received "Missing parameter 'number'" they would learn the
-          API's parameter name, useful for crafting attacks).
+          API's parameter name, useful for crafting attacks). The
+          response is unchanged, but it is now produced by DELEGATING
+          the empty value to the Script Include rather than by returning
+          from the handler ahead of it, so that such a request is
+          counted by the per-session throttle and seen by the abuse
+          monitor instead of being an unmetered free attempt (review
+          finding F07). The Script Include issues no query for a value
+          that is not a well-formed case number, so delegating costs
+          nothing.
         - Array-shaped queryParams.number (when ?number=A&number=B is
           sent) -> normalize to first element. ServiceNow's URL parser
           deduplicates parameters by default but this defensive code
@@ -283,8 +333,12 @@
           Script Include for the actual data-layer query
         - Enforce the field whitelist via the Script Include's
           return shape (NOT via this operation directly)
-        - Return the verbatim 404 text per AAP Section 0.7.4 on no-match
+        - Return the verbatim 404 text per AAP Section 0.7.4 on no-match,
+          and the same text for a malformed, empty or absent number
         - Return ONLY status/subject/opened_date on match
+        - Answer HTTP 429 when the Script Include reports that the calling
+          session is over its per-session lookup ceiling, mirroring the
+          submit endpoint's 429 branch
 -->
 <record_update table="sys_ws_operation">
     <sys_ws_operation action="INSERT_OR_UPDATE">
@@ -292,7 +346,7 @@
         <consumes>application/json</consumes>
         <consumes_customized>true</consumes_customized>
         <default_operation_uri>/api/x_casemgmt/case_status_lookup</default_operation_uri>
-        <description>GET handler for the Case Status Lookup scripted REST API. Anonymously accepts a case number via the 'number' query parameter from the Experience Portal lookup widget. Delegates to x_casemgmt.CasePortalService.lookupCase() which queries x_casemgmt_case by number and returns ONLY the whitelisted fields { status, subject, opened_date } - never assigned_group, assigned_agent, description, closed_date, requester_* fields, priority, type, pending_reason, or any audit field. On match, returns HTTP 200 with body { status, subject, opened_date }. On no match (or empty/missing query parameter), returns HTTP 404 with the verbatim body { error: 'No case found with that number.' } per AAP Section 0.7.4. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() Spring service. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
+        <description>GET handler for the Case Status Lookup scripted REST API. Anonymously accepts a case number via the 'number' query parameter from the Experience Portal lookup widget. Delegates to x_casemgmt.CasePortalService.lookupCase() which queries x_casemgmt_case by number and returns ONLY the whitelisted fields { status, subject, opened_date } - never assigned_group, assigned_agent, description, closed_date, requester_* fields, priority, type, pending_reason, or any audit field. On match, returns HTTP 200 with body { status, subject, opened_date }. On no match - which a malformed, empty or missing query parameter produces identically, and without any query - returns HTTP 404 with the verbatim body { error: 'No case found with that number.' } per AAP Section 0.7.4. When the Script Include reports that the calling session is over its per-session lookup ceiling, returns HTTP 429 with a hardcoded throttle message, mirroring the submit endpoint's 429 branch; that branch is evaluated before the not-found branch, because a throttled request learned nothing about the case table. Anonymous abuse controls for this endpoint are strict format validation and per-session throttling in the Script Include, gs.warn abuse monitoring under the stable marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE|, and the native per-hour sys_rate_limit_rules ceiling on the guest user shipped alongside (sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml); the hit-versus-miss distinction inherent to the AAP-mandated number-only contract is compensated by those controls, not eliminated, and the residual risk is recorded in docs/portal-pages.md. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() Spring service. Anonymous access is enabled by setting requires_authentication=false, requires_acl_authorization=false, and requires_snc_internal_role=false; the privacy perimeter is the field whitelist in the Script Include, not table-level ACLs.</description>
         <enforce_acl/>
         <http_method>GET</http_method>
         <name>Case Status Lookup GET</name>
@@ -338,20 +392,21 @@
     }
 
     // ----------------------------------------------------------------------
-    // 2. Empty/missing parameter -> verbatim 404 (information-leakage
-    //    hardening). DO NOT differentiate "missing parameter" from "case
-    //    not found": returning HTTP 400 with "Missing 'number' parameter"
-    //    would tell anonymous callers (potential attackers) the parameter
-    //    name and shape, useful for crafting follow-on attacks. Returning
-    //    the same 404 response gives no information about the API's
-    //    parameter expectations beyond what is already documented in the
-    //    public widget code.
+    // 2. An empty or missing parameter is NOT short-circuited here, and that
+    //    is deliberate. It still produces the identical verbatim 404 - the
+    //    Script Include validates the value and answers null for an empty
+    //    one, exactly as it does for a malformed one and for a genuine miss,
+    //    so "missing parameter" remains indistinguishable from "case not
+    //    found" and the API's parameter shape is still not disclosed.
+    //
+    //    What changed is that the request now reaches the Script Include's
+    //    per-session throttle and abuse monitor instead of being answered
+    //    ahead of them (review finding F07). An earlier revision returned
+    //    the 404 from right here, which meant a caller could issue unlimited
+    //    parameter-less or malformed requests without ever being counted -
+    //    free attempts, and an unmonitored path. The Script Include performs
+    //    NO query for such a value, so delegating costs nothing.
     // ----------------------------------------------------------------------
-    if (!caseNumber) {
-        response.setStatus(404);
-        response.setBody({ error: 'No case found with that number.' });
-        return;
-    }
 
     // ----------------------------------------------------------------------
     // 3. Delegate to the Script Include. The Script Include is the single
@@ -362,8 +417,14 @@
     //        no-hardcoded-sys_id rule by querying the public 'number' field)
     //
     //    Contract:
-    //      - lookupCase(<non-empty trimmed string>) returns:
-    //          * null       - no case matches the supplied number
+    //      - lookupCase(<the raw query-parameter value, possibly empty>)
+    //        returns:
+    //          * null       - no case matches the supplied number, OR the
+    //                         value is not a well-formed case number, OR no
+    //                         value was supplied. One outcome, one response.
+    //          * { throttled: true }
+    //                       - this session is over its per-session request
+    //                         ceiling for the trailing window
     //          * { status: String, subject: String, opened_date: String }
     //                       - case found, all values pre-coerced to strings
     //
@@ -373,6 +434,36 @@
     // ----------------------------------------------------------------------
     var svc = new x_casemgmt.CasePortalService();
     var result = svc.lookupCase(caseNumber);
+
+    // ----------------------------------------------------------------------
+    // 3a. Session over its lookup ceiling -> HTTP 429 Too Many Requests.
+    //
+    //    The Script Include sets throttled=true when this session has
+    //    exceeded the per-session request ceiling for the trailing window
+    //    (review finding F07: the anonymous lookup had no throttle at all,
+    //    which made a sweep of the sequential case-number space free). 429
+    //    is the correct status for the condition and it MIRRORS the submit
+    //    endpoint's own 429 branch in
+    //    ./sys_ws_operation_x_casemgmt_case_submit_post.xml, so both
+    //    anonymous endpoints refuse in the same way.
+    //
+    //    THIS BRANCH IS CHECKED BEFORE THE NOT-FOUND BRANCH BELOW, and must
+    //    stay there: a throttled request learned NOTHING about the case
+    //    table, so answering it with the AAP Section 0.7.4 not-found body
+    //    would state as fact that the requester's case does not exist. That
+    //    is the same reason the lookup widget renders a distinct panel for
+    //    it rather than the verbatim not-found text.
+    //
+    //    The message is hardcoded here, exactly as the not-found text is; it
+    //    is never taken from the Script Include's return value, and it
+    //    carries no count, ceiling or window - nothing an anonymous caller
+    //    could use to calibrate a sweep against the limit.
+    // ----------------------------------------------------------------------
+    if (result && result.throttled) {
+        response.setStatus(429);
+        response.setBody({ error: 'Too many lookup requests were received in a short period. Please try again in a minute.' });
+        return;
+    }
 
     // ----------------------------------------------------------------------
     // 4. No-match -> verbatim 404. Per AAP Section 0.7.4, the literal text
@@ -431,7 +522,7 @@
         <requires_acl_authorization>false</requires_acl_authorization>
         <requires_authentication>false</requires_authentication>
         <requires_snc_internal_role>false</requires_snc_internal_role>
-        <short_description>Anonymous GET handler for case status lookup. Returns HTTP 200 with whitelisted fields { status, subject, opened_date } on match, or HTTP 404 with verbatim body { error: 'No case found with that number.' } on no-match per AAP Section 0.7.4.</short_description>
+        <short_description>Anonymous GET handler for case status lookup. Returns HTTP 200 with whitelisted fields { status, subject, opened_date } on match, HTTP 404 with verbatim body { error: 'No case found with that number.' } on no-match (and on a malformed, empty or absent number) per AAP Section 0.7.4, or HTTP 429 when the calling session is over its per-session lookup ceiling.</short_description>
         <sys_class_name>sys_ws_operation</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-04-30 12:00:00</sys_created_on>

@@ -114,18 +114,47 @@
       can accidentally expose internal data via the public lookup endpoint.
 
     HTTP-ERROR HARDENING (information-leakage prevention):
-      Every 4xx - a 404 not-found and a 400 bad-request alike - is treated
-      identically by the client: c.notFound = true, and the verbatim
-      "No case found with that number." message is shown.
+      A 404 not-found and a 400 bad-request alike are treated identically
+      by the client: c.notFound = true, and the verbatim "No case found
+      with that number." message is shown.
+
+      An HTTP 429 is treated as its OWN outcome: the endpoint refused to
+      answer because the calling session is over its per-session lookup
+      ceiling (see the abuse controls in
+      ../../script_includes/x_casemgmt_CasePortalService.xml). It renders
+      the throttle panel, NOT the not-found text - a refused request
+      learned nothing about the case table, so telling the requester their
+      case does not exist would be a false statement about their own case,
+      for the same reason a 5xx must not render that text either.
 
       A 5xx, a network failure and an expired client-side deadline are
-      treated as a SERVICE FAILURE instead: c.errorMessage is set and a
-      separate panel says the service could not be reached.
+      treated as a SERVICE FAILURE: c.errorMessage is set and a separate
+      panel says the service could not be reached.
 
-      This is INTENTIONAL information-leakage hardening:
+      This is INTENTIONAL information-leakage hardening, and here is
+      exactly how far it goes:
         - An attacker probing the lookup endpoint cannot distinguish
-          "case not found" from "invalid input" - every 4xx shows the
-          same UX, so there is no oracle for enumerating case numbers.
+          "case not found" from "invalid input" - a 404 and a 400 show the
+          same UX, so nothing here discloses the accepted shape of a case
+          number.
+        - IT DOES NOT REMOVE THE HIT/MISS ORACLE, and an earlier revision
+          of this comment wrongly claimed it did ("no oracle for
+          enumerating case numbers"). A case that EXISTS answers HTTP 200
+          with its status, subject and opened date; one that does not
+          answers HTTP 404. That difference is the contract AAP Section
+          0.7.4 mandates - a single-factor lookup keyed on a sequential
+          case number - and no client-side treatment can hide it, because
+          the two responses differ in the payload the requester is there
+          to read. Review finding F07 named this, and the honest statement
+          is that the oracle is INHERENT and COMPENSATED, not absent:
+          strict ^CASE[0-9]{7}$ validation before any query, a per-session
+          sliding-window throttle answered as HTTP 429, gs.warn abuse
+          monitoring under the marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE|, and
+          a native per-hour sys_rate_limit_rules ceiling on the guest user
+          (../rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml)
+          together make a sweep of the number space slow, bounded and
+          visible. The residual risk is recorded in
+          ../../docs/portal-pages.md rather than denied.
         - The failure branch reveals only whether the service answered,
           which the requester can already observe from the page and which
           says nothing about any case. An earlier revision folded it into
@@ -520,14 +549,20 @@
      *     This controller deliberately does NOT pass error.data.error
      *     or error.statusText to the template - the server's error
      *     body is NEVER trusted by the client.
-     *   - Identical handling of every 4xx: information-leakage hardening.
-     *     404 (not-found) and 400 (bad-request) both set c.notFound =
-     *     true, so an attacker cannot distinguish "case not found" from
-     *     "invalid input" and gains no case-number enumeration oracle.
-     *     A 500, a network failure and an expired deadline set
-     *     c.errorMessage instead, because in those cases the case table
-     *     was never reached and the verbatim not-found text would be a
-     *     false statement about the requester's case.
+     *   - Identical handling of 404 and 400: information-leakage
+     *     hardening. Both set c.notFound = true, so an attacker cannot
+     *     distinguish "case not found" from "invalid input" and learns
+     *     nothing about the accepted shape of a case number. This does
+     *     NOT remove the hit/miss oracle inherent to the AAP Section
+     *     0.7.4 single-factor lookup - a real number answers 200 with the
+     *     case's three fields - see the HTTP-ERROR HARDENING section of
+     *     this record's header for the honest statement of that exposure
+     *     and the controls that compensate for it (review finding F07).
+     *     An HTTP 429 is handled separately, as a throttle rather than as
+     *     a not-found, and a 500, a network failure or an expired
+     *     deadline set c.errorMessage instead - in all of those the case
+     *     table was never consulted and the verbatim not-found text would
+     *     be a false statement about the requester's case.
      *   - c.loading flag: prevents double-lookup race conditions if
      *     the user clicks the button twice quickly, AND drives the
      *     "Looking up..." button text for clear UX feedback.
@@ -884,8 +919,11 @@
 
         // Build the URL with defensive URL-encoding of the case number.
         // The server-side Script Include x_casemgmt.CasePortalService.
-        // lookupCase() trims whitespace and queries by the case 'number'
-        // field. encodeURIComponent() handles any whitespace, special
+        // lookupCase() trims the value, upper-cases it, requires it to match
+        // ^CASE[0-9]{7}$ BEFORE it issues any query, and then queries by the
+        // case 'number' field - so anything this widget sends that is not a
+        // well-formed case number is answered as a not-found without touching
+        // the database. encodeURIComponent() handles any whitespace, special
         // characters, or potentially malicious input safely.
         var url = '/api/x_casemgmt/case_status_lookup?number=' + encodeURIComponent(String(c.caseNumber).trim());
 
@@ -953,16 +991,32 @@
                 c.notFound = true;
             }
         }, function(error) {
-            // Error path. Split in two, because a lookup that was ANSWERED
-            // and found nothing is a different fact from a lookup that was
-            // never answered.
+            // Error path. Split in THREE, because a lookup that was
+            // ANSWERED and found nothing, a lookup that was REFUSED, and a
+            // lookup that was never answered at all are three different
+            // facts and only one of them is a statement about the case.
             //
+            //   429  -> the endpoint refused to answer: this session is over
+            //           its per-session lookup ceiling (the abuse control
+            //           added for review finding F07 in
+            //           ../../script_includes/x_casemgmt_CasePortalService.xml).
+            //           The case table was NEVER consulted, so this must not
+            //           render the not-found text - it renders the throttle
+            //           panel, telling the requester to wait and try again.
+            //           Checked FIRST, because 429 is inside the 4xx range
+            //           the not-found branch below would otherwise swallow.
+            //   other
             //   4xx  -> the request reached the case table and no case with
             //           that number came back. This is the not-found case,
             //           and it renders the AAP Section 0.7.4 verbatim text.
-            //           EVERY 4xx maps here, not just 404, so a 400 and a
-            //           404 remain indistinguishable to the caller and no
-            //           case-number enumeration oracle is created.
+            //           A 400 maps here as well as a 404, so those two stay
+            //           indistinguishable to the caller and nothing
+            //           discloses the accepted shape of a case number. It
+            //           does NOT hide the difference between a case that
+            //           exists (HTTP 200 with three fields) and one that
+            //           does not - that oracle is inherent to the mandated
+            //           single-factor contract and is compensated
+            //           server-side; see this record's header.
             //   5xx,
             //   0/-1 -> the instance failed, the network failed, or the
             //           deadline above expired. Nothing was learned about
@@ -972,13 +1026,16 @@
             //           requester concludes their case does not exist. This
             //           renders the separate service-failure panel instead.
             //
-            // Neither branch echoes error.data.error, error.statusText or any
-            // other server-supplied content: both message strings are
-            // hardcoded, in this controller and in the template respectively.
+            // No branch echoes error.data.error, error.statusText or any
+            // other server-supplied content: every message string is
+            // hardcoded, in this controller and in the template.
             c.loading = false;
             c.result = null;
             var httpStatus = (error && typeof error.status === 'number') ? error.status : 0;
-            if (httpStatus >= 400 && httpStatus < 500) {
+            if (httpStatus === 429) {
+                c.notFound = false;
+                c.errorMessage = 'Too many lookups from this session. Please wait a moment and try again.';
+            } else if (httpStatus >= 400 && httpStatus < 500) {
                 c.notFound = true;
                 c.errorMessage = '';
             } else {
@@ -1035,7 +1092,7 @@
         <controller_as>c</controller_as>
         <css/>
         <data_table>sp_instance</data_table>
-        <description>Custom unauthenticated Service Portal widget for case status lookup. Renders a single case-number input field plus a Look Up Status button, GETs /api/x_casemgmt/case_status_lookup, and displays ONLY the whitelisted fields { status, subject, opened_date } on match or the verbatim text 'No case found with that number.' on no-match per AAP Section 0.7.4. Embedded by sp_page_x_casemgmt_case_status. No internal fields (assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, priority, type, pending_reason, audit fields) are exposed. Every 4xx (404 not-found, 400 bad-request) renders the same verbatim no-case-found message, so no case-number enumeration oracle exists; a 5xx, a network failure or an expired 20-second client deadline renders a separate 'service could not be reached' panel instead, because in those cases nothing was learned about the case and the verbatim message would be false. Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() and PortalRequestService.getRequestStatus() Spring services. No client-side or server-side database operations - all data flows through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
+        <description>Custom unauthenticated Service Portal widget for case status lookup. Renders a single case-number input field plus a Look Up Status button, GETs /api/x_casemgmt/case_status_lookup, and displays ONLY the whitelisted fields { status, subject, opened_date } on match or the verbatim text 'No case found with that number.' on no-match per AAP Section 0.7.4. Embedded by sp_page_x_casemgmt_case_status. No internal fields (assigned_group, assigned_agent, description, closed_date, requester_name, requester_email, priority, type, pending_reason, audit fields) are exposed. A 404 not-found and a 400 bad-request render the same verbatim no-case-found message, so neither the accepted shape of a case number nor the difference between a malformed and an unmatched value is disclosed; an HTTP 429 renders a distinct throttle panel and a 5xx, a network failure or an expired 20-second client deadline render a 'service could not be reached' panel, because in those cases nothing was learned about the case and the verbatim not-found message would be false. This widget does NOT eliminate the hit-versus-miss oracle inherent to the AAP Section 0.7.4 single-factor number-only lookup - a case that exists answers HTTP 200 with its three whitelisted fields - which is compensated server-side by strict ^CASE[0-9]{7}$ validation before any query, per-session sliding-window throttling answered as HTTP 429, abuse monitoring under the log marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE|, and the native per-hour sys_rate_limit_rules ceiling on the guest user; the residual risk is recorded in docs/portal-pages.md (review finding F07). Replaces ArkCase's GetCaseByNumberServiceImpl.getCaseByNumber() and PortalRequestService.getRequestStatus() Spring services. No client-side or server-side database operations - all data flows through the scripted REST endpoint. Per AAP Sections 0.4.3, 0.4.4, 0.5.1, and 0.7.4 (verbatim no-case-found message) and Validation Gate 5 (Portal - lookup).</description>
         <docs/>
         <field_list/>
         <has_preview>false</has_preview>
@@ -1469,14 +1526,20 @@
         exist, or to re-type a case number that was correct all along.
 
         This does NOT weaken the information-leakage hardening described in the
-        file header. Every 4xx still renders the identical verbatim not-found
-        text, so a caller cannot distinguish "no such case" from "malformed
-        request" and cannot enumerate case numbers by comparing responses. What
-        is now distinguishable is only whether the service answered at all,
-        which a requester can already observe from the page and which reveals
-        nothing about any case. The message text is hardcoded here, exactly as
-        the not-found text is, and is never taken from the server's response
-        body.
+        file header. A 404 and a 400 still render the identical verbatim
+        not-found text, so a caller cannot distinguish "no such case" from
+        "malformed request" by comparing those two responses. What is
+        distinguishable is whether the service answered at all, and whether it
+        refused as over-limit (HTTP 429, which renders this same panel with the
+        throttle wording) - neither of which reveals anything about any case.
+        What client-side treatment cannot hide, and this comment no longer
+        claims it does, is that a case which EXISTS answers HTTP 200 with its
+        status, subject and opened date while one that does not answers 404:
+        that hit/miss difference is the AAP Section 0.7.4 contract itself, and
+        it is compensated server-side by input validation, per-session
+        throttling, the native rate-limit rule and abuse monitoring (review
+        finding F07). The message text is hardcoded here, exactly as the
+        not-found text is, and is never taken from the server's response body.
     -->
     <div class="alert alert-danger" role="alert" ng-if="c.errorMessage">
         {{c.errorMessage}}

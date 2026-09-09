@@ -333,13 +333,53 @@ All other fields on the case table are NOT accepted by the submission endpoint a
 > | `requester_email` present but malformed | **400** |
 > | body that is not valid JSON | **400** `Request body must be valid JSON.` — previously this threw inside the operation script and escaped as **HTTP 500** |
 > | body that is a JSON array | **400** `Invalid payload.` (verbatim — an ATF step asserts this exact string) |
-> | more than 10 anonymous submissions inside 60 s | **429** — a flood guard that counts `sys_created_by='guest'` rows in the trailing minute, so it cannot block a legitimate single submission |
+> | more than 10 anonymous submissions inside 60 s, or more than 4 from one `requester_email` | **429** `{"error":"Too many submissions were received in a short period. Please try again in a minute."}` — the admission ceiling described in [The submit ceiling is decided after the insert, and has a per-requester share](#the-submit-ceiling-is-decided-after-the-insert-and-has-a-per-requester-share). A single submission from a quiet endpoint is never refused |
 > | a second identical submission inside 90 s | **201** with the **first** case's number, and the duplicate row is deleted. *This row is the only one in this table not yet confirmed by an anonymous `curl` against the live PDI — confirming it requires writing two cases to a shared instance. It is verified against an in-memory `GlideRecord` stub instead; see* [Identical submissions inside 90 seconds collapse onto one case](#identical-submissions-inside-90-seconds-collapse-onto-one-case) |
 > | wrong `Content-Type` | **415** |
 > | `GET` / `PUT` / `DELETE` on the submit path | **405** |
 > | a valid submission | **201** `{"number":"CASE…","message":"Your case has been submitted"}`, row `status=Draft` |
 
 - Server-side error → 500 Internal Server Error with generic "Submission failed; please try again." (do NOT expose internal stack traces).
+
+#### The submit ceiling is decided after the insert, and has a per-requester share
+
+Delta CR1 finding **F06** (HIGH, CWE-367) against the previous shape of this guard: it ran a `GlideAggregate` count
+of `sys_created_by='guest'` rows in the trailing 60 s, returned an admission decision, and the `insert()` happened
+afterwards. Parallel anonymous requests all read the same pre-insert count, all saw it below the ceiling, and all
+were admitted — so the ceiling bounded nothing under the one condition it exists for. The same finding named a
+second defect: one global allowance with no per-caller dimension, which a single abuser can consume in full,
+denying the endpoint to every legitimate requester for the rest of the window.
+
+`CasePortalService._admitAnonymousSubmission()` now decides **after** the row exists:
+
+1. `submitCase()` inserts the row and re-queries it (it already did both, to read the auto-generated number);
+2. the guard ranks **our own row** among the rows the *same creator* made inside the 60-second window, ordered
+   `sys_created_on` then `sys_id` — a **total** order, because `sys_created_on` has one-second resolution and ties
+   between simultaneous inserts are normal;
+3. a row at or beyond the **global ceiling of 10**, or at or beyond the **per-requester ceiling of 4** counted over
+   the rows in the window sharing its normalised `requester_email` bucket, is **deleted again** and the submission
+   is refused with `{ error, throttled: true }` → **HTTP 429**.
+
+Every concurrent caller computes the same order over the same rows and therefore agrees on every row's rank, so at
+most ten rows survive a window with no lock, no counter and no serialisation.
+
+| Property | Behaviour |
+| --- | --- |
+| Global ceiling | **10 rows per creator per 60 s.** Rows are ranked against *their own creator's* rows, so a flood through the endpoint cannot throttle case creation on the native form, and vice versa |
+| Per-requester ceiling | **4 rows per normalised `requester_email` bucket per 60 s** — strictly below the global ceiling, so no single bucket can consume the whole allowance. The address is trimmed and lower-cased; an absent or empty address is its **own** bucket, shared by all address-less submissions. `requester_email` is used because it is the only caller-identifying value AAP §0.5.7 puts on this path, and AAP §0.7.2's Minimal-Change Clause refuses a new table, field or property to carry a better one |
+| Direction of error | **Over-rejection is possible, over-admission is not.** Under a genuine flood a row can exist briefly, rank badly and be withdrawn. That is the safe direction and it is deliberate |
+| **Limit — read visibility** | Rank can only be computed over rows a query can **see**. Callers whose inserts are each still invisible to the other's query all rank themselves first and all survive, so the honest guarantee is *the ceiling holds across every caller that can see the rows already committed*, not *the ceiling holds absolutely*. Same residual window the duplicate-collapse documents; closing it needs a lock or counter the AAP forbids adding. The native per-hour rule below is the defence-in-depth layer for it |
+| **Limit — a varied address defeats the bucket** | An abuser who changes `requester_email` on every request is counted in a new bucket each time. The per-requester ceiling is a **fairness** dimension, not an identity: what still bounds that abuser is the global ceiling and the native per-hour rule |
+| Case-number gaps | A refused submission **consumes a case number** — the platform allocates it during the insert, and the row is withdrawn afterwards. Already true of the round-trip refusal, of a collapsed duplicate and of every form load, so gaps carry no meaning here, but expect them |
+| Response surface | Unchanged: **429** with only `{ error }`. No count, ceiling or window is ever returned, so a caller cannot calibrate a sweep against the limit |
+| What an operator watches | `gs.warn` / `gs.error` lines beginning `X_CASEMGMT_PORTAL_SUBMIT_ABUSE|` — see [Abuse monitoring and the native rate-limit rules](#abuse-monitoring-and-the-native-rate-limit-rules) |
+
+Verified by driving the extracted method against an in-memory `GlideRecord` stub (40 assertions, all passing):
+fourteen simultaneous inserts sharing one `sys_created_on` leave **exactly ten** rows and the **same** ten in both
+evaluation orders; the 11th-ranked row is withdrawn and the 10th is kept; the fifth row of one email bucket is
+refused while a different bucket's first row is admitted at the same instant; rows created by another user and rows
+older than the window are not ranked; an empty `sys_created_by` declines the guard, admits, and logs; a failed
+cleanup still refuses and escalates to `gs.error` naming the row for manual removal.
 
 #### Identical submissions inside 90 seconds collapse onto one case
 
@@ -441,7 +481,12 @@ Allows an unauthenticated external requester to look up the current status of a 
 0. **Arriving from a submission confirmation.** The confirmation panel links here as `?id=x_casemgmt_case_status&number=CASE0000001`. The widget's server script reads that parameter with `$sp.getParameter('number')` into `data.prefilledNumber` (trimmed, capped at the 20 characters the input's own `maxlength` allows), and the client controller pre-fills the field and runs the lookup once. Without it the requester followed a link labelled "Check the status of this case", landed on an empty form, and had to re-type the number the link already carried. This is the only circumstance in which the widget issues a request without a button press, and it is the requester driving it — they clicked a link that says exactly this. With no parameter, `prefilledNumber` is `''` and the page behaves as it always did: empty field, no request. The parameter is treated as untrusted address-bar input: it is never used to build a query directly (the lookup still goes through the same `encodeURIComponent`'d GET, and the endpoint answers 404 for anything it does not recognise) and it reaches the template through `ng-model`, which renders it as a value and never as markup.
 1. Client-side validates that the case number is non-empty and shows the field's own message plus a summary if it is not. The Look Up Status button is **always enabled** — `ng-disabled` on the in-flight flag only — and `c.lookup(caseLookupForm)` decides on the press, returning without issuing a request when the field is empty. A button disabled on an empty field was the previous gate and it answered nothing, for the same two reasons as on the submission page: a disabled `<button>` is pointer-transparent and is absent from the tab order. The field's message, its `has-error` treatment and its `aria-invalid` binding appear **only after a press** — `c.lookup()` sets `c.pressed` as its first statement and all three read `c.clientInvalid(caseLookupForm.caseNumber)` — because keying them to the control's `$touched` made the press's own blur move the button out from under the pointer; see [The first press of the button used to be swallowed](#the-first-press-of-the-button-used-to-be-swallowed).
 2. On a non-empty value, the widget calls scripted REST endpoint GET `/api/x_casemgmt/case_status_lookup?number=<value>`.
-3. The endpoint queries `x_casemgmt_case` by `number = <value>` using a `GlideRecord` lookup.
+3. The endpoint **throttles first, validates second, queries third**. `CasePortalService.lookupCase()` counts the
+   request in this session's sliding window (over the ceiling → `{ throttled: true }` → **HTTP 429**), then trims and
+   upper-cases the value and requires it to match `^CASE\d{7}$`. A value that fails that test — malformed, empty, or
+   absent — is answered exactly like a genuine miss and **issues no query at all**. Only a well-formed number reaches
+   the `GlideRecord` lookup on `number`, which still uses `setLimit(1)`. See
+   [The lookup is a hit/miss oracle by contract, and what bounds it](#the-lookup-is-a-hitmiss-oracle-by-contract-and-what-bounds-it).
 4. **If found:** returns 200 OK with body `{ "status": "...", "subject": "...", "opened_date": "..." }` — only those three fields, NOTHING else. `opened_date` is the **display** value (session timezone and date format), not the raw stored UTC value: the endpoint previously emitted the raw column, so the same record read `2026-09-03 17:39:40` externally and `2026-09-03 10:39:40` on the internal form — a seven-hour discrepancy that put an external requester's submission time in the future relative to what staff could see. The timezone that qualifies the instant is rendered as part of the **Opened Date label** on the lookup panel (e.g. `Opened Date (America/Los_Angeles)`), resolved by the widget from its own session; it is deliberately **not** a fourth response key, because AAP Section 0.7.4 fixes this payload at exactly three.
 5. **If not found:** returns 404 Not Found carrying the verbatim literal `No case found with that number.` Measured body on this release: **`{"result":{"error":"No case found with that number."}}`** — the Scripted REST framework nests a handler's body under `result`, so the `error` key sits one level down. The message string is byte-identical either way and the widget reads it defensively, but the envelope is recorded here because earlier revisions of this document wrote it as `{"error":"…"}` and a consumer coding against that shape would miss it.
 6. The widget renders the result panel with the three returned fields, OR the verbatim "not found" message.
@@ -553,9 +598,18 @@ Per AAP Section 0.7.4, this text is the canonical not-found message. It MUST app
 
 ### Error Handling
 
-- Empty case number → 400 Bad Request, client-side hint "Please enter a case number."
-- Malformed case number (regex fail) → 400 Bad Request, client-side hint "Case number format must be CASE0000001."
-- Case number not found → 404 Not Found, displays "No case found with that number."
+- Empty case number → the widget shows the client-side hint "Enter a case number to look up." and issues no request.
+  A request that *does* reach the endpoint with an empty `number` (a direct API call) is answered **404** with the
+  verbatim not-found body — deliberately identical to a miss, so the parameter's shape is not disclosed.
+- Malformed case number → **404 Not Found** with the verbatim `No case found with that number.`, and **no query is
+  run**. The widget's own `CASE\d{7}` hint means a requester normally never sees this. *Earlier revisions of this
+  document specified 400 for this case; the endpoint has never returned 400 on the lookup path and must not, because
+  a distinct status for "malformed" would tell an anonymous caller the accepted shape of the identifier.*
+- Case number not found → **404 Not Found**, displays "No case found with that number."
+- More than 12 lookups from one session inside 60 s → **429 Too Many Requests**
+  `{"error":"Too many lookup requests were received in a short period. Please try again in a minute."}`. The widget
+  renders its own hardcoded panel — *"Too many lookups from this session. Please wait a moment and try again."* — and
+  **never** the not-found literal, because a refused request learned nothing about the case table.
 - Server-side error → 500 Internal Server Error, generic "Lookup failed; please try again."
 
 #### Not-found and service-failure are two different answers, and the widget no longer conflates them
@@ -592,12 +646,113 @@ pressing the button again.
 read: abandoning it costs nothing and the user simply retries. A submission is a write. If the client gave up at
 20 seconds on a request the server went on to commit, the page would report failure for a case that exists, and the
 obvious user response — submit again — would create a duplicate. Better to keep waiting than to invite that. The
-anonymous flood guard on the endpoint (10 submissions per 60 s) is a second reason not to encourage retries.
+anonymous admission ceiling on the endpoint (10 rows per creator per 60 s, and 4 per `requester_email` bucket — see
+[The submit ceiling is decided after the insert, and has a per-requester share](#the-submit-ceiling-is-decided-after-the-insert-and-has-a-per-requester-share))
+is a second reason not to encourage retries.
 
 Verified at runtime: the failure path was driven with the browser's network emulation set offline, producing
 `net::ERR_INTERNET_DISCONNECTED` with no HTTP status. The red panel appeared, the literal
 `No case found with that number.` was absent from **every** live text node on the page, and the lookup recovered on a
 plain retry once the network was restored.
+
+#### The lookup is a hit/miss oracle by contract, and what bounds it
+
+Delta CR1 finding **F07** (HIGH, predictable-identifier enumeration): the unauthenticated lookup accepted sequential
+`CASE0000001`-style numbers, answered **200** with `status` / `subject` / `opened_date` for a case that exists and
+**404** for one that does not, and had **no format validation, no throttle and no logging**. Valid-versus-invalid is
+therefore an oracle a script can sweep to harvest case metadata at scale. The lookup widget made matters worse by
+*claiming* in its comments and its `<description>` that "no case-number enumeration oracle exists" — a claim that only
+ever covered 404-versus-400, and was false with respect to 200-versus-404. That claim has been removed from the widget
+and is replaced, here and there, by what is actually true.
+
+**The oracle is inherent to the mandated contract.** AAP §0.7.4 fixes the lookup as *single-factor*: a case number
+alone returns that case's three fields to an anonymous caller, and §0.7.4 also fixes the number format at
+`CASE0000001` (7-digit, sequential — see [`../numbers/sys_number_x_casemgmt_case.xml`](../numbers/)). A response that
+carries the case's data when the case exists cannot be made indistinguishable from one that does not; removing the
+distinction would mean breaking the contract the gate tests. Closing it properly needs a **second factor** — an email
+match, a submission token, a signed link — which the AAP does not define and §0.7.2's Minimal-Change Clause forbids
+inventing. So the honest position is: **the oracle is not closed, it is made slow, bounded and visible.**
+
+| Control | Where it lives | What it costs an attacker |
+| --- | --- | --- |
+| Strict `^CASE\d{7}$` validation **before any query** | `CasePortalService.lookupCase()` | A malformed sweep gets the same 404 as a real miss, reaches no database, and learns nothing about the accepted input shape |
+| Per-session sliding window, **12 requests / 60 s** | `CasePortalService._admitAnonymousLookup()`, held in the session's own `GlideSession` client-data store under one key (`x_casemgmt_portal_lookup_guard`), pruned every call — no new table, field or property (AAP §0.7.2) | Sweeping from one session stops at 12 numbers a minute; refused requests are counted too, so the caller must go quiet for a whole window to recover |
+| Soft **miss threshold, 5 misses / 60 s** | `CasePortalService._recordAnonymousLookupMiss()` | A run of misses is the signature of a sweep, and it raises an alertable log line naming the client IP |
+| Native **per-hour ceiling on the guest user** | [`../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml`](../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml), 240 requests/hour | Covers the caller that discards its session cookie to get a fresh window. At 240/hour, walking `CASE0000001`-`CASE9999999` takes ~41,600 hours — about four and a half years |
+
+**Residual risk, stated rather than denied:**
+
+- A caller **inside** the ceilings can still walk the sequence slowly; 240 numbers an hour is not zero.
+- A **distributed** caller (many sessions, many source addresses) multiplies the per-session window; only the native
+  per-hour rule on `guest` bounds it, and that rule's effectiveness is **not yet verified** (below).
+- What a successful hit discloses is exactly the three fields AAP §0.7.4 mandates — `status`, `subject`,
+  `opened_date`. `subject` is requester-supplied free text, so it is the field with real disclosure value; no
+  internal field, and no `requester_*` value, is ever returned.
+- If the session store is unavailable, the per-session window cannot be maintained and the endpoint **fails open**
+  (a lookup page that refuses everyone on a platform condition is worse). That branch is deliberately **not** logged,
+  because it would be reachable on every request and would turn the monitor into a log-flood amplifier.
+
+#### Abuse monitoring and the native rate-limit rules
+
+**The two log markers an operator should alert on.** Both are stable strings at the start of the message, chosen so a
+single `messageSTARTSWITH` filter on `syslog` finds every line:
+
+| Marker | Emitted by | Emitted when | Payload |
+| --- | --- | --- | --- |
+| `X_CASEMGMT_PORTAL_SUBMIT_ABUSE|` | `CasePortalService._admitAnonymousSubmission()` / `._discardOverflowSubmission()` | a submission is refused by the global or per-requester ceiling; the guard declines because `sys_created_by` is empty; our own row is not visible to its own ranking query; **`gs.error`** when the withdrawal of a refused row fails | `reason=`, `rank=`, `limit=`, `window_seconds=`, `cleanup=`, `sys_id=` — no submitted value and no address |
+| `X_CASEMGMT_PORTAL_LOOKUP_ABUSE|` | `CasePortalService._admitAnonymousLookup()` / `._recordAnonymousLookupMiss()` | a session is throttled, or crosses the soft miss threshold | `event=throttled` or `event=miss_threshold`, `ip=` (from `GlideSession.getClientIP()`), `misses=`, `requests=`, the limit and the window |
+
+Both are rate-limited to **one line per session per 60 s**, so a sustained flood cannot be used to flood the log.
+Suggested operator query:
+
+```text
+GET /api/now/table/syslog
+    ?sysparm_query=messageSTARTSWITHX_CASEMGMT_PORTAL_^ORDERBYDESCsys_created_on
+    &sysparm_fields=sys_created_on,level,message&sysparm_limit=50
+```
+
+**The two native rate-limit rules, and their honest status.** Both are scoped `sys_rate_limit_rules` records shipped
+with the package (`sys_rate_limit_rules` extends `sys_metadata`, so it is an application file and travels in the
+Update Set):
+
+| File | Applies to | Resource | Ceiling |
+| --- | --- | --- | --- |
+| [`sys_rate_limit_rules_x_casemgmt_case_submit.xml`](../portal/rest/sys_rate_limit_rules_x_casemgmt_case_submit.xml) | `type=User`, the platform's stock `guest` user | `POST /x_casemgmt/case_submit` | **60 requests/hour** |
+| [`sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml`](../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml) | `type=User`, the platform's stock `guest` user | `GET /x_casemgmt/case_status_lookup` | **240 requests/hour** |
+
+> **These rules are defence in depth and their effectiveness is NOT PROVEN.** They were authored from the shipped
+> REST records and from the shape of the 30 stock rows on the development instance; neither has been exercised
+> against a live anonymous caller, because the instance is deliberately empty at the end of this run and no writes
+> were made to it. Two things are specifically unverified: whether the platform applies a rate-limit rule **owned by
+> a scoped application** to an anonymous request on a scoped scripted REST resource, and whether the `api` /
+> `api_resource` choice values bind to this application's resources after commit. **The in-script controls are the
+> primary shipped defence and none of them is weakened on the strength of these files.**
+
+Verify **post-commit**, per rule (`<rule sys_id>` = `e10d202203fa5a85dd185af381502031` for submit,
+`55e38d54edf281eb97d455a75b11ac93` for lookup):
+
+```text
+1. installed, active, resource bound
+   GET /api/now/table/sys_rate_limit_rules?sysparm_query=sys_id=<rule sys_id>
+       &sysparm_fields=name,api,api_resource,rest_api_resource,type,user,requests,active
+   expect: one row, active=true, api_resource exactly "POST /x_casemgmt/case_submit"
+           (or "GET /x_casemgmt/case_status_lookup")
+
+2. the platform is counting real anonymous traffic — THE effectiveness check,
+   run it after at least one anonymous call to the endpoint
+   GET /api/now/table/sys_rate_limit_count?sysparm_query=rate_limit_rule=<rule sys_id>
+       &sysparm_fields=user,request_count,count_start
+   expect: a row whose user is guest, whose request_count tracks the calls made.
+           NO ROW AFTER A SUCCESSFUL ANONYMOUS CALL = THE RULE IS NOT IN EFFECT
+
+3. refusals, once the ceiling is crossed
+   GET /api/now/table/sys_rate_limit_violations?sysparm_query=rate_limit_rule=<rule sys_id>
+       &sysparm_fields=user,sys_created_on
+```
+
+An empty `api_resource` in step 1 means the choice did not bind: re-point the rule on its form, where the choice list
+is populated from the live REST registry, and re-export. If step 2 returns nothing, treat the endpoint as protected
+by the in-script controls alone.
 
 ## Source-Side Semantic Mapping
 
@@ -643,6 +798,24 @@ The numbered procedure below cross-references [`validation-gates.md`](./validati
     - On the lookup page, block network access and press Look Up. Confirm the red *"The case service could not be
       reached…"* panel appears and that `No case found with that number.` does **not** appear anywhere on the page.
       Restore the network and press Look Up again; confirm it recovers without a reload.
+11. Re-check the anonymous abuse controls, anonymously and with `curl` (no credentials), because they are the part a
+    later edit is most likely to weaken:
+    - `GET /api/x_casemgmt/case_status_lookup?number=case9000003` (lower case) → **200**; the same value with
+      surrounding spaces → **200**. Normalisation must survive.
+    - `GET …?number=CASE900000`, `…?number=NOTANUMBER`, and `…` with no `number` at all → **404** with the verbatim
+      body, all three identical, and **no** `x_casemgmt_case` query in the slow-query/session log for them.
+    - Issue 13 lookups inside a minute **on one session** (`curl -c jar -b jar`, so the session cookie is reused) →
+      the 13th answers **429**, and the widget shows the throttle panel rather than the not-found literal. Re-run
+      after 60 s → served again.
+    - Confirm `syslog` carries a line starting `X_CASEMGMT_PORTAL_LOOKUP_ABUSE|` for that run, with `ip=`, `misses=`
+      and `requests=` populated and **no** requester name, address or case text.
+12. Re-check the submit ceiling the same way: post 11 valid submissions inside 60 s → the 11th answers **429** and
+    **no eleventh row exists**; post 5 submissions inside 60 s carrying the same `requester_email` → the 5th answers
+    **429** while a submission with a different address at the same moment answers **201**. Confirm `syslog` carries
+    `X_CASEMGMT_PORTAL_SUBMIT_ABUSE|refused reason=…` lines, and delete the synthetic rows afterwards.
+13. Verify the two native rate-limit rules per
+    [Abuse monitoring and the native rate-limit rules](#abuse-monitoring-and-the-native-rate-limit-rules) — the
+    `sys_rate_limit_count` row in step 2 there is the only evidence that those rules are in effect at all.
 
 **Measured outcome of the procedure above, taken on `dev379024` (Australia Patch 3).** That host is now
 **retired and is not used**, so the figures below are dated evidence from it, not a reading of the current

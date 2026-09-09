@@ -6,11 +6,40 @@
 
     WHAT THIS RECORD IS
     ...................
-    Its `<script>` body is `../scripts/post_import_remediation.js` verbatim. That
-    file is the single source of truth; this XML is generated from it, so the two
-    can never disagree. The script completes the four things an Update Set commit
-    cannot do for itself, because each is produced by a platform business rule and
-    the commit engine applies every payload with business rules suppressed:
+    A RETAINED REFERENCE RECORD-DEFINITION, DELIBERATELY NOT SHIPPED INSIDE THE
+    UPDATE SET. `update-set/x_casemgmt_case_management_update_set.xml` carries no
+    `sys_script_fix` payload at all, so a commit installs no Fix Script and there
+    is no installed record for anyone to run. This file exists so the remediation
+    body is reviewable in the record shape the platform would store it in, and so
+    an operator who wants the record on an instance can create it deliberately -
+    it is not part of the deliverable's install path. Two independent reasons for
+    the omission, both measured and both recorded below: the record cannot
+    complete its own work once committed (HOW IT RUNS), and installing a
+    privileged, partly destructive remediation where a recipient can press Run
+    yields 121 errors and no remediation.
+
+    THE ROUTE THAT WORKS, AND THE ONLY ONE DOCUMENTED, is to paste
+    `../scripts/post_import_remediation.js` into **System Definition > Scripts -
+    Background** with **"In scope" = Global** and run it - see
+    `../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` section 5.
+
+    Its `<script>` body is the remediation body, generated from
+    `../scripts/post_import_remediation.js`. THAT FILE IS THE SINGLE SOURCE OF
+    TRUTH AND THE ONLY THING TO RUN; this wrapper is a snapshot of it, and the
+    snapshot is currently BEHIND the source: measured line-for-line, 240 lines of
+    the source are absent from the copy below and 31 lines of the copy are no
+    longer in the source, and the two disagree on the ACL invariants -
+    `EXPECTED_ACL_COUNT` 26 / `EXPECTED_ACL_ROLE_LINKS` 27 in the copy below
+    against 29 / 36 in the source. Nothing installs or executes the copy (see
+    WHAT THIS RECORD IS), so the drift changes no deployed behaviour, but do not
+    treat this wrapper as an authority on the body and do not paste it anywhere:
+    regenerate it from `../scripts/post_import_remediation.js` before creating
+    this record on any instance, and reconcile the ACL invariants against what
+    the package being installed actually carries.
+
+    The script completes the four things an Update Set commit cannot do for
+    itself, because each is produced by a platform business rule and the commit
+    engine applies every payload with business rules suppressed:
 
       Defect C  physical `x_casemgmt_case_task` / `x_casemgmt_case_party` tables,
                 their fields, and all seven choice lists. The DDL is executed by
@@ -30,16 +59,16 @@
 
     HOW IT RUNS - AND WHY RUNNING *THIS RECORD* CANNOT COMPLETE THE REMEDIATION
     ...........................................................................
-    READ THIS BEFORE RELYING ON THIS RECORD. This Fix Script is shipped so the
-    remediation body travels inside the package and is auditable there, NOT as a
-    working execution route. Running it from the Fix Script UI does not perform
-    Defect C or Defect 9, for a measured platform reason:
+    READ THIS BEFORE RELYING ON THIS RECORD. Running a Fix Script that carries
+    this body does not perform Defect C or Defect 9, for a measured platform
+    reason - and that is the first of the two reasons the record is not shipped:
 
-      - The package declares this record `sys_scope = global`, but **the Update
-        Set commit engine rewrites every committed record's `sys_scope` to the
-        Update Set's application.** Read back after commit, the installed record's
-        `sys_scope` is the `x_casemgmt` application sys_id (its `sys_package` is
-        still global).
+      - **The Update Set commit engine rewrites every committed record's
+        `sys_scope` to the Update Set's application.** When the package still
+        carried this record, it was read back after commit with `sys_scope` set
+        to the `x_casemgmt` application sys_id no matter what the payload
+        declared: the behaviour was measured with the payload stamped global,
+        and the rewrite is what makes the record's own stamping irrelevant.
       - Executing it therefore runs the body in the `x_casemgmt` scope, where
         `GlideTableDescriptor` and `GlideSecurityManager` both raise
         "... is not allowed in scoped applications".
@@ -48,13 +77,22 @@
         acl_links_total=0|security_cache_flushed=false|errors=121`, all 121 errors
         being those two SecurityExceptions.
       - No packaging change fixes this, because the rewrite happens at commit
-        time regardless of the scope the package declares.
+        time regardless of the scope the payload declares. That is precisely why
+        the artifact is retained as a reference definition rather than shipped:
+        there is no stamping that turns an installed Fix Script into a working
+        execution route on this release.
+      - The second reason is safety. This body performs a privileged, partly
+        destructive remediation (it can delete and rebuild `sys_db_object` rows).
+        An installed record puts a **Run Fix Script** button in front of a
+        recipient whose only possible outcome is 121 errors and no remediation,
+        so the record is kept out of the package rather than shipped inert.
 
     THE ROUTE THAT WORKS. Paste `../scripts/post_import_remediation.js` into
     **System Definition > Scripts - Background** with **"In scope" = Global** and
-    run it. That is the only measured-working route and it is prescribed step by
-    step in `../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` section 5, whose
-    acceptance path is (b) - disclosed manual remediation - not (a).
+    run it. That is the only measured-working route, it is the only route the
+    documentation prescribes, and it is written out step by step in
+    `../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` section 5, whose acceptance path
+    is (b) - disclosed manual remediation - not (a).
 
     A companion trigger (Business Rule "x_casemgmt Post-Import Bootstrap",
     `when=after` on `sys_remote_update_set`, condition
@@ -64,21 +102,38 @@
     succeed, its condition did not verify that the committed Update Set belonged to
     `x_casemgmt`, so an activated copy would dispatch this privileged, partly
     destructive remediation on the commit of any unrelated Update Set. The
-    remediation body still quiets a legacy copy of that rule when it finds exactly
-    one whose name, `collection` and `sys_update_name` all match this package's own
-    payload. The full evidence is in
+    remediation body still quiets a legacy copy of that rule - one an instance may
+    carry from an older export - when it finds exactly one whose name,
+    `collection` and `sys_update_name` all match the removed artifact's. The full
+    evidence is in
     `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` section 9.4.
 
-    WHY THE SCOPE IS DECLARED GLOBAL ANYWAY
-    .......................................
-    Every table the remediation writes (`sys_db_object`, `sys_dictionary`,
-    `sys_choice`, `sys_number`, `sys_ws_definition`, `sys_security_acl_role`,
-    `sys_script`) lives in the global scope with cross-scope create/update access
-    denied, and `GlideTableDescriptor` / `GlideSecurityManager` are unavailable to
-    a scoped caller. Global is the narrowest scope in which the body can succeed,
-    so it is what the package declares - even though commit overrides it. The
-    override, and its consequence, are disclosed in
-    `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`.
+    WHY THIS DEFINITION IS STAMPED `x_casemgmt`, AND WHY THE BODY STILL NEEDS
+    GLOBAL
+    ........................................................................
+    Two different things, and conflating them is what an earlier revision of this
+    header did:
+
+      - **The record's stamping.** This file is stamped wholly into the
+        application - `sys_scope` = the `x_casemgmt` application record,
+        `sys_package` = `x_casemgmt`, exactly the convention every other authored
+        artifact in this repository uses. The application scope is the only
+        namespace this deliverable writes; it declares no global artifact
+        anywhere, and this file is not an exception to that. (An earlier revision
+        stamped it `global`, on the reasoning quoted in the next bullet. That
+        reasoning was about where the BODY must EXECUTE, which record stamping
+        does not control - the commit engine rewrites `sys_scope` to the
+        installing application regardless - so the global stamp bought nothing
+        and left a global marker in an otherwise scope-exclusive package.)
+      - **Where the body must execute.** Every table the remediation writes
+        (`sys_db_object`, `sys_dictionary`, `sys_choice`, `sys_number`,
+        `sys_ws_definition`, `sys_security_acl_role`, `sys_script`) lives in the
+        global scope with cross-scope create/update access denied, and
+        `GlideTableDescriptor` / `GlideSecurityManager` are unavailable to a
+        scoped caller. So the body must RUN in global - which is what the
+        Background Script route above provides, and what no installed record can
+        provide. The scope rewrite and its consequence are disclosed in
+        `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`.
 
     IDEMPOTENCY, CONVERGENCE AND DESTRUCTIVE SAFETY
     ..............................................
@@ -101,9 +156,12 @@
     by `sys_user_role.name`, tables by `sys_db_object.name`, dictionary entries by
     (`name`, `element`), choices by (`name`, `element`, `value`), counters by
     `sys_number.category`, REST definitions by `sys_ws_definition.name` and ACLs
-    by their own `name` + `description`. It contains no 32-character hex literal
-    of any kind. The only `sys_id` in this file is THIS record's own primary key,
-    the deterministic MD5 of its `<sys_update_name>`.
+    by their own `name` + `description`. The script body contains no 32-character
+    hex literal of any kind. Two `sys_id` values appear in the record wrapper
+    around it, and neither is a reference this script resolves: THIS record's own
+    primary key (the deterministic MD5 of its `<sys_update_name>`) and the
+    `<sys_scope>` binding to the application record - the same scope-binding
+    convention every authored artifact in this repository uses.
 
     VERIFICATION SIGNAL
     ...................
@@ -117,15 +175,19 @@
 
     DEPENDENCY ORDER (AAP Section 0.5.2)
     ....................................
-    This record must load AFTER the Application, Table, Dictionary, Choice List,
-    Number Maintenance, Role, ACL and Scripted REST records it repairs, and
-    BEFORE the seed-data records, whose inserts depend on the physical tables and
-    the auto-number wiring this script restores.
+    Nothing in the shipped package depends on this record's position, because the
+    package does not carry it. The ordering the body implies is a RUN order for
+    the operator: run the Background Script (Global) AFTER the Application,
+    Table, Dictionary, Choice List, Number Maintenance, Role, ACL and Scripted
+    REST records it repairs have been committed, and BEFORE the seed step, whose
+    inserts depend on the physical tables and the auto-number wiring the script
+    restores. That is exactly the step order in
+    `../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` section 5.
 -->
 <record_update table="sys_script_fix">
     <sys_script_fix action="INSERT_OR_UPDATE">
         <before>false</before>
-        <description>Post-import remediation for the x_casemgmt scoped application. Completes the four pieces of wiring an Update Set commit cannot perform for itself, because each is produced by a platform business rule and the commit engine applies payloads with business rules suppressed: Defect C (physical case_task/case_party tables, their fields and all seven choice lists - DDL comes from the after-insert business rule 'Synch Dictionary and Table' on sys_db_object); Defect E (auto-number default_value javascript:global.getNextObjNumberPadded(); on x_casemgmt_case.number plus maximum_digits=7 on the counters); Defect 7 (service_id on the two sys_ws_definition records); Defect 9 (the 27 sys_security_acl_role links plus a GlideSecurityManager security-cache flush). Body is scripts/post_import_remediation.js verbatim. IMPORTANT - RUNNING THIS INSTALLED RECORD CANNOT COMPLETE C OR 9. The package declares this record sys_scope=global, but the Update Set commit engine rewrites every committed record's sys_scope to the application, so after commit this Fix Script is x_casemgmt-scoped and its GlideTableDescriptor/GlideSecurityManager calls are refused. Measured outcome of running it from the Fix Script UI: verified=false, tables_built=0, acl_links_created=0, errors=121, every error being one of those two SecurityExceptions. No packaging change fixes this because the rewrite happens at commit time. THE ROUTE THAT WORKS: paste scripts/post_import_remediation.js into System Definition &gt; Scripts - Background with 'In scope' = Global and run it - see docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5, acceptance path (b), and docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 for the evidence. A companion after-update Business Rule ('x_casemgmt Post-Import Bootstrap' on sys_remote_update_set) that dispatched this Fix Script on commit was built, measured firing and then failing for the same reason, and has been REMOVED from the package: besides being unable to succeed, its condition fired on the commit of ANY retrieved Update Set rather than only this application's, so activating it would have dispatched this privileged, partly destructive remediation on unrelated deployments. The disclosed manual route above replaces it. This script still deactivates a legacy copy of that rule if one is installed, identified by name AND collection AND sys_update_name with exactly one match required. Idempotent and semantically convergent: every insert is lookup-guarded, every dictionary and choice attribute is compared against the package and repaired, the exact 7-list/24-value choice set is verified, and the ACL-to-role wiring is verified as an exact 27-pair set with unexpected pairs removed. The table rebuild is fail-closed: a tri-state physical-storage probe over three independent signals, no deletion unless all three agree there is no storage, and every deletion verified and read back. Emits gs.info lines prefixed X_CASEMGMT_REMEDIATION| and a final SUMMARY| line carrying verified=true|false.</description>
+        <description>Post-import remediation for the x_casemgmt scoped application. Completes the four pieces of wiring an Update Set commit cannot perform for itself, because each is produced by a platform business rule and the commit engine applies payloads with business rules suppressed: Defect C (physical case_task/case_party tables, their fields and all seven choice lists - DDL comes from the after-insert business rule 'Synch Dictionary and Table' on sys_db_object); Defect E (auto-number default_value javascript:global.getNextObjNumberPadded(); on x_casemgmt_case.number plus maximum_digits=7 on the counters); Defect 7 (service_id on the two sys_ws_definition records); Defect 9 (the 27 sys_security_acl_role links plus a GlideSecurityManager security-cache flush). Body is a snapshot generated from scripts/post_import_remediation.js, which is the single source of truth and the only thing to run; the snapshot is currently behind the source (240 source lines absent from it, 31 of its lines no longer in the source, and EXPECTED_ACL_COUNT 26 / EXPECTED_ACL_ROLE_LINKS 27 here against 29 / 36 there) and must be regenerated before this record is created on any instance. IMPORTANT - THIS IS A RETAINED REFERENCE RECORD-DEFINITION AND IS NOT SHIPPED IN THE UPDATE SET: the deliverable carries no sys_script_fix payload, so no commit installs this record. Two measured reasons. (1) RUNNING AN INSTALLED COPY CANNOT COMPLETE C OR 9: the Update Set commit engine rewrites every committed record's sys_scope to the installing application, so a committed Fix Script is x_casemgmt-scoped whatever the payload declared, and its GlideTableDescriptor/GlideSecurityManager calls are refused. Measured outcome of running it from the Fix Script UI: verified=false, tables_built=0, acl_links_created=0, errors=121, every error being one of those two SecurityExceptions. No packaging change fixes this because the rewrite happens at commit time - which is why the artifact is retained rather than repackaged. (2) SAFETY: this body performs a privileged, partly destructive remediation, so shipping it would put a Run Fix Script button in front of a recipient whose only possible outcome is those 121 errors. This definition is stamped wholly into the x_casemgmt application, the convention every authored artifact here uses; the package declares no global artifact. THE ONE DOCUMENTED ROUTE THAT WORKS: paste scripts/post_import_remediation.js into System Definition &gt; Scripts - Background with 'In scope' = Global and run it - see docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5, acceptance path (b), and docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 for the evidence. A companion after-update Business Rule ('x_casemgmt Post-Import Bootstrap' on sys_remote_update_set) that dispatched this Fix Script on commit was built, measured firing and then failing for the same reason, and has been REMOVED from the package: besides being unable to succeed, its condition fired on the commit of ANY retrieved Update Set rather than only this application's, so activating it would have dispatched this privileged, partly destructive remediation on unrelated deployments. The disclosed manual route above replaces it. This script still deactivates a legacy copy of that rule if one is installed, identified by name AND collection AND sys_update_name with exactly one match required. Idempotent and semantically convergent: every insert is lookup-guarded, every dictionary and choice attribute is compared against the package and repaired, the exact 7-list/24-value choice set is verified, and the ACL-to-role wiring is verified as an exact 27-pair set with unexpected pairs removed. The table rebuild is fail-closed: a tri-state physical-storage probe over three independent signals, no deletion unless all three agree there is no storage, and every deletion verified and read back. Emits gs.info lines prefixed X_CASEMGMT_REMEDIATION| and a final SUMMARY| line carrying verified=true|false.</description>
         <name>x_casemgmt Post-Import Remediation</name>
         <record_for_rollback>true</record_for_rollback>
         <script><![CDATA[/*
@@ -137,13 +199,14 @@
  * THIS IS A REQUIRED POST-IMPORT STEP, NOT AN AUTOMATIC ONE. Importing
  * update-set/x_casemgmt_case_management_update_set.xml previews and commits
  * cleanly, but the commit alone does NOT yield a functional application:
- * Defect C (physical tables/fields/choices) and Defect 9 (the 27 ACL -> role
+ * Defect C (physical tables/fields/choices) and Defect 9 (the ACL -> role
  * links) still need this script, and it must be executed BY HAND in the
- * **Global** scope. The packaged auto-execute trigger was measured firing and
- * then failing - see "HOW IT IS INVOKED" below and
- * ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 - so the acceptance
- * path for this deliverable is the disclosed manual path (b), and
- * ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 is the procedure that
+ * **Global** scope. Nothing in the package runs it: the package carries no Fix
+ * Script and no auto-execute record at all. An auto-execute trigger was built,
+ * was measured firing and then failing, and has been removed - see "HOW IT IS
+ * INVOKED" below and ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md section 9.4 -
+ * so the acceptance path for this deliverable is the disclosed manual path (b),
+ * and ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5 is the procedure that
  * actually works. Defects E and 7 need no script at all: they are carried by
  * the package artifacts, and this script only re-asserts them.
  *
@@ -229,21 +292,30 @@
  *   on the target PDI, and it is step 4 (and again step 6) of
  *   ../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5.
  *
- *   ONE other copy of this body ships inside the package. It cannot perform
- *   Defect C or Defect 9, and it is shipped for disclosure and for reuse on an
- *   instance where the scope rewrite below does not apply - not as a working
- *   fallback:
+ *   NO COPY OF THIS BODY SHIPS INSIDE THE PACKAGE. The deliverable
+ *   update-set/x_casemgmt_case_management_update_set.xml carries no
+ *   `sys_script_fix` payload and no auto-execute record of any kind, so a commit
+ *   installs nothing that runs this body. The Background Script route above is
+ *   therefore not the preferred route among several - it is the route.
  *
- *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml - a Fix
- *      Script named "x_casemgmt Post-Import Remediation" whose `script` field is
- *      this file verbatim, byte for byte. The package declares it
- *      `sys_scope = global`, but **the Update Set commit engine rewrites every
- *      committed record's `sys_scope` to the Update Set's application**: read
- *      back after commit, the installed Fix Script is app-scoped. Running it
- *      from the Fix Script UI therefore executes in `x_casemgmt`, where
- *      `GlideTableDescriptor` and `GlideSecurityManager` are refused. Measured
- *      outcome: `verified=false`, `tables_built=0`, `acl_links_created=0`,
- *      `errors=121`, all 121 being those two SecurityExceptions.
+ *   a. scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml is a
+ *      RETAINED REFERENCE RECORD-DEFINITION of a Fix Script named "x_casemgmt
+ *      Post-Import Remediation", stamped wholly into the `x_casemgmt`
+ *      application like every other authored artifact here. It is kept for
+ *      review and is NOT shipped, for two measured reasons. First, an installed
+ *      Fix Script cannot do the work whatever it is stamped: **the Update Set
+ *      commit engine rewrites every committed record's `sys_scope` to the
+ *      Update Set's application**, so a committed copy reads back app-scoped and
+ *      running it from the Fix Script UI executes in `x_casemgmt`, where
+ *      `GlideTableDescriptor` and `GlideSecurityManager` are refused - measured
+ *      outcome `verified=false`, `tables_built=0`, `acl_links_created=0`,
+ *      `errors=121`, all 121 being those two SecurityExceptions. Second, safety:
+ *      this body performs a privileged, partly destructive remediation, and an
+ *      installed record offers a recipient a Run button whose only possible
+ *      result is those 121 errors. Its embedded copy of this body is a snapshot
+ *      that has drifted from this file and must be regenerated from it before
+ *      the record is ever created on an instance; the XML's own header states
+ *      the measured difference.
  *
  *   AN AUTO-EXECUTE TRIGGER WAS BUILT AND HAS BEEN REMOVED. An earlier revision
  *   also shipped a sys_script_x_casemgmt_post_import_bootstrap.xml artifact - a
@@ -354,9 +426,10 @@
  *     are resolved by name AND sys_scope AND sys_package with exactly one match
  *     required (this instance carries several same-named definitions in other
  *     scopes), and a legacy bootstrap Business Rule is only ever modified when
- *     its name, its `collection` and its `sys_update_name` all match this
- *     package's own payload and exactly one row does. A near-miss is reported and
- *     left alone rather than modified.
+ *     its name, its `collection` and its `sys_update_name` all match the payload
+ *     an earlier export of this package declared for that rule - the current
+ *     package carries no such payload - and exactly one row does. A near-miss is
+ *     reported and left alone rather than modified.
  *
  * CONSTRAINTS HONORED
  *   - Zero hard-coded foreign sys_ids. The application scope is resolved by
@@ -450,9 +523,12 @@ var EXPECTED_ROLE_LINK_COUNTS = {
 
 // Name of the bootstrap Business Rule that WAS built to auto-execute this script
 // and has been REMOVED from the package (see the header) - kept here only so
-// deactivateBootstrapTrigger() can recognise a legacy copy - and of the Fix Script
-// that carries this body. Both are looked up by name, so this file carries no
-// sys_id for either.
+// deactivateBootstrapTrigger() can recognise a legacy copy - and the name of the
+// Fix Script record-definition that carries this body, which the package does not
+// ship either: it is recorded here so an operator can identify a legacy installed
+// copy on an inherited instance (nothing in this script looks it up, and it must
+// not be run - see "HOW IT IS INVOKED" in the header). Both are identified by
+// name, so this file carries no sys_id for either.
 //
 // IMPORTANT: `sys_script.name` and `sys_script_fix.name` are both max_length 40
 // on this release and the platform truncates silently. A longer name would still
@@ -3441,8 +3517,10 @@ function verifyRemediation(scopeSysId) {
  *   - name             = BOOTSTRAP_TRIGGER_NAME
  *   - collection       = sys_remote_update_set (the table the trigger ran on)
  *   - sys_update_name  = sys_script_x_casemgmt_post_import_bootstrap
- *                        (the update name the package's own payload declared, so
- *                        only a copy installed FROM this package matches)
+ *                        (the update name an earlier export of this package
+ *                        declared for that rule; the current package carries no
+ *                        such payload, so only a copy installed from an older
+ *                        export of this application matches)
  * and exactly one row matches. Two matches are reported and neither is touched.
  * A row that matches the name but not the identity is reported, never modified.
  */
@@ -3675,11 +3753,10 @@ function remediateUnderLease(scopeSysId, started) {
 // ============================================================================
 //
 // Calling the entry point from the bottom of the file keeps it drop-in runnable
-// with no extra boilerplate in the one route that was measured to work -
-// System Definition -> Scripts - Background with "In scope" = Global - and in the
-// two packaged copies, which run the same body but are forced into the
-// application scope by the commit engine and therefore cannot complete (see
-// "HOW IT IS INVOKED" in the header).
+// with no extra boilerplate in the one route that was measured to work and the
+// only route the documentation prescribes - System Definition -> Scripts -
+// Background with "In scope" = Global. The package installs no copy of this body
+// that could run it any other way (see "HOW IT IS INVOKED" in the header).
 //
 // The call is safe to repeat: see the idempotency and convergence guarantees in
 // the header.
@@ -3692,9 +3769,9 @@ postImportRemediation();
         <sys_id>227b757f182d8f3e1d9b774187ae8358</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_name>x_casemgmt Post-Import Remediation</sys_name>
-        <sys_package display_value="Global" source="global">global</sys_package>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy/>
-        <sys_scope display_value="Global">global</sys_scope>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
         <sys_update_name>sys_script_fix_x_casemgmt_post_import_remediation</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>

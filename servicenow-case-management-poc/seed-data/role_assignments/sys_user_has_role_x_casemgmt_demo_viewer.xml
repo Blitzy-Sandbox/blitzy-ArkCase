@@ -6,9 +6,55 @@
     records in the case-management POC scoped application (the others grant
     the manager and agent roles to their respective demo personas).
 
+    TRANSPORT REALITY — THIS RECORD IS NOT CARRIED IN THE SHIPPED PACKAGE
+    ....................................................................
+    READ THIS BEFORE ASSUMING A COMMIT INSTALLS THIS GRANT. It does not, and
+    on this platform release no Update Set can be made to install it:
+
+      - `sys_user_has_role` is owned by Role Management V2 on this release
+        (`glide.role_management.use.inh_count=true`, with `inherited`,
+        `inh_count` and `inh_map` marked read-only in the dictionary), so the
+        Update Set loader's permission check on the table answers false. The
+        commit does not raise an error: it SKIPS the row and logs
+        "Skipping record for table sys_user_has_role and id <sys_id> -
+        permission denied", i.e. "permission denied: no thrown error".
+      - Measured at record level on the target PDI: all three grant payloads
+        were refused when stamped Global AND when stamped `x_casemgmt`, so
+        this is not a capture defect and not a scope-stamping defect. A commit
+        that carries them reports "Failed at 100% - the update set commit
+        completed but some updates failed to commit", logs exactly three
+        skipped `sys_user_has_role` rows, and leaves
+        `sys_user_has_role` filtered on
+        `user.user_nameSTARTSWITHx_casemgmt_demo` at 0 rows.
+        Evidence: ../../docs/refine-run/CONSOLIDATION-FINAL-REPORT.md, Step 5-6
+        section, §7 (root cause) and §11 (the three skipped sys_ids).
+      - The three grant payloads are therefore DELIBERATELY NOT included in
+        update-set/x_casemgmt_case_management_update_set.xml. Shipping a
+        payload that is known to be refused is what turns an otherwise clean
+        commit into a partial failure, so the package omits them.
+      - This file is retained as the authored record-definition of the grant -
+        AAP Section 0.3.1 enumerates it - and as the specification the
+        post-commit step below is verified against. It is a definition, not a
+        payload the commit applies.
+      - THE DOCUMENTED STEP THAT DELIVERS THIS GRANT:
+        ../../docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md section 5h - the role
+        form's "Edit Members" slushbucket, the native route measured to work on
+        this release. After running it, verify all three grants with
+          GET /api/now/table/sys_user_has_role
+              ?sysparm_query=user.user_nameSTARTSWITHx_casemgmt_demo
+                            ^role.nameSTARTSWITHx_casemgmt_case
+        which must return exactly 3 rows, one per role. Dropping the second
+        condition also returns the `inherited=true`
+        `snc_required_script_writer_permission` companion row the platform
+        derives for each natively-made grant, so that broader form reads 6 on
+        a correctly granted instance - those companions are the platform's own
+        bookkeeping and are not demo grants.
+
     Persona role activated by this grant (per AAP Section 0.5.6 ACL Matrix):
-      Once the Update Set commits, the demo viewer user holds the
-      x_casemgmt_case_viewer role and therefore receives:
+      Once the grant exists on the instance - which the post-commit step
+      above delivers, and which the commit itself never does - the demo
+      viewer user holds the x_casemgmt_case_viewer role and therefore
+      receives:
         - x_casemgmt_case        Read All; NO Create / NO Write / NO Delete
         - x_casemgmt_case_task   Read All; NO Create / NO Write / NO Delete
         - x_casemgmt_case_party  Read All; NO Create / NO Write / NO Delete
@@ -32,21 +78,23 @@
       is therefore central to Gate 3 of the seven-row validation
       framework.
 
-    Why this assignment record lives in the SCOPED Update Set even though
-    `sys_user_has_role` is a global OOB table:
-      The scoped Update Set's deliverable is fully self-contained: the
-      reviewer must be able to install the Update Set on a fresh PDI and
-      immediately exercise all seven validation gates. The three demo
-      personas (manager, agent, viewer) are required by Gate 3 (ACL role-
-      based access) and Gate 6 (dashboard rendering with synthetic data).
-      Tracking the role-assignment records inside the scoped Update Set
-      ensures they import together with the rest of the application; the
-      scope binding via <sys_scope> and <sys_package> source attribute
-      groups them with the scoped app even though their parent table
-      (sys_user_has_role) is global. No global-scope WRITES are performed:
-      only INSERTS into sys_user_has_role (a data table) — the OOB
-      sys_user_has_role dictionary, ACLs, and form layouts are never
-      modified.
+    Why this assignment record is authored as a SCOPED record-definition
+    even though `sys_user_has_role` is a global OOB table:
+      The three demo personas (manager, agent, viewer) are required by
+      Gate 3 (ACL role-based access) and Gate 6 (dashboard rendering with
+      synthetic data), so the deliverable owes a reviewer an unambiguous,
+      reviewable statement of exactly which persona holds which role.
+      That is what this file is. The scope binding via <sys_scope> and
+      <sys_package> records that the x_casemgmt application owns the grant
+      even though the parent table (sys_user_has_role) is global — it does
+      NOT make the grant transportable, because the loader refuses the
+      table outright (see TRANSPORT REALITY above), which is why the grant
+      is delivered by the documented post-commit step instead of by the
+      commit. No global-scope WRITES are performed by the package at all:
+      the delivered grant is an INSERT into sys_user_has_role (a data
+      table) performed by the operator through the platform's own role-
+      membership screen — the OOB sys_user_has_role dictionary, ACLs, and
+      form layouts are never modified.
 
     Authoring rules honored (per AAP Sections 0.7.1 / 0.7.2 and the agent
     prompt's eight authoring rules):
@@ -94,8 +142,11 @@
         "Case Management" — the human-readable scoped-app name. The
         <sys_package> follows the same pattern with the source attribute
         pointing at the scope source name. Although sys_user_has_role is
-        a global OOB table, the SCOPED demo grant is tracked in the scoped
-        Update Set so the deliverable is fully self-contained.
+        a global OOB table, the SCOPED demo grant is attributed to this
+        application by those two fields, so a reader can see which
+        application owns it. The attribution does not make it
+        transportable: the row is delivered post-commit (TRANSPORT
+        REALITY above), not by the package.
 
       Rule 4 — No Inheritance:
         <inherited>false</inherited> (literal lowercase string "false").
@@ -111,18 +162,25 @@
 
       Rule 5 — Active State:
         <state>active</state> (literal lowercase string "active"). The
-        role assignment is effective immediately upon Update Set commit.
-        Inactive states (requested, pending, expired) are workflow-
-        related and not used in the POC seeding flow.
+        role assignment is effective the moment the grant is created by the
+        documented post-commit step (TRANSPORT REALITY above) - it is NOT
+        made effective by an Update Set commit, which never creates the row
+        on this release. Inactive states (requested, pending, expired) are
+        workflow-related and not used in the POC seeding flow.
 
       Rule 6 — Idempotency Anchor:
         The record's idempotent key is the (user, role) tuple
         ("x_casemgmt_demo_viewer", "x_casemgmt_case_viewer"). The companion
         seed script ../../scripts/seed_demo_data.js's
         ensureRoleAssignment(DEMO.USERS.VIEWER, ROLES.VIEWER) helper
-        queries by both fields BEFORE inserting; the action="INSERT_OR_UPDATE"
-        attribute on the inner <sys_user_has_role> element provides the
-        equivalent idempotency guarantee at Update Set commit time. These
+        queries by both fields BEFORE inserting, so re-running it neither
+        duplicates nor disturbs an existing grant, and the platform's own
+        "Edit Members" screen cannot create a duplicate membership either.
+        The action="INSERT_OR_UPDATE" attribute on the inner
+        <sys_user_has_role> element would give the same guarantee at commit
+        time on a release whose loader accepted the table; on THIS release
+        the commit skips the row entirely (TRANSPORT REALITY above), so the
+        idempotency that matters is the post-commit step's. These
         exact display_value strings MUST match the corresponding values
         in ../users/sys_user_x_casemgmt_demo_viewer.xml (<user_name> =
         "x_casemgmt_demo_viewer") and ../../roles/sys_user_role_x_casemgmt_case_viewer.xml
@@ -152,7 +210,13 @@
 
     Cross-dependencies (per AAP Section 0.5.2):
 
-      This grant DEPENDS ON (must be loaded BEFORE this record):
+      Read as PREREQUISITES OF THE POST-COMMIT STEP rather than as
+      package load order: the package does not carry this record, so
+      "before" and "after" below mean "must already exist on the instance
+      when the section 5h grant is made" and "becomes effective for this
+      persona once it is made".
+
+      This grant DEPENDS ON (must exist BEFORE the grant is made):
         - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
           application record - the sole scope authority in this package, so
           <sys_scope> and <sys_package> both resolve against it)
@@ -161,7 +225,7 @@
         - ../../roles/sys_user_role_x_casemgmt_case_viewer.xml (the scoped
           role — resolves <role> by name lookup)
 
-      Records that DEPEND ON this grant (loaded AFTER this record):
+      Records that DEPEND ON this grant (effective once it is made):
         - The 3 read-only ACL records at ../../acl/x_casemgmt_case_read_viewer.xml,
           ../../acl/x_casemgmt_case_task_read_viewer.xml,
           ../../acl/x_casemgmt_case_party_read_viewer.xml — the viewer's

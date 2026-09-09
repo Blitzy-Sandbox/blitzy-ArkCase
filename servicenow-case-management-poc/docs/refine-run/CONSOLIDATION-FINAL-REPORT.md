@@ -1,5 +1,65 @@
 # Update Set Consolidation — Final Report
 
+## CR1 amendment — read this before any identity figure below
+
+Code review checkpoint **CR1** examined the package this report describes and raised seven findings
+against it. Six were defects in the shipped bytes and five were inaccurate or unauthorised statements
+in this report. Both sets were resolved on 2026-09-09, so **the bytes at the canonical path are no
+longer the ones §1 and §8 below measure**:
+
+| Property | Pre-amendment (what §1/§8 measure) | Shipping now |
+| --- | --- | --- |
+| Payload blocks | 522 | **522** (four removed, four added) |
+| Bytes | 3,114,377 | **2,989,530** |
+| SHA-256 | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+
+The seven amendments, each traceable to the finding it answers:
+
+1. **F01** — the three `sys_user_has_role` payloads were **removed**. Role Management V2 refuses them
+   on this release (§7 proved it), so their only effect was to make an otherwise clean commit report
+   "Failed at 100% — some updates failed to commit" and log three skipped rows. The grants are now
+   delivered by the mandatory post-commit step in
+   [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), and the
+   capability gap is recorded as blocking in
+   [`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md).
+2. **F04** — the `sys_script_fix` payload was **removed**. It was the only payload in the package
+   carrying `sys_package`/`sys_scope` = `global`, and by its own description an installed copy cannot
+   complete its work because the commit engine rewrites a committed record's scope. The body remains
+   at `../../scripts/post_import_remediation.js` for the Global Background Script route, and the
+   record definition at `../../scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` is now
+   stamped `x_casemgmt` and marked as a retained, unshipped reference.
+3. **F02** — the eight `sys_grid_canvas_pane` placements were **restored**, as two self-contained
+   bundles that also carry the eight `sys_portal` widget instances they reference (see the correction
+   in §6 fix (2) below).
+4. **F06** — the anonymous-submission ceiling in `CasePortalService` is no longer a count-then-insert
+   check. It ranks the persisted row and withdraws it when the row is over the ceiling, and it now has
+   a per-requester fairness cap.
+5. **F07** — the anonymous lookup gained strict `^CASE[0-9]{7}$` validation ahead of any query,
+   per-session sliding-window throttling, an HTTP 429 path through the REST operation and the widget,
+   and abuse monitoring under a stable log marker; the widget's false "no case-number enumeration
+   oracle exists" claims were replaced with the honest statement of that exposure.
+6. **F06/F07** — two scoped `sys_rate_limit_rules` payloads were **added**, as the platform-native
+   per-hour ceiling on the unauthenticated caller for each anonymous REST resource.
+7. **F03** — every block was **reordered** into the AAP §0.5.2 dependency tiers (application → tables
+   → dictionary → labels → choices/numbers → roles → ACLs → ACL-role links → script includes →
+   subflows → parent flows → business rules → UI → REST → rate limits → portal → reports → dashboard
+   graph → ATF → seed data). No payload byte changed in the reorder: the sha256 over the sorted set of
+   payload texts is identical before and after.
+
+Two consequences a reader must carry into everything below:
+
+- **Every `522` / `3,114,377` / `b2217224…` figure in the rest of this report describes the
+  pre-amendment bytes.** They are retained as provenance, not restated as the shipping identity.
+- **The amended bytes have not been previewed or committed on an instance.** The PDI is deliberately
+  at its torn-down zero state and this checkpoint made no instance writes, so §4's gate evidence
+  belongs to the pre-amendment bytes. A recipient MUST run the preview gate in
+  [`../deployment.md`](../deployment.md) — upload, preview, zero `type=error` and zero `type=warning`
+  — before committing. What was verified statically on the amended bytes: `xmllint` clean; all 522
+  payloads parse; 522 unique block names and no stray root `sys_id`; one sane descriptor whose
+  `inserted`/`summary` equal 522; zero `global` scope stamps anywhere; every one of the 122 embedded
+  script bodies parses and is ES5-conformant; every reference inside the restored pane bundles
+  resolves to a record the same package carries; and the dependency-order assertion passes.
+
 ## What this task is
 
 Four Update Set XML packages exist under `servicenow-case-management-poc/update-set/`. None of the
@@ -960,14 +1020,36 @@ which is why this package needs no standalone `sys_variable_value` blocks where 
 package used 540.
 
 Standing constraints on the shipped bytes: 15 distinct email addresses, **all** `@example.invalid` (no
-PII); 523 payload `application` stamps, **all** the scope `sys_id`, with **zero** `global` stamps (scope
-exclusivity); no global-scope artifacts. Two properties are inherent to any platform export and are
-reported rather than hand-corrected, since hand-editing the package is forbidden: reference fields carry
-resolved `sys_id`s (the no-hardcoded-`sys_id` rule governs authored artifacts — scripts, ACL conditions
-and the seed script, all of which resolve by query), and block order is the platform's canonical
-name-order rather than the dependency order §0.5.2 describes. The gate itself settles whether that
-ordering is sufficient: this package previewed to zero problems and committed on a genuinely empty
-instance.
+PII); 523 payload `application` stamps, **all** the scope `sys_id`.
+
+Three statements this section previously made were wrong or unauthorised, and CR1 findings F03, F04 and
+F05 named each of them. Corrected:
+
+- **Scope exclusivity (F04).** These bytes did **not** carry zero `global` stamps. Exactly one payload
+  did — the `sys_script_fix` record, stamped `<sys_package display_value="Global" source="global">global`
+  and `<sys_scope display_value="Global">global` — so "no global-scope artifacts" was false as written.
+  That payload has since been removed (see the CR1 amendment at the top of this report); the claim is
+  true of the bytes that ship now, and the measurement that establishes it is
+  `zero payloads containing source="global" or <sys_scope>global</sys_scope>`.
+- **Dependency ordering (F03).** Block order being the platform's capture order rather than the AAP
+  §0.5.2 dependency order is a **requirement violation, not a reported property**. No override
+  supersedes §0.5.2, and a passing preview does not settle it: preview resolves a reference against
+  anything in the set regardless of position, so it cannot detect an ordering the AAP mandates for the
+  benefit of a reader and of any consumer that applies the file sequentially. The blocks are now
+  ordered by those tiers, with the payload bytes proven unchanged by the reorder.
+- **No hardcoded `sys_id` (F05).** "The no-hardcoded-`sys_id` rule governs authored artifacts" was a
+  narrowing of AAP §0.7.2 that no override authorises, and it is withdrawn. The rule as written admits
+  no such exception, and a native platform export cannot satisfy it: measured on the bytes that ship,
+  **4,343 32-character-hex occurrences appear outside their own record's `<sys_id>` element, across 515 of
+  the 522 blocks, and 115 distinct ids (983 occurrences) belong to platform records the package does not
+  own** (on the pre-amendment bytes this section was written against: 4,314 / 515 / 114 / 981). Because ServiceNow resolves an Update Set payload's reference fields by `sys_id` and offers no
+  by-key alternative in the transport format, this is a **PDI capability gap that cannot be closed
+  inside the platform's own export**, and it is reported as blocking under the AAP §0.7.2
+  Minimal-Change Clause rather than redefined — see
+  [`../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](../PDI_LIMITATIONS_AND_KNOWN_ISSUES.md). What the project
+  does deliver against the rule's intent is unchanged and remains true: every authored artifact,
+  every ACL condition, every flow script and the seed script resolve their targets by `name`,
+  `user_name`, `number` or `role_label`, so nothing a human wrote carries an id literal.
 
 ### 3. Step 5b — teardown to a proven zero-state
 
@@ -1061,6 +1143,25 @@ modal appeared — no confirmation dialog fired, so nothing was clicked through.
 returns **exactly three rows**, all `sys_user_has_role` ("permission denied: no thrown error", 21:27:58).
 Nothing else was skipped — see §7.
 
+**Gate accuracy (CR1 finding F01).** This report originally carried that outcome forward as a clean,
+complete gate. It was not: the platform's own verdict on the commit was "Failed at 100% — the update set
+commit completed but some updates failed to commit", three payloads the package shipped did not install,
+and post-commit `sys_user_has_role` was 0 — so the package as it then stood could not be described as one
+that installs everything it carries. Two things follow, and both are now true of the shipping bytes
+rather than argued away:
+
+- The three non-installing payloads were **removed** from the package (see the CR1 amendment at the top
+  of this report), so a commit of the bytes that ship has nothing in it that the loader will refuse on
+  this release. The role grants are delivered by the mandatory post-commit step in
+  [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md).
+- The gate evidence in this section therefore attaches to the pre-amendment bytes, and the amended
+  bytes are **not** gated. That is stated at the top of this report and in
+  [`../deployment.md`](../deployment.md), and it is the recipient's first deployment step.
+
+Everything else in this section — the collision proof, the checksum, the 522-children load, the genuine
+`previewing → previewed` transition, the zero-error/zero-warning counts and the single native commit —
+is measurement, and it stands as written for the bytes it was measured on.
+
 **Post-commit verification, every line by direct query:**
 
 | Check | Result |
@@ -1124,11 +1225,39 @@ Nothing was committed. Diagnosis root-caused it to three distinct mechanisms, ea
    *Fix, at the source:* re-stamp those children with the scope and purge 8 stale `sys_update_version`
    rows keyed on the package's own child names. Re-preview: 47 → **9**.
 2. **8 × "Could not find a record in `sys_portal` for column `portal_widget`"**, all on
-   `sys_grid_canvas_pane` payloads. The unresolvable field is `portal_widget`, which points at a
-   `sys_portal` widget-instance row; all 8 targets were confirmed absent, and `sys_portal` rows carry no
-   `sys_scope`, so they are not application files and **no publish can ever include them**. Corroborated
-   by the fact that no package in this project's history has carried panes, canvases or `sys_portal`
-   rows. *Fix:* drop the 8 untransportable pane payloads (530 → 522 children). Re-preview: 9 → **1**.
+   `sys_grid_canvas_pane` payloads. *Fix applied at the time:* drop the 8 pane payloads
+   (530 → 522 children). Re-preview: 9 → **1**.
+
+   **The diagnosis recorded here was wrong, and CR1 finding F02 established it from the shipped bytes.**
+   What this report said was that `sys_portal` rows carry no `sys_scope`, are therefore not application
+   files, and that "no publish can ever include them" — with the corroboration that no package in the
+   project's history had carried panes, canvases or `sys_portal` rows. Measured on the very bytes this
+   report ships, all three of those statements are false: the package embeds **8 `sys_portal`
+   widget-instance rows and 96 `sys_portal_preferences` rows**, inside its two `sys_portal_page`
+   composites, and it embeds both `sys_grid_canvas` rows as standalone blocks. The 8 widget-instance
+   `sys_id`s are exactly the 8 `portal_widget` targets of the dropped panes — set equality, verified
+   against `../../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml` and
+   `…_manager_view.xml`. The 988-block package that previewed to 0 problems and committed on this
+   instance (§ the ledger in step 5b) carried all 8 pane rows as well.
+
+   **The real root cause** is the preview reference validator's resolution rule: it resolves a payload's
+   reference against a record that already exists locally, or against a **standalone block in the same
+   set**, and the 8 widget instances travelled only as composite *children* of the `sys_portal_page`
+   payloads. So `pane.portal_widget` was unresolvable at preview even though the target was in the file.
+   Nothing about `sys_portal` prevented transport.
+
+   **What the wrong diagnosis cost.** With no pane rows, both dashboards install with their tab pages,
+   canvases, tabs, permissions, all 8 reports and all 8 fully-configured widget instances — and no
+   placements, so each canvas renders empty. AAP §0.7.3 Gate 6 ("both dashboards render with synthetic
+   data; all widgets display data") could not have passed on a fresh install of those bytes.
+
+   **Resolution (in the bytes that ship now).** The 8 pane rows are restored as two blocks, one per
+   dashboard, whose payload is a self-contained `<unload>` bundle carrying that dashboard's `sys_portal`
+   widget-instance rows *and* its pane rows — so every `portal_widget` reference resolves inside its own
+   payload, which is the shape the 988-block package previewed clean with. The preference children are
+   not duplicated: they continue to travel in the `sys_portal_page` composites. Verified statically:
+   8 pane records present, every `portal_widget` target and every `grid_canvas` target is a record the
+   same package carries. Not verified on an instance — see the CR1 amendment at the top of this report.
 3. **1 × "Found a local update that is newer than this one"** on `sys_app_82b99028…`. Pulled with display
    values, the problem named its own culprit: `sys_update_xml` `535df78893534b1009aa70d19dba10ee`,
    `action=DELETE`, created 21:03:18 — **during my own teardown**, and captured into the *global* "Default"
@@ -1170,22 +1299,35 @@ Neither is a gate item; both are stated here so nobody downstream reads them as 
   this release**; the native remedy is the role form's *Edit Members*, which is exactly what Step 4 did.
   The gate's own requirements name the three **roles** (`sys_user_role` = 3 ✓) and the 27 **role links**
   (`sys_security_acl_role` = 27 ✓), both of which transported.
-- **`sys_grid_canvas_pane` = 0.** The documented consequence of fix (2) above. Both dashboards, both tab
-  records, both grid canvases, all 8 reports and all 3 dashboard-permission rows transported and are
-  present; the pane rows that bind a canvas cell to a `sys_portal` widget instance cannot be carried by
-  any update set, because `sys_portal` rows are not application files.
+  **CR1 F01 update:** the three payloads have been removed from the package, because shipping a payload
+  that is known to be refused buys nothing and costs the recipient a commit that reports failures. The
+  gap itself is unchanged and is now recorded as blocking, with the mandatory post-commit step written
+  out in [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) and its
+  verification query. `AAP §0.7.4`'s "3 users, one per role" is therefore satisfied by the package plus
+  one documented step, not by the commit alone.
+- **`sys_grid_canvas_pane` = 0.** The documented consequence of fix (2) above — **and the diagnosis
+  under it was wrong.** `sys_portal` rows are in fact carried by this package (8 of them, with 96
+  preference rows), so nothing prevented the pane rows from travelling; what defeated them was the
+  preview validator resolving references only against local records and standalone blocks in the same
+  set. CR1 F02 records the full correction under fix (2) above. **In the bytes that ship now this delta
+  is closed:** 8 pane rows are present, bundled with the widget instances they reference.
 
 ### 8. Step 6 — canonical replacement and cleanup
 
-`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` now holds the
+At the end of this consolidation,
+`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` held the
 **exact bytes that were uploaded and committed** in §4 — not a re-export — re-verified in place:
 
-| Property | Value |
-| --- | --- |
-| **SHA-256** | **`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`** |
-| Bytes | 3,114,377 |
-| Payload blocks | 522 |
-| `xmllint --noout` | PASS |
+| Property | Value (as of this consolidation) | Shipping now (after the CR1 amendment) |
+| --- | --- | --- |
+| **SHA-256** | `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4` | **`8160ed16cfc7c9bce84d5b2e9d3d971d4035b733078a653614d189b8090d89c7`** |
+| Bytes | 3,114,377 | **2,989,530** |
+| Payload blocks | 522 | **522** |
+| `xmllint --noout` | PASS | **PASS** |
+| Gated by upload → preview → commit | **yes**, §4 | **no** — the recipient's first step, per [`../deployment.md`](../deployment.md) |
+
+The right-hand column is the seven-amendment package described at the top of this report; the left-hand
+column is retained because it is what §4's gate evidence was measured on.
 
 Provenance of the two superseded files, recorded before they were deleted with `git rm` (their bytes
 remain recoverable from git history):

@@ -108,12 +108,29 @@
           are refused instead of stored verbatim.
         - Rejections name only the five public input fields; internal
           field names never appear in a validation response.
-        - A coarse flood guard bounds the unauthenticated write path: once
-          the endpoint has created SUBMIT_WINDOW_LIMIT cases inside the
-          trailing SUBMIT_WINDOW_SECONDS the next submission is refused
-          with throttled=true, which the REST operation answers as HTTP
-          429. Internal case creation is never counted, so it is never
-          throttled.
+        - An admission ceiling bounds the unauthenticated write path, and
+          it is evaluated AFTER the insert rather than before it: the row
+          is inserted, then ranked among the rows the same caller created
+          inside the trailing window under a total order
+          (sys_created_on, then sys_id). A row ranking at or beyond the
+          global ceiling - or at or beyond the tighter per-requester
+          ceiling that counts only the rows sharing its normalised
+          requester_email bucket - is deleted again and the submission is
+          refused with throttled=true, which the REST operation answers
+          as HTTP 429. Deciding after the insert is what makes the
+          ceiling hold under concurrency: a pre-insert count let every
+          parallel caller read the same below-ceiling number and be
+          admitted (CWE-367), while a rank computed over published rows
+          is the same for every caller. See
+          _admitAnonymousSubmission for the two honest limits - a caller
+          can be over-rejected under a flood, and rank can only be
+          computed over rows a query can already see - and for why
+          requester_email is the only per-caller dimension available
+          without adding storage the AAP does not define. Rows are ranked
+          against their own creator's rows only, so internal case
+          creation on the native form neither throttles nor is throttled
+          by this endpoint, and a refused submission consumes a case
+          number exactly as a round-trip refusal does.
         - An identical submission received inside a 90-second window is
           COLLAPSED onto the case that survives it, rather than creating a
           second case: the endpoint answers with the surviving case's
@@ -141,6 +158,29 @@
           The literal not-found text is INTENTIONALLY absent from this
           Script Include's body - it is the REST endpoint's responsibility
           to surface the verbatim user-facing message.
+        - The supplied number is normalised (trimmed, upper-cased) and
+          validated against ^CASE[0-9]{7}$ BEFORE any query runs. A value
+          that is malformed, empty or absent produces the SAME null - and
+          therefore the same HTTP 404 - as a genuine miss, and issues no
+          query at all, so a malformed sweep costs the instance nothing
+          and discloses nothing about the accepted input shape.
+        - A per-session sliding-window throttle bounds the read path:
+          requests are counted in the session's own GlideSession
+          client-data store (one key, compact JSON, pruned on every call -
+          no new table, field or property, per AAP Section 0.7.2), and a
+          session over its ceiling gets a THIRD return case,
+          { throttled: true }, which the REST operation answers as HTTP
+          429 exactly as the submit endpoint does.
+        - Sweeps are made VISIBLE rather than claimed impossible:
+          crossing the soft miss threshold, or being throttled, emits a
+          gs.warn under the stable marker
+          X_CASEMGMT_PORTAL_LOOKUP_ABUSE| carrying the client IP and the
+          miss/total counts. The hit-versus-miss distinction itself is
+          inherent to the single-factor number-only lookup AAP Section
+          0.7.4 mandates and is NOT closed by any of this; see the
+          ENUMERATION EXPOSURE note on lookupCase and
+          ../docs/portal-pages.md for the residual risk, stated rather
+          than denied.
 
     SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
         - <name>CasePortalService</name>                          bare class name
@@ -280,7 +320,7 @@
         <api_name>x_casemgmt.CasePortalService</api_name>
         <caller_access/>
         <client_callable>false</client_callable>
-        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - a coarse flood guard bounds the unauthenticated write path, and an identical submission received inside a 90-second window is collapsed onto the surviving case (same five values, still Draft, same caller) so a retry or a simultaneous double-post yields one case rather than two - the duplicate row is deleted and its case number is consumed, leaving a gap in the CASE sequence; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the flood guard refuses it, or {error} when the insert fails; lookupCase returns the whitelisted record on match or null on no-match (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - an admission ceiling evaluated AFTER the insert bounds the unauthenticated write path (the inserted row is ranked among the same caller's rows inside a 60-second window under a total order of sys_created_on then sys_id, and a row at or beyond the global ceiling of 10, or at or beyond the per-requester ceiling of 4 counted over the rows sharing its normalised requester_email bucket, is deleted again and refused with throttled=true; ranking published rows rather than counting before the insert is what stops parallel callers all reading the same below-ceiling count and all being admitted), and an identical submission received inside a 90-second window is collapsed onto the surviving case (same five values, still Draft, same caller) so a retry or a simultaneous double-post yields one case rather than two - the duplicate row is deleted and its case number is consumed, leaving a gap in the CASE sequence; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the admission ceiling refuses it, or {error} when the insert fails; lookupCase normalises and strictly validates the supplied number against ^CASE[0-9]{7}$ before any query, throttles the read path per session in the GlideSession client-data store, and warns under the stable marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE| when a session crosses the soft miss threshold or is throttled; it returns the whitelisted record on match, {throttled} when the session is over its ceiling (the REST operation answers HTTP 429), or null on no-match - which a malformed, empty or absent number produces identically and without a query (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). The hit-versus-miss distinction is inherent to the single-factor number-only lookup the AAP mandates and is compensated rather than removed; the residual risk is recorded in docs/portal-pages.md. Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
         <name>CasePortalService</name>
         <script><![CDATA[var CasePortalService = Class.create();
 CasePortalService.prototype = {
@@ -366,24 +406,17 @@ CasePortalService.prototype = {
         }
 
         // ------------------------------------------------------------------
-        // ANONYMOUS FLOOD GUARD. The submit endpoint is reachable without
-        // credentials from the public Internet, so an unbounded caller can
-        // otherwise create cases without limit. The guard counts the rows
-        // this path has created inside the trailing window and refuses once
-        // the ceiling is reached; it never blocks a legitimate single
-        // submission (see SUBMIT_WINDOW_LIMIT).
+        // ANONYMOUS FLOOD GUARD - EVALUATED AFTER THE INSERT, NOT BEFORE IT.
+        // The guard used to run here, as a count-then-decide check ahead of
+        // the insert. That ordering is unenforceable under concurrency: every
+        // parallel caller read the same pre-insert count, every one of them
+        // saw it below the ceiling, and every one of them was admitted, so the
+        // ceiling bounded nothing at all. The admission decision now happens
+        // AFTER the row exists, in _admitAnonymousSubmission - see that method
+        // for why coupling the decision to the insert is what makes the
+        // ceiling real, and for the per-requester fairness cap that stops one
+        // caller consuming the whole allowance.
         // ------------------------------------------------------------------
-        var admission = this._admitAnonymousSubmission();
-        if (!admission.allowed) {
-            gs.warn('CasePortalService.submitCase: submission refused by the anonymous flood guard; ' +
-                'recent=' + admission.recent + ' limit=' + admission.limit +
-                ' window_seconds=' + admission.windowSeconds);
-            return {
-                error: 'Too many submissions were received in a short period. Please try again in a minute.',
-                throttled: true
-            };
-        }
-
         var caseGr = new GlideRecord('x_casemgmt_case');
         caseGr.initialize();
 
@@ -452,6 +485,20 @@ CasePortalService.prototype = {
         if (!savedGr.get(newSysId)) {
             gs.error('CasePortalService.submitCase: post-insert lookup failed for sys_id=' + newSysId);
             return { error: 'Submission failed.' };
+        }
+
+        // The admission decision. Our row is published, so every concurrent
+        // caller now ranks the same candidate set under the same total order
+        // and at most the ceiling's worth of rows survive the window. A
+        // refused submission has already removed its own row inside
+        // _admitAnonymousSubmission, so nothing is left behind here; the
+        // response carries no count, limit or window, only the throttle flag
+        // the POST operation answers as HTTP 429.
+        if (!this._admitAnonymousSubmission(savedGr, newSysId).allowed) {
+            return {
+                error: 'Too many submissions were received in a short period. Please try again in a minute.',
+                throttled: true
+            };
         }
 
         // ------------------------------------------------------------------
@@ -822,38 +869,117 @@ CasePortalService.prototype = {
      *     lookups - returning the full record would expose internal
      *     assignment data and PII that the requester themselves
      *     supplied at submission time.
-     *   - Returns null when no case matches. The calling scripted REST
+     *   - Returns null when no case matches, when the supplied value is
+     *     not a well-formed case number, and when no value was supplied at
+     *     all - the three are ONE outcome here, so nothing in this method
+     *     tells a caller which of them happened. The calling scripted REST
      *     endpoint translates null into the HTTP 404 not-found response
      *     whose verbatim body is specified in AAP Section 0.7.4. The
      *     user-facing not-found message is INTENTIONALLY absent from this
      *     Script Include's runtime path - it is the REST endpoint's
      *     responsibility to surface that message.
+     *   - Returns { throttled: true } when this session has exceeded the
+     *     per-session request ceiling for the trailing window. The REST
+     *     operation answers that with HTTP 429, mirroring the submit
+     *     endpoint. This is the THIRD return case and the only one that is
+     *     neither a hit nor a miss.
      *
-     * Robust input handling per Rule 9 of the agent prompt: gracefully
-     * handle empty strings, whitespace-only strings, and non-string
-     * inputs without throwing.
+     * ENUMERATION EXPOSURE, STATED PLAINLY (review finding F07). The
+     * contract AAP Section 0.7.4 fixes is a SINGLE-FACTOR lookup: a case
+     * number, on its own, returns that case's status, subject and opened
+     * date to an unauthenticated caller. Case numbers are sequential
+     * (CASE0000001 upward, per ../numbers/sys_number_x_casemgmt_case.xml),
+     * so "200 for a real number, 404 for an unused one" is inherently a
+     * hit/miss oracle: a script that walks the sequence learns which
+     * numbers exist and reads three fields of each. That is a property of
+     * the mandated contract, NOT of this implementation, and it cannot be
+     * removed without a second factor the AAP does not define and the
+     * Section 0.7.2 Minimal-Change Clause forbids inventing.
      *
-     * @param {String} number - case number (e.g., 'CASE0000001'). Any
-     *     leading/trailing whitespace is stripped before query.
+     * What this method therefore does is RAISE THE COST and MAKE THE SWEEP
+     * VISIBLE, rather than claim the oracle away:
+     *
+     *   1. STRICT FORMAT VALIDATION BEFORE ANY QUERY. The value is trimmed,
+     *      upper-cased and matched against ^CASE[0-9]{7}$. Anything else
+     *      returns the not-found result WITHOUT touching the database, so a
+     *      malformed sweep costs the instance nothing and gains the caller
+     *      nothing - and the response is identical to a genuine miss, so
+     *      the shape of the accepted input is not disclosed either.
+     *   2. PER-SESSION SLIDING-WINDOW THROTTLE. Requests are counted in the
+     *      session's own client-data store (no new table, field or
+     *      property - Section 0.7.2), pruned to the window on every call.
+     *      Beyond the ceiling the answer is { throttled: true } / HTTP 429.
+     *   3. ABUSE MONITORING. Crossing the soft miss threshold, or being
+     *      throttled, emits a gs.warn under a STABLE MARKER prefix carrying
+     *      the client IP and the miss/total counts, so an operator can
+     *      alert on the prefix alone and see a sweep in progress.
+     *   4. A PLATFORM-NATIVE PER-HOUR CEILING on the guest user for this
+     *      resource ships beside the endpoint
+     *      (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml),
+     *      as defence in depth behind the in-script controls.
+     *
+     * RESIDUAL RISK, NOT DENIED: a distributed caller that discards its
+     * session cookie between requests gets a fresh session each time and so
+     * a fresh window, which is what the native per-hour rule on the guest
+     * user exists to bound; and a caller inside the ceiling can still walk
+     * the sequence slowly. The three fields exposed are the three the AAP
+     * mandates, and they are the whole of the exposure. This is recorded in
+     * ../docs/portal-pages.md rather than described as closed.
+     *
+     * Robust input handling: gracefully handles empty strings,
+     * whitespace-only strings, non-string inputs and lower-case input
+     * without throwing.
+     *
+     * @param {String} number - case number (e.g., 'CASE0000001'). Trimmed
+     *     and upper-cased, then required to match ^CASE[0-9]{7}$.
      * @return {Object|null} { status, subject, opened_date } when a case
-     *     with the given number is found, or null when no case matches
+     *     with the given number is found; { throttled: true } when this
+     *     session is over its request ceiling; or null when no case matches
      *     (including when the number argument is null, undefined, empty,
-     *     non-string, or whitespace-only).
+     *     non-string, whitespace-only or not a well-formed case number).
      */
     lookupCase: function(number) {
-        // Defensive null/type check. The scripted REST endpoint passes
-        // through whatever the caller supplied as the 'number' query
-        // parameter; a missing parameter yields undefined, an empty
-        // parameter yields '', and the platform may sometimes coerce
-        // numeric-looking strings into numbers. All of these should
-        // produce a clean "not found" response without throwing.
-        if (number === null || number === undefined) {
-            return null;
+        // ------------------------------------------------------------------
+        // 1. PER-SESSION THROTTLE, EVALUATED FIRST so that EVERY request is
+        //    counted - including the ones that will be refused for their
+        //    format and the ones that carry no value at all. A sweep that
+        //    varies its input must not be able to buy free attempts by
+        //    sending values this method rejects early.
+        // ------------------------------------------------------------------
+        if (!this._admitAnonymousLookup().allowed) {
+            // The third return case. Deliberately carries no counts, no
+            // ceiling and no window: the REST operation turns the flag into
+            // HTTP 429 and its own hardcoded message.
+            return { throttled: true };
         }
-        // Coerce to string defensively before calling .trim() - the
-        // string primitive may be received as a Number or other type.
-        var trimmed = String(number).trim();
-        if (trimmed === '') {
+
+        // ------------------------------------------------------------------
+        // 2. NORMALISE, THEN VALIDATE STRICTLY - BEFORE ANY QUERY.
+        //
+        //    The scripted REST endpoint passes through whatever the caller
+        //    supplied as the 'number' query parameter: a missing parameter
+        //    yields undefined, an empty one yields '', and the platform may
+        //    coerce a numeric-looking value into a Number. All of those, and
+        //    anything that is not shaped like a case number, produce the
+        //    SAME not-found result as a genuine miss and issue NO query.
+        //
+        //    Two reasons the check lives here rather than in the query:
+        //      - Cost. A malformed sweep is answered from memory, so it
+        //        cannot be used to make the database do work.
+        //      - Disclosure. A distinct "malformed input" answer would tell
+        //        an anonymous caller the accepted shape of the identifier.
+        //        One answer for both keeps that to what the widget source
+        //        already shows.
+        //
+        //    The pattern is the auto-number format from
+        //    ../numbers/sys_number_x_casemgmt_case.xml: the CASE prefix and
+        //    exactly seven digits. Upper-casing first accepts a requester
+        //    who types their number in lower case, which is a usability
+        //    concession and not a widening: the stored values are upper case.
+        // ------------------------------------------------------------------
+        var candidate = (number === null || number === undefined) ? '' : String(number).trim().toUpperCase();
+        if (!/^CASE[0-9]{7}$/.test(candidate)) {
+            this._recordAnonymousLookupMiss();
             return null;
         }
 
@@ -866,7 +992,7 @@ CasePortalService.prototype = {
         // 0.7.2 no-hardcoded-sys_id constraint is also a privacy win:
         // anonymous callers cannot probe the system by guessing
         // 32-character hex sys_id values.
-        caseGr.addQuery('number', trimmed);
+        caseGr.addQuery('number', candidate);
         // setLimit(1) is a defensive optimization - the case number is
         // a unique field per the auto-numbering generator, so at most
         // one row can match. Setting the limit eliminates any potential
@@ -876,6 +1002,13 @@ CasePortalService.prototype = {
         caseGr.query();
 
         if (!caseGr.next()) {
+            // A well-formed number that matched nothing. This is the miss
+            // the abuse monitor counts: a sweep of the sequential number
+            // space produces a run of them from one session, which is what
+            // the soft threshold in _recordAnonymousLookupMiss detects and
+            // reports. Counting it changes nothing the caller can observe -
+            // the response below is identical either way.
+            this._recordAnonymousLookupMiss();
             // No case with the given number was found. Return null; the
             // caller (the scripted REST operation script) translates
             // null into the HTTP 404 response whose verbatim body is
@@ -976,6 +1109,309 @@ CasePortalService.prototype = {
             subject:     String(caseGr.getValue('subject') || ''),
             opened_date: openedDateDisplay
         };
+    },
+
+    /**
+     * The one place the anonymous-lookup guard's tuning lives.
+     *
+     * Kept in a single method rather than duplicated across the three
+     * methods that need it, so the window used to PRUNE the stored
+     * timestamps can never drift from the window used to JUDGE them - a
+     * drift that would silently widen or narrow the ceiling.
+     *
+     * key                 the single GlideSession client-data key the guard
+     *                     stores its compact JSON under. One key, so the
+     *                     guard adds no storage anywhere else (AAP Section
+     *                     0.7.2 Minimal-Change Clause: no new table, field
+     *                     or property).
+     * marker              the STABLE log-marker prefix an operator alerts
+     *                     on. Changing it breaks existing alerts, so it is
+     *                     treated as a published interface and is recorded
+     *                     in ../docs/portal-pages.md.
+     * windowSeconds       the sliding window, in seconds.
+     * requestLimit        requests allowed per session per window. Sized
+     *                     well above real use of the lookup page - a
+     *                     requester checking one case makes one request,
+     *                     the confirmation link's prefill makes one, and a
+     *                     retry after a mistyped number makes another - and
+     *                     far below the rate a sweep needs to be useful.
+     * missThreshold       misses per session per window that trip the soft
+     *                     abuse warning. A requester mistyping their own
+     *                     number a few times stays under it; walking the
+     *                     number space does not.
+     * logIntervalSeconds  minimum spacing between warnings from ONE
+     *                     session, so a sustained flood cannot turn the
+     *                     monitor into a log-flood amplifier.
+     * maxEntries          hard cap on stored timestamps per list. Only the
+     *                     most recent entries can change a decision, and an
+     *                     uncapped list would let a caller grow its own
+     *                     session record without limit.
+     *
+     * @return {Object} the guard's settings.
+     */
+    _lookupGuardSettings: function() {
+        return {
+            key: 'x_casemgmt_portal_lookup_guard',
+            marker: 'X_CASEMGMT_PORTAL_LOOKUP_ABUSE|',
+            windowSeconds: 60,
+            requestLimit: 12,
+            missThreshold: 5,
+            logIntervalSeconds: 60,
+            maxEntries: 64
+        };
+    },
+
+    /**
+     * Read this session's lookup-guard state and prune it to the window.
+     *
+     * The state is a compact JSON document under ONE client-data key:
+     *     { "t": [<request epoch ms>...],
+     *       "m": [<miss epoch ms>...],
+     *       "w": <epoch ms of the last warning emitted for this session> }
+     * Timestamps outside the window are dropped on every call, which is
+     * what makes the window slide without a scheduled job.
+     *
+     * The session store is used because it is the only per-caller state the
+     * platform offers this path without adding an artifact the AAP does not
+     * define. It is in-memory and per-session, so it is cheap, it expires
+     * with the session, and it stores NO PII - only integers.
+     *
+     * FAILS OPEN, AND SILENTLY, BY DESIGN. When there is no session, or the
+     * client-data store cannot be read, this returns null and the caller
+     * admits the request. Refusing instead would take the public lookup
+     * page down on a platform condition the requester cannot influence.
+     * The branch deliberately does NOT log: it is reachable on every
+     * request if it is reachable at all, so logging it would hand an
+     * attacker a log-flood amplifier. The condition is documented as a
+     * residual risk in ../docs/portal-pages.md and is covered by the native
+     * per-hour rate-limit rule on the guest user instead.
+     *
+     * A stored value that is not the JSON this guard wrote - truncated,
+     * replaced, or from an older shape - is treated as ABSENT rather than
+     * trusted, so a corrupt value costs one window of throttling and never
+     * an exception on the public path.
+     *
+     * @param {Object} settings - the object returned by
+     *     _lookupGuardSettings().
+     * @return {Object|null} { t: Array, m: Array, w: Number,
+     *     session: GlideSession } pruned to the window, or null when no
+     *     session state is available.
+     */
+    _readLookupGuardState: function(settings) {
+        var session = null;
+        try {
+            session = gs.getSession();
+        } catch (sessionError) {
+            return null;
+        }
+        if (!session) {
+            return null;
+        }
+
+        var raw = '';
+        try {
+            raw = String(session.getClientData(settings.key) || '');
+        } catch (readError) {
+            raw = '';
+        }
+
+        var requests = [];
+        var misses = [];
+        var lastWarned = 0;
+        if (raw !== '') {
+            try {
+                var parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    requests = parsed.t;
+                    misses = parsed.m;
+                    var parsedWarned = Number(parsed.w);
+                    if (!isNaN(parsedWarned) && isFinite(parsedWarned)) {
+                        lastWarned = parsedWarned;
+                    }
+                }
+            } catch (parseError) {
+                requests = [];
+                misses = [];
+                lastWarned = 0;
+            }
+        }
+
+        var cutoff = new GlideDateTime().getNumericValue() - (settings.windowSeconds * 1000);
+        return {
+            t: this._pruneGuardTimestamps(requests, cutoff, settings.maxEntries),
+            m: this._pruneGuardTimestamps(misses, cutoff, settings.maxEntries),
+            w: lastWarned,
+            session: session
+        };
+    },
+
+    /**
+     * Keep only the timestamps inside the window, and only the most recent
+     * maxEntries of them.
+     *
+     * Every entry is coerced and checked, because the input is whatever was
+     * parsed out of the session store: a non-array, a sparse array, strings,
+     * nulls and NaN are all possible and none of them may reach the
+     * arithmetic that follows.
+     *
+     * @param {Array} value - the raw parsed list (may be any type).
+     * @param {Number} cutoff - epoch ms; entries older than this are
+     *     dropped.
+     * @param {Number} maxEntries - hard cap on the returned length.
+     * @return {Array} a clean array of numeric timestamps.
+     */
+    _pruneGuardTimestamps: function(value, cutoff, maxEntries) {
+        var kept = [];
+        if (!value || !Array.isArray(value)) {
+            return kept;
+        }
+        for (var i = 0; i < value.length; i++) {
+            var entry = Number(value[i]);
+            if (!isNaN(entry) && isFinite(entry) && entry >= cutoff) {
+                kept.push(entry);
+            }
+        }
+        if (kept.length > maxEntries) {
+            kept = kept.slice(kept.length - maxEntries);
+        }
+        return kept;
+    },
+
+    /**
+     * Persist the pruned lookup-guard state back onto the session.
+     *
+     * A write failure is not fatal and is not logged, for the same reason
+     * the read failure is not: it would be reachable on every request and
+     * would amplify a flood into the log. The consequence of a failed write
+     * is that this request is not counted, which the native per-hour
+     * rate-limit rule bounds.
+     *
+     * @param {Object} settings - the object returned by
+     *     _lookupGuardSettings().
+     * @param {Object} state - the state object from
+     *     _readLookupGuardState().
+     * @return {Boolean} true when the state was stored.
+     */
+    _writeLookupGuardState: function(settings, state) {
+        try {
+            state.session.putClientData(settings.key, JSON.stringify({
+                t: state.t,
+                m: state.m,
+                w: state.w
+            }));
+            return true;
+        } catch (writeError) {
+            return false;
+        }
+    },
+
+    /**
+     * Admission control for one anonymous lookup request.
+     *
+     * Counts THIS request in the session's sliding window and answers
+     * whether it may proceed. Refused requests are counted too: a caller
+     * that keeps hammering keeps its own window full and has to go quiet
+     * for a whole window to recover, which is the point of a throttle.
+     *
+     * Crossing the ceiling emits ONE warning per logIntervalSeconds per
+     * session under the stable marker, carrying the client IP and the
+     * miss/total counts so an operator can see a sweep and its source. The
+     * IP comes from GlideSession.getClientIP(); it is abuse telemetry about
+     * an unauthenticated caller and is not requester data - no submitted
+     * field value, name or address is ever logged (AAP Section 0.7.2
+     * no-PII).
+     *
+     * @return {Object} { allowed: Boolean } - and nothing else, so no
+     *     count, ceiling or window can escape into a response.
+     */
+    _admitAnonymousLookup: function() {
+        var settings = this._lookupGuardSettings();
+        var state = this._readLookupGuardState(settings);
+        if (state === null) {
+            return { allowed: true };
+        }
+
+        var nowMs = new GlideDateTime().getNumericValue();
+        state.t.push(nowMs);
+        var requests = state.t.length;
+        var allowed = requests <= settings.requestLimit;
+
+        if (!allowed && (nowMs - state.w) >= (settings.logIntervalSeconds * 1000)) {
+            state.w = nowMs;
+            gs.warn(settings.marker + 'event=throttled ip=' + this._clientIpForLog() +
+                ' requests=' + requests + ' misses=' + state.m.length +
+                ' request_limit=' + settings.requestLimit +
+                ' window_seconds=' + settings.windowSeconds);
+        }
+
+        this._writeLookupGuardState(settings, state);
+        return { allowed: allowed };
+    },
+
+    /**
+     * Record one anonymous lookup that returned nothing - a malformed
+     * value, an absent value, or a well-formed number that matched no case.
+     *
+     * A run of misses from a single session is the signature of a sweep of
+     * the sequential number space, and it is the only signal available on
+     * an endpoint whose mandated contract makes hit-versus-miss inherently
+     * observable (see the ENUMERATION EXPOSURE note on lookupCase). Once
+     * the soft threshold is crossed the guard emits ONE warning per
+     * logIntervalSeconds per session under the stable marker, carrying the
+     * client IP and both counts, so an admin can alert on the prefix and
+     * act - block the address at the edge, or tighten the shipped
+     * sys_rate_limit_rules ceiling.
+     *
+     * Recording a miss changes NOTHING a caller can observe: the response
+     * that follows is byte-identical whether or not this method ran, so the
+     * monitor itself introduces no new oracle.
+     *
+     * @return {undefined} nothing; monitoring never alters the answer.
+     */
+    _recordAnonymousLookupMiss: function() {
+        var settings = this._lookupGuardSettings();
+        var state = this._readLookupGuardState(settings);
+        if (state === null) {
+            return;
+        }
+
+        var nowMs = new GlideDateTime().getNumericValue();
+        state.m.push(nowMs);
+        var misses = state.m.length;
+
+        if (misses >= settings.missThreshold && (nowMs - state.w) >= (settings.logIntervalSeconds * 1000)) {
+            state.w = nowMs;
+            gs.warn(settings.marker + 'event=miss_threshold ip=' + this._clientIpForLog() +
+                ' misses=' + misses + ' requests=' + state.t.length +
+                ' miss_threshold=' + settings.missThreshold +
+                ' window_seconds=' + settings.windowSeconds);
+        }
+
+        this._writeLookupGuardState(settings, state);
+    },
+
+    /**
+     * The calling client's IP address, in a form that is always safe to
+     * concatenate into a log line.
+     *
+     * Returns the literal 'unavailable' rather than an empty string when
+     * the platform cannot supply an address, so a log line always has a
+     * value in the ip= field and an alert parsing those lines never has to
+     * handle a missing token.
+     *
+     * @return {String} the client IP, or 'unavailable'.
+     */
+    _clientIpForLog: function() {
+        var ip = '';
+        try {
+            var session = gs.getSession();
+            if (session) {
+                ip = String(session.getClientIP() || '');
+            }
+        } catch (ipError) {
+            ip = '';
+        }
+        return ip === '' ? 'unavailable' : ip;
     },
 
     /**
@@ -1292,58 +1728,249 @@ CasePortalService.prototype = {
     },
 
     /**
-     * Coarse flood guard for the unauthenticated submit path.
+     * Admission control for the unauthenticated submit path, decided AFTER
+     * the row has been inserted.
      *
-     * The endpoint accepts writes with no credentials, so without a ceiling
-     * a single caller can create cases indefinitely (measured: six parallel
-     * anonymous submits all accepted, with no throttling of any kind). The
-     * guard counts the cases this path has created inside the trailing
-     * window and refuses further submissions once the ceiling is reached.
+     * WHY THE DECISION FOLLOWS THE INSERT. This method used to count the
+     * rows the endpoint had created inside the trailing window and answer
+     * "allowed" while the insert happened afterwards, in submitCase(). That
+     * is a check-then-act race (CWE-367) and it bounded nothing under the
+     * one condition a flood guard exists for: parallel callers each read the
+     * same pre-insert count, each saw it below the ceiling, and each was
+     * admitted - so ten simultaneous requests produced ten cases whatever
+     * the ceiling said.
      *
-     * Why it counts rows instead of tracking callers: the scoped
-     * application owns exactly three tables per the AAP Section 0.5.7 data
-     * model, so there is nowhere to persist per-caller counters without
-     * adding an artifact the AAP does not define (Section 0.7.2
-     * Minimal-Change Clause). Counting the endpoint's own recent rows
-     * needs no new storage, keeps no client identifier and therefore
-     * stores no PII, and still bounds the damage an abusive caller can do.
-     * The trade-off is deliberate and documented: the ceiling is global to
-     * the endpoint rather than per-IP, so a flood suppresses other
-     * anonymous submissions for the remainder of the window.
+     * The decision is now taken from the row itself. submitCase() inserts
+     * first and calls this method with the persisted row, and the row's RANK
+     * inside the window - not a count read before it existed - decides. Rank
+     * is computed under a TOTAL order: sys_created_on ascending, then sys_id
+     * ascending as the tiebreak, because sys_created_on has one-second
+     * resolution so ties between simultaneous inserts are normal and must be
+     * broken deterministically. Every concurrent caller evaluates the same
+     * order over the same rows and therefore agrees on every row's rank, so
+     * at most GLOBAL_LIMIT rows survive a window with no lock, no counter
+     * and no serialization. A row ranking at or beyond the ceiling deletes
+     * itself and its caller is answered with the throttle.
      *
-     * Rows created by the endpoint are identified by their creator: an
-     * unauthenticated call runs as the platform's guest user, so
-     * sys_created_by on those rows is that user name and never a real
-     * internal user. Internal case creation through the native form is
-     * therefore never counted and never throttled.
+     * The trade is deliberate and it is the safe direction: a caller can be
+     * over-REJECTED under a genuine flood (its row existed briefly, ranked
+     * badly and was withdrawn) and cannot be over-ADMITTED. The same
+     * insert-then-reconcile shape is already how this file verifies the
+     * round trip and collapses duplicate submissions.
      *
-     * @return {Object} { allowed: Boolean, recent: Number, limit: Number,
-     *     windowSeconds: Number }
+     * HONEST LIMIT ON THE CEILING. Rank can only be computed over the rows
+     * the query can SEE. Two callers whose inserts are each still invisible
+     * to the other's query both rank themselves first and both survive, so
+     * the guarantee is "the ceiling holds across every caller that can see
+     * the rows already committed", not "the ceiling holds absolutely". This
+     * is the same residual visibility window _collapseDuplicateSubmission
+     * documents, it is a property of reconciling after the fact rather than
+     * of this implementation, and closing it would need a lock or a counter
+     * table that AAP Section 0.7.2's Minimal-Change Clause refuses. The
+     * platform-native per-hour ceiling shipped beside this endpoint
+     * (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_submit.xml) is
+     * the defence-in-depth layer for exactly that residue.
+     *
+     * PER-REQUESTER FAIRNESS. One global allowance is a denial-of-service
+     * lever in its own right: a single abuser consuming all ten submissions
+     * leaves nothing for any legitimate requester until the window rolls. A
+     * second, tighter ceiling therefore applies to the rows in the window
+     * that share this submission's requester_email bucket, normalised
+     * case-insensitively, with an absent or empty address forming its OWN
+     * bucket so it cannot dilute anybody else's. PER_REQUESTER_LIMIT is
+     * strictly below GLOBAL_LIMIT, so no single bucket can consume the
+     * endpoint's whole allowance.
+     *
+     * requester_email is used because it is the only caller-identifying
+     * value the AAP Section 0.5.7 data model puts on this path, and no new
+     * table, field or property may be added to carry a better one (Section
+     * 0.7.2 Minimal-Change Clause; Section 0.5.7 is verbatim). HONEST LIMIT:
+     * an abuser who varies the address defeats the bucket - it is a fairness
+     * dimension, not an identity. What still bounds that abuser is the
+     * global ceiling above, the native per-hour rate-limit rule on the guest
+     * user, and the refusal log below, which names the ceiling that fired so
+     * an operator can alert on a sustained flood.
+     *
+     * WHOSE ROWS ARE RANKED. The window is scoped to OUR OWN row's
+     * sys_created_by rather than to the literal 'guest', so it is correct
+     * for whatever user the platform runs an unauthenticated call as, and an
+     * internal user's cases are never ranked against an anonymous caller's:
+     * a flood through this endpoint cannot throttle case creation on the
+     * native form, and case creation on the native form cannot throttle this
+     * endpoint.
+     *
+     * A REFUSED SUBMISSION CONSUMES A CASE NUMBER. The platform allocates
+     * the number during the insert, so a withdrawn row leaves a gap in the
+     * CASE sequence - already true of this file's round-trip refusal, of a
+     * collapsed duplicate and of every form load, so gaps carry no meaning
+     * here, but a reader comparing counts should expect them.
+     *
+     * NO PII IS LOGGED. The refusal log carries the marker, the rank, the
+     * ceilings and our own row's sys_id - never the address that formed the
+     * bucket, never any submitted field value (AAP Section 0.7.2 no-PII).
+     *
+     * @param {GlideRecord} savedGr - the post-insert re-query of our own
+     *     row, already positioned on it.
+     * @param {String} newSysId - the sys_id returned by insert().
+     * @return {Object} { allowed: Boolean } - true when our row is inside
+     *     both ceilings and survives; false when it ranked at or beyond one
+     *     of them, in which case the row has ALREADY been removed. No count,
+     *     limit or window is returned, so no caller can leak one to an
+     *     anonymous requester.
      */
-    _admitAnonymousSubmission: function() {
+    _admitAnonymousSubmission: function(savedGr, newSysId) {
         var SUBMIT_WINDOW_SECONDS = 60;
-        var SUBMIT_WINDOW_LIMIT = 10;
-        var ANONYMOUS_USER_NAME = 'guest';
+        var GLOBAL_LIMIT = 10;
+        var PER_REQUESTER_LIMIT = 4;
+        var LOG_MARKER = 'X_CASEMGMT_PORTAL_SUBMIT_ABUSE|';
+
+        var creator = String(savedGr.getValue('sys_created_by') || '');
+        if (creator === '') {
+            // Without a creator the window cannot be scoped to this
+            // endpoint's own rows, and widening it to every recent case
+            // would let internal case creation throttle the public endpoint.
+            // The guard declines rather than guesses, and says so: this
+            // ceiling is a rate control, not the security perimeter, and the
+            // native per-hour rule on the guest user still applies.
+            gs.warn(LOG_MARKER + 'guard_skipped reason=empty_sys_created_by sys_id=' + newSysId);
+            return { allowed: true };
+        }
 
         var windowStart = new GlideDateTime();
         windowStart.addSeconds(-SUBMIT_WINDOW_SECONDS);
 
-        var recent = 0;
-        var agg = new GlideAggregate('x_casemgmt_case');
-        agg.addQuery('sys_created_by', ANONYMOUS_USER_NAME);
-        agg.addQuery('sys_created_on', '>=', windowStart);
-        agg.addAggregate('COUNT');
-        agg.query();
-        if (agg.next()) {
-            recent = parseInt(agg.getAggregate('COUNT'), 10) || 0;
+        var ourBucket = this._requesterEmailBucket(savedGr.getValue('requester_email'));
+
+        // Only the first GLOBAL_LIMIT + 1 rows of the window's total order
+        // can change the answer: if our row is not among them then at least
+        // GLOBAL_LIMIT rows precede it and it is refused whatever follows.
+        // The limit keeps this query bounded during a flood.
+        var rows = new GlideRecord('x_casemgmt_case');
+        rows.addQuery('sys_created_by', creator);
+        rows.addQuery('sys_created_on', '>=', windowStart);
+        rows.orderBy('sys_created_on');
+        rows.orderBy('sys_id');
+        rows.setLimit(GLOBAL_LIMIT + 1);
+        rows.query();
+
+        var globalRank = 0;
+        var bucketRank = 0;
+        var foundOurRow = false;
+        while (rows.next()) {
+            if (String(rows.getValue('sys_id') || '') === newSysId) {
+                // Our row. Everything counted so far precedes it, because
+                // the iteration follows the total order, so globalRank and
+                // bucketRank ARE its ranks.
+                foundOurRow = true;
+                break;
+            }
+            globalRank++;
+            if (this._requesterEmailBucket(rows.getValue('requester_email')) === ourBucket) {
+                bucketRank++;
+            }
+            if (globalRank >= GLOBAL_LIMIT) {
+                // GLOBAL_LIMIT rows already precede ours; the answer cannot
+                // change and the remaining rows need not be read.
+                break;
+            }
         }
 
-        return {
-            allowed: recent < SUBMIT_WINDOW_LIMIT,
-            recent: recent,
-            limit: SUBMIT_WINDOW_LIMIT,
-            windowSeconds: SUBMIT_WINDOW_SECONDS
-        };
+        if (globalRank >= GLOBAL_LIMIT) {
+            return this._discardOverflowSubmission(newSysId, LOG_MARKER, 'global_window_ceiling',
+                'rank=' + globalRank + ' limit=' + GLOBAL_LIMIT +
+                ' window_seconds=' + SUBMIT_WINDOW_SECONDS);
+        }
+
+        if (bucketRank >= PER_REQUESTER_LIMIT) {
+            return this._discardOverflowSubmission(newSysId, LOG_MARKER, 'per_requester_ceiling',
+                'rank=' + bucketRank + ' limit=' + PER_REQUESTER_LIMIT +
+                ' window_seconds=' + SUBMIT_WINDOW_SECONDS);
+        }
+
+        if (!foundOurRow) {
+            // Our own row should always be visible to this query - the same
+            // session inserted it. When it is not, fewer than GLOBAL_LIMIT
+            // rows preceded it so admitting is the correct answer, but the
+            // visibility gap is worth a log line: it is the one condition
+            // under which two callers can both believe they are inside the
+            // ceiling (see HONEST LIMIT ON THE CEILING above).
+            gs.warn(LOG_MARKER + 'rank_incomplete reason=own_row_not_visible sys_id=' + newSysId +
+                ' rows_seen=' + globalRank);
+        }
+
+        return { allowed: true };
+    },
+
+    /**
+     * Normalise a requester_email value into the bucket key the
+     * per-requester fairness ceiling counts by.
+     *
+     * Case and surrounding whitespace are not identity, so both are removed.
+     * An absent, empty or whitespace-only address collapses to the empty
+     * bucket. That empty value is a BUCKET, not a wildcard: an address-less
+     * submission is never counted against one that carries an address, so a
+     * flood of address-less requests cannot push a requester who supplied
+     * one over the per-requester ceiling. All address-less submissions DO
+     * share that single bucket, which is the honest consequence of having no
+     * better caller dimension on this path - what bounds that case is the
+     * global ceiling and the native per-hour rule, not this bucket.
+     *
+     * The value is used ONLY as an in-memory grouping key: it is never
+     * logged, never stored anywhere new and never returned to a caller, so
+     * no address leaves the row it was submitted on (AAP Section 0.7.2
+     * no-PII).
+     *
+     * @param {String} value - a row's requester_email, as read with
+     *     GlideRecord.getValue() (may be null, undefined or empty).
+     * @return {String} the bucket key; '' when there is no address.
+     */
+    _requesterEmailBucket: function(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value).trim().toLowerCase();
+    },
+
+    /**
+     * Withdraw the row this request inserted because it ranked at or beyond
+     * one of the admission ceilings, and report the refusal.
+     *
+     * The row is removed rather than left in place because an admitted
+     * submission and a refused one must not both persist a case: the caller
+     * is being told, with HTTP 429, that nothing was accepted, so nothing
+     * may remain. A failed delete is the one branch that leaves a case
+     * behind the requester was never told about, so it is logged with
+     * gs.error and names the sys_id an administrator has to remove by hand.
+     *
+     * Every line starts with the caller-supplied STABLE MARKER so an
+     * operator can alert on the prefix alone. The lines carry ranks,
+     * ceilings and our own row's sys_id, and no submitted value, no address
+     * and no client identifier, so the log stays free of PII.
+     *
+     * @param {String} newSysId - the sys_id returned by insert().
+     * @param {String} marker - the stable log-marker prefix.
+     * @param {String} reason - which ceiling refused the row.
+     * @param {String} detail - space-separated key=value diagnostics.
+     * @return {Object} { allowed: false } - always, so the caller returns
+     *     the throttled response whether or not the cleanup succeeded.
+     */
+    _discardOverflowSubmission: function(newSysId, marker, reason, detail) {
+        var cleanupGr = new GlideRecord('x_casemgmt_case');
+        if (!cleanupGr.get(newSysId)) {
+            gs.warn(marker + 'refused reason=' + reason + ' ' + detail +
+                ' cleanup=row_already_gone sys_id=' + newSysId);
+            return { allowed: false };
+        }
+        if (!cleanupGr.deleteRecord()) {
+            gs.error(marker + 'refused reason=' + reason + ' ' + detail +
+                ' cleanup=FAILED sys_id=' + newSysId +
+                ' lastErrorMessage=' + cleanupGr.getLastErrorMessage() +
+                '; the refused case row still exists and needs manual removal.');
+            return { allowed: false };
+        }
+        gs.warn(marker + 'refused reason=' + reason + ' ' + detail +
+            ' cleanup=ok sys_id=' + newSysId);
+        return { allowed: false };
     },
 
     /**

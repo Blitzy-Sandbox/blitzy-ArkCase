@@ -283,6 +283,21 @@ This section documents how each ServiceNow widget semantically corresponds to an
 
 ## Verification
 
+> **CR1 2026-09-09 (review finding F02) — the eight widget placements are back in the package.** The
+> `sys_grid_canvas_pane` rows that bind each canvas cell to its report widget instance — 3 for Agent Workspace,
+> 5 for Manager View — had been dropped from the shipped Update Set on the mistaken premise that the
+> `sys_portal` widget instances they reference cannot be packaged. The package does carry all 8 widget
+> instances (with their 96 `sys_portal_preferences` rows) inside its two `sys_portal_page` composites; what
+> actually defeated the pane rows at preview is that the reference validator resolves a target only against a
+> local record or a **standalone** block in the same set, and the widget instances travelled as composite
+> children. Without the pane rows, a committed dashboard has its canvas, its tab, its permissions, all 8
+> reports and all 8 configured widget instances, and **renders empty** — the pass condition below could not
+> have been met on a fresh install. The 8 rows now ship as two self-contained bundles, one per dashboard, each
+> carrying that dashboard's widget instances alongside its panes so the reference resolves inside its own
+> payload. This is verified statically only (8 pane records present; every `portal_widget` and `grid_canvas`
+> target resolves inside the package); the instance-side confirmation is the procedure below plus
+> `GET /api/now/stats/sys_grid_canvas_pane?sysparm_count=true&sysparm_query=sys_scope.scope=x_casemgmt` → 8.
+
 The following row is preserved verbatim from AAP Section 0.7.3.
 
 | Gate | Criterion | Pass Condition |

@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for a `sys_rate_limit_rules`
+    record inside the scoped application `x_casemgmt` (Case Management).
+
+    PURPOSE (review finding F07; AAP Sections 0.4.3, 0.7.2, 0.7.4):
+
+      A PLATFORM-NATIVE per-hour request ceiling on the unauthenticated
+      caller of the anonymous case-status-lookup endpoint
+
+          GET /api/x_casemgmt/case_status_lookup?number=<CASE0000001>
+
+      declared by ./sys_ws_definition_x_casemgmt_case_status_lookup.xml
+      (base URI /api/x_casemgmt/case_status_lookup) and handled by
+      ./sys_ws_operation_x_casemgmt_case_status_lookup_get.xml.
+
+      WHY THIS ENDPOINT NEEDS A CEILING AT ALL. AAP Section 0.7.4 fixes
+      the lookup contract as single-factor: a case number alone returns
+      that case's status, subject and opened date to an anonymous caller,
+      and case numbers are sequential (CASE0000001 upward, per
+      ../../numbers/sys_number_x_casemgmt_case.xml). "HTTP 200 for a real
+      number, HTTP 404 for an unused one" is therefore inherently a
+      hit/miss oracle over a predictable sequence - review finding F07.
+      The oracle cannot be removed without a second factor the AAP does
+      not define and the Section 0.7.2 Minimal-Change Clause forbids
+      inventing, so what remains is to make a sweep expensive, bounded and
+      visible.
+
+      This rule is the DEFENCE-IN-DEPTH layer of that answer. The primary,
+      shipped defences are in script, in
+      ../../script_includes/x_casemgmt_CasePortalService.xml:
+
+        1. strict ^CASE[0-9]{7}$ validation before any query, so a
+           malformed sweep reaches no database and learns nothing;
+        2. a per-session sliding-window request ceiling held in the
+           session's own client-data store, answered as HTTP 429;
+        3. gs.warn abuse monitoring under the stable marker
+           X_CASEMGMT_PORTAL_LOOKUP_ABUSE| carrying the client IP and the
+           miss/total counts, so an operator can alert on a sweep.
+
+      This record covers what those three cannot: a caller that DISCARDS
+      ITS SESSION COOKIE between requests gets a fresh session, and
+      therefore a fresh per-session window, every time. A per-hour ceiling
+      on the unauthenticated user is not session-scoped, so it bounds that
+      caller too.
+
+    HONESTY ABOUT WHAT IS PROVEN (required, and deliberate):
+
+      THE EFFECTIVENESS OF THIS RULE IS NOT VERIFIED. It was authored from
+      the shipped REST records and from the shape of the 30 stock rows
+      readable on the development instance; it has NOT been exercised
+      against a live anonymous caller, because the instance is
+      deliberately empty at the end of this run and no writes were made to
+      it. Unproven in particular: whether the platform applies a
+      rate-limit rule OWNED BY A SCOPED APPLICATION to an inbound
+      anonymous request on a scoped scripted REST resource, and whether
+      `api` / `api_resource` as spelled below bind to this application's
+      REST resource after commit (both are choice fields the platform
+      populates from its own REST registry).
+
+      VERIFY POST-COMMIT, in this order:
+
+        1. The rule installed and is active, and its resource bound:
+             GET /api/now/table/sys_rate_limit_rules
+                 ?sysparm_query=sys_id=55e38d54edf281eb97d455a75b11ac93
+                 &sysparm_fields=name,api,api_resource,rest_api_resource,type,user,requests,active
+           Expect one row, active=true, and api_resource exactly
+           "GET /x_casemgmt/case_status_lookup". An empty or altered
+           api_resource means the choice did not bind and the rule is
+           inert - fix it on the form, where the choice list is populated
+           from the live REST registry, and re-export.
+
+        2. The platform is counting real anonymous traffic against it -
+           the actual effectiveness check, which needs one anonymous GET
+           to have happened first:
+             GET /api/now/table/sys_rate_limit_count
+                 ?sysparm_query=rate_limit_rule=55e38d54edf281eb97d455a75b11ac93
+                 &sysparm_fields=user,request_count,count_start
+           Expect a row whose `user` is the guest user and whose
+           request_count tracks the anonymous lookups made. NO ROW AFTER A
+           SUCCESSFUL ANONYMOUS GET MEANS THIS RULE IS NOT IN EFFECT,
+           whatever step 1 showed.
+
+        3. Refusals, once the ceiling is crossed:
+             GET /api/now/table/sys_rate_limit_violations
+                 ?sysparm_query=rate_limit_rule=55e38d54edf281eb97d455a75b11ac93
+                 &sysparm_fields=user,sys_created_on
+
+      Until step 2 returns a row, treat the in-script controls as the ONLY
+      effective ceiling on this endpoint. That is why none of them is
+      weakened on the strength of this file, and why
+      ../../docs/portal-pages.md records this rule as unverified and keeps
+      the residual enumeration risk stated rather than closed.
+
+    THE CEILING, AND WHY THIS NUMBER:
+
+      <requests>240</requests> - the column is "Request limit per hour"
+      (sys_dictionary: sys_rate_limit_rules.requests, integer), so this is
+      240 anonymous lookups per hour for the guest user across the whole
+      instance.
+
+      What it costs a legitimate requester: nothing measurable. A
+      requester checking one case makes one request; the confirmation
+      link's prefill makes one; a mistyped number adds another. The ATF
+      suite makes a handful per run
+      (../../atf/x_casemgmt_atf_19_portal_contract_lookup_of_a_valid_number_returns_only_status_subject_o.xml
+      and
+      ../../atf/x_casemgmt_atf_20_portal_contract_lookup_of_an_unknown_number_returns_404_with_the_verba.xml).
+
+      What it costs a sweeper: the number space is CASE0000001 through
+      CASE9999999, so at 240 numbers per hour an exhaustive sweep of it
+      takes on the order of 41,600 hours - about four and a half years of
+      uninterrupted requests to enumerate a space this POC populates with
+      ten cases. That is the point of the number: it does not make the
+      oracle disappear, it makes walking the sequence useless while
+      leaving normal use untouched.
+
+      Deliberately looser than the sibling submit rule
+      (./sys_rate_limit_rules_x_casemgmt_case_submit.xml, 60/hour): this
+      endpoint is a READ that persists nothing, while every refused write
+      on the submit path still consumes a case number.
+
+    WHY type=User AND A LITERAL GUEST sys_id:
+
+      `type` is a choice with exactly three values on this release - All,
+      Role, User (sys_choice on sys_rate_limit_rules.type). The caller to
+      be bounded is UNAUTHENTICATED, so it holds no role and `Role` cannot
+      address it; `All` would bound every caller of the resource including
+      internal ones. `User` pointed at the platform's stock `guest` user
+      addresses exactly the unauthenticated caller, which is who reaches
+      this endpoint (the operation and its definition both set
+      requires_authentication=false, so the platform serves the request as
+      guest).
+
+      <user> therefore carries 5136503cc611227c0183e96598c4f706, the stock
+      guest user's sys_id, verified on the development instance by a
+      read-only lookup of sys_user?user_name=guest. This is the ONE
+      element in this file that is a sys_id reference literal rather than
+      a key, and it is a considered exception rather than an oversight:
+
+        - A record-definition is DATA, not script. The AAP Section 0.7.2
+          no-hardcoded-sys_id constraint is satisfied elsewhere by
+          performing a GlideRecord lookup against a human-readable key
+          (`name`, `user_name`, `number`, `role_label`), and an Update Set
+          payload has no script layer in which such a lookup could run. A
+          `user_name=guest` lookup is impossible here by construction.
+        - The value is PORTABLE in the way the constraint exists to
+          protect: 5136503cc611227c0183e96598c4f706 is the platform's own
+          stock guest record, shipped with the same sys_id on every
+          ServiceNow instance - a well-known platform constant, not an
+          instance-specific identifier.
+        - display_value="guest" carries the human-readable key alongside
+          it, so a reader never has to resolve the hex by hand.
+
+      If a future maintainer prefers this repo's key-in-the-text-node
+      convention (as used by
+      ../../seed-data/role_assignments/sys_user_has_role_x_casemgmt_demo_agent.xml),
+      the correct change is to re-point the rule on the form and
+      re-export - not to hand-edit the text node, because an unresolved
+      `user` silently makes the rule apply to nobody.
+
+    SCOPE AND TRANSPORTABILITY:
+
+      sys_rate_limit_rules extends sys_metadata (verified read-only:
+      sys_db_object.super_class -> sys_metadata), so it is an application
+      file: it carries sys_scope / sys_package / sys_update_name, is owned
+      by this scoped application, and travels inside the Update Set with
+      the rest of the package. Zero global-scope artifacts are introduced
+      by this file - <sys_scope> and <sys_package> both resolve to
+      x_casemgmt (AAP Section 0.7.2 scoped-namespace-only constraint), and
+      no ACL, business rule, property, email configuration or Store
+      dependency is created.
+
+    DERIVATION OF api / api_resource / rest_api_resource:
+
+      Taken from the shipped REST records themselves, not invented:
+        - `api` = "Case Status Lookup" - the <name> of
+          ./sys_ws_definition_x_casemgmt_case_status_lookup.xml.
+        - `api_resource` and `rest_api_resource` =
+          "GET /x_casemgmt/case_status_lookup" - the stock rows on this
+          instance format the resource as
+          "<METHOD> <path with the leading /api removed>" (e.g.
+          "GET /now/documents/explore" for an operation whose
+          default_operation_uri is /api/now/documents/explore). The lookup
+          operation's <default_operation_uri> is
+          /api/x_casemgmt/case_status_lookup and its <http_method> is GET,
+          giving the value below.
+        - `version` = "latest" - the definition carries no versioned
+          namespace and the operation's <web_service_version/> is empty,
+          which is the same shape as the stock rows that read "latest".
+
+    AUTHORED-ARTIFACT CONVENTIONS (matching every sibling in this package):
+
+      - <unload> root with a single <record_update table="..."> child.
+      - Inner element <sys_rate_limit_rules action="INSERT_OR_UPDATE"> for
+        idempotent re-import (AAP Section 0.7.1 round-trip verification).
+      - Elements ordered alphabetically, four-space indentation.
+      - Stable audit fields (admin / 2025-01-01 00:00:00) so re-generating
+        this file is byte-identical.
+      - <sys_update_name>sys_rate_limit_rules_<sys_id></sys_update_name> -
+        the format the platform itself uses on this table (observed on all
+        30 stock rows), which is why the update name embeds the sys_id
+        rather than a readable slug.
+      - THIS RECORD'S OWN <sys_id> is a fabricated 32-character lowercase
+        hex value, derived deterministically as
+        MD5("sys_rate_limit_rules_x_casemgmt_case_status_lookup") =
+        55e38d54edf281eb97d455a75b11ac93 so that re-generation is stable
+        and a re-import updates the same row instead of creating a second
+        one. A repository-wide grep for this value returned no other
+        occurrence, so it collides with nothing shipped.
+      - No PII: the only identifier in the file is the platform's own
+        guest user, and no requester name, address or case content
+        appears anywhere.
+
+    LOAD ORDER (AAP Section 0.5.2):
+
+      MUST load AFTER:
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package,
+          so <sys_scope> and <sys_package> both resolve against it)
+        - ./sys_ws_definition_x_casemgmt_case_status_lookup.xml and
+          ./sys_ws_operation_x_casemgmt_case_status_lookup_get.xml (this
+          rule names their API and resource; the rule installs regardless,
+          but its choice values only mean anything once the resource they
+          describe is registered)
+
+      Nothing depends on this record: it constrains an existing resource
+      and is referenced by no other artifact.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<record_update table="sys_rate_limit_rules">
+    <sys_rate_limit_rules action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <api>Case Status Lookup</api>
+        <api_resource>GET /x_casemgmt/case_status_lookup</api_resource>
+        <import_set_table/>
+        <name>x_casemgmt anonymous case status lookup (guest)</name>
+        <requests>240</requests>
+        <rest_api_resource>GET /x_casemgmt/case_status_lookup</rest_api_resource>
+        <role/>
+        <sys_class_name>sys_rate_limit_rules</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>55e38d54edf281eb97d455a75b11ac93</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt anonymous case status lookup (guest)</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_rate_limit_rules_55e38d54edf281eb97d455a75b11ac93</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table/>
+        <type>User</type>
+        <user display_value="guest">5136503cc611227c0183e96598c4f706</user>
+        <version>latest</version>
+    </sys_rate_limit_rules>
+</record_update>
+</unload>
