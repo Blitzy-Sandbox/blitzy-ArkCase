@@ -1499,3 +1499,544 @@ at any point in this step.
 
 
 ## Step 8 + Exit Condition
+
+Owner: unit U5 (order 4). This section discharges Step 8 (directive lines 169-189) and the Exit Condition
+(lines 191-200), and records the documentation impact of the two deletions Step 6 made. Every number below was
+measured by this unit against the live instance during this step; nothing in it is inherited from a prior
+report, and where it cites another step's measurement it says so and names the section.
+
+### 1. Preflight, and why this step runs regardless of outcome
+
+The directive requires the teardown "after Step 6/7 complete (or after a CRITICAL stop, if reached)" and says
+plainly that "this teardown happens regardless of outcome". Step 5c was a clean pass, so no CRITICAL path was
+taken; the teardown ran on the successful path, and would have run identically had it not been.
+
+Preflight, all three checks, 2026-09-08:
+
+| Check | Command | Result |
+|---|---|---|
+| Instance live (body content, not status code) | `GET /api/now/table/sys_remote_update_set?sysparm_limit=1` | HTTP 200 with a **JSON** body → live, not hibernating |
+| Credentials | same call, Basic auth as `admin` | HTTP 200 — no 401, no 403, so no BLOCKED stop |
+| Not mid-upgrade | `GET /api/now/table/sys_upgrade_history?sysparm_query=upgrade_startedISNOTEMPTY^upgrade_finishedISEMPTY` | `{"result":[]}` |
+
+The instance's own `Date` response header at preflight read `Tue, 08 Sep 2026 22:36:17 GMT`. A read-only
+heartbeat (`GET /api/now/table/sys_user?sysparm_limit=1`) was used for the duration of the step; no hibernation
+event occurred, so no wake cycle was consumed.
+
+### 2. The line-34 guard, applied fresh for the third teardown
+
+Line 34 requires the guard to be re-verified fresh every time a teardown runs — "a prior successful teardown
+does not make the next one safe by default". It was applied twice here, immediately before the destructive
+call, and both applications returned the identical raw body:
+
+```
+$ curl -s --user "$A" -H 'Accept: application/json' \
+    "$U/api/now/table/sys_scope?sysparm_query=scope%3Dx_casemgmt&sysparm_fields=sys_id,scope,name,version"
+{"result":[{"sys_id":"82b99028936f74320d74d6f88357a5af","scope":"x_casemgmt","name":"x_casemgmt Case Management","version":"1.0.0"}]}
+```
+
+- record count = **1** (exactly one, as required) ✔
+- `sys_id` length = **32**, and it matches `^[0-9a-f]{32}$` ✔
+- **VERDICT: PROCEED.** Had the query returned zero records the delete would have been skipped and this section
+  would have recorded that instead; had it returned an empty or malformed `sys_id`, or more than one record,
+  nothing would have been deleted and this step would have reported BLOCKED with the raw output.
+
+### 3. Pre-teardown inventory — the last measurement of the live application
+
+Captured before anything was destroyed, because after the teardown it is unrecoverable. This is the state Step
+5c's single native commit produced and Step 7 measured without altering it.
+
+| Class | Measured | Class | Measured |
+|---|---|---|---|
+| `sys_scope` | 1 (`82b99028936f74320d74d6f88357a5af`, v1.0.0) | Rows: case / task / party | **10 / 10 / 8** |
+| `sys_dictionary` (case/task/party) | 21 / 14 / 13 | `sys_documentation` | 21 / 14 / 13 |
+| `sys_db_object` | 3 | `sys_choice` | **24** (case 15 · task 7 · party 2) |
+| `sys_number` | 3 | `sys_user_role` | 3 |
+| scoped `sys_security_acl` | 26 | `sys_security_acl_role` | **27** (manager 14 · agent 10 · viewer 3) |
+| `sys_user_has_role` (scoped roles) | **0** — the residual delta of §7, Step 5-6 | Flows | 7 (active + published) |
+| Business rules | 7 | Script includes | 2 |
+| UI actions | 6 | UI policies | 2 |
+| Reports | 8 | Dashboards | 2 |
+| Portal / pages / widgets | 1 / 2 / 3 | Scripted REST APIs | 2 |
+| ATF tests / suites / steps / suite-tests | 20 / 1 / 180 / 20 | Demo users / group / membership | 3 / 1 / 1 |
+| Synthetic `core_company` rows | 2 | `sys_metadata` in scope | 553 |
+| `sys_update_version` (application = scope) | 487 | `sys_update_xml` (application = scope) | 1970 |
+| `sys_metadata_delete` | 0 | | |
+
+Update-set ledger, captured with `sys_id | name | state` before deletion, as the directive's evidence-first
+principle requires:
+
+| Table | `sys_id` | `name` | `state` | Children | Preview problems | Disposition |
+|---|---|---|---|---|---|---|
+| `sys_remote_update_set` | `8ebb770493534b1009aa70d19dba102a` | `x_casemgmt_case_management v1.0.0 (gate candidate)` | `committed` | 522 | **0 error / 0 warning** | this task's — DELETED |
+| `sys_remote_update_set` | `9929f50df18ccec91ea13b2a3bccfc90` | `x_casemgmt_case_management v1.0.0` | `committed` | 926 | not queried | **the excluded package's own record — untouched, uncounted** |
+| `sys_update_set` | `bce2c05c93934b1009aa70d19dba1042` | `x_casemgmt_case_management v1.0.0 (gate candidate)` | `complete` | 522 | n/a | this task's — DELETED |
+| `sys_update_set` | `5e2b48dc93d34b1009aa70d19dba108a` | `Default` (scope's own, `is_default`) | `in progress` | 0 → 438 at deletion | n/a | this task's — DELETED |
+| `sys_update_set` | `11226d84a56503108bb220b7a4d212b2` | `Default` (global) | `in progress` | 290, none `x_casemgmt`-named | n/a | global — left alone |
+| `sys_update_set` | `2f6d66b1938b8f1009aa70d19dba10f0`, `a2bda2f1938b8f1009aa70d19dba1047` | other scopes' `Default` sets | `in progress` | — | n/a | other scopes — left alone |
+
+`nameLIKE` and `descriptionLIKE` queries for the excluded package's marker text returned **0 rows on both
+tables**, so that record is textually unidentifiable; it was therefore excluded **structurally, by `sys_id`
+comparison**, in every deletion loop and every count in this section.
+
+### 4. The collateral guard, run read-only before destroying anything
+
+`scripts/pre_delete_collateral_guard.js` was run **unmodified**, in the `x_casemgmt` scope, via
+`/sys.scripts.do` — response `Script completed in scope x_casemgmt`, enumeration timestamped `22:40:12Z`. Its
+finding that bounds the blast radius: **zero `sys_security_acl_role` rows held by any role outside the scoped
+three**, for all three tables (per-table scoped links 11 / 8 / 8; ACLs 10 / 8 / 8; choices 15 / 7 / 2). Its
+own STEP2 then aborted with 18 reasons, which is expected and correct: the script's authorised subset is the
+narrower Phase-1 table-delete subset, not a full application teardown. The full teardown is authorised for
+this task by the directive itself (lines 169-172), and the guard's read-only enumeration is what it was used
+for here.
+
+### 5. The teardown itself
+
+```
+POST /xmlhttp.do
+  sysparm_processor=com.snc.apps.AppsAjaxProcessor
+  sysparm_function=deleteApplication
+  sysparm_sys_id=82b99028936f74320d74d6f88357a5af      <- the guard-verified value, nothing else
+  sysparm_delete_all=true
+  sysparm_ck=<fresh token from an interactive UI session>
+```
+
+HTTP 200, worker `3b93dc1c93934b1009aa70d19dba1034`. Progress trail: *Dropping table x_casemgmt_case* →
+*Deleting Case Task* → *Dropping table x_casemgmt_case_party* → *Deleting Run Server Side Script* → *Deleting
+Send REST Request - Inbound* → *Deleting CasePortalService*. It finished `state=complete` with
+`state_code=error` and the platform's expected partial verdict: *"Failed to completely delete application
+'x_casemgmt Case Management'. Review and manually delete any files that remain…"*. That verdict is precisely
+why the directive requires the three explicit sweeps below; it is not a failure of the teardown.
+
+`DELETE /api/now/table/sys_scope/<id>` was **not** used at any point — it returns 204 without cascading.
+
+### 6. What did not cascade, and what was deleted explicitly
+
+Residue survey immediately after the cascade: scope 0 · three table endpoints HTTP 400 · roles 0 · `sys_choice`
+0 · `sys_number` 0 · ACLs 0 · role links 0 · grants 0 · dictionary / documentation / `sys_db_object` 0 · ATF 0
+— **but** 2 retrieved sets, 2 local sets, 3 demo users, 1 group, 1 membership, 2 synthetic companies,
+`sys_metadata` in scope 490 (1 `sys_hub_action_type_snapshot` + 5 `sys_hub_flow_snapshot` + 484
+`sys_metadata_delete`), `sys_update_version` 1041 and `sys_update_xml` 2409. The directive names exactly this
+class of survivor, and each was removed explicitly.
+
+Deletion ledger, verbatim from the run log (`found` / `deleted` per class; the excluded package's record and
+its children are absent from every line because the loops skipped it by `sys_id`):
+
+| Class | Selector | found | deleted |
+|---|---|---|---|
+| `sys_update_preview_problem` | children of `8ebb7704…` | 0 | 0 |
+| `sys_update_xml` | payloads of retrieved `8ebb7704…` | 522 | 522 |
+| `sys_remote_update_set` | retrieved set `8ebb7704…` | 1 | 1 |
+| `sys_update_xml` | payloads of local `5e2b48dc…` (`Default`) | 438 | 438 |
+| `sys_update_set` | local set `5e2b48dc…` | 1 | 1 |
+| `sys_update_xml` | payloads of local `bce2c05c…` (gate candidate) | 522 | 522 |
+| `sys_update_set` | local set `bce2c05c…` | 1 | 1 |
+| `sys_update_version` | by name / by application | 28 / 1041 | 28 / 1041 |
+| `sys_metadata_delete` | orphans in the deleted scope | 484 | 484 |
+| `sys_hub_flow_snapshot` | flow snapshots | 5 | 5 |
+| `sys_hub_action_type_snapshot` | action-type snapshots | 1 | 1 |
+| `sys_user` | the 3 synthetic demo users | 3 | 3 |
+| `sys_user_group` | the synthetic demo group | 1 | 1 |
+| `sys_user_grmember` | demo group membership | 1 | 1 |
+| `core_company` | `Synthetic Org Alpha` (`d46832bc679ff0254d734c6d4d512315`), `Synthetic Org Beta` (`764f7aa36e02a12f9de6da7d7cf1cf82`) | 2 | 2 |
+| `sys_choice`, `sys_choice_set`, `sys_number`, `sys_user_role`, `sys_security_acl`, `sys_security_acl_role`, `sys_user_has_role`, `sys_dictionary`, `sys_documentation`, `sys_db_object` | scoped selectors | 0 each | 0 each — already removed by the cascade |
+
+**One survivor took three passes and is worth recording, because it is the exact class that produces "Found a
+local update that is newer than this one" on a later import.** After the first sweep,
+`sys_update_xml application=<scope>` read **927** rather than the excluded package's 926. A second sweep
+reported `found=0` for everything — because `addQuery(ref,'!=',id)` does **not** match rows whose reference is
+EMPTY (a SQL NULL comparison), so the row was invisible to it. Rewritten with encoded queries plus an in-loop
+`getValue()` check, the third sweep found and deleted it: `67e39c9493574b1009aa70d19dba10b2 |
+sys_app_82b99028936f74320d74d6f88357a5af | DELETE | Custom Application`, created **22:41:55 during the
+teardown itself** and captured into the **global** `Default` set — the teardown recording its own DELETE.
+Afterwards `sys_update_xml application=<scope>` = **926**, all of them the excluded package's children
+(`nameLIKEx_casemgmt` AND `remote_update_set != 9929f50d…` = **0**).
+
+A broad follow-up sweep returned **0** for `sys_app`, `sys_scope`, `sys_app_module`, `sys_app_application`,
+`sys_ui_list`, `sys_ui_section`, `sys_ui_related_list`, `sys_ui_policy`, `sys_script`, `sys_script_include`,
+`sys_script_client`, `sys_ui_action`, `sys_report`, `pa_dashboards`, `sp_page`, `sp_widget`,
+`sys_ws_definition`, every `sys_atf_*` table, `sys_dictionary` (by name and by reference), `sys_documentation`,
+`sys_db_object`, `sys_number`, `sys_choice`, `sys_security_acl`, `sys_user_role`, `sys_user`, `sys_user_group`,
+`sys_metadata`, `sys_metadata_delete`, `sys_atf_test_result` and `sys_atf_test_suite_result`. Two apparent
+non-zeros were an invalid-field trap — an unknown field in `sysparm_query` is silently ignored and the
+unfiltered table total comes back — `sys_ui_application?titleLIKE…` = 19 and `sp_portal?urlLIKE…` = 9; with the
+real columns (`name`, `url_suffix`) both read **0**, and `sp_portal`'s 9 rows are the stock portals (cab, mesp,
+kb, benchmarks, esc, perf, sp, sp_config, swp). `sys_package` / `sys_store_app` are ACL-refused to this account
+("Failed API level ACL Validation") and were not readable either before or after.
+
+### 7. The ten zero-state checks, with raw evidence
+
+Re-run in full, from the top, after the last removal. **PASS = 10 / FAIL = 0.**
+
+**1. `sys_scope` for `x_casemgmt` → zero records**
+
+```
+$ curl -s --user "$A" -H 'Accept: application/json' "$U/api/now/table/sys_scope?sysparm_query=scope%3Dx_casemgmt"
+{"result":[]}
+```
+
+**2-4. The three table endpoints → HTTP 400 "Invalid table" (this instance's confirmation that a table is gone)**
+
+```
+$ curl -s -w "\nHTTP=%{http_code}\n" ... "$U/api/now/table/x_casemgmt_case?sysparm_limit=1"
+{"error":{"message":"Invalid table x_casemgmt_case","detail":null},"status":"failure"}
+HTTP=400
+$ ... x_casemgmt_case_task
+{"error":{"message":"Invalid table x_casemgmt_case_task","detail":null},"status":"failure"}
+HTTP=400
+$ ... x_casemgmt_case_party
+{"error":{"message":"Invalid table x_casemgmt_case_party","detail":null},"status":"failure"}
+HTTP=400
+```
+
+**5. `sys_user_role` for the three scoped roles → zero records**
+
+```
+$ ... "sys_user_role?sysparm_query=nameINx_casemgmt_case_manager%2Cx_casemgmt_case_agent%2Cx_casemgmt_case_viewer"
+{"result":[]}
+cross-check nameLIKEx_casemgmt count=0
+```
+
+**6. `sys_choice` queried directly for the three tables' choice-typed fields → zero rows**
+
+```
+$ ... "sys_choice?sysparm_query=nameINx_casemgmt_case%2Cx_casemgmt_case_task%2Cx_casemgmt_case_party"
+{"result":[]}
+per-field cross-check (case.type/status/priority/pending_reason, task.type/status, party.party_type) count=0
+nameSTARTSWITHx_casemgmt count=0
+nameLIKEx_casemgmt count=0
+sys_choice_set nameLIKEx_casemgmt count=0
+```
+
+**7. `sys_number` counters for the three tables → zero rows**
+
+```
+$ ... "sys_number?sysparm_query=categoryINx_casemgmt_case%2Cx_casemgmt_case_task%2Cx_casemgmt_case_party"
+{"result":[]}
+cross-check prefixINCASE,TASK,PARTY:
+{"result":[{"sys_id":"4","prefix":"TASK","sys_scope":{...,"value":"global"},"category":{...,"value":"task"}}]}
+```
+
+The single row the cross-check returns is the out-of-box **global** `task` counter (`sys_id` `4`, scope
+`global`), which is not this application's and was deliberately preserved.
+
+**8. `sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt` → zero, the excluded package's own record aside**
+
+```
+$ ... "sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt&sysparm_fields=sys_id,name,state,sys_mod_count"
+{"result":[{"sys_id":"9929f50df18ccec91ea13b2a3bccfc90","name":"x_casemgmt_case_management v1.0.0","sys_mod_count":"0","state":"committed"}]}
+raw count=1  → excluding that record = 0
+```
+
+`sys_mod_count` = **0** on that row, before and after this step: it was never opened, never previewed, never
+loaded into, never modified. It is the one record the directive excludes, and it is excluded from this count.
+
+**9. `sys_update_set?sysparm_query=nameLIKEx_casemgmt` → zero records**
+
+```
+$ ... "sys_update_set?sysparm_query=nameLIKEx_casemgmt"
+{"result":[]}
+$ ... "sys_update_set?sysparm_query=application%3D82b99028936f74320d74d6f88357a5af"
+{"result":[]}
+```
+
+**10. Scoped ACLs, role links, grants, dictionary, table records and ATF definitions → zero rows**
+
+```
+sys_security_acl        nameSTARTSWITHx_casemgmt                                    => 0
+sys_security_acl        sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_security_acl_role   sys_user_role.nameIN<the three roles>                        => 0
+sys_security_acl_role   sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_user_has_role       role.nameIN<the three roles>                                 => 0
+sys_dictionary          nameIN<the three tables>                                     => 0
+sys_documentation       nameIN<the three tables>                                     => 0
+sys_db_object           nameIN<the three tables>                                     => 0
+sys_atf_test            sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_atf_test_suite      sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_atf_step            sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_atf_test_suite_test sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_metadata            sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+sys_update_version      application=82b99028936f74320d74d6f88357a5af                 => 0
+sys_hub_flow            sys_scope=82b99028936f74320d74d6f88357a5af                   => 0
+SUM of check-10 counters = 0
+```
+
+Every earlier partial pass was followed by an explicit removal and then a re-run of **all ten** checks from
+the top; the pass recorded above is the complete final pass, not an aggregate of partial ones.
+
+### 8. Collateral proof — global totals before and after
+
+Snapshotted before the teardown and re-read after the last removal. Every delta equals the inventory in §3;
+nothing unrelated was destroyed.
+
+| Table | Before | After | Δ | Table | Before | After | Δ |
+|---|---:|---:|---:|---|---:|---:|---:|
+| `sys_user` | 638 | 635 | −3 | `sys_atf_test` | 206 | 186 | −20 |
+| `sys_user_group` | 52 | 51 | −1 | `sys_atf_test_suite` | 49 | 48 | −1 |
+| `core_company` | 179 | 177 | −2 | `sys_atf_step` | 2345 | 2165 | −180 |
+| `sys_user_role` | 620 | 617 | −3 | `sys_report` | 656 | 648 | −8 |
+| `sys_security_acl` | 43739 | 43713 | −26 | `pa_dashboards` | 5 | 3 | −2 |
+| `sys_security_acl_role` | 40617 | 40590 | −27 | `sp_portal` | 10 | 9 | −1 |
+| `sys_user_has_role` | 3884 | 3884 | **0** | `sp_page` | 121 | 119 | −2 |
+| `sys_db_object` | 6293 | 6290 | −3 | `sp_widget` | 296 | 293 | −3 |
+| `sys_number` | 148 | 145 | −3 | `sys_ws_definition` | 245 | 243 | −2 |
+| `sys_choice` | 18985 | 18961 | −24 | `sys_ui_action` | 2479 | 2473 | −6 |
+| `sys_hub_flow` | 349 | 342 | −7 | `sys_ui_policy` | 2905 | 2903 | −2 |
+| `sys_script` | 5671 | 5664 | −7 | `sys_update_set` | 5 | 3 | −2 |
+| `sys_script_include` | 4785 | 4783 | −2 | `sys_remote_update_set` | 2 | 1 | −1 |
+| `sys_dictionary` | 154187 | 154077 | −110 | `sys_documentation` | 145236 | 145130 | −106 |
+
+`sys_user_has_role` at **0** is consistent with §7 of the Step 5-6 section: the three grants were never
+created, because this release refuses them from any update set. The dictionary and documentation deltas
+(−110 / −106) are the three tables' own columns plus the platform's per-table system columns. Stock endpoints
+all still answer HTTP 200 and stock dictionary counts are intact (`sys_user` 67, `sys_user_group` 20,
+`core_company` 45, `task` 71, `incident` 26, `sys_user_role` 12); `sys_dictionary` queried by
+`nameCONTAINSx_casemgmt` and by `referenceCONTAINSx_casemgmt` both read **0**.
+
+### 9. Browser confirmation — the empty end state, observed rather than only queried
+
+Driven in a real headless Chrome under this unit's own control (private profile, private debugging port,
+process stopped cleanly afterwards; the checkpoint provides no browser-subagent tool, so the session was
+driven directly over CDP). A "not found" or absent result is the **expected, correct** outcome for every
+observation below.
+
+| Observation | URL | What the page showed |
+|---|---|---|
+| Portal, authenticated as `admin` | `/x_casemgmt_case_portal` | **"Page not found — The page you are looking for could not be found."** |
+| Portal submit page, authenticated | `?id=x_casemgmt_case_submit` | same "Page not found" |
+| Portal, signed out | `/x_casemgmt_case_portal` | HTTP 302 → `/session_timeout.do` login page; no portal renders |
+| Custom Applications list | `/sys_app_list.do` | **"Unfiltered Custom Applications list showing 0 records … No records to display"**; page text contains neither `casemgmt` nor `case management` |
+| Applications, filtered on the scope | `/sys_scope_list.do?sysparm_query=scope=x_casemgmt` | **"Filtered Applications list showing 0 records … No records to display"** |
+| Anonymous REST endpoint | `GET /api/x_casemgmt/case_status_lookup?number=CASE9000002` | **HTTP 401** — the endpoint no longer serves |
+
+Screenshots (agent scratch, not repository files):
+
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-after-teardown-authenticated.png` — the portal URL, authenticated, "Page not found"
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-after-teardown.png` — the portal URL signed out, redirected to login
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-portal-submit-after-teardown.png` — the submit page, "Page not found"
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-app-list-after-teardown.png` — Custom Applications, 0 records
+- `/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/shots/u5-scope-list-after-teardown.png` — Applications filtered on `scope=x_casemgmt`, 0 records
+
+### 10. Zero-state statement
+
+The timestamp is the instance's own, not this agent's host clock: the `Date` response header read
+`Tue, 08 Sep 2026 22:51:41 GMT`, corroborated by `new GlideDateTime().getValue()` executed on the instance
+(`2026-09-08 22:51:41`, displaying as 15:51:41 in US/Pacific — the documented 7-hour offset) and by the
+`sys_created_on` of the syslog row that script wrote.
+
+> **instance zero-state confirmed at 2026-09-08T22:51:41Z, no residue remaining**
+
+### 11. This teardown is intentional and expected — not a failure state
+
+The goal of this task was a single, verified, portable XML file, not a live running instance. The verified,
+final Update Set XML from Step 6 is the durable artifact; the live instance was never meant to hold the proof,
+and after this step it holds none of it. A clean, empty instance is therefore the **correct, successful end
+state** of this task, and the missing application, the unreachable portal URL, the absent dashboards and the
+absent demo data are all expected consequences of it rather than regressions, unmet gates or AAP deviations.
+
+What the AAP asked to be confirmed on a live instance (§0.7.1's post-commit deployable state, §0.7.2's
+deployment-step items 3-4 and its portal-URL deliverable, and every §0.7.3 gate that presupposes a live
+instance) is discharged instead by the Step 5c post-commit evidence recorded in the Step 5-6 section plus the
+checksum-recorded XML named below — which is what the directive at lines 180-186 instructs.
+
+The Step 6 file is what gets redeployed later, to this same instance or to any other, as a **separate
+deployment step outside this task's scope**. Nothing in this task's remit re-installs it, and nothing needs to
+be undone before it is installed: the instance is now the clean target such an install wants.
+
+### 12. EXIT CONDITION — item by item
+
+**(1) One file, at the canonical path, checksum-recorded.**
+`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml` —
+**522** payload blocks, **3,114,377** bytes,
+
+> SHA-256 `b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`
+
+re-computed independently by this unit with `sha256sum` against the file on disk after Step 6 completed, and
+matching the value Step 6 recorded, character for character. `ls update-set/` shows exactly two files: this
+one and the untouched package named in §14. `xmllint --noout` parses it cleanly, and every payload block
+carries a `<payload_hash>`, as a genuine platform export does.
+
+**(2) Proven by a real preview and commit, on this instance reset to a genuine zero-state immediately before
+that exact import, with no intervening patch.** Cited from the Step 5-6 section, which measured it:
+
+- Step 5b emptied the instance first, and its zero-state was proven the same way this step's was — all three
+  table endpoints HTTP 400, `sys_scope` empty, no `x_casemgmt` update-set records.
+- The package was uploaded and located by **its own descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`,
+  never by a name-ordered locator, with the loaded child count asserted at **522 = the file's own block count,
+  exactly**.
+- Preview: **0 `type=error` and 0 `type=warning`** problems, with **no** problem row set to
+  `skip_collision`, `ignored` or `skipped` — the count is genuinely zero, not zeroed.
+- Commit: a **single** native *Commit Update Set* action at **2026-09-08 21:27:27 UTC**, reaching
+  `state=committed`. Nothing ran between the teardown and the commit, and nothing ran after it to make any
+  post-commit check pass — no remediation script, no second commit, no live-instance patch.
+- Installed with everything intact: 3 tables at HTTP 200 with **real physical storage** and rows **10 / 10 /
+  8**; `sys_dictionary` and `sys_documentation` 21 / 14 / 13 each; 3 `sys_db_object`; **3 roles**; **26** scoped
+  ACLs with **27 `sys_security_acl_role` role links** (manager 14 / agent 10 / viewer 3; per table case 11 /
+  task 8 / party 8); **24 choice values** from 7 native `sys_choice_set` composites at 2 / 6 / 4 / 3 / 4 / 3 /
+  2; 3 `sys_number` counters; 7 flows active and published; 8 reports; 2 rendering dashboards; 1 portal with 2
+  public pages and 3 widgets; 2 anonymous REST endpoints; 20 ATF tests + 1 suite + 180 steps + 20 suite-tests;
+  and **data linkage resolving** — every seeded task and party pointing at its case, and the case references
+  resolving by number.
+- Two residual deltas were reported rather than papered over (Step 5-6 §7): `sys_user_has_role` = 0 (Role
+  Management V2 refuses those payloads from any update set on this release; the native remedy is the role
+  form's *Edit Members* related list) and `sys_grid_canvas_pane` = 0 (those 8 rows point at `sys_portal`
+  widget instances, not application files). Both dashboards still render from the committed report and
+  placement records.
+
+**(3) The ATF suite result is current against this exact file.** Cited from the Step 7 section, which ran it
+against the artifacts this package's commit created, after that commit and against nothing else:
+
+- Suite result **`TES0001006`** (`sys_id` `027c049093174b1009aa70d19dba109e`), created **2026-09-08 22:09:18
+  UTC**: 20 tests — **4 Success · 16 Failure · 0 Error · 0 Skipped**; 180 steps = 64 success + 16 failure +
+  100 skipped. Passing: ATF 01, ATF 18, ATF 19, ATF 20.
+- All sixteen failures are itemized by name in the Step 7 section, and **all sixteen are classified (b) — new
+  defect** rather than (a) — accepted-failure-register: they share **one root cause**, that the three demo
+  personas hold no role grants, which is the same `sys_user_has_role` class the package cannot carry. None of
+  the sixteen matches the project's accepted-failure register, and the stale `TES0001005` = 17 / 3 / 0 / 0
+  baseline is superseded and is not quoted as a result anywhere.
+- The sixteen, by name — ATF 02 (manager full CRUD), ATF 03 (agent create / assigned-only read-write / no
+  delete), ATF 04 (viewer read-only), ATF 05 (field-level ACLs on `assigned_group` and `assigned_agent`), ATF
+  06 (RBAC mirror on task and party), ATF 07 (agent assigned-only on task and party), ATF 08 (Draft → Open
+  requires `assigned_group`), ATF 09 (Open → In Progress requires an agent in the group), ATF 10 (In Progress
+  ↔ Pending sets and clears `pending_reason`), ATF 11 (task-closure gate blocks In Progress → Resolved with the
+  verbatim message), ATF 12 (Resolved → Closed requires the manager role and auto-sets `closed_date`), ATF 13
+  (any status back to Draft is prohibited), ATF 14 (Closed is terminal), ATF 15 (form: resolving with an open
+  task is blocked), ATF 16 (form: returning to Draft is blocked) and ATF 17 (form: a Closed case cannot leave
+  the terminal state) — each with its `atf/` filename, first failing step and exact message in the Step 7
+  section, §5.
+- Per directive lines 166-167, ATF failures do not block shipping the Step 6 file, and per the adjudicated
+  reading of D10.5(b)/D10.6 the (b) classification does not trigger a Step 5a restart; the failures are
+  escalated in the report rather than patched live, because any fix would require a full Step 5a restart and
+  never a live patch.
+- The 13-assertion transition harness was also re-run on this package's committed artifacts:
+  **`TOTAL=13 PASSED=13 FAILED=0`**, 2026-09-08 22:17:27 UTC.
+
+**(4) The verification method, stated explicitly — see §13, which states it on its own because the directive
+requires it to be unmissable.**
+
+**(5) Nothing carried forward.** Per directive lines 199-200, no part of this exit condition rests on a prior
+report's verification. Every Step 5 check — the zero-state proof, the upload, the descriptor lookup, the child
+count, the preview problem counts by type, the single commit, and the entire post-commit census — was freshly
+re-run by the order-2 unit against **this specific, final export**, and it is those fresh checks that are
+cited above. The ATF suite and the transition harness were likewise re-measured against this package rather
+than inherited; both identifiers (the suite's `sys_id` and the scope `sys_id`) were re-queried after the
+commit rather than taken from any prior report, because both changed when the package was committed.
+
+### 13. The verification caveat, stated on its own
+
+**Verification used a same-instance reset-and-reimport, not an independent second instance.** There is one
+Personal Developer Instance available to this task and provisioning a second one is out of scope, so the
+closest achievable proxy for a clean-instance import was used: the instance was torn down to a proven
+zero-state and the exact candidate bytes were then uploaded, previewed and committed onto it.
+
+The residual risk this leaves is not fully eliminated: **instance-level cache, index or metadata that a full
+teardown might not reset** could, in principle, have contributed to the clean preview and the successful
+install. Specifically — platform metadata caches, table-descriptor and dictionary caches, security-manager
+caches, and any residual index or database artifact that survives a scope deletion — were never independently
+proven absent, only proven not to be visible to the ten record-level checks that Step 5b and this step ran. A
+genuinely independent second PDI is the only thing that closes that gap, and this task did not have one.
+Whoever reads this report should treat the Update Set gate as **met on these exact bytes, on this instance, by
+this method**, and should treat an install onto a different instance as the remaining unproven case.
+
+### 14. Closing inventory for whoever reads this next
+
+**The two packages deleted at Step 6, with their provenance.** Both were removed with `git rm`, so their bytes
+remain recoverable from git history; neither was moved to an archive directory and no archive directory was
+created.
+
+| Deleted file | Payload blocks | Bytes | SHA-256 | Why superseded |
+|---|---:|---:|---|---|
+| `update-set/x_casemgmt_case_management_update_set.REBUILT-DEPENDENCY-ORDERED.xml` | 988 | 4,062,067 | `e109e1d107e28401cbcc74a7e0006f10cfa68d668560843d6e0fee6f8b79408d` | hand-authored rather than platform-exported; its records were the input to the native rebuild, and the consolidation produced and gated a platform export in its place |
+| `update-set/x_casemgmt_case_management_update_set.AMENDED-NOT-GATED.xml` | 935 | 3,973,569 | `9f3ea74c043c0e2c966d4b4314dc6c0868583780becf79316d792da1d9cf60a9` | never gated on its own complete bytes; superseded by the gated export |
+
+The file the canonical path held before Step 6 was 926 blocks / 3,781,097 bytes /
+`7292a6fe30413a9fb0b115e160c668edb7487b4391865b21a011a7be1add66b7`; it was replaced by the gated export, and
+that replacement is what made the seven forward-looking documents stale (see §16).
+
+**The FALLBACK package was never touched at any point in this task.** `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`
+was not opened, not read for reference, not checksummed, not diffed, not archived, not deleted, and not
+included in any count or comparison — by this unit or by any of the four units before it. It is proven
+unmodified by `git status` and `git diff --stat` alone, which show it absent from the diff. Its own instance
+record (`sys_remote_update_set` `9929f50df18ccec91ea13b2a3bccfc90`, `sys_mod_count` 0, `state=committed`) was
+excluded structurally by `sys_id` from every deletion loop and every count in this section, and it still
+carries `sys_mod_count` 0 after the teardown.
+
+**Which scripts were run, and why** (from the Step 3-4 section, D3.6):
+
+| Script | Run? | Why |
+|---|---|---|
+| `scripts/create_choice_values.js` | **RUN** | newly authored for this task (785 lines, ES5, idempotent): no standalone choice-only script existed, and Update Set commit does not transport `sys_choice` rows, so the 24 values across the 7 choice fields were created natively via the Table API before the Step 5a export |
+| `scripts/seed_demo_data.js` | **RUN**, unmodified | the case/task/party linkage fix; it contains no `sys_choice` handling |
+| `scripts/post_import_remediation.js` and its Fix Script twin `scripts/sys_script_fix_x_casemgmt_post_import_remediation.xml` | **NOT RUN** | not choice-only: its `ensureTable`, dictionary, ACL and number branches — including a destructive table delete — would have mutated the Step 2 natively-committed rebuild output, which the directive classifies as a CRITICAL trigger. The five measured reasons are recorded in the Step 3-4 section |
+| `scripts/pre_delete_collateral_guard.js` | **RUN**, unmodified, read-only | used here in §4 to bound the blast radius before the teardown |
+| `scripts/transition_logic_regression_assertions.js` | **RUN** | the 13-assertion harness, re-run against this package's committed artifacts (§12 item 3) |
+
+**No user-specified Rules exist for this project.** `review_rules` reports "No user rules provided", so there
+was no Rule-versus-directive conflict anywhere in this task. The work was therefore held to enterprise-standard
+best practice plus the AAP's standing constraints that the directive does not touch and no override relaxes:
+no hardcoded `sys_id` in package artifacts, synthetic data only with no PII, scope-namespace exclusivity with
+zero global-scope writes, no global ACLs and no stock-role grants, no SMTP or email configuration, no
+ServiceNow Store apps, AAP §0.5.2 dependency ordering in the shipped package, and no secret — instance URL,
+username, password or session token — written into any repository file.
+
+**Outcome classification.** The run did **not** end CRITICAL or BLOCKED. Step 5c was a clean pass on the first
+gated attempt after one earlier failure cycle (1 of the 2 permitted, recorded in the Step 5-6 section), the
+canonical file was replaced with the gated export, and the instance was then emptied. Had the run ended
+CRITICAL, this section would record that the canonical file had been left unchanged and why; it does not,
+because it did not.
+
+### 15. Evidence artifacts for this step
+
+Raw command-and-response captures and run logs (agent scratch, not repository files) in
+`/tmp/blitzy/scratch/7871c364-a98a-4b0b-9eda-3e6a8571a6d2/dest/u5/`: `ten_checks.txt` (all ten checks with the
+exact curl command above each raw body), `ten_checks_final.txt` (the final full pass), `purge_log.txt` (the
+deletion ledger, `found`/`deleted` per class), `global_before.txt` / `global_after.txt` (the 28 collateral
+counters), `guard_out.html` (the collateral guard's enumeration), `browser_report.json` /
+`browser_report2.json` (the browser observations quoted in §9) and the five screenshots listed there.
+
+Because the instance no longer holds the application, these captures and the numbers in this section are the
+durable record of the teardown; there is nothing left on the instance to re-measure them against, which is the
+intended outcome.
+
+### 16. Documentation impact of Step 6's two deletions — closed
+
+Step 6 deleted two files and replaced the canonical package's bytes, which left the project's forward-looking
+documentation pointing at filenames that no longer exist and quoting an identity that no longer ships. That
+impact was closed in seven documents — `README.md`, `docs/validation-gates.md`, `docs/deployment.md`,
+`scripts/round_trip_verify.md`, `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`,
+`docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` and `docs/ATF_MANUAL_TEST_PLAN.md` — and bounded to exactly two
+categories of statement:
+
+- **(a) a reference to a file that no longer exists** — re-pointed at
+  `update-set/x_casemgmt_case_management_update_set.xml`, or, where the sentence existed only to distinguish the
+  candidate packages, replaced with a short factual note that both were superseded and deleted in this
+  consolidation, citing this report;
+- **(b) a statement naming a superseded package as the artifact that ships** — corrected to the canonical
+  identity (522 blocks / 3,114,377 bytes / `b2217224…`), and, where the statement described verification
+  status, corrected to say the gate was met by a same-instance reset-and-reimport rather than an independent
+  second PDI, with the residual risk named.
+
+81 dated correction blocks were written across the seven files (per file, cat-(a) / cat-(b) statements:
+README 4 / 7 · validation-gates 4 / 6 · deployment 5 / 7 · round_trip_verify 6 / 9 ·
+PDI_LIMITATIONS_AND_KNOWN_ISSUES 6 / 33 · HUMAN_DEPLOYMENT_RECREATE_GUIDE 3 / 7 · ATF_MANUAL_TEST_PLAN 1 / 1).
+A re-grep afterwards found **0** statements still pointing at a deleted filename or claiming a superseded
+package ships outside a dated, explicitly-retained historical block.
+
+Left deliberately untouched: the `docs/refine-run/` run records (`PHASE0-1.md`, `PHASE1-REBUILD.md`,
+`PHASE2.md`, `PHASE3-ATF.md`, `FINAL-REPORT.md`, `run-state.json`), which record past measurements at past
+timestamps and are stale by design — proven byte-identical by `git diff`; the four earlier sections of this
+report; every existing FALLBACK mention in every document, byte-identical, with corrections placed adjacent to
+those sentences rather than inside them and with no such reference introduced by any new text in those seven
+documents; and everything outside the two categories — no rewording, restructuring, reformatting, link-fixing
+or AAP-layout tidying, and no deletion of the extra scripts and documents the AAP's enumerated layout omits.
+
+### 17. Hand-off
+
+Nothing follows this step on the instance: it holds no `x_casemgmt` scope, tables, dictionary rows, roles,
+ACLs, role links, grants, choices, number counters, flows, reports, dashboards, portal artifacts, REST
+endpoints, ATF definitions, seed data or update-set records of this application, and that is the intended end
+state. The deliverable is the file at
+`servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, SHA-256
+`b2217224888fb9b6de664ae816dcee8748507c37e9da0f2d259cc676cd4105a4`. Installing it is a separate deployment
+step outside this task's scope; a reader doing that should note the one native step it cannot carry (the three
+`sys_user_has_role` grants, via each role form's *Edit Members* related list) and the caveat in §13.
