@@ -16,8 +16,13 @@ longer the ones §1 and §8 below measure**:
 The seven amendments, each traceable to the finding it answers:
 
 1. **F01** — the three `sys_user_has_role` payloads were **removed**. Role Management V2 refuses them
-   on this release (§7 proved it), so their only effect was to make an otherwise clean commit report
-   "Failed at 100% — some updates failed to commit" and log three skipped rows. The manual sequence a
+   on this release (§7 proved it), so their effect was to make the commit report
+   "Failed at 100% — some updates failed to commit" and log three skipped rows. *(CORRECTED 2026-09-09, CR3
+   F04: this read "an **otherwise clean** commit". Withdrawn — a commit the platform reports as having failed
+   updates is not clean, otherwise or not, and directive lines 113-120 (INTERP-10) define the gate as one
+   clean commit. Removing the refused payloads was right; it does not retrospectively make that attempt a
+   pass, and no byte sequence in this project has yet produced a commit the platform reported as clean.)*
+   The manual sequence a
    deployer can run instead is written out in
    [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md` §5h](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md), and the
    capability gap is recorded as blocking in
@@ -2020,10 +2025,13 @@ The file it replaced measured 3,781,097 bytes / 926 blocks / sha256
 still names the 926-, 935- or 988-block artifact, or a superseded checksum, as the shipping package is now
 stale by design and needs re-pointing to the value above.
 
-`update-set/` ends with **exactly two files**: this canonical package and the FALLBACK package. The
-FALLBACK file was not opened, read, checksummed, diffed, archived, deleted, or included in any count or
-comparison; that it is unchanged is shown by `git status` and an empty `git diff --stat`, and its own
-instance record was excluded by `sys_id` from every teardown sweep.
+*(CORRECTED 2026-09-09, CR3 F08 second pass. A sentence here counted the contents of `update-set/` and named
+the excluded package as one of the two files in it. That count is **withdrawn**: directive lines 221-223
+forbid including that artifact in any count or comparison, and a two-file total is such a count. Nothing in
+this report rests on it — what is claimed about the canonical package is measured from the canonical path
+alone.)* The excluded file was not opened, read, checksummed, diffed, archived or deleted; that it is
+unchanged is shown by `git status` and an empty `git diff --stat`, in which it does not appear, and its own
+instance record was excluded by `sys_id`, structurally and before enumeration, from every teardown sweep.
 
 ### 9. Hand-off
 
@@ -2803,8 +2811,12 @@ re-computed with `sha256sum` against the file on disk (`sha256sum
 servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, re-run at code review
 CR3 on 2026-09-09 and character-for-character identical to the value the CR1 amendment at the top of this
 report records), with `wc -c` giving the byte count and `grep -o '<sys_update_xml action=' | wc -l` giving
-522. `ls update-set/` shows exactly two files: this one and the excluded package named in §14. `xmllint
---noout` parses it cleanly. **`<payload_hash>` count re-measured at CR3: 515 of the 522 blocks carry one.**
+522. `xmllint
+--noout` parses it cleanly. *(CORRECTED 2026-09-09, CR3 F08 second pass: a sentence here read "`ls
+update-set/` shows exactly two files: this one and the excluded package named in §14". That is **withdrawn** —
+a directory listing that resolves to a count of two is a count that includes the excluded artifact, which
+directive lines 221-223 forbid, and no conclusion in this report rests on it. What is asserted about the
+canonical file is asserted from the canonical file's own path alone.)* **`<payload_hash>` count re-measured at CR3: 515 of the 522 blocks carry one.**
 The seven that do not are exactly the blocks the CR1/CR2 remediation authored or rewrote rather than the
 platform exporting them — `sys_script_include_95e90fa1…` (the `CasePortalService` fix), `sys_ws_operation_f3b3b39c…`
 (the lookup's HTTP 429 path), the two `sys_rate_limit_rules_…` additions, `sp_widget_e992deb0…` (the lookup
@@ -3030,17 +3042,27 @@ zero-state (CR2 F06 — recorded, not proven: see Step 5-6 §3) and the candidat
 > run on them. Both statements are true at once and neither replaces the other.
 
 The residual risk this leaves is not fully eliminated: **instance-level cache, index or metadata that a full
-teardown might not reset** could, in principle, have contributed to the clean preview and the successful
-install. Specifically — platform metadata caches, table-descriptor and dictionary caches, security-manager
+teardown might not reset** could, in principle, have contributed to the clean preview and to the install
+reaching `state=committed`. *(CORRECTED 2026-09-09, CR3 F04 second pass: this sentence read "the clean
+preview and the successful install". The preview was clean; the install was **not successful** — the
+platform's own verdict on it was "Failed at 100% — the update set commit completed but some updates failed to
+commit", with three `sys_user_has_role` payloads refused. "Successful install" is withdrawn wherever it
+described that attempt.)* Specifically — platform metadata caches, table-descriptor and dictionary caches, security-manager
 caches, and any residual index or database artifact that survives a scope deletion — were never independently
 proven absent, only recorded as not visible to the ten record-level checks that Step 5b and this step ran —
 and, for the Step 5b pass specifically, that recording carries no raw evidence at all, so its
 raw-evidence obligation is **NOT DISCHARGED** and cannot now be (CR2 F06, CR3 F05;
 Step 8's ten checks do carry their verbatim requests and bodies). A
 genuinely independent second PDI is the only thing that closes that gap, and this task did not have one.
-Whoever reads this report should treat the Update Set gate as **met on the superseded revision
-(`b2217224…`), on this instance, by this method — and as NOT MET on the bytes at the canonical path
-(`751ceb…`), which no instance has ever loaded**. Two unproven cases therefore remain, and they are
+Whoever reads this report should treat the Update Set gate as **NOT MET, on either byte sequence.** On the
+bytes at the canonical path (`751ceb…`) it is not met because no instance has ever loaded them. On the
+superseded revision (`b2217224…`) it is not met either: its preview was clean, but its single native commit
+was reported by the platform as "Failed at 100% — the update set commit completed but some updates failed to
+commit", and directive lines 113-120 (INTERP-10) define the gate as **one clean commit**, which a commit with
+refused payloads is not. *(CORRECTED 2026-09-09, CR3 F04 second pass: this sentence read that the gate should
+be treated as "met on the superseded revision … by this method". That reading is withdrawn — it contradicted
+§12 item (2) and the platform's own verdict, and no gate on this project has yet been met on any byte
+sequence.)* Two unproven cases therefore remain, and they are
 different sizes: the shipping bytes have no gate at all until the re-gate in §12 item (2) is run on them,
 and even after that run an install onto a genuinely different instance stays unproven for as long as this
 project has one PDI.
@@ -3280,8 +3302,16 @@ categories" reading of this paragraph:
 > `SUPPORTED INSTALL ROUTE — 2026-09-09` block stating that the supported route is one clean commit of the exact
 > candidate — no remediation script, no live patching, no second commit.
 >
-> **A third category of change exists in these seven files and was not disclosed here. It is authorised, and
-> naming it is the honest accounting.** Beyond (a) and (b), the seven documents carry the amendments that
+> **A third category of change exists in these seven files and was not disclosed here. This report cannot
+> authorise it and does not try to: it is recorded, quantified, and escalated for an explicit human decision.**
+> *(Stated this way 2026-09-09 at CR3 second pass, finding F19: an earlier wording called this category
+> "authorised", which was a licence this document has no standing to grant. The checkpoint boundary authorises
+> two categories of change in these files and no others, so everything in the third column below sits outside
+> that boundary as written — while also being the resolution of blocking findings raised against this work by
+> code review checkpoints CR1, CR2 and CR3. Both of those are true at once, which is exactly why the decision
+> belongs to a human and not to this report. What a reverting party must know: each item discharges a
+> named blocking finding, so a revert re-opens that finding, and the same review that asked for the revert
+> records F12, F16, F17 and F18 as satisfied **by** this content.)* Beyond (a) and (b), the seven documents carry the amendments that
 > **code review checkpoints CR1, CR2 and CR3 required** — the blocked `sys_user_has_role` capability gap, the
 > anonymous-portal security exposures and their rate-limit perimeter, the `guest` `sys_id` exception recorded
 > as an AAP §0.7.2 violation, the Global-scope `sys_choice` runs recorded as violations, and CR3's own
@@ -3302,7 +3332,16 @@ categories" reading of this paragraph:
 > Reproduce any column with `git diff --numstat <range> -- <the seven paths>`. What is **not** in any column:
 > no rewording, restructuring, reformatting or link-fixing of a passage none of these findings reaches; no
 > AAP-layout tidying; and no deletion of the extra scripts and documents the AAP's enumerated layout omits
-> (their retention is authorised).
+> (their retention is authorised by OVERRIDE-R7, which does grant that).
+>
+> **What a human has to decide about the third column, stated as the open question it is.** Either (i) the
+> third column stands, in which case the checkpoint boundary that authorises only categories (a) and (b) in
+> these seven files needs widening on the record to cover review-mandated remediation; or (ii) it is reverted,
+> in which case the blocking findings it discharges — CR1's and CR2's capability-gap, portal-security and
+> scope-exclusivity disclosures, and CR3's identity, deleted-pointer, census, test-evidence and
+> Global-remediation corrections — re-open, and the documents return to presenting several identities as
+> current and directing Global-scope remediation with a second commit. Nothing in this report may be read as
+> having chosen (i). The measurements above are what the choice should be made on.
 >
 > **Certification 1 — the excluded package's documentation mentions are unchanged, and here is the proof.**
 > `git diff 03a0a1393c -- <the seven paths> | grep '^[+-]' | grep -c FALLBACK` returns **0**: across the whole

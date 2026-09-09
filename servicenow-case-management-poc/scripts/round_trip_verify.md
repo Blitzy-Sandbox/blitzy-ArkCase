@@ -196,6 +196,7 @@ commit, no remediation script, no live-instance patching**. Both constraints sta
 > choice-materialization fix to this package too. `90ee0249…` matches **no file in this tree**, so any
 > instruction still quoting it would send an operator to a checksum they cannot reproduce, and they would
 > correctly abort.
+> **[CR3 2026-09-09 · F15 — WITHDRAWN AS EVIDENCE.** The block immediately above records a byte-comparison result against an artifact this project's scope excludes. That assertion is **not evidence** about the package that ships and must not be relied upon for any check, digest or decision: the shipping identity is the one published in CURRENT ARTIFACT STATE at the top of this document, established from the canonical path alone. This correction performed no comparison of any kind and records none. The wording above is left unaltered because the text of such a line may not be edited.**]
 
 ## Purpose
 
@@ -279,6 +280,7 @@ The procedure has **six phases**. Each phase has a numbered checklist. Failure a
   the retained `…FALLBACK.xml`.** The superseded `a9204411…` / 926 blocks / 3,780,373 bytes (commit
   `f8454fb078`) and `4e28acae…` / 935 blocks / 3,944,374 bytes (commit `6efb13b141`) matched no file in the
   tree then either — that was the standing statement on 2026-09-05, retained as written.
+**[CR3 2026-09-09 · F15 — WITHDRAWN AS EVIDENCE.** The block immediately above records a byte-comparison result against an artifact this project's scope excludes. That assertion is **not evidence** about the package that ships and must not be relied upon for any check, digest or decision: the shipping identity is the one published in CURRENT ARTIFACT STATE at the top of this document, established from the canonical path alone. This correction performed no comparison of any kind and records none. The wording above is left unaltered because the text of such a line may not be edited.**]
 
   **CORRECTED 2026-09-08, superseding the 2026-09-05 correction above:**
   the shipping deliverable is the consolidated platform export —
@@ -504,6 +506,7 @@ Only proceed if Phase 2 completed with zero preview errors. Committing applies a
 > for the three tables went from 0 to 24 rows with the exact option labels on the real forms. What you still run
 > the steps below for is the seed linkage and `opened_date` — for which `scripts/seed_demo_data.js` in scope is
 > the relevant step.
+> **[CR3 2026-09-09 · F15 — WITHDRAWN AS EVIDENCE.** The block immediately above records a byte-comparison result against an artifact this project's scope excludes. That assertion is **not evidence** about the package that ships and must not be relied upon for any check, digest or decision: the shipping identity is the one published in CURRENT ARTIFACT STATE at the top of this document, established from the canonical path alone. This correction performed no comparison of any kind and records none. The wording above is left unaltered because the text of such a line may not be edited.**]
 
 On the shipping deliverable, a successful commit **does** produce a working application for everything the
 package can carry — schema, roles, ACLs, the 27 role links, the 24 choice values and the demo rows — measured
@@ -1095,6 +1098,7 @@ The REST sequence described in Phases 1–3 does not work here. What does:
 > three `sys_user_has_role` rows skipped, and on bytes since superseded by the ungated `751ceb61…` file
 > (CR3 F12) — consistent with the
 > *Pass / Fail Decision* block above. See [`../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` §0.11 and §10.0 item 1a](../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md) — item 1a is that round trip, closed on 2026-09-08 by the same-instance reset-and-reimport recorded above; item 0's wake of the retired `dev379024` is superseded and gates nothing.
+> **[CR3 2026-09-09 · F15 — WITHDRAWN AS EVIDENCE.** The block immediately above records a byte-comparison result against an artifact this project's scope excludes. That assertion is **not evidence** about the package that ships and must not be relied upon for any check, digest or decision: the shipping identity is the one published in CURRENT ARTIFACT STATE at the top of this document, established from the canonical path alone. This correction performed no comparison of any kind and records none. The wording above is left unaltered because the text of such a line may not be edited.**]
 
 ### Fail Criteria (Any One Triggers Fail)
 
