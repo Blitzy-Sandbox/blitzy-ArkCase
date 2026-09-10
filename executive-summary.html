@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Case Management Modernization — Executive Summary</title>
+
+  <!-- reveal.js core + theme (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/theme/white.min.css" id="theme">
+
+  <style>
+    :root{
+      --brand:#0b6bcb;        /* primary blue */
+      --brand-dark:#084a8c;
+      --accent:#16a34a;       /* success green */
+      --amber:#d97706;        /* risk amber */
+      --ink:#1f2937;          /* slate ink */
+      --muted:#6b7280;
+      --paper:#ffffff;
+      --soft:#f3f6fb;
+    }
+    .reveal{font-family:"Segoe UI",Helvetica,Arial,sans-serif;color:var(--ink);font-size:30px;}
+    .reveal h1,.reveal h2,.reveal h3,.reveal h4{color:var(--brand-dark);text-transform:none;letter-spacing:normal;font-weight:700;}
+    .reveal h1{font-size:1.9em;line-height:1.1;}
+    .reveal h2{font-size:1.45em;margin-bottom:.4em;}
+    .reveal h3{font-size:1.1em;color:var(--brand);}
+    .reveal p,.reveal li{line-height:1.35;}
+    .reveal section{text-align:left;}
+    .reveal .center{text-align:center;}
+    .reveal .lead{font-size:1.05em;color:var(--muted);}
+    .reveal small{color:var(--muted);font-size:.55em;}
+
+    /* Title slide */
+    .title-slide{background:linear-gradient(135deg,var(--brand) 0%,var(--brand-dark) 100%);color:#fff;border-radius:14px;padding:50px 60px;}
+    .title-slide h1,.title-slide h3,.title-slide p{color:#fff;}
+    .title-slide p.lead{color:#eaf2fb;}   /* override muted .lead so subtitle stays legible on the dark gradient card */
+    .title-slide .kicker{font-size:.62em;letter-spacing:.18em;text-transform:uppercase;opacity:.85;margin-bottom:.4em;}
+    .badge{display:inline-block;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);padding:.25em .7em;border-radius:999px;font-size:.5em;margin-top:.8em;}
+
+    /* Cards / grids */
+    .grid{display:grid;gap:18px;margin-top:.4em;}
+    .g2{grid-template-columns:1fr 1fr;}
+    .g3{grid-template-columns:1fr 1fr 1fr;}
+    .card{background:var(--soft);border:1px solid #e3eaf3;border-left:5px solid var(--brand);border-radius:10px;padding:16px 20px;}
+    .card.green{border-left-color:var(--accent);}
+    .card.amber{border-left-color:var(--amber);}
+    .card h4{margin:0 0 .25em 0;font-size:.82em;}
+    .card p,.card ul{margin:0;font-size:.66em;color:#374151;}
+    .card ul{padding-left:1.1em;}
+
+    /* Stat strip */
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:.3em;}
+    .stat{background:#fff;border:1px solid #e3eaf3;border-radius:12px;padding:14px;text-align:center;box-shadow:0 2px 10px rgba(11,107,203,.06);}
+    .stat .num{font-size:1.5em;font-weight:800;color:var(--brand);line-height:1;}
+    .stat .lbl{font-size:.5em;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:.4em;}
+
+    /* Pills / flow */
+    .flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:.5em;justify-content:center;}
+    .pill{background:#fff;border:2px solid var(--brand);color:var(--brand-dark);border-radius:999px;padding:.3em .85em;font-size:.62em;font-weight:600;}
+    .pill.term{border-color:var(--muted);color:var(--muted);}
+    .pill.start{background:var(--brand);color:#fff;}
+    .arrow{color:var(--brand);font-weight:800;font-size:.8em;}
+
+    /* before/after */
+    .ba{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;}
+    .ba .col{border-radius:10px;padding:14px 16px;font-size:.62em;}
+    .ba .legacy{background:#fdf2f2;border:1px solid #f3c9c9;}
+    .ba .modern{background:#eefaf1;border:1px solid #bfe6cb;}
+    .ba .col h4{margin:0 0 .35em 0;}
+    .ba .col ul{margin:0;padding-left:1.05em;}
+    .ba .mid{font-size:1.6em;color:var(--brand);font-weight:800;}
+
+    .reveal table{font-size:.6em;}
+    .reveal table th{background:var(--brand);color:#fff;}
+    .reveal table td,.reveal table th{padding:.35em .6em;}
+    .check{color:var(--accent);font-weight:800;}
+    .no{color:#b91c1c;font-weight:800;}
+    .tag{display:inline-block;background:var(--brand);color:#fff;border-radius:6px;padding:.08em .5em;font-size:.55em;font-weight:600;}
+    .tag.green{background:var(--accent);}
+    .tag.amber{background:var(--amber);}
+    .footer-note{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:.4em;color:var(--muted);}
+    .reveal ul.tight li{margin:.18em 0;}
+    .kpi-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:.4em;}
+    .kpi{background:#fff;border:1px solid #e3eaf3;border-radius:8px;padding:.4em .7em;font-size:.58em;}
+    .kpi b{color:var(--brand);}
+  </style>
+</head>
+<body>
+<div class="reveal">
+  <div class="slides">
+
+    <!-- 1. TITLE -->
+    <section data-background-color="#ffffff">
+      <div class="title-slide center">
+        <div class="kicker">Application Modernization &middot; Proof of Concept</div>
+        <h1>Case Management, Reimagined on ServiceNow</h1>
+        <p class="lead" style="margin-top:.6em;">Re-platforming the core of our ArkCase system into a modern, low-code cloud application</p>
+        <div class="badge">Executive Summary &nbsp;|&nbsp; Status: <strong>APPROVED</strong> for deployment</div>
+      </div>
+      <p class="center" style="margin-top:30px;"><small>Prepared for leadership review &middot; Independent code review: 7 of 7 areas approved, zero blocking issues</small></p>
+    </section>
+
+    <!-- 2. EXECUTIVE SUMMARY -->
+    <section>
+      <h2>The one-slide story</h2>
+      <p class="lead">We rebuilt the essential case-handling capabilities of our legacy ArkCase platform as a self-contained ServiceNow application &mdash; faster to change, cheaper to run, and secure by design.</p>
+      <div class="stats">
+        <div class="stat"><div class="num">7</div><div class="lbl">Capabilities delivered</div></div>
+        <div class="stat"><div class="num">3</div><div class="lbl">Data tables</div></div>
+        <div class="stat"><div class="num">2</div><div class="lbl">Self-service portal pages</div></div>
+        <div class="stat"><div class="num">2</div><div class="lbl">Leadership dashboards</div></div>
+      </div>
+      <div class="grid g3" style="margin-top:22px;">
+        <div class="card green"><h4>Built &amp; validated</h4><p>A complete, packaged application that passed an independent review with no blocking issues.</p></div>
+        <div class="card"><h4>No servers to manage</h4><p>Runs entirely on our ServiceNow cloud platform &mdash; no databases or app servers to maintain.</p></div>
+        <div class="card amber"><h4>One step remains</h4><p>Final "switch-on" verification on a live ServiceNow instance &mdash; a routine deployment task.</p></div>
+      </div>
+    </section>
+
+    <!-- 3. THE BUSINESS PROBLEM -->
+    <section>
+      <h2>Why change?</h2>
+      <p class="lead">Our legacy ArkCase platform is powerful but heavy &mdash; custom Java code, a separate database, and specialized servers that are slow and costly to evolve.</p>
+      <div class="grid g2" style="margin-top:.3em;">
+        <div class="card amber"><h4>The legacy reality</h4><ul class="tight">
+          <li>Custom-coded system requiring scarce specialist skills</li>
+          <li>Multiple moving parts: app servers, database, search engine, workflow engine</li>
+          <li>Every change is a code-build-deploy cycle</li>
+          <li>Security and audit must be built and maintained by hand</li>
+        </ul></div>
+        <div class="card green"><h4>The opportunity</h4><ul class="tight">
+          <li>Move to a low-code platform we already operate</li>
+          <li>Configure instead of code &mdash; changes in hours, not weeks</li>
+          <li>Inherit security, audit history, and reporting for free</li>
+          <li>Prove the approach on a focused, low-risk slice first</li>
+        </ul></div>
+      </div>
+      <p style="margin-top:18px;"><small>This proof of concept deliberately targets the highest-value, most representative slice of ArkCase &mdash; not a full replacement &mdash; to validate the approach before any larger commitment.</small></p>
+    </section>
+
+    <!-- 4. WHAT WE BUILT -->
+    <section>
+      <h2>What we built</h2>
+      <p class="lead">A single, self-contained ServiceNow application that an organization can install in one step and run end-to-end.</p>
+      <div class="grid g2">
+        <div class="card"><h4>For our case workers</h4><ul class="tight">
+          <li>Create, assign, and progress cases through their full lifecycle</li>
+          <li>Manage tasks and the people/organizations involved in each case</li>
+          <li>Operational dashboards available on day one</li>
+        </ul></div>
+        <div class="card"><h4>For the public / requesters</h4><ul class="tight">
+          <li>A simple web page to submit a case &mdash; no login required</li>
+          <li>A status-lookup page to check progress by case number</li>
+          <li>Internal details are never exposed externally</li>
+        </ul></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi"><b>Packaged</b> as one installable file</div>
+        <div class="kpi"><b>Self-contained</b> &mdash; no add-ons to purchase</div>
+        <div class="kpi"><b>Demo data included</b> &mdash; ready to show</div>
+        <div class="kpi"><b>Fully documented</b> for the deployment team</div>
+      </div>
+    </section>
+
+    <!-- 5. CAPABILITIES DELIVERED -->
+    <section>
+      <h2>Seven capabilities, all delivered</h2>
+      <div class="grid g3">
+        <div class="card"><h4>1 &middot; Case lifecycle</h4><p>The full journey of a case from intake to closure.</p></div>
+        <div class="card"><h4>2 &middot; Tasks</h4><p>Work items linked to a case; a case can't close with open tasks.</p></div>
+        <div class="card"><h4>3 &middot; Parties</h4><p>People and organizations associated to each case.</p></div>
+        <div class="card"><h4>4 &middot; Roles &amp; access</h4><p>Manager, Agent, and Viewer with appropriate permissions.</p></div>
+        <div class="card"><h4>5 &middot; Guided workflow</h4><p>Rules that enforce a valid, auditable case process.</p></div>
+        <div class="card"><h4>6 &middot; Public portal</h4><p>Submit and track cases without an account.</p></div>
+        <div class="card" style="grid-column:span 3;"><h4>7 &middot; Dashboards &amp; reporting</h4><p>Agent and manager views with live charts and lists &mdash; no separate reporting tool required.</p></div>
+      </div>
+    </section>
+
+    <!-- 6. DATA MODEL -->
+    <section>
+      <h2>How information is organized</h2>
+      <p class="lead">Three simple, connected record types &mdash; intentionally lean and easy to understand.</p>
+      <div class="grid g3">
+        <div class="card"><h4>Case</h4><p>The heart of the system: subject, type, status, priority, who's assigned, and who requested it.</p><p style="margin-top:.4em;"><span class="tag">12 fields</span></p></div>
+        <div class="card"><h4>Task</h4><p>A unit of work on a case: what, who, by when, and its status.</p><p style="margin-top:.4em;"><span class="tag">6 fields</span></p></div>
+        <div class="card"><h4>Party</h4><p>A person or an organization connected to a case, with their role.</p><p style="margin-top:.4em;"><span class="tag">5 fields</span></p></div>
+      </div>
+      <p class="center" style="margin-top:22px;"><span class="pill">Task</span> <span class="arrow">&rarr;</span> <span class="pill start">Case</span> <span class="arrow">&larr;</span> <span class="pill">Party</span></p>
+      <p class="center"><small>Tasks and Parties each link back to their parent Case.</small></p>
+    </section>
+
+    <!-- 7. CASE LIFECYCLE / STATE MACHINE -->
+    <section>
+      <h2>A guided, enforced case lifecycle</h2>
+      <p class="lead">Every case follows a clear path. The system blocks invalid steps and explains why &mdash; no bad data, no skipped steps.</p>
+      <div class="flow">
+        <span class="pill start">Draft</span><span class="arrow">&rarr;</span>
+        <span class="pill">Open</span><span class="arrow">&rarr;</span>
+        <span class="pill">In Progress</span><span class="arrow">&harr;</span>
+        <span class="pill">Pending</span><span class="arrow">&rarr;</span>
+        <span class="pill">Resolved</span><span class="arrow">&rarr;</span>
+        <span class="pill term">Closed</span>
+      </div>
+      <div class="grid g3" style="margin-top:24px;">
+        <div class="card green"><h4>Quality guardrails</h4><p>A case can't be resolved while it still has open tasks &mdash; enforced automatically.</p></div>
+        <div class="card"><h4>No going backwards</h4><p>Cases can't be returned to Draft; Closed is final. Mistakes are prevented up front.</p></div>
+        <div class="card"><h4>Two case types</h4><p>"General Inquiry" and "Complaint" each follow the same disciplined process.</p></div>
+      </div>
+    </section>
+
+    <!-- 8. ACCESS CONTROL -->
+    <section>
+      <h2>Security built in: who can do what</h2>
+      <p class="lead">Three roles map cleanly to how the team actually works. Access is enforced by the platform, not by hand-written code.</p>
+      <table>
+        <thead><tr><th>Role</th><th>Create</th><th>Read</th><th>Update</th><th>Delete</th></tr></thead>
+        <tbody>
+          <tr><td><b>Case Manager</b></td><td class="check">&#10004;</td><td class="check">All cases</td><td class="check">All cases</td><td class="check">&#10004;</td></tr>
+          <tr><td><b>Case Agent</b></td><td class="check">&#10004;</td><td>Assigned only</td><td>Assigned only</td><td class="no">&#10008;</td></tr>
+          <tr><td><b>Case Viewer</b></td><td class="no">&#10008;</td><td class="check">All cases</td><td class="no">&#10008;</td><td class="no">&#10008;</td></tr>
+        </tbody>
+      </table>
+      <div class="grid g2" style="margin-top:18px;">
+        <div class="card green"><h4>Least privilege</h4><p>Agents see and edit only the cases assigned to them or their team &mdash; sensitive assignment fields are extra-protected.</p></div>
+        <div class="card"><h4>Self-contained</h4><p>All security lives inside the new app; nothing in the wider platform is altered or weakened.</p></div>
+      </div>
+    </section>
+
+    <!-- 9. EXTERNAL PORTAL -->
+    <section>
+      <h2>Public self-service portal</h2>
+      <p class="lead">Requesters help themselves &mdash; reducing inbound calls and emails &mdash; while internal information stays private.</p>
+      <div class="grid g2">
+        <div class="card"><h4>Submit a case</h4><ul class="tight">
+          <li>Simple 5-field form, no login required</li>
+          <li>Instant confirmation with a tracking number</li>
+          <li>New cases land safely as "Draft" for staff review</li>
+        </ul></div>
+        <div class="card"><h4>Check status</h4><ul class="tight">
+          <li>Look up by case number</li>
+          <li>Shows only status, subject, and date opened</li>
+          <li>A clear "no case found" message when needed</li>
+        </ul></div>
+      </div>
+      <div class="card green" style="margin-top:16px;"><h4>Privacy by design</h4><p>The status page returns just three safe fields &mdash; assignments, internal notes, and contact details are never exposed to the public.</p></div>
+    </section>
+
+    <!-- 10. DASHBOARDS & REPORTING -->
+    <section>
+      <h2>Insight on day one</h2>
+      <p class="lead">Two ready-made dashboards turn case data into decisions &mdash; no separate business-intelligence tool needed.</p>
+      <div class="grid g2">
+        <div class="card"><h4>Agent Workspace</h4><ul class="tight">
+          <li>My open cases</li>
+          <li>My overdue tasks</li>
+          <li>My cases by status</li>
+        </ul></div>
+        <div class="card"><h4>Manager View</h4><ul class="tight">
+          <li>Cases by status, type, and priority</li>
+          <li>Average time to close</li>
+          <li>Cases opened in the last 30 days</li>
+        </ul></div>
+      </div>
+      <p style="margin-top:16px;"><small>All charts are powered by live case data &mdash; they stay current automatically as work progresses.</small></p>
+    </section>
+
+    <!-- 11. BUSINESS VALUE -->
+    <section>
+      <h2>Why this matters to the business</h2>
+      <div class="grid g3">
+        <div class="card green"><h4>Faster to change</h4><p>Configure, don't code. New fields, rules, and views in hours &mdash; not multi-week release cycles.</p></div>
+        <div class="card green"><h4>Lower cost to run</h4><p>No dedicated servers, database, or search engine to license, patch, and maintain.</p></div>
+        <div class="card green"><h4>Secure &amp; auditable</h4><p>Role-based access and a complete change history come standard with the platform.</p></div>
+        <div class="card"><h4>Better service</h4><p>Self-service intake and status lookup reduce manual handling and phone/email volume.</p></div>
+        <div class="card"><h4>Fewer specialists</h4><p>Built on a platform our teams already know &mdash; less reliance on rare legacy skills.</p></div>
+        <div class="card"><h4>Low-risk path</h4><p>A focused proof of concept de-risks any larger modernization decision.</p></div>
+      </div>
+    </section>
+
+    <!-- 12. ARCHITECTURE CHANGE -->
+    <section>
+      <h2>The architecture shift, in plain terms</h2>
+      <div class="ba">
+        <div class="col legacy">
+          <h4>Legacy ArkCase</h4>
+          <ul>
+            <li>Hand-written Java application</li>
+            <li>Separate database (MySQL)</li>
+            <li>Dedicated app, search &amp; workflow servers</li>
+            <li>Custom UI framework</li>
+            <li>Security &amp; reporting built by hand</li>
+          </ul>
+        </div>
+        <div class="mid">&rarr;</div>
+        <div class="col modern">
+          <h4>ServiceNow app</h4>
+          <ul>
+            <li>Configured, low-code application</li>
+            <li>Data managed by the platform</li>
+            <li>No servers &mdash; fully cloud-hosted</li>
+            <li>Standard, accessible web pages</li>
+            <li>Security, audit &amp; reporting built in</li>
+          </ul>
+        </div>
+      </div>
+      <p class="center" style="margin-top:20px;"><small>Same business outcomes &mdash; dramatically simpler to operate, secure, and evolve.</small></p>
+    </section>
+
+    <!-- 13. QUALITY & VALIDATION -->
+    <section>
+      <h2>Independently reviewed &amp; approved</h2>
+      <p class="lead">A structured, seven-area code review found <b>zero blocking issues</b>.</p>
+      <div class="stats">
+        <div class="stat"><div class="num" style="color:var(--accent);">7/7</div><div class="lbl">Review areas approved</div></div>
+        <div class="stat"><div class="num" style="color:var(--accent);">0</div><div class="lbl">Critical issues</div></div>
+        <div class="stat"><div class="num" style="color:var(--accent);">0</div><div class="lbl">Warnings</div></div>
+        <div class="stat"><div class="num">100%</div><div class="lbl">Files validated</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:20px;">
+        <div class="card green"><h4>What was checked</h4><p>Data model, workflow rules, security, business fidelity, the portal &amp; dashboards, test/demo data, documentation, and platform constraints.</p></div>
+        <div class="card"><h4>The result</h4><p>Every requirement we inspected is met faithfully, with only six minor, non-blocking notes recorded for transparency.</p></div>
+      </div>
+    </section>
+
+    <!-- 14. OPEN RISKS & NEXT STEPS -->
+    <section>
+      <h2>Open risks &amp; next steps</h2>
+      <p class="lead">The application is built and validated. The remaining items are routine deployment activities, not defects.</p>
+      <div class="grid g2">
+        <div class="card amber"><h4>1 &middot; Live "switch-on" verification</h4><p>Install on a live ServiceNow instance and run the seven functional checks. Requires a provisioned instance and admin access. Fully scripted and documented.</p></div>
+        <div class="card amber"><h4>2 &middot; Scope is intentionally focused</h4><p>This is a proof of concept &mdash; it covers the core slice, not every legacy feature (e.g., documents are out of scope by design).</p></div>
+        <div class="card"><h4>3 &middot; Email is off by design</h4><p>Notifications were deliberately excluded for the POC; they can be added later if the approach is adopted.</p></div>
+        <div class="card green"><h4>Recommendation</h4><p>Proceed to deploy on a target instance, complete the documented checks, and use the results to scope a broader rollout.</p></div>
+      </div>
+    </section>
+
+    <!-- 15. DEVELOPER ONBOARDING -->
+    <section>
+      <h2>For the team that deploys &amp; extends it</h2>
+      <p class="lead">Everything needed to install, verify, and grow the application is included in the package.</p>
+      <div class="grid g2">
+        <div class="card"><h4>Deploy in 4 steps</h4><ul class="tight">
+          <li>Import the single packaged file</li>
+          <li>Preview &mdash; expect zero errors</li>
+          <li>Commit to activate the application</li>
+          <li>Run the included script to load demo data</li>
+        </ul></div>
+        <div class="card"><h4>Verify &amp; extend</h4><ul class="tight">
+          <li>Follow the seven-gate checklist to confirm it works</li>
+          <li>Extend visually with the platform's low-code tools</li>
+          <li>Reference guides cover data model, workflow, security &amp; portal</li>
+        </ul></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi"><b>9</b> guidance documents</div>
+        <div class="kpi"><b>1</b> repeatable demo-data script</div>
+        <div class="kpi"><b>0</b> manual ID wiring &mdash; everything self-resolves</div>
+      </div>
+    </section>
+
+    <!-- 16. CLOSING -->
+    <section data-background-color="#ffffff">
+      <div class="title-slide center">
+        <div class="kicker">Summary &amp; Recommendation</div>
+        <h1>Built, validated, ready to deploy</h1>
+        <p class="lead" style="margin-top:.5em;">A modern, secure, low-cost case-management foundation &mdash; proven on a focused slice and approved with zero blocking issues.</p>
+        <p style="margin-top:1em;"><span class="badge">Deliverables: the installable application package &middot; full documentation &middot; this summary</span></p>
+      </div>
+      <p class="center" style="margin-top:26px;"><small>Recommended next step: deploy to a target ServiceNow instance and complete the documented go-live checks.</small></p>
+    </section>
+
+  </div>
+</div>
+
+<!-- reveal.js core (CDN) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    width: 1280,
+    height: 800,
+    margin: 0.06,
+    controls: true,
+    progress: true,
+    center: false
+  });
+</script>
+</body>
+</html>

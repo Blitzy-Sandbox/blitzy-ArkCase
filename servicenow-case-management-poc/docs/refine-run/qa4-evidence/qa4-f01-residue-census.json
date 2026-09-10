@@ -1,0 +1,2416 @@
+{
+ "purpose": "QA4 finding F01 - provable before/after census of the persistent app / demo-persona rows that survive a ServiceNow scope deletion",
+ "method": "residue.py (committed alongside) runs each predicate against the Table/Stats API as admin; counts are the platform's own",
+ "snapshots": {
+  "01_pre_teardown_app_installed": {
+   "captured_at_utc": "2026-09-10T10:00:28Z",
+   "f01_predicate_sum": 1245,
+   "predicates": {
+    "f01_sys_metadata_named": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 125
+    },
+    "f01_sys_metadata_named_upper": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEX_CASEMGMT",
+     "count": 125
+    },
+    "f01_navigator_history": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEx_casemgmt",
+     "count": 527,
+     "url_histogram": {
+      "x_casemgmt_case.do": 175,
+      "x_casemgmt_case_list.do": 155,
+      "x_casemgmt_case_party.do": 51,
+      "x_casemgmt_case_party_list.do": 34,
+      "x_casemgmt_case_task_list.do": 28,
+      "x_casemgmt_case_task.do": 26,
+      "sys_upgrade_history_log_list.do": 8,
+      "sys_choice_list.do": 7,
+      "sys_db_object_list.do": 6,
+      "sys_security_acl_role_list.do": 5,
+      "core_company_list.do": 3,
+      "sys_user_role_list.do": 3
+     },
+     "rows_captured": 527
+    },
+    "f01_recent_selection": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableSTARTSWITHx_casemgmt",
+     "count": 18,
+     "rows": [
+      {
+       "sys_id": "0268e2179347831009aa70d19dba1060",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "0cc3ad1b930f431009aa70d19dba1017",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "14e9df9b93cb831009aa70d19dba10b9",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "1b64219b930f431009aa70d19dba10db",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "47786593934f431009aa70d19dba10f0",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4869d45393c3431009aa70d19dba10ad",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "5364219b930f431009aa70d19dba10dc",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "569afa2a934f075009aa70d19dba1037",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "5eb45c32934b475009aa70d19dba1048",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "7ab821d3934f431009aa70d19dba10d9",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "823f860f9343031009aa70d19dba109e",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "8f786593934f431009aa70d19dba10ef",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "c8c3ad1b930f431009aa70d19dba1018",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "ce68e2179347831009aa70d19dba105e",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "dce9df9b93cb831009aa70d19dba10b6",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "f68a931f93cb831009aa70d19dba10f8",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "fab0597e9303875009aa70d19dba107d",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "fab8e993934f431009aa70d19dba1042",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      }
+     ]
+    },
+    "f01_report_chart_color": {
+     "table": "sys_report_chart_color",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 15,
+     "rows": [
+      {
+       "sys_id": "04cdff029347435009aa70d19dba10e4",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "2f8d7b029347435009aa70d19dba10ee",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "3fbdff029347435009aa70d19dba10d6",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "40cdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "48cdff029347435009aa70d19dba10e2",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "638d7b029347435009aa70d19dba10ac",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "6b8d7b029347435009aa70d19dba10ef",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "7bbdff029347435009aa70d19dba10d7",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "8ccdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "a38d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "a78d7b029347435009aa70d19dba10f0",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "bfbdff029347435009aa70d19dba10d5",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "c4cdff029347435009aa70d19dba10e3",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ed",
+       "sys_name": "x_casemgmt_case"
+      }
+     ]
+    },
+    "f01_metadata_delete": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list": {
+     "table": "sys_ui_list",
+     "query": "sys_nameLIKEx_casemgmt^ORnameSTARTSWITHx_casemgmt",
+     "count": 3,
+     "rows": [
+      {
+       "sys_id": "35145a169322cb10830ef82bdd03d6e7",
+       "view": "Default view",
+       "name": "x_casemgmt_case",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "view": "Default view",
+       "name": "x_casemgmt_case_party",
+       "sys_name": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "c36167c8935f0b1009aa70d19dba1080",
+       "view": "Default view",
+       "name": "x_casemgmt_case_task",
+       "sys_name": "x_casemgmt_case_task"
+      }
+     ]
+    },
+    "f01_ui_bookmark": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEx_casemgmt^ORtitleLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_bookmark_demo_actor": {
+     "table": "sys_ui_bookmark",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 5,
+     "rows": [
+      {
+       "sys_id": "1c3daf4493df0b1009aa70d19dba10b6",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "1c8088969347435009aa70d19dba106f",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "5d3ce74093df0b1009aa70d19dba101a",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "849100d69347435009aa70d19dba10b3",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "e47e7b029347435009aa70d19dba1048",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "f01_presence_demo_actor": {
+     "table": "sys_user_presence",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 5,
+     "rows": [
+      {
+       "sys_id": "0891c4569347435009aa70d19dba10b5",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "143d2b0493df0b1009aa70d19dba10a8",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4480c8969347435009aa70d19dba103e",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "553c2b4c939f0b1009aa70d19dba1021",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "ec7ebbce9307435009aa70d19dba101d",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "f01_ui_list_demo_actor": {
+     "table": "sys_ui_list",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 2,
+     "rows": [
+      {
+       "sys_id": "94dff3469347435009aa70d19dba1024",
+       "name": "ua_user_role_ct",
+       "sys_name": "ua_user_role_ct",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "a6c1de439383031009aa70d19dba10bc",
+       "name": "sys_user_role_contains",
+       "sys_name": "sys_user_role_contains",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      }
+     ]
+    },
+    "f01_navhist_demo_actor": {
+     "table": "sys_ui_navigator_history",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 375,
+     "url_histogram": {
+      "x_casemgmt_case_list.do": 88,
+      "x_casemgmt_case.do": 85,
+      "ui_page.do": 72,
+      "$pa_dashboard.do": 37,
+      "x_casemgmt_case_party.do": 22,
+      "x_casemgmt_case_task_list.do": 18,
+      "x_casemgmt_case_party_list.do": 17,
+      "x_casemgmt_case_task.do": 14,
+      "": 4,
+      "/now/platform-analytics-workspace/dashboard-library": 4,
+      "welcome.do": 4,
+      "blank.do": 3
+     },
+     "rows_captured": 375
+    },
+    "f01_recentsel_demo_actor": {
+     "table": "sys_ui_recent_selection",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 12,
+     "rows": [
+      {
+       "sys_id": "0cc3ad1b930f431009aa70d19dba1017",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "1b64219b930f431009aa70d19dba10db",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "47786593934f431009aa70d19dba10f0",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4869d45393c3431009aa70d19dba10ad",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "5364219b930f431009aa70d19dba10dc",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "569afa2a934f075009aa70d19dba1037",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "7ab821d3934f431009aa70d19dba10d9",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "823f860f9343031009aa70d19dba109e",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "8f786593934f431009aa70d19dba10ef",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "c8c3ad1b930f431009aa70d19dba1018",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "fab0597e9303875009aa70d19dba107d",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "fab8e993934f431009aa70d19dba1042",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      }
+     ]
+    },
+    "f01_ui_list_element_app": {
+     "table": "sys_ui_list_element",
+     "query": "list_id.nameSTARTSWITHx_casemgmt",
+     "count": 26,
+     "rows": [
+      {
+       "sys_id": "036167c8935f0b1009aa70d19dba1099",
+       "list_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "element": "case"
+      },
+      {
+       "sys_id": "04a55bfb47d0896e92ed9064bea4f167",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "type"
+      },
+      {
+       "sys_id": "0b6167c8935f0b1009aa70d19dba109a",
+       "list_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "element": "role_label"
+      },
+      {
+       "sys_id": "0f6167c8935f0b1009aa70d19dba1099",
+       "list_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "element": "party_type"
+      },
+      {
+       "sys_id": "17b3bd08c5d712240692208a65c328dc",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "pending_reason"
+      },
+      {
+       "sys_id": "3465363256d9f1c2464c8db6741c0bec",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "status"
+      },
+      {
+       "sys_id": "3e23d89436716d4009cd8b28bbc276ed",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "subject"
+      },
+      {
+       "sys_id": "3e84f9082bcd5ad3289d6251f1eeb3a1",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "requester_name"
+      },
+      {
+       "sys_id": "476167c8935f0b1009aa70d19dba1084",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "type"
+      },
+      {
+       "sys_id": "4b6167c8935f0b1009aa70d19dba1081",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "number"
+      },
+      {
+       "sys_id": "4b6167c8935f0b1009aa70d19dba1083",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "status"
+      },
+      {
+       "sys_id": "4f6167c8935f0b1009aa70d19dba1082",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "case"
+      },
+      {
+       "sys_id": "5fae7d329ff3285af41106995327159a",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "requester_email"
+      },
+      {
+       "sys_id": "836167c8935f0b1009aa70d19dba109a",
+       "list_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "element": "person"
+      },
+      {
+       "sys_id": "8541f38dd188ff731dacc94054eeaea8",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "priority"
+      },
+      {
+       "sys_id": "876167c8935f0b1009aa70d19dba1099",
+       "list_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "element": "organization"
+      },
+      {
+       "sys_id": "8b6167c8935f0b1009aa70d19dba1098",
+       "list_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "element": "number"
+      },
+      {
+       "sys_id": "af1e7c283ec90b7f2e546b7caa660e65",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "assigned_agent"
+      },
+      {
+       "sys_id": "b802a30d601e89f561e8c00c846ab532",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "closed_date"
+      },
+      {
+       "sys_id": "b902b461a7d845af3a7855ef54517782",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "number"
+      },
+      {
+       "sys_id": "c36167c8935f0b1009aa70d19dba1083",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "due_date"
+      },
+      {
+       "sys_id": "c76167c8935f0b1009aa70d19dba1082",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "assigned_to"
+      },
+      {
+       "sys_id": "c90e9971cdc99482c6db90b7a91fe83c",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "assigned_group"
+      },
+      {
+       "sys_id": "cf6167c8935f0b1009aa70d19dba1083",
+       "list_id": "c36167c8935f0b1009aa70d19dba1080",
+       "element": "subject"
+      },
+      {
+       "sys_id": "e2ce9e08a0e6445dabd7a86538c1eaf0",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "opened_date"
+      },
+      {
+       "sys_id": "f3a5942f6916ddf2143095d296b401c6",
+       "list_id": "35145a169322cb10830ef82bdd03d6e7",
+       "element": "description"
+      }
+     ]
+    },
+    "f01_ui_list_element_demo_actor": {
+     "table": "sys_ui_list_element",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 7,
+     "rows": [
+      {
+       "sys_id": "54dff3469347435009aa70d19dba1026",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "table_ref"
+      },
+      {
+       "sys_id": "58dff3469347435009aa70d19dba1025",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "role_ref"
+      },
+      {
+       "sys_id": "bec1de439383031009aa70d19dba10bf",
+       "list_id": "a6c1de439383031009aa70d19dba10bc",
+       "sys_created_by": "x_casemgmt_demo_agent",
+       "element": "contains"
+      },
+      {
+       "sys_id": "d0dff3469347435009aa70d19dba1025",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "role_name"
+      },
+      {
+       "sys_id": "d8dff3469347435009aa70d19dba1026",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "user"
+      },
+      {
+       "sys_id": "dcdff3469347435009aa70d19dba1025",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "table_name"
+      },
+      {
+       "sys_id": "fac1de439383031009aa70d19dba10d9",
+       "list_id": "a6c1de439383031009aa70d19dba10bc",
+       "sys_created_by": "x_casemgmt_demo_agent",
+       "element": "role"
+      }
+     ]
+    },
+    "f01_metadata_delete_broad": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_user_preference": {
+     "table": "sys_user_preference",
+     "query": "nameLIKEcasemgmt^ORvalueLIKEcasemgmt",
+     "count": 1,
+     "rows": [
+      {
+       "sys_id": "848a6a2093db0f1009aa70d19dba1038",
+       "name": "recent.impersonations",
+       "value": "x_casemgmt_demo_manager",
+       "user": "6816f79cc0a8016401c5a33be04be441"
+      }
+     ]
+    },
+    "guard_presence_all": {
+     "table": "sys_user_presence",
+     "query": "sysparm_all",
+     "count": 6,
+     "rows": [
+      {
+       "sys_id": "0891c4569347435009aa70d19dba10b5",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "143d2b0493df0b1009aa70d19dba10a8",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4480c8969347435009aa70d19dba103e",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "553c2b4c939f0b1009aa70d19dba1021",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "cdcb0fe8930f071009aa70d19dba1090",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "ec7ebbce9307435009aa70d19dba101d",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "guard_bookmark_all": {
+     "table": "sys_ui_bookmark",
+     "query": "sysparm_all",
+     "count": 7,
+     "rows": [
+      {
+       "sys_id": "1c3daf4493df0b1009aa70d19dba10b6",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "1c8088969347435009aa70d19dba106f",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "456dbb869f5112000391b89a442e7072",
+       "title": "On-Call: Application Development Weekly",
+       "url": "/$oc.do?sysparm_current_view=weekly&sysparm_group_id=0a52d3dcd7011200f2d224837e6103f2&sysparm_timeline_enabled=false&sysparm_rotas=98ec5fdcd7011200f2d224837e610317&sysparm_rosters=d0ec5fdcd7011200f2d224837e610318%2C14ec5fdcd7011200f2d224837e610318",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "5d3ce74093df0b1009aa70d19dba101a",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "61880613eb1021001c13abf11206febc",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "849100d69347435009aa70d19dba10b3",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "e47e7b029347435009aa70d19dba1048",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "broad_metadata_casemgmt": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 125
+    },
+    "broad_navhist_casemgmt": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEcasemgmt",
+     "count": 528,
+     "url_histogram": {
+      "x_casemgmt_case.do": 175,
+      "x_casemgmt_case_list.do": 155,
+      "x_casemgmt_case_party.do": 51,
+      "x_casemgmt_case_party_list.do": 34,
+      "x_casemgmt_case_task_list.do": 28,
+      "x_casemgmt_case_task.do": 26,
+      "sys_upgrade_history_log_list.do": 8,
+      "sys_choice_list.do": 7,
+      "sys_db_object_list.do": 6,
+      "sys_security_acl_role_list.do": 5,
+      "sys_scope_list.do": 4,
+      "core_company_list.do": 3
+     },
+     "rows_captured": 528
+    },
+    "broad_recentsel_casemgmt": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableLIKEcasemgmt",
+     "count": 18,
+     "rows": [
+      {
+       "sys_id": "0268e2179347831009aa70d19dba1060",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "0cc3ad1b930f431009aa70d19dba1017",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "14e9df9b93cb831009aa70d19dba10b9",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "1b64219b930f431009aa70d19dba10db",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "47786593934f431009aa70d19dba10f0",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "4869d45393c3431009aa70d19dba10ad",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "5364219b930f431009aa70d19dba10dc",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "569afa2a934f075009aa70d19dba1037",
+       "table": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "5eb45c32934b475009aa70d19dba1048",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "7ab821d3934f431009aa70d19dba10d9",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "823f860f9343031009aa70d19dba109e",
+       "table": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "8f786593934f431009aa70d19dba10ef",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "c8c3ad1b930f431009aa70d19dba1018",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "ce68e2179347831009aa70d19dba105e",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "dce9df9b93cb831009aa70d19dba10b6",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "f68a931f93cb831009aa70d19dba10f8",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "fab0597e9303875009aa70d19dba107d",
+       "table": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "fab8e993934f431009aa70d19dba1042",
+       "table": "x_casemgmt_case_party"
+      }
+     ]
+    },
+    "broad_bookmark_casemgmt": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEcasemgmt^ORtitleLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_ui_list_casemgmt": {
+     "table": "sys_ui_list",
+     "query": "nameLIKEcasemgmt^ORsys_nameLIKEcasemgmt",
+     "count": 3,
+     "rows": [
+      {
+       "sys_id": "35145a169322cb10830ef82bdd03d6e7",
+       "name": "x_casemgmt_case",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "4f6167c8935f0b1009aa70d19dba1097",
+       "name": "x_casemgmt_case_party",
+       "sys_name": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "c36167c8935f0b1009aa70d19dba1080",
+       "name": "x_casemgmt_case_task",
+       "sys_name": "x_casemgmt_case_task"
+      }
+     ]
+    },
+    "preserve_atf_attachments": {
+     "table": "sys_attachment",
+     "query": "table_name=sys_atf_test_result",
+     "count": 87
+    },
+    "preserve_atf_suite_results": {
+     "table": "sys_atf_test_suite_result",
+     "query": "sysparm_all",
+     "count": 11
+    },
+    "preserve_syslog_u1assert": {
+     "table": "syslog",
+     "query": "messageSTARTSWITHU1ASSERT",
+     "count": 10
+    }
+   }
+  },
+  "02_post_teardown_before_cleanup": {
+   "captured_at_utc": "2026-09-10T10:07:03Z",
+   "f01_predicate_sum": 996,
+   "predicates": {
+    "f01_sys_metadata_named": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 15,
+     "rows": [
+      {
+       "sys_id": "04cdff029347435009aa70d19dba10e4",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "2f8d7b029347435009aa70d19dba10ee",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "3fbdff029347435009aa70d19dba10d6",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "40cdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "48cdff029347435009aa70d19dba10e2",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "638d7b029347435009aa70d19dba10ac",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "6b8d7b029347435009aa70d19dba10ef",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "7bbdff029347435009aa70d19dba10d7",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "8ccdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "a38d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "a78d7b029347435009aa70d19dba10f0",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "bfbdff029347435009aa70d19dba10d5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "c4cdff029347435009aa70d19dba10e3",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ed",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      }
+     ]
+    },
+    "f01_sys_metadata_named_upper": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEX_CASEMGMT",
+     "count": 15,
+     "rows": [
+      {
+       "sys_id": "04cdff029347435009aa70d19dba10e4",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "2f8d7b029347435009aa70d19dba10ee",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "3fbdff029347435009aa70d19dba10d6",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "40cdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "48cdff029347435009aa70d19dba10e2",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "638d7b029347435009aa70d19dba10ac",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "6b8d7b029347435009aa70d19dba10ef",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "7bbdff029347435009aa70d19dba10d7",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "8ccdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "a38d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "a78d7b029347435009aa70d19dba10f0",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "bfbdff029347435009aa70d19dba10d5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "c4cdff029347435009aa70d19dba10e3",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ed",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      }
+     ]
+    },
+    "f01_navigator_history": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEx_casemgmt",
+     "count": 527,
+     "url_histogram": {
+      "x_casemgmt_case.do": 175,
+      "x_casemgmt_case_list.do": 155,
+      "x_casemgmt_case_party.do": 51,
+      "x_casemgmt_case_party_list.do": 34,
+      "x_casemgmt_case_task_list.do": 28,
+      "x_casemgmt_case_task.do": 26,
+      "sys_upgrade_history_log_list.do": 8,
+      "sys_choice_list.do": 7,
+      "sys_db_object_list.do": 6,
+      "sys_security_acl_role_list.do": 5,
+      "core_company_list.do": 3,
+      "sys_user_role_list.do": 3
+     },
+     "rows_captured": 527
+    },
+    "f01_recent_selection": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableSTARTSWITHx_casemgmt",
+     "count": 18,
+     "rows": [
+      {
+       "sys_id": "0268e2179347831009aa70d19dba1060",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "0cc3ad1b930f431009aa70d19dba1017",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "14e9df9b93cb831009aa70d19dba10b9",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "1b64219b930f431009aa70d19dba10db",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "47786593934f431009aa70d19dba10f0",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4869d45393c3431009aa70d19dba10ad",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "5364219b930f431009aa70d19dba10dc",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "569afa2a934f075009aa70d19dba1037",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "5eb45c32934b475009aa70d19dba1048",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "7ab821d3934f431009aa70d19dba10d9",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "823f860f9343031009aa70d19dba109e",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "8f786593934f431009aa70d19dba10ef",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "c8c3ad1b930f431009aa70d19dba1018",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "ce68e2179347831009aa70d19dba105e",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "dce9df9b93cb831009aa70d19dba10b6",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "f68a931f93cb831009aa70d19dba10f8",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "fab0597e9303875009aa70d19dba107d",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "fab8e993934f431009aa70d19dba1042",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      }
+     ]
+    },
+    "f01_report_chart_color": {
+     "table": "sys_report_chart_color",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 15,
+     "rows": [
+      {
+       "sys_id": "04cdff029347435009aa70d19dba10e4",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "2f8d7b029347435009aa70d19dba10ee",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "3fbdff029347435009aa70d19dba10d6",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "40cdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "48cdff029347435009aa70d19dba10e2",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "638d7b029347435009aa70d19dba10ac",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "6b8d7b029347435009aa70d19dba10ef",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "7bbdff029347435009aa70d19dba10d7",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "8ccdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "a38d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "a78d7b029347435009aa70d19dba10f0",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "bfbdff029347435009aa70d19dba10d5",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "c4cdff029347435009aa70d19dba10e3",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ed",
+       "sys_name": "x_casemgmt_case"
+      }
+     ]
+    },
+    "f01_metadata_delete": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list": {
+     "table": "sys_ui_list",
+     "query": "sys_nameLIKEx_casemgmt^ORnameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_bookmark": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEx_casemgmt^ORtitleLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_bookmark_demo_actor": {
+     "table": "sys_ui_bookmark",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 5,
+     "rows": [
+      {
+       "sys_id": "1c3daf4493df0b1009aa70d19dba10b6",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "1c8088969347435009aa70d19dba106f",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "5d3ce74093df0b1009aa70d19dba101a",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "849100d69347435009aa70d19dba10b3",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "e47e7b029347435009aa70d19dba1048",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "f01_presence_demo_actor": {
+     "table": "sys_user_presence",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 5,
+     "rows": [
+      {
+       "sys_id": "0891c4569347435009aa70d19dba10b5",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "143d2b0493df0b1009aa70d19dba10a8",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4480c8969347435009aa70d19dba103e",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "553c2b4c939f0b1009aa70d19dba1021",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "ec7ebbce9307435009aa70d19dba101d",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "f01_ui_list_demo_actor": {
+     "table": "sys_ui_list",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 2,
+     "rows": [
+      {
+       "sys_id": "94dff3469347435009aa70d19dba1024",
+       "name": "ua_user_role_ct",
+       "sys_name": "ua_user_role_ct",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "a6c1de439383031009aa70d19dba10bc",
+       "name": "sys_user_role_contains",
+       "sys_name": "sys_user_role_contains",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      }
+     ]
+    },
+    "f01_navhist_demo_actor": {
+     "table": "sys_ui_navigator_history",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 375,
+     "url_histogram": {
+      "x_casemgmt_case_list.do": 88,
+      "x_casemgmt_case.do": 85,
+      "ui_page.do": 72,
+      "$pa_dashboard.do": 37,
+      "x_casemgmt_case_party.do": 22,
+      "x_casemgmt_case_task_list.do": 18,
+      "x_casemgmt_case_party_list.do": 17,
+      "x_casemgmt_case_task.do": 14,
+      "": 4,
+      "/now/platform-analytics-workspace/dashboard-library": 4,
+      "welcome.do": 4,
+      "blank.do": 3
+     },
+     "rows_captured": 375
+    },
+    "f01_recentsel_demo_actor": {
+     "table": "sys_ui_recent_selection",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 12,
+     "rows": [
+      {
+       "sys_id": "0cc3ad1b930f431009aa70d19dba1017",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "1b64219b930f431009aa70d19dba10db",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "47786593934f431009aa70d19dba10f0",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4869d45393c3431009aa70d19dba10ad",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "5364219b930f431009aa70d19dba10dc",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "569afa2a934f075009aa70d19dba1037",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "7ab821d3934f431009aa70d19dba10d9",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "823f860f9343031009aa70d19dba109e",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "8f786593934f431009aa70d19dba10ef",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "c8c3ad1b930f431009aa70d19dba1018",
+       "table": "x_casemgmt_case_task",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      },
+      {
+       "sys_id": "fab0597e9303875009aa70d19dba107d",
+       "table": "x_casemgmt_case",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "fab8e993934f431009aa70d19dba1042",
+       "table": "x_casemgmt_case_party",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      }
+     ]
+    },
+    "f01_ui_list_element_app": {
+     "table": "sys_ui_list_element",
+     "query": "list_id.nameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list_element_demo_actor": {
+     "table": "sys_ui_list_element",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 7,
+     "rows": [
+      {
+       "sys_id": "54dff3469347435009aa70d19dba1026",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "table_ref"
+      },
+      {
+       "sys_id": "58dff3469347435009aa70d19dba1025",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "role_ref"
+      },
+      {
+       "sys_id": "bec1de439383031009aa70d19dba10bf",
+       "list_id": "a6c1de439383031009aa70d19dba10bc",
+       "sys_created_by": "x_casemgmt_demo_agent",
+       "element": "contains"
+      },
+      {
+       "sys_id": "d0dff3469347435009aa70d19dba1025",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "role_name"
+      },
+      {
+       "sys_id": "d8dff3469347435009aa70d19dba1026",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "user"
+      },
+      {
+       "sys_id": "dcdff3469347435009aa70d19dba1025",
+       "list_id": "94dff3469347435009aa70d19dba1024",
+       "sys_created_by": "x_casemgmt_demo_manager",
+       "element": "table_name"
+      },
+      {
+       "sys_id": "fac1de439383031009aa70d19dba10d9",
+       "list_id": "a6c1de439383031009aa70d19dba10bc",
+       "sys_created_by": "x_casemgmt_demo_agent",
+       "element": "role"
+      }
+     ]
+    },
+    "f01_metadata_delete_broad": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_user_preference": {
+     "table": "sys_user_preference",
+     "query": "nameLIKEcasemgmt^ORvalueLIKEcasemgmt",
+     "count": 1,
+     "rows": [
+      {
+       "sys_id": "848a6a2093db0f1009aa70d19dba1038",
+       "name": "recent.impersonations",
+       "value": "x_casemgmt_demo_manager",
+       "user": "6816f79cc0a8016401c5a33be04be441"
+      }
+     ]
+    },
+    "guard_presence_all": {
+     "table": "sys_user_presence",
+     "query": "sysparm_all",
+     "count": 6,
+     "rows": [
+      {
+       "sys_id": "0891c4569347435009aa70d19dba10b5",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "143d2b0493df0b1009aa70d19dba10a8",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "4480c8969347435009aa70d19dba103e",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "553c2b4c939f0b1009aa70d19dba1021",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "cdcb0fe8930f071009aa70d19dba1090",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "ec7ebbce9307435009aa70d19dba101d",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "guard_bookmark_all": {
+     "table": "sys_ui_bookmark",
+     "query": "sysparm_all",
+     "count": 7,
+     "rows": [
+      {
+       "sys_id": "1c3daf4493df0b1009aa70d19dba10b6",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "1c8088969347435009aa70d19dba106f",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_agent"
+      },
+      {
+       "sys_id": "456dbb869f5112000391b89a442e7072",
+       "title": "On-Call: Application Development Weekly",
+       "url": "/$oc.do?sysparm_current_view=weekly&sysparm_group_id=0a52d3dcd7011200f2d224837e6103f2&sysparm_timeline_enabled=false&sysparm_rotas=98ec5fdcd7011200f2d224837e610317&sysparm_rosters=d0ec5fdcd7011200f2d224837e610318%2C14ec5fdcd7011200f2d224837e610318",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "5d3ce74093df0b1009aa70d19dba101a",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "61880613eb1021001c13abf11206febc",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "849100d69347435009aa70d19dba10b3",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_viewer"
+      },
+      {
+       "sys_id": "e47e7b029347435009aa70d19dba1048",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "x_casemgmt_demo_manager"
+      }
+     ]
+    },
+    "broad_metadata_casemgmt": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 15,
+     "rows": [
+      {
+       "sys_id": "04cdff029347435009aa70d19dba10e4",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "2f8d7b029347435009aa70d19dba10ee",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "3fbdff029347435009aa70d19dba10d6",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "40cdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "48cdff029347435009aa70d19dba10e2",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "638d7b029347435009aa70d19dba10ac",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "6b8d7b029347435009aa70d19dba10ef",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "7bbdff029347435009aa70d19dba10d7",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "8ccdff029347435009aa70d19dba10e5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "a38d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "a78d7b029347435009aa70d19dba10f0",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "bfbdff029347435009aa70d19dba10d5",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "c4cdff029347435009aa70d19dba10e3",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ae",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      },
+      {
+       "sys_id": "ef8d7b029347435009aa70d19dba10ed",
+       "sys_name": "x_casemgmt_case",
+       "sys_class_name": "sys_report_chart_color"
+      }
+     ]
+    },
+    "broad_navhist_casemgmt": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEcasemgmt",
+     "count": 528,
+     "url_histogram": {
+      "x_casemgmt_case.do": 175,
+      "x_casemgmt_case_list.do": 155,
+      "x_casemgmt_case_party.do": 51,
+      "x_casemgmt_case_party_list.do": 34,
+      "x_casemgmt_case_task_list.do": 28,
+      "x_casemgmt_case_task.do": 26,
+      "sys_upgrade_history_log_list.do": 8,
+      "sys_choice_list.do": 7,
+      "sys_db_object_list.do": 6,
+      "sys_security_acl_role_list.do": 5,
+      "sys_scope_list.do": 4,
+      "core_company_list.do": 3
+     },
+     "rows_captured": 528
+    },
+    "broad_recentsel_casemgmt": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableLIKEcasemgmt",
+     "count": 18,
+     "rows": [
+      {
+       "sys_id": "0268e2179347831009aa70d19dba1060",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "0cc3ad1b930f431009aa70d19dba1017",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "14e9df9b93cb831009aa70d19dba10b9",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "1b64219b930f431009aa70d19dba10db",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "47786593934f431009aa70d19dba10f0",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "4869d45393c3431009aa70d19dba10ad",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "5364219b930f431009aa70d19dba10dc",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "569afa2a934f075009aa70d19dba1037",
+       "table": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "5eb45c32934b475009aa70d19dba1048",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "7ab821d3934f431009aa70d19dba10d9",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "823f860f9343031009aa70d19dba109e",
+       "table": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "8f786593934f431009aa70d19dba10ef",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "c8c3ad1b930f431009aa70d19dba1018",
+       "table": "x_casemgmt_case_task"
+      },
+      {
+       "sys_id": "ce68e2179347831009aa70d19dba105e",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "dce9df9b93cb831009aa70d19dba10b6",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "f68a931f93cb831009aa70d19dba10f8",
+       "table": "x_casemgmt_case_party"
+      },
+      {
+       "sys_id": "fab0597e9303875009aa70d19dba107d",
+       "table": "x_casemgmt_case"
+      },
+      {
+       "sys_id": "fab8e993934f431009aa70d19dba1042",
+       "table": "x_casemgmt_case_party"
+      }
+     ]
+    },
+    "broad_bookmark_casemgmt": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEcasemgmt^ORtitleLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_ui_list_casemgmt": {
+     "table": "sys_ui_list",
+     "query": "nameLIKEcasemgmt^ORsys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "preserve_atf_attachments": {
+     "table": "sys_attachment",
+     "query": "table_name=sys_atf_test_result",
+     "count": 87
+    },
+    "preserve_atf_suite_results": {
+     "table": "sys_atf_test_suite_result",
+     "query": "sysparm_all",
+     "count": 11
+    },
+    "preserve_syslog_u1assert": {
+     "table": "syslog",
+     "query": "messageSTARTSWITHU1ASSERT",
+     "count": 10
+    }
+   }
+  },
+  "03_post_cleanup": {
+   "captured_at_utc": "2026-09-10T10:10:14Z",
+   "f01_predicate_sum": 129,
+   "predicates": {
+    "f01_sys_metadata_named": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_sys_metadata_named_upper": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEX_CASEMGMT",
+     "count": 0
+    },
+    "f01_navigator_history": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_recent_selection": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_report_chart_color": {
+     "table": "sys_report_chart_color",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_metadata_delete": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list": {
+     "table": "sys_ui_list",
+     "query": "sys_nameLIKEx_casemgmt^ORnameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_bookmark": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEx_casemgmt^ORtitleLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_bookmark_demo_actor": {
+     "table": "sys_ui_bookmark",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_presence_demo_actor": {
+     "table": "sys_user_presence",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_demo_actor": {
+     "table": "sys_ui_list",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_navhist_demo_actor": {
+     "table": "sys_ui_navigator_history",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 129,
+     "url_histogram": {
+      "ui_page.do": 72,
+      "$pa_dashboard.do": 37,
+      "": 4,
+      "/now/platform-analytics-workspace/dashboard-library": 4,
+      "welcome.do": 4,
+      "blank.do": 3,
+      "core_company.do": 2,
+      "sys_user_role.do": 1,
+      "sys_report_template.do": 1,
+      "sys_user_group.do": 1
+     },
+     "rows_captured": 129
+    },
+    "f01_recentsel_demo_actor": {
+     "table": "sys_ui_recent_selection",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_element_app": {
+     "table": "sys_ui_list_element",
+     "query": "list_id.nameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list_element_demo_actor": {
+     "table": "sys_ui_list_element",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_metadata_delete_broad": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_user_preference": {
+     "table": "sys_user_preference",
+     "query": "nameLIKEcasemgmt^ORvalueLIKEcasemgmt",
+     "count": 0
+    },
+    "guard_presence_all": {
+     "table": "sys_user_presence",
+     "query": "sysparm_all",
+     "count": 1,
+     "rows": [
+      {
+       "sys_id": "cdcb0fe8930f071009aa70d19dba1090",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "guard_bookmark_all": {
+     "table": "sys_ui_bookmark",
+     "query": "sysparm_all",
+     "count": 2,
+     "rows": [
+      {
+       "sys_id": "456dbb869f5112000391b89a442e7072",
+       "title": "On-Call: Application Development Weekly",
+       "url": "/$oc.do?sysparm_current_view=weekly&sysparm_group_id=0a52d3dcd7011200f2d224837e6103f2&sysparm_timeline_enabled=false&sysparm_rotas=98ec5fdcd7011200f2d224837e610317&sysparm_rosters=d0ec5fdcd7011200f2d224837e610318%2C14ec5fdcd7011200f2d224837e610318",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "61880613eb1021001c13abf11206febc",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "broad_metadata_casemgmt": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_navhist_casemgmt": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_recentsel_casemgmt": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_bookmark_casemgmt": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEcasemgmt^ORtitleLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_ui_list_casemgmt": {
+     "table": "sys_ui_list",
+     "query": "nameLIKEcasemgmt^ORsys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "preserve_atf_attachments": {
+     "table": "sys_attachment",
+     "query": "table_name=sys_atf_test_result",
+     "count": 87
+    },
+    "preserve_atf_suite_results": {
+     "table": "sys_atf_test_suite_result",
+     "query": "sysparm_all",
+     "count": 11
+    },
+    "preserve_syslog_u1assert": {
+     "table": "syslog",
+     "query": "messageSTARTSWITHU1ASSERT",
+     "count": 10
+    }
+   }
+  },
+  "04_after_evidence_capture": {
+   "captured_at_utc": "2026-09-10T10:19:44Z",
+   "f01_predicate_sum": 2,
+   "predicates": {
+    "f01_sys_metadata_named": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_sys_metadata_named_upper": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEX_CASEMGMT",
+     "count": 0
+    },
+    "f01_navigator_history": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEx_casemgmt",
+     "count": 2,
+     "url_histogram": {
+      "sys_user_role_list.do": 1,
+      "sys_scope_list.do": 1
+     },
+     "rows_captured": 2
+    },
+    "f01_recent_selection": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_report_chart_color": {
+     "table": "sys_report_chart_color",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_metadata_delete": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list": {
+     "table": "sys_ui_list",
+     "query": "sys_nameLIKEx_casemgmt^ORnameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_bookmark": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEx_casemgmt^ORtitleLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_bookmark_demo_actor": {
+     "table": "sys_ui_bookmark",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_presence_demo_actor": {
+     "table": "sys_user_presence",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_demo_actor": {
+     "table": "sys_ui_list",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_navhist_demo_actor": {
+     "table": "sys_ui_navigator_history",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_recentsel_demo_actor": {
+     "table": "sys_ui_recent_selection",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_element_app": {
+     "table": "sys_ui_list_element",
+     "query": "list_id.nameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list_element_demo_actor": {
+     "table": "sys_ui_list_element",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_metadata_delete_broad": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_user_preference": {
+     "table": "sys_user_preference",
+     "query": "nameLIKEcasemgmt^ORvalueLIKEcasemgmt",
+     "count": 0
+    },
+    "guard_presence_all": {
+     "table": "sys_user_presence",
+     "query": "sysparm_all",
+     "count": 1,
+     "rows": [
+      {
+       "sys_id": "cdcb0fe8930f071009aa70d19dba1090",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "guard_bookmark_all": {
+     "table": "sys_ui_bookmark",
+     "query": "sysparm_all",
+     "count": 2,
+     "rows": [
+      {
+       "sys_id": "456dbb869f5112000391b89a442e7072",
+       "title": "On-Call: Application Development Weekly",
+       "url": "/$oc.do?sysparm_current_view=weekly&sysparm_group_id=0a52d3dcd7011200f2d224837e6103f2&sysparm_timeline_enabled=false&sysparm_rotas=98ec5fdcd7011200f2d224837e610317&sysparm_rosters=d0ec5fdcd7011200f2d224837e610318%2C14ec5fdcd7011200f2d224837e610318",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "61880613eb1021001c13abf11206febc",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "broad_metadata_casemgmt": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_navhist_casemgmt": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEcasemgmt",
+     "count": 2,
+     "url_histogram": {
+      "sys_user_role_list.do": 1,
+      "sys_scope_list.do": 1
+     },
+     "rows_captured": 2
+    },
+    "broad_recentsel_casemgmt": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_bookmark_casemgmt": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEcasemgmt^ORtitleLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_ui_list_casemgmt": {
+     "table": "sys_ui_list",
+     "query": "nameLIKEcasemgmt^ORsys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "preserve_atf_attachments": {
+     "table": "sys_attachment",
+     "query": "table_name=sys_atf_test_result",
+     "count": 87
+    },
+    "preserve_atf_suite_results": {
+     "table": "sys_atf_test_suite_result",
+     "query": "sysparm_all",
+     "count": 11
+    },
+    "preserve_syslog_u1assert": {
+     "table": "syslog",
+     "query": "messageSTARTSWITHU1ASSERT",
+     "count": 10
+    }
+   }
+  },
+  "05_final": {
+   "captured_at_utc": "2026-09-10T10:20:16Z",
+   "f01_predicate_sum": 0,
+   "predicates": {
+    "f01_sys_metadata_named": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_sys_metadata_named_upper": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEX_CASEMGMT",
+     "count": 0
+    },
+    "f01_navigator_history": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_recent_selection": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_report_chart_color": {
+     "table": "sys_report_chart_color",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_metadata_delete": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list": {
+     "table": "sys_ui_list",
+     "query": "sys_nameLIKEx_casemgmt^ORnameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_bookmark": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEx_casemgmt^ORtitleLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_bookmark_demo_actor": {
+     "table": "sys_ui_bookmark",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_presence_demo_actor": {
+     "table": "sys_user_presence",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_demo_actor": {
+     "table": "sys_ui_list",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_navhist_demo_actor": {
+     "table": "sys_ui_navigator_history",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_recentsel_demo_actor": {
+     "table": "sys_ui_recent_selection",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_element_app": {
+     "table": "sys_ui_list_element",
+     "query": "list_id.nameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list_element_demo_actor": {
+     "table": "sys_ui_list_element",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_metadata_delete_broad": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_user_preference": {
+     "table": "sys_user_preference",
+     "query": "nameLIKEcasemgmt^ORvalueLIKEcasemgmt",
+     "count": 0
+    },
+    "guard_presence_all": {
+     "table": "sys_user_presence",
+     "query": "sysparm_all",
+     "count": 1,
+     "rows": [
+      {
+       "sys_id": "cdcb0fe8930f071009aa70d19dba1090",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "guard_bookmark_all": {
+     "table": "sys_ui_bookmark",
+     "query": "sysparm_all",
+     "count": 2,
+     "rows": [
+      {
+       "sys_id": "456dbb869f5112000391b89a442e7072",
+       "title": "On-Call: Application Development Weekly",
+       "url": "/$oc.do?sysparm_current_view=weekly&sysparm_group_id=0a52d3dcd7011200f2d224837e6103f2&sysparm_timeline_enabled=false&sysparm_rotas=98ec5fdcd7011200f2d224837e610317&sysparm_rosters=d0ec5fdcd7011200f2d224837e610318%2C14ec5fdcd7011200f2d224837e610318",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "61880613eb1021001c13abf11206febc",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "broad_metadata_casemgmt": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_navhist_casemgmt": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_recentsel_casemgmt": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_bookmark_casemgmt": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEcasemgmt^ORtitleLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_ui_list_casemgmt": {
+     "table": "sys_ui_list",
+     "query": "nameLIKEcasemgmt^ORsys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "preserve_atf_attachments": {
+     "table": "sys_attachment",
+     "query": "table_name=sys_atf_test_result",
+     "count": 87
+    },
+    "preserve_atf_suite_results": {
+     "table": "sys_atf_test_suite_result",
+     "query": "sysparm_all",
+     "count": 11
+    },
+    "preserve_syslog_u1assert": {
+     "table": "syslog",
+     "query": "messageSTARTSWITHU1ASSERT",
+     "count": 10
+    }
+   }
+  },
+  "06_phase6_regression": {
+   "captured_at_utc": "2026-09-10T12:50:34Z",
+   "f01_predicate_sum": 0,
+   "predicates": {
+    "f01_sys_metadata_named": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_sys_metadata_named_upper": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEX_CASEMGMT",
+     "count": 0
+    },
+    "f01_navigator_history": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_recent_selection": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_report_chart_color": {
+     "table": "sys_report_chart_color",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_metadata_delete": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list": {
+     "table": "sys_ui_list",
+     "query": "sys_nameLIKEx_casemgmt^ORnameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_bookmark": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEx_casemgmt^ORtitleLIKEx_casemgmt",
+     "count": 0
+    },
+    "f01_bookmark_demo_actor": {
+     "table": "sys_ui_bookmark",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_presence_demo_actor": {
+     "table": "sys_user_presence",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_demo_actor": {
+     "table": "sys_ui_list",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_navhist_demo_actor": {
+     "table": "sys_ui_navigator_history",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_recentsel_demo_actor": {
+     "table": "sys_ui_recent_selection",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_ui_list_element_app": {
+     "table": "sys_ui_list_element",
+     "query": "list_id.nameSTARTSWITHx_casemgmt",
+     "count": 0
+    },
+    "f01_ui_list_element_demo_actor": {
+     "table": "sys_ui_list_element",
+     "query": "sys_created_byINx_casemgmt_demo_manager,x_casemgmt_demo_agent,x_casemgmt_demo_viewer",
+     "count": 0
+    },
+    "f01_metadata_delete_broad": {
+     "table": "sys_metadata_delete",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_user_preference": {
+     "table": "sys_user_preference",
+     "query": "nameLIKEcasemgmt^ORvalueLIKEcasemgmt",
+     "count": 0
+    },
+    "guard_presence_all": {
+     "table": "sys_user_presence",
+     "query": "sysparm_all",
+     "count": 1,
+     "rows": [
+      {
+       "sys_id": "cdcb0fe8930f071009aa70d19dba1090",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "guard_bookmark_all": {
+     "table": "sys_ui_bookmark",
+     "query": "sysparm_all",
+     "count": 2,
+     "rows": [
+      {
+       "sys_id": "456dbb869f5112000391b89a442e7072",
+       "title": "On-Call: Application Development Weekly",
+       "url": "/$oc.do?sysparm_current_view=weekly&sysparm_group_id=0a52d3dcd7011200f2d224837e6103f2&sysparm_timeline_enabled=false&sysparm_rotas=98ec5fdcd7011200f2d224837e610317&sysparm_rosters=d0ec5fdcd7011200f2d224837e610318%2C14ec5fdcd7011200f2d224837e610318",
+       "sys_created_by": "admin"
+      },
+      {
+       "sys_id": "61880613eb1021001c13abf11206febc",
+       "title": "Home",
+       "url": "home.do",
+       "sys_created_by": "admin"
+      }
+     ]
+    },
+    "broad_metadata_casemgmt": {
+     "table": "sys_metadata",
+     "query": "sys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_navhist_casemgmt": {
+     "table": "sys_ui_navigator_history",
+     "query": "urlLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_recentsel_casemgmt": {
+     "table": "sys_ui_recent_selection",
+     "query": "tableLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_bookmark_casemgmt": {
+     "table": "sys_ui_bookmark",
+     "query": "urlLIKEcasemgmt^ORtitleLIKEcasemgmt",
+     "count": 0
+    },
+    "broad_ui_list_casemgmt": {
+     "table": "sys_ui_list",
+     "query": "nameLIKEcasemgmt^ORsys_nameLIKEcasemgmt",
+     "count": 0
+    },
+    "preserve_atf_attachments": {
+     "table": "sys_attachment",
+     "query": "table_name=sys_atf_test_result",
+     "count": 87
+    },
+    "preserve_atf_suite_results": {
+     "table": "sys_atf_test_suite_result",
+     "query": "sysparm_all",
+     "count": 11
+    },
+    "preserve_syslog_u1assert": {
+     "table": "syslog",
+     "query": "messageSTARTSWITHU1ASSERT",
+     "count": 10
+    }
+   }
+  }
+ },
+ "result": {
+  "f01_predicates_at_zero": "all 22 F01/broad predicates read 0 from snapshot 03 onward",
+  "evidence_preserved_never_deleted": {
+   "sys_attachment on sys_atf_test_result": 87,
+   "sys_atf_test_result": 227,
+   "sys_atf_test_suite_result": 11,
+   "syslog U1ASSERT": 10,
+   "sys_upgrade_history": 96
+  },
+  "zero_state_statement": "Instance zero-state confirmed at 2026-09-10T10:20:32Z, no residue remaining."
+ }
+}

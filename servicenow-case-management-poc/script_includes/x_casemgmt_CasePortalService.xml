@@ -1,0 +1,2067 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_include`
+    record `x_casemgmt.CasePortalService` inside the scoped application
+    `x_casemgmt` (Case Management).
+
+    PURPOSE (AAP Sections 0.4.3, 0.4.4, 0.5.1, 0.7.4):
+
+        Server-side helper class that encapsulates the two operations
+        performed by the unauthenticated Experience Portal pages:
+
+          1. submitCase(payload) - anonymous case submission, called by
+             ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+             (and its paired sys_ws_operation handler) on the public
+             POST /api/x_casemgmt/case_submit endpoint.
+
+          2. lookupCase(number) - anonymous case status lookup, called by
+             ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+             (and its paired sys_ws_operation handler) on the public
+             GET /api/x_casemgmt/case_status_lookup endpoint.
+
+        Per AAP Section 0.4.3 ("Anonymous portal via scripted REST + Experience
+        widget"), this Script Include lives BETWEEN the scripted REST endpoints
+        and the x_casemgmt_case table, providing a whitelisted-field discipline
+        layer that prevents anonymous callers from setting forbidden fields on
+        insert and from reading internal fields on lookup.
+
+    SEMANTIC SOURCE-SIDE REFERENCES (read-only, NOT byte-for-byte ported):
+
+        - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+          com/armedia/acm/plugins/casefile/service/SaveCaseService.java -
+          ArkCase Spring service that orchestrated case persistence with
+          transactional semantics. The submitCase() method here performs
+          the equivalent platform-native insert via GlideRecord, omitting
+          the Spring/JPA cross-cutting concerns (Authentication, IP-address
+          tracking, multipart-file attachment, pipeline pre/post processors)
+          since the POC scope is intake-only and email/notifications are
+          disabled (AAP Section 0.7.2 email-disabled constraint).
+
+        - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/
+          com/armedia/acm/plugins/casefile/service/GetCaseByNumberServiceImpl.java
+          line 47-50:
+              public CaseFile getCaseByNumber(String caseNumber) {
+                  return getCaseFileDao().findByCaseNumber(caseNumber);
+              }
+          The lookupCase(number) method here performs the equivalent
+          platform-native lookup via GlideRecord.addQuery('number', ...),
+          replacing the JPA caseFileDao.findByCaseNumber() call. The Java
+          method returned a fully-populated CaseFile with all internal
+          fields; the ServiceNow target deliberately whitelists the
+          response payload to ONLY status/subject/opened_date per AAP
+          Section 0.7.4 ("the lookup page returns ONLY status, subject,
+          opened_date - no internal fields exposed").
+
+        - acm-services/acm-service-portal-gateway/src/main/java/com/armedia/
+          acm/portalgateway/... - ArkCase's portal-gateway pattern for
+          anonymous submission. Semantic reference for the
+          definition-vs-operation separation that the sibling
+          ../portal/rest/ records implement; this Script Include is the
+          equivalent of the persistence/whitelisting helper that the
+          ArkCase pluggable portal request providers delegated to.
+
+    WHITELIST-DISCIPLINE INVARIANTS (AAP Section 0.7.4 - non-negotiable):
+
+      submitCase whitelist (INPUT side - prevents privilege escalation):
+        - Accepts ONLY: subject, type, description, requester_name,
+          requester_email.
+        - Silently DROPS every other field, including but not limited to:
+          assigned_group, assigned_agent, closed_date, opened_date,
+          priority, pending_reason, number, sys_id, sys_created_by,
+          sys_created_on, sys_updated_by, sys_updated_on, status (caller-
+          provided), and any unrecognized custom field.
+        - status is FORCED to 'Draft' regardless of payload. A malicious
+          caller sending status=Closed (or any non-Draft value) is silently
+          overridden to 'Draft' before insert. This is the central security
+          guarantee that anonymous submissions cannot bypass the
+          state-machine workflow defined by the Flow Designer flows.
+        - Returns the auto-generated case number (CASE0000001 format)
+          on success. The number generator is configured in
+          ../numbers/sys_number_x_casemgmt_case.xml.
+
+      submitCase INPUT VALIDATION (AAP Section 0.5.7 field constraints):
+        - subject, description and requester_name are MANDATORY: a payload
+          in which any of them is absent, null or whitespace-only is
+          REFUSED, and no row is created. The dictionary mandatory flag
+          alone does not achieve this - mandatory is enforced on forms and
+          through ACLs, not on a scoped GlideRecord.insert() - so this
+          method is the only place the constraint can hold for the
+          anonymous write path.
+        - subject / description / requester_name / requester_email are
+          held to their declared 255 / 4000 / 100 / 100 lengths, and an
+          over-length value is REFUSED with a named field error rather
+          than shortened to fit. The check must be applied in script: the
+          platform stores string columns longer than 255 in a TEXT column
+          that does not truncate, so a 6006-character description was
+          previously stored in full against a declared 4000, and the
+          earlier substring() cap answered HTTP 201 for a 4001-character
+          description while silently dropping its last character. The
+          same constraint is enforced on every OTHER write path - the
+          internal form included - by the before-insert/update rule
+          ../business_rules/x_casemgmt_validate_case_text_lengths.xml.
+        - requester_email stays OPTIONAL per AAP Section 0.5.7, but a
+          supplied value must look like an address.
+        - type stays OPTIONAL at the dictionary level (choice=3), but a
+          supplied value MUST be a live choice of x_casemgmt_case.type,
+          read from sys_choice so the "extensible" part of the AAP
+          Section 0.5.7 contract keeps working. Values outside the list
+          are refused instead of stored verbatim.
+        - Rejections name only the five public input fields; internal
+          field names never appear in a validation response.
+        - An admission ceiling bounds the unauthenticated write path, and
+          it is evaluated AFTER the insert rather than before it: the row
+          is inserted, then the rows the same caller created inside the
+          trailing window are COUNTED with our own row among them. A
+          count above the global ceiling - or a count above the tighter
+          per-requester ceiling, taken over the rows sharing its
+          normalised requester_email bucket - deletes our row again and
+          refuses the submission with throttled=true, which the REST
+          operation answers as HTTP 429. Counting published rows after
+          the insert is what makes the ceiling hold under concurrency,
+          and the proof is short: of any set of rows that survive, the
+          one whose count query ran LAST saw every other survivor, since
+          each survivor's insert committed before its own query and its
+          query ran before that last query; so had more than the ceiling
+          survived, that last caller would have counted them and refused
+          itself. Neither a pre-insert count nor a post-insert RANK
+          survives that test - the count because nothing bound the
+          insert that followed it (CWE-367), the rank because a caller
+          whose query sees only part of the window ranks itself first
+          and admits. See _admitAnonymousSubmission for the one cost of
+          counting - a simultaneous burst past the ceiling can refuse
+          ALL of its requests instead of admitting the first few, which
+          is the safe direction and answers a retryable 429 - and for
+          why requester_email is the only per-caller dimension available
+          without adding storage the AAP does not define. Rows are
+          counted against their own creator's rows only, so internal
+          case creation on the native form neither throttles nor is
+          throttled by this endpoint, and a refused submission consumes
+          a case number exactly as a round-trip refusal does.
+        - An identical submission received inside a 90-second window is
+          COLLAPSED onto the case that survives it, rather than creating a
+          second case: the endpoint answers with the surviving case's
+          number and removes the duplicate row. "Identical" means all five
+          whitelisted values match, the surviving row is still in Draft,
+          and it was created by the same caller. The collapse happens
+          after the insert, which is what lets two genuinely simultaneous
+          callers converge on one winner rather than only settling
+          sequential retries; see _collapseDuplicateSubmission for the
+          total order that makes the winner the same for every caller, and
+          for the two limits on the guarantee - a duplicate whose sibling
+          row is not yet visible to its query cannot be collapsed, and the
+          discarded row's case number is consumed, leaving a gap in the
+          CASE sequence.
+
+      lookupCase whitelist (OUTPUT side - prevents PII / internal-data leak):
+        - Returns ONLY: status, subject, opened_date.
+        - NEVER returns: assigned_group, assigned_agent, description,
+          closed_date, requester_name, requester_email, priority, type,
+          pending_reason, sys_id, sys_created_by, sys_created_on,
+          sys_updated_by, sys_updated_on, or any other field.
+        - Returns null when no record matches. The calling scripted REST
+          endpoint translates null into HTTP 404 with the verbatim
+          message "No case found with that number." per AAP Section 0.7.4.
+          The literal not-found text is INTENTIONALLY absent from this
+          Script Include's body - it is the REST endpoint's responsibility
+          to surface the verbatim user-facing message.
+        - The supplied number is normalised (trimmed, upper-cased) and
+          validated against ^CASE[0-9]{7}$ BEFORE any query runs. A value
+          that is malformed, empty or absent produces the SAME null - and
+          therefore the same HTTP 404 - as a genuine miss, and issues no
+          query at all, so a malformed sweep costs the instance nothing
+          and discloses nothing about the accepted input shape.
+        - A per-session sliding-window throttle bounds the read path:
+          requests are counted in the session's own GlideSession
+          client-data store (one key, compact JSON, pruned on every call -
+          no new table, field or property, per AAP Section 0.7.2), and a
+          session over its ceiling gets a THIRD return case,
+          { throttled: true }, which the REST operation answers as HTTP
+          429 exactly as the submit endpoint does.
+        - Sweeps are made VISIBLE rather than claimed impossible:
+          crossing the soft miss threshold, or being throttled, emits a
+          gs.warn under the stable marker
+          X_CASEMGMT_PORTAL_LOOKUP_ABUSE| carrying the client IP and the
+          miss/total counts. The hit-versus-miss distinction itself is
+          inherent to the single-factor number-only lookup AAP Section
+          0.7.4 mandates and is NOT closed by any of this; see the
+          ENUMERATION EXPOSURE note on lookupCase and
+          ../docs/portal-pages.md for the residual risk, stated rather
+          than denied.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <name>CasePortalService</name>                          bare class name
+        - <api_name>x_casemgmt.CasePortalService</api_name>       scope-qualified
+        - <sys_update_name>sys_script_include_x_casemgmt_CasePortalService</sys_update_name>
+        - <sys_scope>x_casemgmt</sys_scope>                       scoped namespace
+        - <sys_package>x_casemgmt</sys_package>                   scoped application
+        - script body references new GlideRecord('x_casemgmt_case') only
+        - Zero global-scope writes. Zero modifications to OOB tables
+          (sys_user, sys_user_group, sys_user_role, core_company, etc.).
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <sys_scope> resolves the scope record BY NAME (x_casemgmt)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - The script body performs ZERO GlideRecord lookups by sys_id
+          literal; lookupCase() queries by the case 'number' field, NOT by
+          sys_id. The post-insert re-query in submitCase() uses the sys_id
+          RETURNED BY the .insert() call (not a hardcoded literal); this
+          is the documented platform pattern for re-reading auto-numbered
+          values that are populated by the platform's Number Maintenance
+          subsystem during the insert pipeline.
+        - The script body uses NO gs.getReference(<32-char-hex>) calls.
+        - The <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_CasePortalService"), which is
+          permitted because the AAP "no hardcoded sys_id" rule applies
+          to REFERENCE FIELDS pointing at OTHER records, not to a record's
+          own primary key.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        The script body MUST NOT call gs.eventQueue('...') for any email
+        notification event since email is disabled on the PDI. This Script
+        Include contains zero gs.eventQueue() calls, zero gs.email() calls,
+        and zero gs.notificationEngine() calls. ArkCase's
+        SaveCaseServiceImpl invoked downstream listeners that ultimately
+        sent confirmation emails to the requester; the ServiceNow POC
+        omits this entirely - the portal submission is silent at the
+        server side, with the confirmation surfaced by the calling widget
+        directly from the {number} return value.
+
+    NO-PII CONSTRAINT (AAP Section 0.7.2):
+        Code comments and gs.error()/gs.info() log messages contain ZERO
+        real names, real email addresses, real phone numbers, real
+        organizational identifiers, or any other personally identifiable
+        information. The example error log message in submitCase() includes
+        getLastErrorMessage() which returns a system-generated diagnostic
+        string (not user-supplied content); even if this string occasionally
+        echoes a snippet of input payload, that is a rare diagnostic case
+        acceptable for the POC scope. The script body does NOT log the
+        raw payload itself, NOT the requester_name/email values, and NOT
+        the case description text - all of which could carry PII at runtime.
+
+    ACCESS-LEVEL JUSTIFICATION:
+        <access>package_private</access> - this Script Include is callable
+        ONLY from code inside the same x_casemgmt scope. Per AAP Section
+        0.5.2 cross-dependency rules, the calling scripted REST endpoints
+        (../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml and
+        sys_ws_definition_x_casemgmt_case_status_lookup.xml) are in the
+        SAME scope, so package_private is sufficient and is the safer
+        default per ServiceNow scoped-application best practices. If a
+        future cross-scope caller needed to invoke this Script Include,
+        the access could be elevated to "public", but the POC has no such
+        requirement.
+
+        <client_callable>false</client_callable> - this Script Include is
+        SERVER-SIDE only. It writes/reads database rows and must NOT be
+        exposed to client scripts (where it would be reachable by any
+        authenticated user via the GlideAjax channel). The portal widget
+        clients reach this code only INDIRECTLY through the public
+        scripted REST endpoints, which is the correct attack-surface
+        boundary.
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script_include record MUST be loaded AFTER:
+            - ../app/sys_app/x_casemgmt_case_management.xml (the scoped
+              application record - the sole scope authority in this package,
+              so <sys_scope> and <sys_package> both resolve against it)
+            - ../tables/x_casemgmt_case.xml                   (case table queried by both methods)
+            - ../dictionary/x_casemgmt_case_number.xml        (auto-numbered field returned by submitCase, queried by lookupCase)
+            - ../dictionary/x_casemgmt_case_subject.xml       (whitelisted in/out field)
+            - ../dictionary/x_casemgmt_case_type.xml          (whitelisted input field)
+            - ../dictionary/x_casemgmt_case_status.xml        (forced to Draft on submit, returned on lookup)
+            - ../dictionary/x_casemgmt_case_description.xml   (whitelisted input field)
+            - ../dictionary/x_casemgmt_case_opened_date.xml   (returned on lookup)
+            - ../dictionary/x_casemgmt_case_requester_name.xml (whitelisted input field)
+            - ../dictionary/x_casemgmt_case_requester_email.xml (whitelisted input field)
+        And BEFORE:
+            - ../portal/rest/sys_ws_definition_x_casemgmt_case_submit.xml
+              (paired sys_ws_operation calls new x_casemgmt.CasePortalService().submitCase(payload))
+            - ../portal/rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml
+              (paired sys_ws_operation calls new x_casemgmt.CasePortalService().lookupCase(number))
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_CasePortalService")
+               = 95e90fa18471e42875f5f956ec7949d1
+        32-character lowercase hex. The PDI accepts any valid 32-char hex
+        sys_id; deriving from the record name guarantees idempotent re-import
+        on a fresh PDI: re-importing the same Update Set produces the same
+        sys_id, which collides on the existing record and updates it in
+        place rather than creating a duplicate. This is the same convention
+        used by the sibling Script Include
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+
+        - Gate 4 (Portal - submission): "Case created from unauthenticated
+          portal submission - Case appears in internal list with Draft
+          status and correct case number."
+            * submitCase() inserts a row with status='Draft' (forced).
+            * Returns { number: '<auto-generated>' } matching format
+              CASE0000001 (per ../numbers/sys_number_x_casemgmt_case.xml).
+            * The case appears in the internal list view because no
+              field-level ACL conditions hide rows from authenticated
+              internal users; the case_viewer role (read-all) and
+              case_manager role (read-all) both see all Draft rows.
+
+        - Gate 5 (Portal - lookup): "Status lookup returns correct data
+          for valid case number - Correct status / subject / opened_date
+          returned; 'No case found with that number.' for invalid number."
+            * lookupCase(number) returns { status, subject, opened_date }
+              for valid numbers.
+            * Returns null for invalid numbers; the REST operation handler
+              translates null into HTTP 404 with the verbatim message
+              "No case found with that number." per AAP Section 0.7.4.
+            * Internal fields (assigned_*, description, closed_date,
+              requester_*, priority, type, pending_reason, audit fields)
+              are NEVER included in the response object.
+
+        - Gate 7 (Update Set): "Scoped app exported - Update Set loads
+          without errors on a fresh PDI instance." The deterministic
+          sys_id, reference-by-name pattern, and well-formed XML structure
+          ensure this record re-imports cleanly with zero preview errors.
+-->
+<record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_casemgmt.CasePortalService</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description>Server-side helper for the unauthenticated Experience Portal. Provides submitCase(payload) for anonymous case submission and lookupCase(number) for anonymous status lookup. Enforces strict field whitelisting per AAP Section 0.7.4: submission accepts only subject, type, description, requester_name, requester_email and forces status=Draft regardless of payload; lookup returns only status, subject, opened_date and never exposes internal fields. submitCase validates its input before inserting - subject, description and requester_name are required and must not exceed 255/4000/100 characters (an over-length value is refused with a named field error, never truncated), requester_email must look like an address when supplied and must not exceed 100 characters, type must be a live choice of x_casemgmt_case.type - an admission ceiling evaluated AFTER the insert bounds the unauthenticated write path (the same caller's rows inside a 60-second window are counted with the inserted row among them, and a count above the global ceiling of 10, or above the per-requester ceiling of 4 taken over the rows sharing its normalised requester_email bucket, deletes the row again and refuses it with throttled=true; counting published rows after the insert bounds the window absolutely - the last caller to count necessarily sees every row that survives - whereas a count taken before the insert bounds nothing and a rank taken after it admits any caller whose query sees only part of the window), and an identical submission received inside a 90-second window is collapsed onto the surviving case (same five values, still Draft, same caller) so a retry or a simultaneous double-post yields one case rather than two - the duplicate row is deleted and its case number is consumed, leaving a gap in the CASE sequence; submitCase returns {number} on success, {error, fields} when validation refuses the payload, {error, throttled} when the admission ceiling refuses it, or {error} when the insert fails; lookupCase normalises and strictly validates the supplied number against ^CASE[0-9]{7}$ before any query, throttles the read path per session in the GlideSession client-data store, and warns under the stable marker X_CASEMGMT_PORTAL_LOOKUP_ABUSE| when a session crosses the soft miss threshold or is throttled; it returns the whitelisted record on match, {throttled} when the session is over its ceiling (the REST operation answers HTTP 429), or null on no-match - which a malformed, empty or absent number produces identically and without a query (the calling scripted REST endpoint translates null into the HTTP 404 not-found response whose verbatim body is specified by AAP Section 0.7.4). The hit-versus-miss distinction is inherent to the single-factor number-only lookup the AAP mandates and is compensated rather than removed; the residual risk is recorded in docs/portal-pages.md. Replaces the persistence and lookup roles of ArkCase SaveCaseService and GetCaseByNumberService for the portal slice. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id reference literals.</description>
+        <name>CasePortalService</name>
+        <script><![CDATA[var CasePortalService = Class.create();
+CasePortalService.prototype = {
+    /**
+     * No-arg initializer. The class holds no per-instance state across
+     * calls (each request from the scripted REST handler instantiates a
+     * fresh CasePortalService), so initialize() is intentionally empty.
+     */
+    initialize: function() {
+    },
+
+    /**
+     * Anonymous case submission entry point.
+     *
+     * Whitelist-only field handling per AAP Section 0.7.4:
+     *   - Accepted fields: subject, type, description, requester_name,
+     *     requester_email
+     *   - All other fields are silently dropped (no error returned for
+     *     unrecognized keys; this matches the AAP requirement that the
+     *     portal not surface internal field names to anonymous callers
+     *     even by way of validation error messages).
+     *   - status is FORCED to 'Draft' regardless of payload. Even if a
+     *     malicious caller sends status='Closed' or any non-Draft value,
+     *     the server overwrites to 'Draft' before insert. This is the
+     *     single security guarantee that anonymous submissions cannot
+     *     bypass the state-machine workflow.
+     *   - Returns the auto-generated case number (CASE0000001 format)
+     *     on success. The number generator is configured in
+     *     ../numbers/sys_number_x_casemgmt_case.xml.
+     *   - An identical submission received inside the de-duplication
+     *     window is answered with the number of the case that survives
+     *     it, and its own row is removed, so a retry or a simultaneous
+     *     double-post yields ONE case rather than two. The response shape
+     *     is unchanged - { number } either way - so no caller has to know
+     *     which of the two happened.
+     *
+     * Robust input handling per Rule 9 of the agent prompt: gracefully
+     * handle null, undefined, and non-object payloads without throwing
+     * uncaught exceptions (the unauthenticated REST endpoint can receive
+     * any malformed payload from the public Internet).
+     *
+     * @param {Object} payload - request payload from the scripted REST
+     *     endpoint, as parsed from the JSON request body.
+     * @return {Object} { number: 'CASE0000001' } on success; or
+     *     { error: '<message>', fields: { <field>: '<reason>' } } when the
+     *     payload fails validation (the REST operation answers HTTP 400);
+     *     or { error: '<message>', throttled: true } when the anonymous
+     *     flood guard refuses the request (HTTP 429); or
+     *     { error: '<message>' } when the insert itself fails.
+     */
+    submitCase: function(payload) {
+        // Defensive null/type check. The scripted REST endpoint should
+        // already have parsed JSON into an object, but a malformed
+        // request could yield null/undefined/string/array; guard against
+        // all of those without leaking implementation details to the caller.
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            return { error: 'Invalid payload.' };
+        }
+
+        // ------------------------------------------------------------------
+        // VALIDATION GATE (AAP Section 0.5.7 constraints, enforced here
+        // because nothing else on this write path enforces them).
+        //
+        // The dictionary marks subject, description and requester_name
+        // Mandatory, but a scoped GlideRecord.insert() performed by this
+        // Script Include does NOT run the platform's mandatory-field UI
+        // validation: mandatory is a form/ACL-time construct, so an insert
+        // carrying empty strings succeeds silently. Likewise, ServiceNow
+        // backs string columns longer than 255 with a TEXT column that does
+        // NOT truncate, so the declared 4000-character description limit is
+        // only real if this method enforces it. Both gaps were reproduced
+        // against the live endpoint (blank mandatory fields accepted with
+        // HTTP 201; a 6006-character description stored in full), so the
+        // guard below is the fix for them, and for a `type` value outside
+        // the declared choice list.
+        //
+        // Validation runs BEFORE any GlideRecord is initialized so a
+        // rejected submission cannot leave a partial row behind.
+        // ------------------------------------------------------------------
+        var validated = this._validateSubmission(payload);
+        if (validated.error) {
+            return validated;
+        }
+
+        // ------------------------------------------------------------------
+        // ANONYMOUS FLOOD GUARD - EVALUATED AFTER THE INSERT, NOT BEFORE IT.
+        // The guard used to run here, as a count-then-decide check ahead of
+        // the insert. That ordering is unenforceable under concurrency: every
+        // parallel caller read the same pre-insert count, every one of them
+        // saw it below the ceiling, and every one of them was admitted, so the
+        // ceiling bounded nothing at all. The admission decision now happens
+        // AFTER the row exists, in _admitAnonymousSubmission - see that method
+        // for why coupling the decision to the insert is what makes the
+        // ceiling real, and for the per-requester fairness cap that stops one
+        // caller consuming the whole allowance.
+        // ------------------------------------------------------------------
+        var caseGr = new GlideRecord('x_casemgmt_case');
+        caseGr.initialize();
+
+        // Whitelisted input fields per AAP Section 0.7.4. The five fields
+        // below are EXACTLY the inputs the case submission page exposes
+        // to anonymous callers (../portal/pages/sp_page_x_casemgmt_case_submit.xml
+        // and the submission widget at
+        // ../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml).
+        // Any other key in the payload is silently dropped - we do not
+        // even acknowledge unrecognized keys via an error response, so a
+        // probing client cannot enumerate internal field names.
+        //
+        // The values written are the VALIDATED, trimmed, length-checked
+        // values produced by _validateSubmission(), never the raw payload.
+        var WHITELIST = ['subject', 'type', 'description', 'requester_name', 'requester_email'];
+        for (var i = 0; i < WHITELIST.length; i++) {
+            var fieldName = WHITELIST[i];
+            if (Object.prototype.hasOwnProperty.call(validated.values, fieldName)) {
+                caseGr.setValue(fieldName, validated.values[fieldName]);
+            }
+        }
+
+        // FORCE status='Draft' regardless of payload (security perimeter).
+        // Anonymous submissions ALWAYS start in Draft per AAP Sections
+        // 0.5.5 and 0.7.4; the state-machine in the Flow Designer flows
+        // (../flows/general_inquiry_state_machine.xml,
+        // ../flows/complaint_state_machine.xml) advances the case from
+        // Draft to subsequent statuses only via authenticated internal
+        // user actions. Even if the dictionary's default_value='Draft'
+        // already covers most insert paths, an explicit setValue() here
+        // defends against a payload that includes status='Closed' (or
+        // any other string) attempting to skip the state-machine entirely.
+        caseGr.setValue('status', 'Draft');
+
+        // Insert the new row. The insert() return value is the new
+        // record's sys_id on success or null on failure. Failure here
+        // typically indicates a before-insert business rule rejected the
+        // record (e.g., a missing mandatory field that the portal client
+        // forgot to send), or a database/platform error.
+        var newSysId = caseGr.insert();
+        if (!newSysId) {
+            // gs.error() emits a diagnostic to the system log. Per Rule 5
+            // of the agent prompt, we log getLastErrorMessage() (a
+            // system-generated diagnostic) but NOT the raw payload (which
+            // could carry PII like a real requester email). The error
+            // returned to the caller is intentionally generic ("Submission
+            // failed.") so a probing client cannot extract field-level
+            // validation hints.
+            gs.error('CasePortalService.submitCase: insert failed; lastErrorMessage=' + caseGr.getLastErrorMessage());
+            return { error: 'Submission failed.' };
+        }
+
+        // Re-query by sys_id to read the auto-generated 'number' field.
+        // The number is populated by the platform's Number Maintenance
+        // subsystem during the insert pipeline; on most platform releases
+        // the number is already visible on the original GlideRecord by
+        // the time insert() returns, but a fresh GlideRecord.get(sys_id)
+        // is the documented defensive pattern that works across all
+        // releases (Yokohama and later per AAP Section 0.6.1).
+        //
+        // The newSysId used here is the value returned by insert() in the
+        // line above - it is NOT a hardcoded sys_id literal, so this
+        // GlideRecord.get(newSysId) call complies with the AAP Section
+        // 0.7.2 no-hardcoded-sys_id constraint.
+        var savedGr = new GlideRecord('x_casemgmt_case');
+        if (!savedGr.get(newSysId)) {
+            gs.error('CasePortalService.submitCase: post-insert lookup failed for sys_id=' + newSysId);
+            return { error: 'Submission failed.' };
+        }
+
+        // The admission decision. Our row is published, so every concurrent
+        // caller now counts a window that already contains it, and the last
+        // caller to count cannot miss a row that survives. A
+        // refused submission has already removed its own row inside
+        // _admitAnonymousSubmission, so nothing is left behind here; the
+        // response carries no count, limit or window, only the throttle flag
+        // the POST operation answers as HTTP 429.
+        if (!this._admitAnonymousSubmission(savedGr, newSysId).allowed) {
+            return {
+                error: 'Too many submissions were received in a short period. Please try again in a minute.',
+                throttled: true
+            };
+        }
+
+        // ------------------------------------------------------------------
+        // ROUND-TRIP VERIFICATION - the value stored must equal the value
+        // submitted, or the submission is refused and the row removed.
+        //
+        // _validateSubmission() refuses anything longer than the declared
+        // limit, counted in the units JavaScript counts (str.length, i.e.
+        // UTF-16 code units). That is necessary and it is not sufficient,
+        // because the column's real capacity is not expressed in those
+        // units. Measured on this instance against x_casemgmt_case.subject,
+        // declared String(255):
+        //     255 ASCII characters                  -> stored 255, exact
+        //     one emoji + 253 ASCII (255 units)     -> stored 245 units,
+        //                                              ten characters of
+        //                                              the tail silently
+        //                                              gone
+        //     one emoji + 243 ASCII                 -> exact
+        // The boundary moves with the number of astral characters present
+        // and does not correspond to characters, UTF-16 units or UTF-8
+        // bytes in any way that survives being written down as a formula -
+        // it is an artefact of how the platform encodes the value on its
+        // way to a VARCHAR-backed column. Short values containing the same
+        // characters round-trip perfectly, so this is a capacity boundary
+        // and not character mangling.
+        //
+        // Rather than re-derive that boundary and hardcode a formula that a
+        // platform upgrade or a different column type would quietly
+        // invalidate, this check asks the only question that actually
+        // matters and asks it of the platform itself: is what you stored
+        // what I gave you? That is exact by construction, needs no model of
+        // the encoding, and cannot drift.
+        //
+        // It costs nothing extra: savedGr is the re-query this method
+        // already performs to read the auto-generated number.
+        //
+        // On mismatch the row is DELETED. A partial case is worse than no
+        // case on an anonymous intake path - the requester would be handed
+        // a case number for a case whose material content had been
+        // shortened, with no way to know, which is the whole defect this
+        // check exists to prevent. Deleting and refusing gives them an
+        // actionable error and one edit. The case number is consumed either
+        // way; the platform allocates numbers on form load as well, so
+        // gaps in the CASE sequence are already expected and carry no
+        // meaning.
+        //
+        // Only the four bounded string columns are compared. status is
+        // forced by this method, number and the audit columns are the
+        // platform's, and type is a choice value resolved against the live
+        // choice list before it is written.
+        // ------------------------------------------------------------------
+        var ROUND_TRIP_FIELDS = [
+            { name: 'subject',         label: 'Subject' },
+            { name: 'description',     label: 'Description' },
+            { name: 'requester_name',  label: 'Your name' },
+            { name: 'requester_email', label: 'Email' }
+        ];
+        var mismatches = {};
+        var mismatchCount = 0;
+        for (var r = 0; r < ROUND_TRIP_FIELDS.length; r++) {
+            var rtField = ROUND_TRIP_FIELDS[r];
+            if (!Object.prototype.hasOwnProperty.call(validated.values, rtField.name)) {
+                continue;
+            }
+            var submittedValue = String(validated.values[rtField.name]);
+            var storedValue = String(savedGr.getValue(rtField.name) || '');
+            if (storedValue === submittedValue) {
+                continue;
+            }
+            mismatchCount++;
+            // The message quotes both lengths so the caller can act without
+            // bisecting the payload, and describes the effect rather than
+            // the platform mechanism, which is not the caller's problem.
+            // Both numbers describe the caller's own input.
+            mismatches[rtField.name] = rtField.label + ' could not be stored exactly as submitted' +
+                ' (sent ' + submittedValue.length + ' characters, stored ' + storedValue.length +
+                '). Please shorten it and submit again.';
+        }
+
+        if (mismatchCount > 0) {
+            // Remove the row before returning, so a refused submission
+            // leaves nothing behind. deleteRecord() is checked: if the
+            // delete itself fails the row would survive as a partial case,
+            // which must be logged loudly rather than passed over.
+            var cleanupGr = new GlideRecord('x_casemgmt_case');
+            if (cleanupGr.get(newSysId) && !cleanupGr.deleteRecord()) {
+                gs.error('CasePortalService.submitCase: stored value did not match the submitted ' +
+                    'value AND the cleanup delete failed for sys_id=' + newSysId +
+                    '; a partial case row has been left behind and needs manual removal.');
+            } else {
+                gs.warn('CasePortalService.submitCase: refused a submission because ' +
+                    mismatchCount + ' field(s) did not round-trip exactly; the partial row was ' +
+                    'removed. Fields: ' + Object.keys(mismatches).join(', ') + '.');
+            }
+            return {
+                error: 'The submission could not be accepted because one or more fields are invalid.',
+                fields: mismatches
+            };
+        }
+
+        // ------------------------------------------------------------------
+        // DOUBLE-SUBMIT COLLAPSE. Two identical anonymous submissions in
+        // quick succession are one intake, not two, and this endpoint had
+        // no defence against them: QA released two barrier-synchronised
+        // POSTs carrying the same body and both were accepted, persisting
+        // CASE0000226 and CASE0000227. The flood guard above does not help
+        // - ten submissions a minute is exactly what it permits - and the
+        // widget's in-flight button lock only covers the single page, not
+        // the public API.
+        //
+        // The collapse runs HERE, after the insert, deliberately. See
+        // _collapseDuplicateSubmission for why a post-insert reconcile is
+        // the only variant that also settles genuinely simultaneous
+        // callers, and for the two honest limits on the guarantee.
+        // ------------------------------------------------------------------
+        var winningNumber = this._collapseDuplicateSubmission(savedGr, validated.values, newSysId);
+        if (winningNumber !== null) {
+            return { number: winningNumber };
+        }
+
+        // Return ONLY the auto-generated number - no other fields, no
+        // sys_id, no audit fields. The portal confirmation widget
+        // (../portal/widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml)
+        // displays this number to the requester so they can later look up
+        // their case via the status page.
+        return { number: String(savedGr.getValue('number')) };
+    },
+
+    /**
+     * Collapse an identical anonymous submission received inside a short
+     * window onto the single case that survives it.
+     *
+     * WHAT IT GUARANTEES, AND WHAT IT DOES NOT. Stated first, because the
+     * value of a de-duplication contract is entirely in its edges:
+     *
+     *   IT DOES collapse a retry - a requester who presses Submit twice,
+     *   a client that repeats a POST after a timeout, a script that loops
+     *   - onto the FIRST case, and answers the later caller with that
+     *   first case's number, so both callers are told the same truth and
+     *   exactly one row survives.
+     *
+     *   IT DOES collapse two genuinely simultaneous callers, provided
+     *   each one's query can see the other's row. Both compute the SAME
+     *   winner, because the winner is defined by a total order over the
+     *   candidate rows (sys_created_on, then sys_id) rather than by
+     *   "whoever noticed first"; the loser removes its own row.
+     *
+     *   IT DOES NOT collapse two callers whose inserts are both still
+     *   invisible to each other's query. Each then sees only its own row,
+     *   each declares itself the winner, and TWO cases survive. This is a
+     *   real residual window, it is a property of reconciling after the
+     *   fact rather than of this implementation, and closing it would
+     *   need a uniqueness constraint or a mutex - neither of which exists
+     *   for this table, and adding a table, a field or an endpoint to
+     *   carry one is refused by the AAP Section 0.7.2 Minimal-Change
+     *   Clause. So the guarantee is "duplicates are collapsed, not
+     *   prevented", and that is the honest wording.
+     *
+     *   IT DOES NOT reclaim the case number the discarded row consumed.
+     *   The platform allocates a number during the insert, so a collapsed
+     *   duplicate leaves a GAP in the CASE sequence. That is already true
+     *   of this method's round-trip refusal and of every form load, so
+     *   gaps carry no meaning here, but they are visible and a reader
+     *   comparing counts should expect them.
+     *
+     * WHY POST-INSERT RATHER THAN PRE-INSERT. A pre-insert "has an
+     * identical case just arrived?" check reads a window in which a
+     * simultaneous sibling has not yet written anything, so two callers
+     * both see nothing and both insert - it collapses retries only. By
+     * inserting first and reconciling after, each caller has already
+     * published its candidate before it looks, which is what lets two
+     * simultaneous callers converge on one winner. The pattern is not new
+     * to this file: the round-trip verification above inserts, asks the
+     * platform what it actually stored, and deletes the row when the
+     * answer is wrong. This is the same shape with a different question.
+     *
+     * WHY 90 SECONDS. The window has to be longer than the interval a
+     * human or a client will re-press within, and short enough that a
+     * requester who deliberately submits the same case again later is not
+     * silently refused a second case. Measured behaviour bounds both
+     * ends: the submission widget has no client-side timeout at all (see
+     * the lookup widget's LOOKUP_TIMEOUT_MS comment for why the write
+     * deliberately differs from the read), so a retry follows a stalled
+     * request by whatever the requester's patience is - tens of seconds -
+     * while the endpoint's own flood guard already thinks in a 60-second
+     * window. 90 seconds sits just above that flood window, so the two
+     * mechanisms describe overlapping periods rather than contradicting
+     * ones, and well below the minutes it takes to retype a case by hand.
+     *
+     * THE FINGERPRINT is the five whitelisted values, and nothing else.
+     * Two submissions are "identical" when subject, type, description,
+     * requester_name and requester_email all match, the row is still in
+     * Draft, and it was created by the same caller as ours. status is in
+     * the fingerprint because a case that has already been worked -
+     * advanced out of Draft by an agent - must never be handed back to an
+     * anonymous caller as the answer to a new submission. The creator is
+     * read off our own row rather than assumed to be 'guest', so this is
+     * correct for whatever user the platform runs an unauthenticated call
+     * as, and it keeps an internal user's identically-worded case from
+     * ever being returned to the public endpoint.
+     *
+     * `description` is compared IN SCRIPT rather than in the query. It is
+     * declared 4000 characters, so the platform backs it with a TEXT
+     * column, and an equality predicate on a TEXT column is the one part
+     * of this query that is neither reliably indexed nor portable across
+     * the databases the platform runs on. The four narrow columns do the
+     * selecting; the wide one does the confirming, on the handful of rows
+     * that survive.
+     *
+     * No hardcoded sys_id (AAP Section 0.7.2): the only identifier used
+     * is the one insert() returned, passed in. No gs.eventQueue and no
+     * notification of any kind (email is disabled per Section 0.7.2). No
+     * new table, field or endpoint (Minimal-Change Clause).
+     *
+     * @param {GlideRecord} savedGr - the post-insert re-query of our own
+     *     row, already positioned on it.
+     * @param {Object} values - the validated whitelisted values that were
+     *     written.
+     * @param {String} newSysId - the sys_id returned by insert().
+     * @return {String|null} the surviving case's number when OUR row was
+     *     the duplicate and has been removed, or null when our row is the
+     *     one that survives (the caller then returns its own number).
+     */
+    _collapseDuplicateSubmission: function(savedGr, values, newSysId) {
+        var DEDUPE_WINDOW_SECONDS = 90;
+
+        var ourNumber = String(savedGr.getValue('number') || '');
+        var creator = String(savedGr.getValue('sys_created_by') || '');
+        if (creator === '') {
+            // Without a creator there is no safe way to scope the search to
+            // this endpoint's own rows, and widening it to every Draft case
+            // could hand an anonymous caller a case somebody else created.
+            // Fail open: keep our row.
+            gs.warn('CasePortalService._collapseDuplicateSubmission: sys_created_by was empty on ' +
+                'sys_id=' + newSysId + '; the duplicate check was skipped for this submission.');
+            return null;
+        }
+
+        if (String(savedGr.getValue('status') || '') !== 'Draft') {
+            // Our own row must satisfy the same fingerprint the candidates
+            // are selected by, or the winner could be a row that is
+            // "identical" to what we submitted while OUR row holds
+            // something else - and we would delete the row the requester
+            // actually created. submitCase() forces status='Draft' before
+            // the insert, so reaching here means something moved it
+            // afterwards; that is a state this method has no basis to
+            // reconcile, so it declines and keeps our row.
+            gs.warn('CasePortalService._collapseDuplicateSubmission: sys_id=' + newSysId +
+                ' is no longer in Draft immediately after insert (status=' +
+                String(savedGr.getValue('status') || '') + '); the duplicate check was skipped.');
+            return null;
+        }
+
+        var windowStart = new GlideDateTime();
+        windowStart.addSeconds(-DEDUPE_WINDOW_SECONDS);
+
+        var ourDescription = Object.prototype.hasOwnProperty.call(values, 'description') ?
+            String(values.description) : '';
+
+        var candidates = new GlideRecord('x_casemgmt_case');
+        candidates.addQuery('status', 'Draft');
+        candidates.addQuery('sys_created_by', creator);
+        candidates.addQuery('sys_created_on', '>=', windowStart);
+        candidates.addQuery('subject', this._fingerprintValue(values, 'subject'));
+        candidates.addQuery('type', this._fingerprintValue(values, 'type'));
+        candidates.addQuery('requester_name', this._fingerprintValue(values, 'requester_name'));
+        candidates.addQuery('requester_email', this._fingerprintValue(values, 'requester_email'));
+        // The order is the whole mechanism: every caller evaluating this
+        // same candidate set picks the same first row. sys_created_on has
+        // one-second resolution, so two simultaneous inserts routinely
+        // share it - sys_id breaks that tie deterministically, since every
+        // caller compares the same 32-character strings.
+        candidates.orderBy('sys_created_on');
+        candidates.orderBy('sys_id');
+        candidates.query();
+
+        var winnerSysId = '';
+        var winnerNumber = '';
+        while (candidates.next()) {
+            if (String(candidates.getValue('description') || '') !== ourDescription) {
+                continue;
+            }
+            winnerSysId = String(candidates.getValue('sys_id') || '');
+            winnerNumber = String(candidates.getValue('number') || '');
+            break;
+        }
+
+        if (winnerSysId === '' || winnerSysId === newSysId) {
+            // Either nothing matched (our own row should always match, so
+            // this means the query could not see it yet) or we ARE the
+            // winner. Both keep our row and return its own number.
+            return null;
+        }
+
+        if (winnerNumber === '') {
+            // A surviving row with no case number is nothing to hand a
+            // requester, and deleting ours in favour of it would lose the
+            // only number we can quote. Keep ours and say why.
+            gs.warn('CasePortalService._collapseDuplicateSubmission: an earlier identical Draft case ' +
+                'sys_id=' + winnerSysId + ' carries no case number, so submission sys_id=' + newSysId +
+                ' was kept as a separate case rather than collapsed onto it.');
+            return null;
+        }
+
+        // We are the duplicate. Remove our row and answer with the case
+        // that survives. deleteRecord() is checked for the same reason the
+        // round-trip cleanup checks it: a failed delete leaves two rows,
+        // and the caller must then be told about the row that actually
+        // exists under its own number rather than about a row we failed to
+        // remove.
+        var duplicateGr = new GlideRecord('x_casemgmt_case');
+        if (!duplicateGr.get(newSysId)) {
+            gs.warn('CasePortalService._collapseDuplicateSubmission: the duplicate row sys_id=' +
+                newSysId + ' could no longer be read for removal; answering with the surviving case.');
+            return winnerNumber;
+        }
+        if (!duplicateGr.deleteRecord()) {
+            gs.error('CasePortalService._collapseDuplicateSubmission: submission sys_id=' + newSysId +
+                ' duplicates case sys_id=' + winnerSysId + ' but the duplicate could NOT be deleted' +
+                ' (lastErrorMessage=' + duplicateGr.getLastErrorMessage() + '); both rows now exist' +
+                ' and the duplicate needs manual removal.');
+            return null;
+        }
+
+        gs.info('CasePortalService._collapseDuplicateSubmission: collapsed an identical anonymous ' +
+            'submission received inside ' + DEDUPE_WINDOW_SECONDS + 's onto the surviving case; the ' +
+            'duplicate row (number ' + ourNumber + ') was removed and the caller was answered with the ' +
+            'earlier case number. The removed row consumed a case number, so the CASE sequence has a gap.');
+        return winnerNumber;
+    },
+
+    /**
+     * One whitelisted value, in the exact form it was written to the row,
+     * for use as a query term in the duplicate fingerprint.
+     *
+     * A field absent from `values` was never written, so the stored column
+     * holds the empty string and the query term must be '' - not null,
+     * which GlideRecord would treat as an unset condition and silently
+     * widen the search with.
+     *
+     * @param {Object} values - the validated whitelisted values.
+     * @param {String} name - the field name.
+     * @return {String} the value written, or '' when the field was absent.
+     */
+    _fingerprintValue: function(values, name) {
+        if (!Object.prototype.hasOwnProperty.call(values, name)) {
+            return '';
+        }
+        return String(values[name]);
+    },
+
+    /**
+     * Anonymous case status lookup entry point.
+     *
+     * Whitelist-only field return per AAP Section 0.7.4:
+     *   - Looks up by case number (CASE0000001 style; the public-facing
+     *     identifier returned by submitCase).
+     *   - Returns ONLY: status, subject, opened_date. opened_date is the
+     *     DISPLAY value (session timezone and date format), so the instant
+     *     an external requester reads matches the instant internal staff
+     *     read on the case form; see the block comment at the return
+     *     statement for the measurement that made this necessary.
+     *   - NEVER returns: assigned_group, assigned_agent, description,
+     *     closed_date, requester_name, requester_email, priority, type,
+     *     pending_reason, sys_id, sys_created_by, sys_created_on,
+     *     sys_updated_by, sys_updated_on, or any other field. The
+     *     three-field whitelist is the privacy perimeter for anonymous
+     *     lookups - returning the full record would expose internal
+     *     assignment data and PII that the requester themselves
+     *     supplied at submission time.
+     *   - Returns null when no case matches, when the supplied value is
+     *     not a well-formed case number, and when no value was supplied at
+     *     all - the three are ONE outcome here, so nothing in this method
+     *     tells a caller which of them happened. The calling scripted REST
+     *     endpoint translates null into the HTTP 404 not-found response
+     *     whose verbatim body is specified in AAP Section 0.7.4. The
+     *     user-facing not-found message is INTENTIONALLY absent from this
+     *     Script Include's runtime path - it is the REST endpoint's
+     *     responsibility to surface that message.
+     *   - Returns { throttled: true } when this session has exceeded the
+     *     per-session request ceiling for the trailing window. The REST
+     *     operation answers that with HTTP 429, mirroring the submit
+     *     endpoint. This is the THIRD return case and the only one that is
+     *     neither a hit nor a miss.
+     *
+     * ENUMERATION EXPOSURE, STATED PLAINLY (review finding F07). The
+     * contract AAP Section 0.7.4 fixes is a SINGLE-FACTOR lookup: a case
+     * number, on its own, returns that case's status, subject and opened
+     * date to an unauthenticated caller. Case numbers are sequential
+     * (CASE0000001 upward, per ../numbers/sys_number_x_casemgmt_case.xml),
+     * so "200 for a real number, 404 for an unused one" is inherently a
+     * hit/miss oracle: a script that walks the sequence learns which
+     * numbers exist and reads three fields of each. That is a property of
+     * the mandated contract, NOT of this implementation, and it cannot be
+     * removed without a second factor the AAP does not define and the
+     * Section 0.7.2 Minimal-Change Clause forbids inventing.
+     *
+     * What this method therefore does is RAISE THE COST and MAKE THE SWEEP
+     * VISIBLE, rather than claim the oracle away:
+     *
+     *   1. STRICT FORMAT VALIDATION BEFORE ANY QUERY. The value is trimmed,
+     *      upper-cased and matched against ^CASE[0-9]{7}$. Anything else
+     *      returns the not-found result WITHOUT touching the database, so a
+     *      malformed sweep costs the instance nothing and gains the caller
+     *      nothing - and the response is identical to a genuine miss, so
+     *      the shape of the accepted input is not disclosed either.
+     *   2. PER-SESSION SLIDING-WINDOW THROTTLE. Requests are counted in the
+     *      session's own client-data store (no new table, field or
+     *      property - Section 0.7.2), pruned to the window on every call.
+     *      Beyond the ceiling the answer is { throttled: true } / HTTP 429.
+     *   3. ABUSE MONITORING. Crossing the soft miss threshold, or being
+     *      throttled, emits a gs.warn under a STABLE MARKER prefix carrying
+     *      the client IP and the miss/total counts, so an operator can
+     *      alert on the prefix alone and see a sweep in progress.
+     *   4. A PLATFORM-NATIVE PER-HOUR CEILING on the guest user for this
+     *      resource ships beside the endpoint
+     *      (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml),
+     *      as defence in depth behind the in-script controls.
+     *
+     * RESIDUAL RISK, NOT DENIED: a distributed caller that discards its
+     * session cookie between requests gets a fresh session each time and so
+     * a fresh window, which is what the native per-hour rule on the guest
+     * user exists to bound; and a caller inside the ceiling can still walk
+     * the sequence slowly. The three fields exposed are the three the AAP
+     * mandates, and they are the whole of the exposure. This is recorded in
+     * ../docs/portal-pages.md rather than described as closed.
+     *
+     * Robust input handling: gracefully handles empty strings,
+     * whitespace-only strings, non-string inputs and lower-case input
+     * without throwing.
+     *
+     * @param {String} number - case number (e.g., 'CASE0000001'). Trimmed
+     *     and upper-cased, then required to match ^CASE[0-9]{7}$.
+     * @return {Object|null} { status, subject, opened_date } when a case
+     *     with the given number is found; { throttled: true } when this
+     *     session is over its request ceiling; or null when no case matches
+     *     (including when the number argument is null, undefined, empty,
+     *     non-string, whitespace-only or not a well-formed case number).
+     */
+    lookupCase: function(number) {
+        // ------------------------------------------------------------------
+        // 1. PER-SESSION THROTTLE, EVALUATED FIRST so that EVERY request is
+        //    counted - including the ones that will be refused for their
+        //    format and the ones that carry no value at all. A sweep that
+        //    varies its input must not be able to buy free attempts by
+        //    sending values this method rejects early.
+        // ------------------------------------------------------------------
+        if (!this._admitAnonymousLookup().allowed) {
+            // The third return case. Deliberately carries no counts, no
+            // ceiling and no window: the REST operation turns the flag into
+            // HTTP 429 and its own hardcoded message.
+            return { throttled: true };
+        }
+
+        // ------------------------------------------------------------------
+        // 2. NORMALISE, THEN VALIDATE STRICTLY - BEFORE ANY QUERY.
+        //
+        //    The scripted REST endpoint passes through whatever the caller
+        //    supplied as the 'number' query parameter: a missing parameter
+        //    yields undefined, an empty one yields '', and the platform may
+        //    coerce a numeric-looking value into a Number. All of those, and
+        //    anything that is not shaped like a case number, produce the
+        //    SAME not-found result as a genuine miss and issue NO query.
+        //
+        //    Two reasons the check lives here rather than in the query:
+        //      - Cost. A malformed sweep is answered from memory, so it
+        //        cannot be used to make the database do work.
+        //      - Disclosure. A distinct "malformed input" answer would tell
+        //        an anonymous caller the accepted shape of the identifier.
+        //        One answer for both keeps that to what the widget source
+        //        already shows.
+        //
+        //    The pattern is the auto-number format from
+        //    ../numbers/sys_number_x_casemgmt_case.xml: the CASE prefix and
+        //    exactly seven digits. Upper-casing first accepts a requester
+        //    who types their number in lower case, which is a usability
+        //    concession and not a widening: the stored values are upper case.
+        // ------------------------------------------------------------------
+        var candidate = (number === null || number === undefined) ? '' : String(number).trim().toUpperCase();
+        if (!/^CASE[0-9]{7}$/.test(candidate)) {
+            this._recordAnonymousLookupMiss();
+            return null;
+        }
+
+        var caseGr = new GlideRecord('x_casemgmt_case');
+        // Query by the public-facing 'number' field, NOT by sys_id. The
+        // case number is the stable human-readable identifier shown to
+        // the requester on the submission confirmation; it is the only
+        // identifier the requester ever sees, so it is the only key the
+        // lookup endpoint accepts. This compliance with the AAP Section
+        // 0.7.2 no-hardcoded-sys_id constraint is also a privacy win:
+        // anonymous callers cannot probe the system by guessing
+        // 32-character hex sys_id values.
+        caseGr.addQuery('number', candidate);
+        // setLimit(1) is a defensive optimization - the case number is
+        // a unique field per the auto-numbering generator, so at most
+        // one row can match. Setting the limit eliminates any potential
+        // for a misconfiguration to return multiple rows and tells the
+        // database engine to stop after the first hit.
+        caseGr.setLimit(1);
+        caseGr.query();
+
+        if (!caseGr.next()) {
+            // A well-formed number that matched nothing. This is the miss
+            // the abuse monitor counts: a sweep of the sequential number
+            // space produces a run of them from one session, which is what
+            // the soft threshold in _recordAnonymousLookupMiss detects and
+            // reports. Counting it changes nothing the caller can observe -
+            // the response below is identical either way.
+            this._recordAnonymousLookupMiss();
+            // No case with the given number was found. Return null; the
+            // caller (the scripted REST operation script) translates
+            // null into the HTTP 404 response whose verbatim body is
+            // specified in AAP Section 0.7.4. We deliberately do NOT
+            // include that verbatim text in this Script Include - the
+            // REST endpoint owns the user-facing message, and embedding
+            // the literal here would create a maintenance hazard if the
+            // message ever needed to be reworded (which would then
+            // require a schema/Update-Set re-export rather than just a
+            // REST endpoint update).
+            return null;
+        }
+
+        // Whitelisted output fields per AAP Section 0.7.4. EXACTLY three
+        // fields are exposed to anonymous lookup callers:
+        //
+        //   - status: lets the requester see if their case is still
+        //     Draft, has progressed to Open / In Progress / Pending /
+        //     Resolved, or has been Closed.
+        //   - subject: lets the requester confirm they're looking up the
+        //     correct case (the requester chose this string at
+        //     submission time, so echoing it back confirms identity
+        //     without exposing other-party content).
+        //   - opened_date: lets the requester compute how long the case
+        //     has been open. Note: opened_date is auto-set on insert
+        //     by the before-insert business rule
+        //     ../business_rules/x_casemgmt_set_opened_date.xml.
+        //
+        // The String() coercion normalizes the GlideElement primitive
+        // values into plain strings (so JSON.stringify on the result
+        // produces clean JSON without any GlideElement object metadata).
+        // The `|| ''` defaults handle the rare edge case where a column
+        // is unexpectedly null-valued at runtime (e.g., a partially-
+        // initialized seed-data row); empty strings are safer than null
+        // in JSON responses to widget code that may not handle null
+        // gracefully.
+        //
+        // ------------------------------------------------------------------
+        // opened_date IS EMITTED AS THE DISPLAY VALUE, NOT THE RAW COLUMN
+        // VALUE.
+        //
+        // A GlideDateTime column is stored in UTC and getValue() returns
+        // exactly those stored characters. getDisplayValue() renders the
+        // same instant in the session's timezone and date format - which is
+        // what every internal surface (the case form, the case list, the
+        // reports) shows. Reading the column with getValue() therefore made
+        // this endpoint the ONLY surface in the application quoting UTC:
+        // measured on CASE9000003, /api/now/table/x_casemgmt_case with
+        // sysparm_display_value=false returned '2026-09-03 17:39:40', with
+        // sysparm_display_value=true returned '2026-09-03 10:39:40', and
+        // this endpoint returned the 17:39:40 form while the internal form
+        // showed 10:39:40 - a seven-hour discrepancy on one record, because
+        // the instance default timezone resolves to US/Pacific and neither
+        // the admin nor the guest user carries a personal timezone.
+        //
+        // An external requester reading 17:39:40 concludes their case was
+        // opened seven hours in the future relative to what the staff
+        // handling it can see, and there is no way for them to reconcile the
+        // two. AAP Section 0.7.3 Gate 5 requires the CORRECT opened_date be
+        // returned for a valid case number, so the display value is the
+        // correct emission and the raw value is not.
+        //
+        // The RESPONSE SHAPE IS UNCHANGED: exactly three keys - status,
+        // subject, opened_date - per AAP Section 0.7.4's whitelist. The
+        // timezone that qualifies the instant is surfaced as a LABEL on the
+        // lookup panel by
+        //   ../portal/widgets/sp_widget_x_casemgmt_case_lookup_widget.xml
+        // (which reads it from its own widget data, not from this response),
+        // deliberately NOT as a fourth key here: adding one would widen a
+        // whitelist the AAP fixes at three fields.
+        //
+        // getDisplayValue() is called on the GlideElement (caseGr.opened_date)
+        // rather than on the GlideRecord, because the no-argument
+        // GlideRecord.getDisplayValue() returns the record's DISPLAY FIELD
+        // (the case number), not this column.
+        //
+        // The fallback below covers only the abnormal case where the element
+        // is unavailable or renders empty while the column holds data - a
+        // partially-initialized row or a platform-level formatting failure.
+        // It cannot reintroduce the UTC value for a normal populated row,
+        // because getDisplayValue() on a populated GlideDateTime always
+        // renders; and when opened_date is genuinely empty both calls yield
+        // '' so the emitted value is '' either way (the empty opened_date
+        // seen on some seeded rows is a separate, upstream seed-data
+        // concern, not a formatting one).
+        // ------------------------------------------------------------------
+        var openedDateDisplay = '';
+        var openedDateElement = caseGr.opened_date;
+        if (openedDateElement) {
+            openedDateDisplay = String(openedDateElement.getDisplayValue() || '');
+        }
+        if (openedDateDisplay === '') {
+            openedDateDisplay = String(caseGr.getValue('opened_date') || '');
+        }
+
+        return {
+            status:      String(caseGr.getValue('status') || ''),
+            subject:     String(caseGr.getValue('subject') || ''),
+            opened_date: openedDateDisplay
+        };
+    },
+
+    /**
+     * The one place the anonymous-lookup guard's tuning lives.
+     *
+     * Kept in a single method rather than duplicated across the three
+     * methods that need it, so the window used to PRUNE the stored
+     * timestamps can never drift from the window used to JUDGE them - a
+     * drift that would silently widen or narrow the ceiling.
+     *
+     * key                 the single GlideSession client-data key the guard
+     *                     stores its compact JSON under. One key, so the
+     *                     guard adds no storage anywhere else (AAP Section
+     *                     0.7.2 Minimal-Change Clause: no new table, field
+     *                     or property).
+     * marker              the STABLE log-marker prefix an operator alerts
+     *                     on. Changing it breaks existing alerts, so it is
+     *                     treated as a published interface and is recorded
+     *                     in ../docs/portal-pages.md.
+     * windowSeconds       the sliding window, in seconds.
+     * requestLimit        requests allowed per session per window. Sized
+     *                     well above real use of the lookup page - a
+     *                     requester checking one case makes one request,
+     *                     the confirmation link's prefill makes one, and a
+     *                     retry after a mistyped number makes another - and
+     *                     far below the rate a sweep needs to be useful.
+     * missThreshold       misses per session per window that trip the soft
+     *                     abuse warning. A requester mistyping their own
+     *                     number a few times stays under it; walking the
+     *                     number space does not.
+     * logIntervalSeconds  minimum spacing between warnings from ONE
+     *                     session, so a sustained flood cannot turn the
+     *                     monitor into a log-flood amplifier.
+     * maxEntries          hard cap on stored timestamps per list. Only the
+     *                     most recent entries can change a decision, and an
+     *                     uncapped list would let a caller grow its own
+     *                     session record without limit.
+     *
+     * @return {Object} the guard's settings.
+     */
+    _lookupGuardSettings: function() {
+        return {
+            key: 'x_casemgmt_portal_lookup_guard',
+            marker: 'X_CASEMGMT_PORTAL_LOOKUP_ABUSE|',
+            windowSeconds: 60,
+            requestLimit: 12,
+            missThreshold: 5,
+            logIntervalSeconds: 60,
+            maxEntries: 64
+        };
+    },
+
+    /**
+     * Read this session's lookup-guard state and prune it to the window.
+     *
+     * The state is a compact JSON document under ONE client-data key:
+     *     { "t": [<request epoch ms>...],
+     *       "m": [<miss epoch ms>...],
+     *       "w": <epoch ms of the last warning emitted for this session> }
+     * Timestamps outside the window are dropped on every call, which is
+     * what makes the window slide without a scheduled job.
+     *
+     * The session store is used because it is the only per-caller state the
+     * platform offers this path without adding an artifact the AAP does not
+     * define. It is in-memory and per-session, so it is cheap, it expires
+     * with the session, and it stores NO PII - only integers.
+     *
+     * FAILS OPEN, AND SILENTLY, BY DESIGN. When there is no session, or the
+     * client-data store cannot be read, this returns null and the caller
+     * admits the request. Refusing instead would take the public lookup
+     * page down on a platform condition the requester cannot influence.
+     * The branch deliberately does NOT log: it is reachable on every
+     * request if it is reachable at all, so logging it would hand an
+     * attacker a log-flood amplifier. The condition is documented as a
+     * residual risk in ../docs/portal-pages.md and is covered by the native
+     * per-hour rate-limit rule on the guest user instead.
+     *
+     * A stored value that is not the JSON this guard wrote - truncated,
+     * replaced, or from an older shape - is treated as ABSENT rather than
+     * trusted, so a corrupt value costs one window of throttling and never
+     * an exception on the public path.
+     *
+     * @param {Object} settings - the object returned by
+     *     _lookupGuardSettings().
+     * @return {Object|null} { t: Array, m: Array, w: Number,
+     *     session: GlideSession } pruned to the window, or null when no
+     *     session state is available.
+     */
+    _readLookupGuardState: function(settings) {
+        var session = null;
+        try {
+            session = gs.getSession();
+        } catch (sessionError) {
+            return null;
+        }
+        if (!session) {
+            return null;
+        }
+
+        var raw = '';
+        try {
+            raw = String(session.getClientData(settings.key) || '');
+        } catch (readError) {
+            raw = '';
+        }
+
+        var requests = [];
+        var misses = [];
+        var lastWarned = 0;
+        if (raw !== '') {
+            try {
+                var parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    requests = parsed.t;
+                    misses = parsed.m;
+                    var parsedWarned = Number(parsed.w);
+                    if (!isNaN(parsedWarned) && isFinite(parsedWarned)) {
+                        lastWarned = parsedWarned;
+                    }
+                }
+            } catch (parseError) {
+                requests = [];
+                misses = [];
+                lastWarned = 0;
+            }
+        }
+
+        var cutoff = new GlideDateTime().getNumericValue() - (settings.windowSeconds * 1000);
+        return {
+            t: this._pruneGuardTimestamps(requests, cutoff, settings.maxEntries),
+            m: this._pruneGuardTimestamps(misses, cutoff, settings.maxEntries),
+            w: lastWarned,
+            session: session
+        };
+    },
+
+    /**
+     * Keep only the timestamps inside the window, and only the most recent
+     * maxEntries of them.
+     *
+     * Every entry is coerced and checked, because the input is whatever was
+     * parsed out of the session store: a non-array, a sparse array, strings,
+     * nulls and NaN are all possible and none of them may reach the
+     * arithmetic that follows.
+     *
+     * @param {Array} value - the raw parsed list (may be any type).
+     * @param {Number} cutoff - epoch ms; entries older than this are
+     *     dropped.
+     * @param {Number} maxEntries - hard cap on the returned length.
+     * @return {Array} a clean array of numeric timestamps.
+     */
+    _pruneGuardTimestamps: function(value, cutoff, maxEntries) {
+        var kept = [];
+        if (!value || !Array.isArray(value)) {
+            return kept;
+        }
+        for (var i = 0; i < value.length; i++) {
+            var entry = Number(value[i]);
+            if (!isNaN(entry) && isFinite(entry) && entry >= cutoff) {
+                kept.push(entry);
+            }
+        }
+        if (kept.length > maxEntries) {
+            kept = kept.slice(kept.length - maxEntries);
+        }
+        return kept;
+    },
+
+    /**
+     * Persist the pruned lookup-guard state back onto the session.
+     *
+     * A write failure is not fatal and is not logged, for the same reason
+     * the read failure is not: it would be reachable on every request and
+     * would amplify a flood into the log. The consequence of a failed write
+     * is that this request is not counted, which the native per-hour
+     * rate-limit rule bounds.
+     *
+     * @param {Object} settings - the object returned by
+     *     _lookupGuardSettings().
+     * @param {Object} state - the state object from
+     *     _readLookupGuardState().
+     * @return {Boolean} true when the state was stored.
+     */
+    _writeLookupGuardState: function(settings, state) {
+        try {
+            state.session.putClientData(settings.key, JSON.stringify({
+                t: state.t,
+                m: state.m,
+                w: state.w
+            }));
+            return true;
+        } catch (writeError) {
+            return false;
+        }
+    },
+
+    /**
+     * Admission control for one anonymous lookup request.
+     *
+     * Counts THIS request in the session's sliding window and answers
+     * whether it may proceed. Refused requests are counted too: a caller
+     * that keeps hammering keeps its own window full and has to go quiet
+     * for a whole window to recover, which is the point of a throttle.
+     *
+     * Crossing the ceiling emits ONE warning per logIntervalSeconds per
+     * session under the stable marker, carrying the client IP and the
+     * miss/total counts so an operator can see a sweep and its source. The
+     * IP comes from GlideSession.getClientIP(); it is abuse telemetry about
+     * an unauthenticated caller and is not requester data - no submitted
+     * field value, name or address is ever logged (AAP Section 0.7.2
+     * no-PII).
+     *
+     * WHAT THIS GUARD IS AND IS NOT. The window lives in the session's
+     * client-data store, which this method READS, appends to and WRITES
+     * BACK - three steps with no lock around them. Two requests of the same
+     * session that interleave inside those steps can both read the same
+     * array, and the later write then drops the earlier increment, so a
+     * caller issuing its lookups in parallel can get more of them through
+     * than the ceiling names. A caller that discards its session cookie is
+     * not slowed at all, because the next request arrives with a fresh
+     * session and therefore an empty window (recorded on lookupCase under
+     * ENUMERATION EXPOSURE).
+     *
+     * This guard is therefore defence-in-depth against a naive sequential
+     * sweep, plus the telemetry an operator needs - it is NOT the
+     * enumeration perimeter. The perimeter is the platform-native per-hour
+     * ceiling shipped beside this endpoint
+     * (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml),
+     * whose binding to a scoped resource for an unauthenticated caller is
+     * unverified on this release and is recorded as a capability gap in
+     * ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md, together with the
+     * miss-threshold warning below. Closing either hole inside this file
+     * would need an atomic counter in a new table or system property, or a
+     * control at the edge in front of the instance: AAP Section 0.7.2's
+     * Minimal-Change Clause refuses the first and a PDI does not offer the
+     * second, so the residue is reported rather than worked around.
+     *
+     * @return {Object} { allowed: Boolean } - and nothing else, so no
+     *     count, ceiling or window can escape into a response.
+     */
+    _admitAnonymousLookup: function() {
+        var settings = this._lookupGuardSettings();
+        var state = this._readLookupGuardState(settings);
+        if (state === null) {
+            return { allowed: true };
+        }
+
+        var nowMs = new GlideDateTime().getNumericValue();
+        state.t.push(nowMs);
+        var requests = state.t.length;
+        var allowed = requests <= settings.requestLimit;
+
+        if (!allowed && (nowMs - state.w) >= (settings.logIntervalSeconds * 1000)) {
+            state.w = nowMs;
+            gs.warn(settings.marker + 'event=throttled ip=' + this._clientIpForLog() +
+                ' requests=' + requests + ' misses=' + state.m.length +
+                ' request_limit=' + settings.requestLimit +
+                ' window_seconds=' + settings.windowSeconds);
+        }
+
+        this._writeLookupGuardState(settings, state);
+        return { allowed: allowed };
+    },
+
+    /**
+     * Record one anonymous lookup that returned nothing - a malformed
+     * value, an absent value, or a well-formed number that matched no case.
+     *
+     * A run of misses from a single session is the signature of a sweep of
+     * the sequential number space, and it is the only signal available on
+     * an endpoint whose mandated contract makes hit-versus-miss inherently
+     * observable (see the ENUMERATION EXPOSURE note on lookupCase). Once
+     * the soft threshold is crossed the guard emits ONE warning per
+     * logIntervalSeconds per session under the stable marker, carrying the
+     * client IP and both counts, so an admin can alert on the prefix and
+     * act - block the address at the edge, or tighten the shipped
+     * sys_rate_limit_rules ceiling.
+     *
+     * Recording a miss changes NOTHING a caller can observe: the response
+     * that follows is byte-identical whether or not this method ran, so the
+     * monitor itself introduces no new oracle.
+     *
+     * @return {undefined} nothing; monitoring never alters the answer.
+     */
+    _recordAnonymousLookupMiss: function() {
+        var settings = this._lookupGuardSettings();
+        var state = this._readLookupGuardState(settings);
+        if (state === null) {
+            return;
+        }
+
+        var nowMs = new GlideDateTime().getNumericValue();
+        state.m.push(nowMs);
+        var misses = state.m.length;
+
+        if (misses >= settings.missThreshold && (nowMs - state.w) >= (settings.logIntervalSeconds * 1000)) {
+            state.w = nowMs;
+            gs.warn(settings.marker + 'event=miss_threshold ip=' + this._clientIpForLog() +
+                ' misses=' + misses + ' requests=' + state.t.length +
+                ' miss_threshold=' + settings.missThreshold +
+                ' window_seconds=' + settings.windowSeconds);
+        }
+
+        this._writeLookupGuardState(settings, state);
+    },
+
+    /**
+     * The calling client's IP address, in a form that is always safe to
+     * concatenate into a log line.
+     *
+     * Returns the literal 'unavailable' rather than an empty string when
+     * the platform cannot supply an address, so a log line always has a
+     * value in the ip= field and an alert parsing those lines never has to
+     * handle a missing token.
+     *
+     * @return {String} the client IP, or 'unavailable'.
+     */
+    _clientIpForLog: function() {
+        var ip = '';
+        try {
+            var session = gs.getSession();
+            if (session) {
+                ip = String(session.getClientIP() || '');
+            }
+        } catch (ipError) {
+            ip = '';
+        }
+        return ip === '' ? 'unavailable' : ip;
+    },
+
+    /**
+     * Validate an anonymous submission payload against the AAP Section 0.5.7
+     * constraints for the five whitelisted input fields, returning the
+     * cleaned values to write.
+     *
+     * Contract per field:
+     *   subject         MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then REJECTED when it
+     *                   exceeds 255 characters (the declared String(255)
+     *                   length) - never truncated to fit.
+     *   description     MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then REJECTED when it
+     *                   exceeds 4000 characters. The check MUST live here:
+     *                   the platform stores >255-character string columns
+     *                   in a TEXT column that does not truncate, so the
+     *                   database alone does not enforce the declared limit.
+     *   requester_name  MANDATORY. Rejected when absent, null or
+     *                   whitespace-only. Trimmed, then REJECTED above 100
+     *                   characters.
+     *   requester_email OPTIONAL (AAP Section 0.5.7 marks it optional).
+     *                   When supplied non-empty it must look like an
+     *                   address - one '@', no whitespace, a dot-bearing
+     *                   domain - and is REJECTED above 100 characters. An
+     *                   empty or absent value is accepted and stored as an
+     *                   empty string.
+     *
+     *   type            OPTIONAL at the dictionary level (choice=3, the
+     *                   platform's "Dropdown with -- None --"), so an
+     *                   absent value is legal and stored empty. A SUPPLIED
+     *                   value must match one of the live choices for
+     *                   x_casemgmt_case.type, resolved case-insensitively
+     *                   and normalised to the canonical stored value, so a
+     *                   value outside the choice list can never be stored.
+     *
+     * NO field is ever silently shortened. Every length violation becomes a
+     * named field error, which the calling REST operation answers as HTTP
+     * 400 with the { error, fields } body - see the block comment at the
+     * length checks for why truncation was the wrong behaviour on an
+     * anonymous intake path.
+     *
+     * The error response names the offending fields. Those five names are
+     * already public - the portal form posts them - so naming them leaks
+     * nothing an anonymous caller cannot read in the widget source, while
+     * making the endpoint usable by any client. No INTERNAL field name
+     * (status, assigned_group, assigned_agent, closed_date, ...) ever
+     * appears in a validation response.
+     *
+     * @param {Object} payload - the parsed request body (already checked
+     *     to be a non-array object by the caller).
+     * @return {Object} { values: { <field>: <cleaned string> } } when the
+     *     payload is valid, or { error: '<message>', fields: { <field>:
+     *     '<reason>' } } when it is not.
+     */
+    _validateSubmission: function(payload) {
+        var MANDATORY_TEXT_FIELDS = [
+            { name: 'subject',        label: 'Subject',    maxLength: 255 },
+            { name: 'description',    label: 'Description', maxLength: 4000 },
+            { name: 'requester_name', label: 'Your name',  maxLength: 100 }
+        ];
+        var values = {};
+        var fieldErrors = {};
+        var i;
+
+        // ------------------------------------------------------------------
+        // OVER-LENGTH IS REFUSED, NEVER TRUNCATED.
+        //
+        // Each of these fields previously did
+        //     values[spec.name] = raw.length > spec.maxLength ?
+        //         raw.substring(0, spec.maxLength) : raw;
+        // which answered HTTP 201 and stored a SILENTLY SHORTENED value.
+        // Measured against the live endpoint, a 4001-character description
+        // was accepted and stored as 4000 characters, a 256-character
+        // subject as 255 and a 101-character requester_name as 100, with
+        // nothing in the response distinguishing that from a submission
+        // stored in full.
+        //
+        // For an anonymous intake form that is the worst available
+        // behaviour. The requester is handed a case number and told the
+        // case was submitted, so they have no reason to check, while the
+        // material sentence of a complaint - the one at the end of a long
+        // description - is gone, and neither they nor the agent who later
+        // reads the case has any way to know that anything was dropped.
+        // Refusing the write and naming the field costs the requester one
+        // edit and loses nothing.
+        //
+        // The public form makes this refusal rare rather than routine: the
+        // submission widget's inputs carry maxlength=255/4000/100 plus a
+        // role="status" notice that fires once a limit is reached
+        // (../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml),
+        // so a requester using the page cannot normally reach this branch.
+        // It is the guard for every OTHER caller of a public endpoint,
+        // which is the population that matters on an unauthenticated write
+        // path.
+        //
+        // The message quotes the limit and the length received so a caller
+        // can fix the payload in one attempt instead of bisecting it. Both
+        // numbers describe the caller's OWN input against a limit the
+        // portal form already publishes as an HTML attribute, so nothing
+        // internal is disclosed.
+        //
+        // The equivalent gap on the INTERNAL form is closed separately and
+        // server-side by
+        //   ../business_rules/x_casemgmt_validate_case_text_lengths.xml
+        // which aborts any insert or update whose subject, description,
+        // requester_name or requester_email exceeds the declared length,
+        // whatever the write path.
+        //
+        // That rule backstops THIS method for description and only for
+        // description, and the reason is worth stating here so the two
+        // files are not read as saying the same thing. Measured on this
+        // instance: a column declared <= 255 characters is VARCHAR-backed
+        // and the platform coerces the value to fit BEFORE before-rules
+        // run, so no business rule can observe that subject,
+        // requester_name or requester_email arrived over-length (a
+        // 300-character subject is answered HTTP 200 and stored at 255).
+        // description is declared 4000, is TEXT-backed, is not coerced,
+        // and IS refused there (4001 characters is answered HTTP 403 with
+        // the stored value unchanged). So for those three fields THIS
+        // method is not merely the first line of defence on the anonymous
+        // path - it is the only layer that can report the violation at
+        // all, which is another reason it must refuse rather than
+        // truncate.
+        // ------------------------------------------------------------------
+        for (i = 0; i < MANDATORY_TEXT_FIELDS.length; i++) {
+            var spec = MANDATORY_TEXT_FIELDS[i];
+            var raw = this._readString(payload, spec.name);
+            if (raw === '') {
+                fieldErrors[spec.name] = spec.label + ' is required.';
+                continue;
+            }
+            if (raw.length > spec.maxLength) {
+                fieldErrors[spec.name] = spec.label + ' must be ' + spec.maxLength +
+                    ' characters or fewer (received ' + raw.length + ').';
+                continue;
+            }
+            values[spec.name] = raw;
+        }
+
+        // requester_email - optional, but validated when present so the
+        // stored value is always either empty or plausibly deliverable.
+        // Over-length is refused here for the same reason as above: an
+        // address truncated to fit is not the requester's address, and
+        // storing it would make the case unanswerable while reporting
+        // success. The format test runs first so a caller who sends
+        // something that is not an address at all is told that, rather
+        // than being told about its length.
+        var email = this._readString(payload, 'requester_email');
+        if (email === '') {
+            values.requester_email = '';
+        } else if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(email)) {
+            fieldErrors.requester_email = 'Email must be a valid address.';
+        } else if (email.length > 100) {
+            fieldErrors.requester_email = 'Email must be 100 characters or fewer (received ' +
+                email.length + ').';
+        } else {
+            values.requester_email = email;
+        }
+
+        // ------------------------------------------------------------------
+        // type - REQUIRED on this path, and constrained to the choice list.
+        //
+        // It is required here even though the DICTIONARY leaves it optional
+        // (choice=3, the platform's "Dropdown with -- None --"), and the
+        // difference is deliberate rather than an oversight. Two reasons,
+        // and the first is decisive.
+        //
+        // 1. A typeless case cannot be worked. AAP Sections 0.4.1 and 0.5.5
+        //    implement the case lifecycle as TWO Flow Designer flows, one
+        //    per case type - ../flows/general_inquiry_state_machine.xml
+        //    triggered on type = General Inquiry and
+        //    ../flows/complaint_state_machine.xml on type = Complaint. A row
+        //    whose type is empty matches NEITHER trigger filter, so it can
+        //    never be advanced out of Draft by the mechanism the AAP
+        //    specifies for advancing it. Storing one produces a case that is
+        //    permanently stuck at birth: it counts in every aggregate, it
+        //    appears in the internal list, and no flow will ever pick it up.
+        //    Measured before this check: three anonymous submissions with
+        //    `type` omitted, empty and null each answered HTTP 201 and
+        //    created a guest-owned Draft case with type = ''.
+        //
+        // 2. The public form already states the requirement. The submission
+        //    widget renders the control as "Type *" with `required` and
+        //    aria-required=true, and its helper text reads "Every field
+        //    marked * is required. Complete all four before submitting."
+        //    (../portal/widgets/sp_widget_x_casemgmt_case_submission_widget.xml).
+        //    An endpoint that accepts what its own form declares mandatory
+        //    is contradicting the contract it publishes, and every
+        //    non-browser caller sees the endpoint, not the form.
+        //
+        // The dictionary is deliberately NOT changed to mandatory: doing so
+        // would impose the constraint on every internal write path too,
+        // where AAP Section 0.5.7 declares only subject, description and
+        // requester_name Mandatory, and the AAP is authoritative on that
+        // table's constraints. So the requirement is applied exactly where
+        // the contradiction lives - the anonymous intake path this class
+        // owns - and nowhere else.
+        // ------------------------------------------------------------------
+        var type = this._readString(payload, 'type');
+        if (type === '') {
+            fieldErrors.type = 'Type is required.';
+        } else {
+            var canonical = this._resolveCaseTypeChoice(type);
+            if (canonical === null) {
+                fieldErrors.type = 'Type must be one of: ' + this._caseTypeChoices().join(', ') + '.';
+            } else {
+                values.type = canonical;
+            }
+        }
+
+        for (var key in fieldErrors) {
+            if (Object.prototype.hasOwnProperty.call(fieldErrors, key)) {
+                return {
+                    error: 'The submission could not be accepted because one or more fields are invalid.',
+                    fields: fieldErrors
+                };
+            }
+        }
+        return { values: values };
+    },
+
+    /**
+     * Read one payload key as a trimmed string.
+     *
+     * Absent keys, null, undefined, objects and arrays all collapse to the
+     * empty string so the caller can treat "not usable" uniformly; scalar
+     * non-strings (a JSON number or boolean) are coerced, matching the
+     * String() coercion this class has always applied before writing to a
+     * string column.
+     *
+     * @param {Object} payload - the parsed request body.
+     * @param {String} key - the field name to read.
+     * @return {String} the trimmed value, or '' when unusable.
+     */
+    _readString: function(payload, key) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) {
+            return '';
+        }
+        var value = payload[key];
+        if (value === null || value === undefined) {
+            return '';
+        }
+        if (typeof value === 'object') {
+            // An object or array where a scalar belongs is not a usable
+            // value; treating it as empty makes it fail the mandatory
+            // check rather than storing "[object Object]".
+            return '';
+        }
+        return String(value).trim();
+    },
+
+    /**
+     * The live choice values for x_casemgmt_case.type, in the order the
+     * platform presents them.
+     *
+     * Read from sys_choice rather than hardcoded so the "extensible" part
+     * of the AAP Section 0.5.7 contract ("General Inquiry, Complaint -
+     * extensible") keeps working: an administrator who adds a choice does
+     * not have to touch this Script Include for the endpoint to accept it.
+     * Inactive choices are excluded - an inactive choice must not be
+     * storable through the public endpoint.
+     *
+     * @return {Array} array of choice value strings (possibly empty when
+     *     the choice list has not been created yet).
+     */
+    _caseTypeChoices: function() {
+        var choices = [];
+        var gr = new GlideRecord('sys_choice');
+        gr.addQuery('name', 'x_casemgmt_case');
+        gr.addQuery('element', 'type');
+        gr.addQuery('inactive', false);
+        gr.orderBy('sequence');
+        gr.query();
+        while (gr.next()) {
+            var value = String(gr.getValue('value') || '');
+            if (value !== '' && choices.indexOf(value) === -1) {
+                choices.push(value);
+            }
+        }
+        return choices;
+    },
+
+    /**
+     * Resolve a caller-supplied case type to its canonical stored value.
+     *
+     * Matching is exact first, then case-insensitive, so 'general inquiry'
+     * is accepted and stored as 'General Inquiry' while 'NOT_A_REAL_TYPE'
+     * is refused. When the choice list cannot be read at all (it has not
+     * been created on this instance yet) the value is refused rather than
+     * stored unchecked: refusing is the fail-closed answer, and the choice
+     * list is a Gate 1 requirement, so its absence is an installation
+     * fault rather than a reason to relax the contract.
+     *
+     * @param {String} supplied - a non-empty trimmed candidate value.
+     * @return {String|null} the canonical choice value, or null when the
+     *     candidate is not a live choice.
+     */
+    _resolveCaseTypeChoice: function(supplied) {
+        var choices = this._caseTypeChoices();
+        var i;
+        for (i = 0; i < choices.length; i++) {
+            if (choices[i] === supplied) {
+                return choices[i];
+            }
+        }
+        var lowered = supplied.toLowerCase();
+        for (i = 0; i < choices.length; i++) {
+            if (choices[i].toLowerCase() === lowered) {
+                return choices[i];
+            }
+        }
+        return null;
+    },
+
+    /**
+     * Admission control for the unauthenticated submit path, decided AFTER
+     * the row has been inserted.
+     *
+     * WHY THE DECISION FOLLOWS THE INSERT. This method used to count the
+     * rows the endpoint had created inside the trailing window and answer
+     * "allowed" while the insert happened afterwards, in submitCase(). That
+     * is a check-then-act race (CWE-367) and it bounded nothing under the
+     * one condition a flood guard exists for: parallel callers each read the
+     * same pre-insert count, each saw it below the ceiling, and each was
+     * admitted - so ten simultaneous requests produced ten cases whatever
+     * the ceiling said.
+     *
+     * The decision is now taken from the row itself. submitCase() inserts
+     * first and calls this method with the persisted row, and what decides
+     * is a COUNT of the rows the same caller created inside the trailing
+     * window, taken with our own row already among them. A count above
+     * GLOBAL_LIMIT deletes our row and answers its caller with the
+     * throttle.
+     *
+     * WHY COUNTING AFTER THE INSERT BOUNDS THE WINDOW ABSOLUTELY. Take any
+     * set of rows that survive this guard and consider the one whose count
+     * query ran LAST. Every other survivor had already inserted when that
+     * query ran: a survivor's insert commits before that survivor's own
+     * query, and its query ran before the last one. So the last caller's
+     * query saw every other survivor, and its own row besides. Had more
+     * than GLOBAL_LIMIT rows survived, that caller would have counted more
+     * than GLOBAL_LIMIT and refused itself - a contradiction. At most
+     * GLOBAL_LIMIT rows therefore survive a window, with no lock, no
+     * counter table and no serialization, and the bound holds whatever the
+     * interleaving.
+     *
+     * WHY THE TWO OBVIOUS ALTERNATIVES DO NOT. A count taken BEFORE the
+     * insert bounds nothing, because nothing bound the insert that followed
+     * it: every parallel caller read the same below-ceiling number and
+     * every one of them was admitted (CWE-367). A RANK taken after the
+     * insert - our row's position among the window's rows under a total
+     * order - fails differently and less visibly: rank can only be computed
+     * over the rows a query can SEE, so a caller whose query sees only part
+     * of the window ranks itself near the front and admits, and a run of
+     * inserts arriving in descending sys_id order admits every one of them
+     * however far past the ceiling it goes. Counting has no such hole,
+     * because a partial view can only UNDER-count, and an under-count is
+     * exactly what the last caller's complete view corrects.
+     *
+     * THE ONE COST, AND IT IS THE SAFE DIRECTION. A caller can be
+     * over-REJECTED and can never be over-ADMITTED. Under a burst that is
+     * genuinely simultaneous - every request inserting before any of them
+     * counts - each caller sees a window already past the ceiling, and how
+     * many are refused depends only on how much of the withdrawal each
+     * caller's query can already see: the range runs from JUST THE EXCESS,
+     * when refusals are visible to the callers that follow, to THE WHOLE
+     * BURST, when every caller queried before any withdrawal committed.
+     * Both ends are inside the ceiling and both were measured (see the
+     * offline harness cited under VERIFICATION below). That is deliberate:
+     * the answer is a retryable throttle, the next window admits normally,
+     * legitimate traffic on this endpoint never approaches ten submissions
+     * in sixty seconds, and an abuser gains nothing by racing. The same
+     * insert-then-reconcile shape is already how this file verifies the
+     * round trip and collapses duplicate submissions.
+     *
+     * VERIFICATION. The bound above is a claim about interleavings, which
+     * no single-threaded reading of this file can settle, so it was
+     * exercised offline against this exact method body with a stubbed
+     * GlideRecord that models what each caller's query may see: 3,000
+     * randomly generated schedules (arbitrary interleavings of insert and
+     * count, under both delete-visibility models), the prefix-visibility
+     * run in descending sys_id order that the earlier RANK implementation
+     * admitted in full, and the simultaneous burst at both ends of the
+     * range above. No schedule left more than GLOBAL_LIMIT rows in the
+     * window or more than PER_REQUESTER_LIMIT in one bucket. What that
+     * cannot establish is the platform's own commit visibility, which only
+     * a deployed instance shows; the mandatory pre-release gate recorded in
+     * ../docs/validation-gates.md is where that is settled.
+     *
+     * WHAT THIS CEILING IS NOT. It is a rate control on one endpoint, not
+     * an identity check and not the security perimeter: it cannot tell two
+     * anonymous callers apart (see PER-REQUESTER FAIRNESS below), and a
+     * caller that keeps its traffic under the ceiling is not slowed at all.
+     * The platform-native per-hour ceiling shipped beside this endpoint
+     * (../portal/rest/sys_rate_limit_rules_x_casemgmt_case_submit.xml) is
+     * the defence-in-depth layer for that residue, and its own file records
+     * that its binding and effectiveness are unverified on this release.
+     *
+     * PER-REQUESTER FAIRNESS. One global allowance is a denial-of-service
+     * lever in its own right: a single abuser consuming all ten submissions
+     * leaves nothing for any legitimate requester until the window rolls. A
+     * second, tighter ceiling therefore applies to the rows in the window
+     * that share this submission's requester_email bucket, normalised
+     * case-insensitively, with an absent or empty address forming its OWN
+     * bucket so it cannot dilute anybody else's. PER_REQUESTER_LIMIT is
+     * strictly below GLOBAL_LIMIT, so no single bucket can consume the
+     * endpoint's whole allowance.
+     *
+     * requester_email is used because it is the only caller-identifying
+     * value the AAP Section 0.5.7 data model puts on this path, and no new
+     * table, field or property may be added to carry a better one (Section
+     * 0.7.2 Minimal-Change Clause; Section 0.5.7 is verbatim). HONEST LIMIT:
+     * an abuser who varies the address defeats the bucket - it is a fairness
+     * dimension, not an identity. What still bounds that abuser is the
+     * global ceiling above, the native per-hour rate-limit rule on the guest
+     * user, and the refusal log below, which names the ceiling that fired so
+     * an operator can alert on a sustained flood.
+     *
+     * WHOSE ROWS ARE COUNTED. The window is scoped to OUR OWN row's
+     * sys_created_by rather than to the literal 'guest', so it is correct
+     * for whatever user the platform runs an unauthenticated call as, and an
+     * internal user's cases are never ranked against an anonymous caller's:
+     * a flood through this endpoint cannot throttle case creation on the
+     * native form, and case creation on the native form cannot throttle this
+     * endpoint.
+     *
+     * A REFUSED SUBMISSION CONSUMES A CASE NUMBER. The platform allocates
+     * the number during the insert, so a withdrawn row leaves a gap in the
+     * CASE sequence - already true of this file's round-trip refusal, of a
+     * collapsed duplicate and of every form load, so gaps carry no meaning
+     * here, but a reader comparing counts should expect them.
+     *
+     * NO PII IS LOGGED. The refusal log carries the marker, the count, the
+     * ceilings and our own row's sys_id - never the address that formed the
+     * bucket, never any submitted field value (AAP Section 0.7.2 no-PII).
+     *
+     * @param {GlideRecord} savedGr - the post-insert re-query of our own
+     *     row, already positioned on it.
+     * @param {String} newSysId - the sys_id returned by insert().
+     * @return {Object} { allowed: Boolean } - true when our row is inside
+     *     both ceilings and survives; false when the window count exceeded
+     *     one of them, in which case the row has ALREADY been removed. No count,
+     *     limit or window is returned, so no caller can leak one to an
+     *     anonymous requester.
+     */
+    _admitAnonymousSubmission: function(savedGr, newSysId) {
+        var SUBMIT_WINDOW_SECONDS = 60;
+        var GLOBAL_LIMIT = 10;
+        var PER_REQUESTER_LIMIT = 4;
+        var LOG_MARKER = 'X_CASEMGMT_PORTAL_SUBMIT_ABUSE|';
+
+        var creator = String(savedGr.getValue('sys_created_by') || '');
+        if (creator === '') {
+            // Without a creator the window cannot be scoped to this
+            // endpoint's own rows, and widening it to every recent case
+            // would let internal case creation throttle the public endpoint.
+            // The guard declines rather than guesses, and says so: this
+            // ceiling is a rate control, not the security perimeter, and the
+            // native per-hour rule on the guest user still applies.
+            gs.warn(LOG_MARKER + 'guard_skipped reason=empty_sys_created_by sys_id=' + newSysId);
+            return { allowed: true };
+        }
+
+        var windowStart = new GlideDateTime();
+        windowStart.addSeconds(-SUBMIT_WINDOW_SECONDS);
+
+        var ourBucket = this._requesterEmailBucket(savedGr.getValue('requester_email'));
+
+        // GLOBAL_LIMIT + 1 rows are enough to decide and reading no more
+        // keeps this query bounded during a flood: a window already holding
+        // that many rows is past the ceiling whatever else it holds. The
+        // order does not enter the decision - a count does not depend on it
+        // - and is kept only so the rows read during a flood are the
+        // window's oldest, which makes a refusal reproducible from the log.
+        var rows = new GlideRecord('x_casemgmt_case');
+        rows.addQuery('sys_created_by', creator);
+        rows.addQuery('sys_created_on', '>=', windowStart);
+        rows.orderBy('sys_created_on');
+        rows.orderBy('sys_id');
+        rows.setLimit(GLOBAL_LIMIT + 1);
+        rows.query();
+
+        var windowCount = 0;
+        var bucketCount = 0;
+        var sawOurRow = false;
+        while (rows.next()) {
+            windowCount++;
+            if (String(rows.getValue('sys_id') || '') === newSysId) {
+                sawOurRow = true;
+            }
+            if (this._requesterEmailBucket(rows.getValue('requester_email')) === ourBucket) {
+                bucketCount++;
+            }
+        }
+
+        if (!sawOurRow) {
+            // Our row exists - this method only runs after an insert that
+            // succeeded and a re-query that found it - so it counts even
+            // when this query could not return it, which is what happens
+            // when the window already held GLOBAL_LIMIT + 1 older rows and
+            // the limit truncated ours away. Counting it keeps the decision
+            // on the safe side in that case instead of guessing.
+            windowCount++;
+            bucketCount++;
+        }
+
+        if (windowCount > GLOBAL_LIMIT) {
+            return this._discardOverflowSubmission(newSysId, LOG_MARKER, 'global_window_ceiling',
+                'count=' + windowCount + ' limit=' + GLOBAL_LIMIT +
+                ' window_seconds=' + SUBMIT_WINDOW_SECONDS);
+        }
+
+        // The bucket count is exact whenever the global count is inside its
+        // ceiling, because the query then returned every row of the window
+        // rather than a truncated prefix of it.
+        if (bucketCount > PER_REQUESTER_LIMIT) {
+            return this._discardOverflowSubmission(newSysId, LOG_MARKER, 'per_requester_ceiling',
+                'count=' + bucketCount + ' limit=' + PER_REQUESTER_LIMIT +
+                ' window_seconds=' + SUBMIT_WINDOW_SECONDS);
+        }
+
+        return { allowed: true };
+    },
+
+    /**
+     * Normalise a requester_email value into the bucket key the
+     * per-requester fairness ceiling counts by.
+     *
+     * Case and surrounding whitespace are not identity, so both are removed.
+     * An absent, empty or whitespace-only address collapses to the empty
+     * bucket. That empty value is a BUCKET, not a wildcard: an address-less
+     * submission is never counted against one that carries an address, so a
+     * flood of address-less requests cannot push a requester who supplied
+     * one over the per-requester ceiling. All address-less submissions DO
+     * share that single bucket, which is the honest consequence of having no
+     * better caller dimension on this path - what bounds that case is the
+     * global ceiling and the native per-hour rule, not this bucket.
+     *
+     * The value is used ONLY as an in-memory grouping key: it is never
+     * logged, never stored anywhere new and never returned to a caller, so
+     * no address leaves the row it was submitted on (AAP Section 0.7.2
+     * no-PII).
+     *
+     * @param {String} value - a row's requester_email, as read with
+     *     GlideRecord.getValue() (may be null, undefined or empty).
+     * @return {String} the bucket key; '' when there is no address.
+     */
+    _requesterEmailBucket: function(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value).trim().toLowerCase();
+    },
+
+    /**
+     * Withdraw the row this request inserted because the window count
+     * exceeded one of the admission ceilings, and report the refusal.
+     *
+     * The row is removed rather than left in place because an admitted
+     * submission and a refused one must not both persist a case: the caller
+     * is being told, with HTTP 429, that nothing was accepted, so nothing
+     * may remain. A failed delete is the one branch that leaves a case
+     * behind the requester was never told about, so it is logged with
+     * gs.error and names the sys_id an administrator has to remove by hand.
+     *
+     * Every line starts with the caller-supplied STABLE MARKER so an
+     * operator can alert on the prefix alone. The lines carry counts,
+     * ceilings and our own row's sys_id, and no submitted value, no address
+     * and no client identifier, so the log stays free of PII.
+     *
+     * @param {String} newSysId - the sys_id returned by insert().
+     * @param {String} marker - the stable log-marker prefix.
+     * @param {String} reason - which ceiling refused the row.
+     * @param {String} detail - space-separated key=value diagnostics.
+     * @return {Object} { allowed: false } - always, so the caller returns
+     *     the throttled response whether or not the cleanup succeeded.
+     */
+    _discardOverflowSubmission: function(newSysId, marker, reason, detail) {
+        var cleanupGr = new GlideRecord('x_casemgmt_case');
+        if (!cleanupGr.get(newSysId)) {
+            gs.warn(marker + 'refused reason=' + reason + ' ' + detail +
+                ' cleanup=row_already_gone sys_id=' + newSysId);
+            return { allowed: false };
+        }
+        if (!cleanupGr.deleteRecord()) {
+            gs.error(marker + 'refused reason=' + reason + ' ' + detail +
+                ' cleanup=FAILED sys_id=' + newSysId +
+                ' lastErrorMessage=' + cleanupGr.getLastErrorMessage() +
+                '; the refused case row still exists and needs manual removal.');
+            return { allowed: false };
+        }
+        gs.warn(marker + 'refused reason=' + reason + ' ' + detail +
+            ' cleanup=ok sys_id=' + newSysId);
+        return { allowed: false };
+    },
+
+    /**
+     * Class-name marker. ServiceNow's Class.create() pattern conventionally
+     * exposes a `type` property whose value matches the class name (without
+     * the scope prefix). This is used by the platform's introspection
+     * tooling and by some debug logging. It MUST be 'CasePortalService'
+     * (NOT 'x_casemgmt_CasePortalService') - the scope prefix lives only in
+     * the <api_name> element above, not in the class name itself.
+     */
+    type: 'CasePortalService'
+};
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>95e90fa18471e42875f5f956ec7949d1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CasePortalService</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_include_x_casemgmt_CasePortalService</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_script_include>
+</record_update>

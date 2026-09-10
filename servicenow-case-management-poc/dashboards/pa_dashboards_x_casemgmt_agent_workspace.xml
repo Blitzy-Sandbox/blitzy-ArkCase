@@ -1,0 +1,1067 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Case Management POC : Agent Workspace Dashboard
+    ==================================================================
+    File Path:  servicenow-case-management-poc/dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml
+    Scope:      x_casemgmt
+    Build Ref:  AAP Section 0.4.4 (dashboard UI), 0.5.1 (transformation plan
+                row for this file), 0.5.2 (Update Set dependency order),
+                0.7.3 Validation Gate 6 ("Both dashboards render with
+                synthetic data / All widgets display data; no broken report
+                references")
+
+    PURPOSE
+    .......
+    The Agent Workspace dashboard required by AAP Section 0.4.4: 3 widgets (My open cases list, My overdue tasks list, Case count by status donut).
+
+    WHY THIS FILE WAS REWRITTEN
+    ...........................
+    QA measured both dashboards rendering 0 of 8 widgets with the platform's
+    empty state "Add widgets using the widget picker." - no error, no broken-
+    reference warning, just an empty canvas. The cause was not one mis-spelled
+    element but a wrong model: THREE of the six tables the previous revision
+    wrote to do not exist on this release, and a fourth record was the wrong
+    table for its job.
+
+      previous revision      ->  reality on this instance
+      .....................      ........................
+      pa_tab                 ->  pa_tabs, whose only writable columns are
+                                 name, canvas_page, page, sys_overrides
+      pa_dashboard_widgets   ->  no such table. A report widget is three
+                                 records: sys_portal + sys_portal_preferences
+                                 + sys_grid_canvas_pane
+      pa_dashboard_role      ->  no such table. Sharing is
+                                 pa_dashboards_permissions (type 1 = Role);
+                                 pa_dashboards.roles only NARROWS it
+      sys_grid_canvas_pane       that is a widget PLACEMENT; the canvas table
+      used as the canvas     ->  is sys_grid_canvas
+      pa_dashboards.canvas_id,   none of these four is a column on
+      .title, .icon,         ->  pa_dashboards or on its parent
+      .is_homepage               analytics_dashboard
+
+    Every table and column emitted below was verified against this instance's
+    own sys_db_object / sys_dictionary, and the record topology was read off
+    dashboards that render correctly out of the box.
+
+    RECORD INVENTORY (in load order)
+    ................................
+      [1] sys_portal_page          the tab's page
+      [2] sys_grid_canvas          the 12-column canvas (legacy_page -> [1])
+      [3] pa_tabs                  the tab (canvas_page -> [2], page -> [1])
+      [4] pa_m2m_dashboard_tabs    tab <-> dashboard link, order + home
+      [5] pa_dashboards            the dashboard ("Requires Roles" narrowing)
+      [5a..] pa_dashboards_permissions   the SHARE list - the table that
+            actually decides who may open the dashboard
+      [6..] per widget: sys_portal (instance) + 12 sys_portal_preferences
+            rows + sys_grid_canvas_pane (placement)
+
+    CROSS-DEPENDENCIES
+    ..................
+    DEPENDS ON (must load earlier in the Update Set):
+      - ../app/sys_app/x_casemgmt_case_management.xml   (the scope)
+      - ../tables/x_casemgmt_case.xml and, for the task widget,
+        ../tables/x_casemgmt_case_task.xml               (reported tables)
+      - the reports this dashboard renders, each by its own primary key:
+        - ../reports/x_casemgmt_my_open_cases.xml
+        - ../reports/x_casemgmt_my_overdue_tasks.xml
+        - ../reports/x_casemgmt_case_count_by_status.xml
+
+    REFERENCED BY: nothing - dashboards are leaves. Per AAP Section 0.5.2 the
+    dashboard blocks load after the Report blocks and before the seed data.
+
+    QA ISSUE 10 (MEDIUM, accessibility) - DASHBOARD-CONTROL PORTION
+    ...............................................................
+    QA Issue 10 measured, among several surfaces, that on the rendered
+    dashboards "Refresh/menu/legend controls are below 24/44px and legend
+    toggles are not keyboard reachable" against a checkpoint standard of
+    at least 44x44px with every interactive control keyboard reachable.
+    That half of the finding was adjudicated against THIS file record by
+    record, and the outcome is split:
+
+    WHAT IS OURS, AND WAS FIXED
+      - The `report_type` widget preference on the "Case Count by Status" widget
+        read `pie` while the source report declares <type>donut</type>.
+        Corrected to `donut` below. The widget frame is the only piece of
+        chart chrome this package controls, so it must agree with the
+        report it hosts. Detail and the platform precedent are recorded on
+        that widget's own block.
+      - Canvas geometry was re-audited for anything that could clip or
+        hide a widget - including at the 375px width the finding was
+        measured at. Measured from the sys_grid_canvas_pane rows in this
+        file: My Open Cases (posx 0, posy 0, width 6, height 10), My Overdue
+        Tasks (6, 0, 6, 10), Case Count by Status (0, 10, 12, 10). The per-row column spans sum to exactly 12, no
+        two panes overlap, no span is zero or negative, and the load order
+        of the widget blocks matches the reading order of the canvas. So
+        nothing in this file clips a control, hides a widget or reorders
+        the canvas, at 375px or at any other width, and there was nothing
+        of that kind to fix.
+
+    WHAT IS NOT OURS, AND IS RECORDED OPEN RATHER THAN WORKED AROUND
+      - The dashboard shell's Refresh button, its widget kebab/context
+        menu and the tab strip are emitted by the platform's dashboard
+        renderer. Nothing in this file expresses their size, padding, hit
+        area, tab order or accessible name: the complete writable surface
+        here is pa_dashboards (active, name, order, description,
+        restrict_to_roles, roles), pa_dashboards_permissions (grantee,
+        type, read), sys_portal_page, sys_grid_canvas, pa_tabs,
+        pa_m2m_dashboard_tabs, sys_portal (summary/page) plus the twelve
+        sys_portal_preferences parameters the platform defines
+        (renderer, sys_id, title, report_type, show_title, show_header,
+        show_border, filter_indicator, real_time, can_subscribe,
+        subscriber_widget, publisher_widget) and sys_grid_canvas_pane
+        (posx, posy, width, height). None of those twelve is a size, a
+        tabindex, an ARIA attribute or a label for a shell control.
+      - The chart legend, its per-item show/hide toggles and its 375px
+        "1/6" paging arrows are emitted by the platform's Highcharts
+        wrapper (GlideV2ChartingIncludes.jsx / chart_includes.cssx).
+        Measured corroboration that the control is not ours: `show_legend`
+        reads `false` on the committed row of every report this dashboard
+        renders, yet the paginating legend still draws.
+      - Enlarging those hit areas or adding tab stops to them means
+        editing global chart/dashboard component markup or global CSS.
+        AAP Section 0.3.2 verbatim prohibits "Global scope changes of any
+        kind" and AAP Section 0.7.2 verbatim requires "zero global-scope
+        writes are permitted", so this residue is REPORTED for human
+        authorisation, not mitigated here. It is carried in
+        ../docs/dashboards.md under "Dashboard and chart controls (QA
+        Issue 10)" so it survives outside this header. It is OPEN - not
+        "acceptable" and not "improved".
+      - Related and in-scope: the two donut reports this package ships now
+        enable `show_chart_data_label` and `display_grid`, which is what
+        makes every charted value readable in text WITHOUT operating the
+        legend at all (QA Issue 12). That reduces the legend's importance;
+        it does not repair the legend control, and it is not offered as if
+        it did.
+
+    AAP COMPLIANCE
+    ..............
+      - Section 0.7.2 scope-namespace exclusivity: every record carries
+        sys_scope/sys_package = x_casemgmt and every name is x_casemgmt_*.
+      - Section 0.7.2 no-hardcoded-sys_id: every cross-reference resolves to a
+        primary key THIS package declares (the dashboard, the tab, the canvas,
+        the page, the widget instances) or to the declared primary key of a
+        sibling report in ../reports/. No identifier of a record this package
+        does not ship appears anywhere in this file. The one place a report is
+        named by key rather than by name is the sys_portal_preferences pair
+        `sys_id`, which is the platform's own parameter name for the report a
+        RenderReport widget draws - there is no name-based form of that
+        parameter on this release.
+      - Section 0.4.4 "no custom CSS, no custom branding": no styling is
+        emitted; the platform's default dashboard chrome renders the widgets.
+      - Section 0.7.2 email-disabled: no scheduling or distribution is
+        configured on any widget.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <!--
+        ===================================================================
+        RECORD [1] - TAB PAGE (sys_portal_page)
+        ===================================================================
+        Every dashboard tab is backed by a portal page: pa_tabs.page points at
+        it, sys_grid_canvas.legacy_page points at it, and every widget instance
+        (sys_portal) on the tab carries it in its `page` field. The platform
+        creates one automatically when an admin opens a tab-less dashboard -
+        which is exactly what happened to this application before this fix, and
+        the auto-created page is what the register recorded as "New Tab 1".
+        Shipping the page in the package is what makes the tab, its canvas and
+        its widgets resolvable at commit time instead of being invented later.
+
+          - <title> is the human-readable tab caption.
+          - <view> is the page's slug; it must be unique per page, so it is
+            derived from the scoped dashboard name (AAP Section 0.7.2).
+          - <selectable>false</selectable> keeps the page out of the
+            self-service homepage picker - it is a dashboard tab, not a
+            homepage a user may choose.
+          - <roles/> and <read_roles/> stay empty on purpose: access to this
+            dashboard is governed by pa_dashboards.roles (record [5] below),
+            which is the field the Dashboards list and the dashboard renderer
+            both honour.
+    -->
+    <sys_portal_page action="INSERT_OR_UPDATE">
+        <layout/>
+        <order/>
+        <read_roles/>
+        <roles/>
+        <selectable>false</selectable>
+        <sys_class_name>sys_portal_page</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>23795850fe7318a525ef56edf43dbfff</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Overview</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_portal_page_x_casemgmt_agent_workspace_page</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <title>Overview</title>
+        <user/>
+        <view>x_casemgmt_agent_workspace_page</view>
+    </sys_portal_page>
+
+    <!--
+        ===================================================================
+        RECORD [2] - CANVAS (sys_grid_canvas)
+        ===================================================================
+        The responsive 12-column grid the widgets are positioned on. THIS is
+        the canvas table; `sys_grid_canvas_pane` (records [6c], [7c], ...) is a
+        single widget PLACEMENT on it, not the canvas itself. An earlier
+        revision of this artifact shipped one `sys_grid_canvas_pane` named
+        "..._canvas" and pointed a non-existent pa_dashboards.canvas_id field
+        at it; that row committed but stayed inert - no grid_canvas, no
+        portal_widget, no geometry - which is why both dashboards rendered the
+        platform's empty state "Add widgets using the widget picker."
+    -->
+    <sys_grid_canvas action="INSERT_OR_UPDATE">
+        <legacy_page display_value="Overview">23795850fe7318a525ef56edf43dbfff</legacy_page>
+        <name>x_casemgmt_agent_workspace_canvas</name>
+        <sys_class_name>sys_grid_canvas</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0067e3c7959400dbfeb4219bfb91b895</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_agent_workspace_canvas</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_grid_canvas_x_casemgmt_agent_workspace_canvas</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_grid_canvas>
+
+    <!--
+        ===================================================================
+        RECORD [3] - TAB (pa_tabs)
+        ===================================================================
+        The table is `pa_tabs`, NOT `pa_tab`. An earlier revision of this
+        artifact emitted <pa_tab>, a table that does not exist on this release;
+        the Update Set preview reported "Table 'pa_tab' does not exist" and the
+        block was skipped, leaving the dashboard with no tab at all.
+
+        pa_tabs has exactly four writable columns - name, canvas_page, page and
+        sys_overrides - so the active/order/title elements the earlier revision
+        emitted had nowhere to land. Tab ORDER lives on the m2m row (record [4]).
+        `name` is a translated_field and is what the dashboard renders as the
+        tab caption.
+    -->
+    <pa_tabs action="INSERT_OR_UPDATE">
+        <canvas_page display_value="x_casemgmt_agent_workspace_canvas">0067e3c7959400dbfeb4219bfb91b895</canvas_page>
+        <name>Overview</name>
+        <page display_value="Overview">23795850fe7318a525ef56edf43dbfff</page>
+        <sys_class_name>pa_tabs</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8516d401f8b1bd46655181cdcc09d363</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Overview</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>pa_tabs_x_casemgmt_agent_workspace_tab_main</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <sys_overrides/>
+    </pa_tabs>
+
+    <!--
+        ===================================================================
+        RECORD [4] - DASHBOARD-TO-TAB LINK (pa_m2m_dashboard_tabs)
+        ===================================================================
+        Binds the tab to the dashboard and carries the tab's order plus the
+        `home` flag (the tab opened first). Shipping this link is what stops
+        the platform from auto-creating an empty "New Tab 1" the first time an
+        administrator opens the dashboard.
+    -->
+    <pa_m2m_dashboard_tabs action="INSERT_OR_UPDATE">
+        <dashboard display_value="Agent Workspace">cde4dd9cb243cac3ad196d6a90a678be</dashboard>
+        <home>true</home>
+        <order>1</order>
+        <sys_class_name>pa_m2m_dashboard_tabs</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7e6f545ed321b8b2ed9a42ce517e6fe9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Overview</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>pa_m2m_dashboard_tabs_x_casemgmt_agent_workspace_tab_main</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <sys_overrides/>
+        <tab display_value="Overview">8516d401f8b1bd46655181cdcc09d363</tab>
+    </pa_m2m_dashboard_tabs>
+
+    <!--
+        ===================================================================
+        RECORD [5] - DASHBOARD (pa_dashboards)
+        ===================================================================
+        The dashboard row itself, per AAP Section 0.4.4 (3 widgets (My open cases list, My overdue tasks list, Case count by status donut)).
+
+        Only columns that exist are emitted. Measured against sys_dictionary
+        for pa_dashboards and its parent analytics_dashboard, the writable
+        surface is name / description / active / order / roles /
+        restrict_to_roles / groups / users / owner / visible_to / no_tabs -
+        there is NO title, canvas_id, icon or is_homepage column. An earlier
+        revision emitted all four; they were silently dropped, and because the
+        dashboard renders `name` as its heading, the H1 shows the scoped
+        internal name. That is a deliberate consequence of AAP Section 0.7.2
+        (scope-namespace exclusivity: every artifact name carries the
+        x_casemgmt_ prefix) and not a defect - the human-readable caption is
+        carried by <sys_name> and by the tab caption.
+
+          - <roles>x_casemgmt_case_agent,x_casemgmt_case_manager</roles>
+            is the sharing gate for this dashboard, replacing the three
+            `pa_dashboard_role` rows an earlier revision emitted for a table
+            that does not exist. Role NAMES, no sys_ids (AAP Section 0.7.2).
+          - <restrict_to_roles>x_casemgmt_case_agent,x_casemgmt_case_manager</restrict_to_roles>
+            is the gate the dashboard renderer actually quotes when it refuses.
+            The Dashboards module stamps every dashboard it creates with
+            `pa_viewer,pa_contributor`, and while that stood, a case manager
+            holding the scoped role and carrying an explicit read share row was
+            still refused with the platform's own wording: "The
+            x_casemgmt_manager_view dashboard is restricted to following roles:
+            pa_viewer, pa_contributor. You need to have one of the specified
+            roles to see this dashboard." Naming this application's own roles
+            here is what makes AAP Section 0.7.1 ("both dashboards accessible
+            to users with correct roles") true without granting anybody a
+            Platform Analytics licence role, and it is a write to THIS
+            application's own record - no identity and no global
+            configuration is touched. An administrator still sees both
+            dashboards because gs.hasRole() answers true for admin on every
+            role.
+    -->
+    <pa_dashboards action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Personal work queue dashboard for case agents - shows your assigned open cases, your overdue tasks, and the status distribution of your own case portfolio. All three widgets are scoped to the viewing user: the Case Count by Status donut was re-scoped for QA finding F5, because report execution does not apply row-level read ACLs and an unfiltered aggregate disclosed the status distribution of cases the agent cannot open. The portfolio-wide aggregates stay on the Manager View per AAP Section 0.4.4.</description>
+        <name>x_casemgmt_agent_workspace</name>
+        <order>100</order>
+        <restrict_to_roles>x_casemgmt_case_agent,x_casemgmt_case_manager</restrict_to_roles>
+        <roles>x_casemgmt_case_agent,x_casemgmt_case_manager</roles>
+        <sys_class_name>pa_dashboards</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>cde4dd9cb243cac3ad196d6a90a678be</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Agent Workspace</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>pa_dashboards_x_casemgmt_agent_workspace</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </pa_dashboards>
+
+    <!--
+        ===================================================================
+        RECORDS [5a..] - DASHBOARD PERMISSIONS (pa_dashboards_permissions)
+        ===================================================================
+        THIS is the table that decides whether a user may open the dashboard.
+        Measured on this release, and the distinction matters:
+
+          - pa_dashboards.roles is labelled "Requires Roles" in the dictionary.
+            It NARROWS access among users the dashboard is already shared with;
+            it grants access to nobody. Setting it alone left every demo
+            persona staring at the platform's whole-dashboard refusal
+            "Sorry! The <name> dashboard has not been shared with you." -
+            a 3.5 KB HTTP 200 document in which no widget is ever instantiated.
+          - pa_dashboards_permissions is the SHARE list (type 1 = Role,
+            2 = Group, 3 = User). When a dashboard is created the platform
+            seeds it with four rows for its own Platform Analytics roles
+            (pa_admin, pa_power_user, pa_viewer, pa_contributor) - which is why
+            an administrator, who holds pa_viewer, could always see these
+            dashboards while a case manager holding only a scoped role could
+            not.
+
+        The rows below add the scoped roles to that share list with READ only:
+        a persona may open and read the dashboard but may not edit or delete
+        the packaged layout. `role` is a reference to sys_user_role and carries
+        the primary key THIS package declares in ../roles/, so no foreign
+        instance identifier is introduced (AAP Section 0.7.2); `identity` is
+        the platform's denormalised label for the grantee and carries the role
+        NAME.
+
+        Sharing matrix per AAP Section 0.4.4 (agents get the personal work
+        queue, managers get both views):
+          x_casemgmt_case_agent    -> read
+          x_casemgmt_case_manager  -> read
+    -->
+
+    <pa_dashboards_permissions action="INSERT_OR_UPDATE">
+        <dashboard display_value="Agent Workspace">cde4dd9cb243cac3ad196d6a90a678be</dashboard>
+        <delete>false</delete>
+        <group/>
+        <identity>x_casemgmt_case_agent</identity>
+        <read>true</read>
+        <role display_value="x_casemgmt_case_agent">f7c449d22a2944c6e33eddb62ca4d241</role>
+        <sys_class_name>pa_dashboards_permissions</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>991ff5100dd4c1df8affe138c2f1caed</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_agent</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>pa_dashboards_permissions_x_casemgmt_agent_workspace_permission_x_casemgmt_case_agent</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>1</type>
+        <user/>
+        <write>false</write>
+    </pa_dashboards_permissions>
+
+    <pa_dashboards_permissions action="INSERT_OR_UPDATE">
+        <dashboard display_value="Agent Workspace">cde4dd9cb243cac3ad196d6a90a678be</dashboard>
+        <delete>false</delete>
+        <group/>
+        <identity>x_casemgmt_case_manager</identity>
+        <read>true</read>
+        <role display_value="x_casemgmt_case_manager">73710b052f274ece1d578c00f4424423</role>
+        <sys_class_name>pa_dashboards_permissions</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ea8f2dd8e55c8fe201b5c642e137e1a5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_manager</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>pa_dashboards_permissions_x_casemgmt_agent_workspace_permission_x_casemgmt_case_manager</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <type>1</type>
+        <user/>
+        <write>false</write>
+    </pa_dashboards_permissions>
+
+    <!--
+        ===================================================================
+        RECORD [6] - WIDGET "My Open Cases" (sys_portal + sys_portal_preferences + sys_grid_canvas_pane)
+        ===================================================================
+        One dashboard widget is three records, not one. `pa_dashboard_widgets`
+        (what an earlier revision of this artifact emitted 3 and 5 times) is not
+        a table on this release; the shape below was read off working
+        out-of-box dashboards on the instance:
+
+          [6a] sys_portal              - the widget INSTANCE, bound to the tab page
+          [6b] sys_portal_preferences  - its parameters, as name/value pairs
+          [6c] sys_grid_canvas_pane    - where it sits on the canvas
+
+        The pair that makes it a REPORT widget is
+        renderer=com.glide.ui.portal.RenderReport plus sys_id=<report>. The
+        `sys_id` preference is the platform's own parameter name for "which
+        report to render" and there is no name-based alternative; the value is
+        the primary key THIS package declares for
+        ../reports/x_casemgmt_my_open_cases.xml, so it resolves identically on
+        every fresh import and no foreign instance's identifier is baked in.
+        `report_type` mirrors that report's own <type> so the widget frame is
+        sized for the visualisation it hosts.
+
+        Geometry: posx/posy are 0-based columns/rows on the 12-column grid,
+        preserving the layout the earlier revision described (this widget:
+        column 1, width 6).
+    -->
+    <sys_portal action="INSERT_OR_UPDATE">
+        <dropzone/>
+        <offset/>
+        <page display_value="Overview">23795850fe7318a525ef56edf43dbfff</page>
+        <summary>My Open Cases</summary>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ce0c8a0f078b18fa7626acc7e13b902f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_portal>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>renderer</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a791335a408609b0a4250e196465a8d5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>com.glide.ui.portal.RenderReport</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>sys_id</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f1bd15521792573a90c48e89209a8006</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>ee04fa982b136ad35c6fe1512826f6ab</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>title</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>162bb3aba8aeb1eaca285994f841d0e9</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>My Open Cases</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>report_type</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>1bb7b34c5cd230596e7c894b232de370</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>list</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_title</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2598d6308f64e19d1d4bd29bd4840a7c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>true</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_header</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>516ca99f2208137ab3021c1e5261a15e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>true</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_border</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>52d5112fced832d353fd321be8af3112</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>filter_indicator</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>388849f1a097df7a3118c7151a4b1fcc</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>real_time</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>39d0beb2d36a0df97a011b1627cb47f6</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>can_subscribe</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b382de25bddb5a6745900d22a3e57f5a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>subscriber_widget</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a7a8ad520388f4377a2f2998a378a4bf</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>publisher_widget</name>
+        <portal_section display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7e617adbaaa652b8b84c6d95806fc083</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_grid_canvas_pane action="INSERT_OR_UPDATE">
+        <grid_canvas display_value="x_casemgmt_agent_workspace_canvas">0067e3c7959400dbfeb4219bfb91b895</grid_canvas>
+        <height>10</height>
+        <portal_widget display_value="My Open Cases">ce0c8a0f078b18fa7626acc7e13b902f</portal_widget>
+        <posx>0</posx>
+        <posy>0</posy>
+        <sys_class_name>sys_grid_canvas_pane</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>3f73cde6016e65ccfc121a2e51e42457</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>My Open Cases</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_grid_canvas_pane_x_casemgmt_agent_workspace_widget_my_open_cases</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <width>6</width>
+    </sys_grid_canvas_pane>
+
+    <!--
+        ===================================================================
+        RECORD [7] - WIDGET "My Overdue Tasks" (sys_portal + sys_portal_preferences + sys_grid_canvas_pane)
+        ===================================================================
+        One dashboard widget is three records, not one. `pa_dashboard_widgets`
+        (what an earlier revision of this artifact emitted 3 and 5 times) is not
+        a table on this release; the shape below was read off working
+        out-of-box dashboards on the instance:
+
+          [7a] sys_portal              - the widget INSTANCE, bound to the tab page
+          [7b] sys_portal_preferences  - its parameters, as name/value pairs
+          [7c] sys_grid_canvas_pane    - where it sits on the canvas
+
+        The pair that makes it a REPORT widget is
+        renderer=com.glide.ui.portal.RenderReport plus sys_id=<report>. The
+        `sys_id` preference is the platform's own parameter name for "which
+        report to render" and there is no name-based alternative; the value is
+        the primary key THIS package declares for
+        ../reports/x_casemgmt_my_overdue_tasks.xml, so it resolves identically on
+        every fresh import and no foreign instance's identifier is baked in.
+        `report_type` mirrors that report's own <type> so the widget frame is
+        sized for the visualisation it hosts.
+
+        Geometry: posx/posy are 0-based columns/rows on the 12-column grid,
+        preserving the layout the earlier revision described (this widget:
+        column 7, width 6).
+    -->
+    <sys_portal action="INSERT_OR_UPDATE">
+        <dropzone/>
+        <offset/>
+        <page display_value="Overview">23795850fe7318a525ef56edf43dbfff</page>
+        <summary>My Overdue Tasks</summary>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>500686fef5a53132c5d136188dbd377b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_portal>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>renderer</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>60938b2994f82e77fcca55f39ec0d378</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>com.glide.ui.portal.RenderReport</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>sys_id</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>47a168252f10c3a238b9835f5e40a8d8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>d9121344dff6c38d1db560bb7562f6d6</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>title</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d880e398287e4faff1882e613f0e5d1b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>My Overdue Tasks</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>report_type</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2339b1d6ffb19bc81f22f52a248f29a7</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>list</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_title</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>da1beaacce95af5d626fc944d737e4d0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>true</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_header</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2e7c678dfc8bdd2829b1ac62fd81c161</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>true</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_border</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>38c15f42a75a110c95198fc06754ed78</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>filter_indicator</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>658c314e6e9b1057ec82ab621eb3d2d5</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>real_time</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5afb00ccd0c0832a3f0535451ba15c8f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>can_subscribe</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>10e79df86e01d6c84725e95abd2796eb</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>subscriber_widget</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>019808b4cbac29328b569f516ce55f18</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>publisher_widget</name>
+        <portal_section display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>51c7dc64da31bfa97118cea44e9549ca</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_grid_canvas_pane action="INSERT_OR_UPDATE">
+        <grid_canvas display_value="x_casemgmt_agent_workspace_canvas">0067e3c7959400dbfeb4219bfb91b895</grid_canvas>
+        <height>10</height>
+        <portal_widget display_value="My Overdue Tasks">500686fef5a53132c5d136188dbd377b</portal_widget>
+        <posx>6</posx>
+        <posy>0</posy>
+        <sys_class_name>sys_grid_canvas_pane</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e4044f15ae8a922ba0be712e9851722b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>My Overdue Tasks</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_grid_canvas_pane_x_casemgmt_agent_workspace_widget_my_overdue_tasks</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <width>6</width>
+    </sys_grid_canvas_pane>
+
+    <!--
+        ===================================================================
+        RECORD [8] - WIDGET "Case Count by Status" (sys_portal + sys_portal_preferences + sys_grid_canvas_pane)
+        ===================================================================
+        One dashboard widget is three records, not one. `pa_dashboard_widgets`
+        (what an earlier revision of this artifact emitted 3 and 5 times) is not
+        a table on this release; the shape below was read off working
+        out-of-box dashboards on the instance:
+
+          [8a] sys_portal              - the widget INSTANCE, bound to the tab page
+          [8b] sys_portal_preferences  - its parameters, as name/value pairs
+          [8c] sys_grid_canvas_pane    - where it sits on the canvas
+
+        The pair that makes it a REPORT widget is
+        renderer=com.glide.ui.portal.RenderReport plus sys_id=<report>. The
+        `sys_id` preference is the platform's own parameter name for "which
+        report to render" and there is no name-based alternative; the value is
+        the primary key THIS package declares for
+        ../reports/x_casemgmt_case_count_by_status.xml, so it resolves identically on
+        every fresh import and no foreign instance's identifier is baked in.
+        `report_type` mirrors that report's own <type> so the widget frame is
+        sized for the visualisation it hosts. THIS widget's value was
+        `pie` while ../reports/x_casemgmt_case_count_by_status.xml declares
+        <type>donut</type>; that mismatch is corrected to `donut` here.
+        It was found while adjudicating the dashboard half of QA Issue 10
+        (undersized / non-keyboard chart controls): the widget frame is the
+        one piece of the chart's chrome this package DOES control, so it
+        must not describe the visualisation as a chart family the report no
+        longer renders. `donut` is a value the platform itself uses for
+        this preference - measured on this instance, the out-of-box widgets
+        "Subscription Status" and "Allocated" both carry
+        report_type=donut against reports whose own <type> is `donut` - so
+        this is the platform's own vocabulary, not an invention. The report
+        remains the authority on the rendering (a pie is not promoted to a
+        donut by the widget, and a donut is not demoted by it); this
+        preference only stops the widget frame and the report disagreeing.
+
+        Geometry: posx/posy are 0-based columns/rows on the 12-column grid,
+        preserving the layout the earlier revision described (this widget:
+        column 1, width 12).
+    -->
+    <sys_portal action="INSERT_OR_UPDATE">
+        <dropzone/>
+        <offset/>
+        <page display_value="Overview">23795850fe7318a525ef56edf43dbfff</page>
+        <summary>Case Count by Status</summary>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c1f14e40233f87c2e29a5fac1c94f54d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_portal>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>renderer</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>52a9f29bf54116e2f1480d1eb9e6d294</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>com.glide.ui.portal.RenderReport</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>sys_id</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>78ca2628a1d9773e5a5d07041f7a6f16</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>32ae52ab8735ea76587edee6130abc06</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>title</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>55d49147e56861c3d88cfc39a66d2224</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>Case Count by Status</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>report_type</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0cf1d918c2e132414663035bd1e135a1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>donut</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_title</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>32526b25de0c574578793d9c56e44438</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>true</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_header</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5ca59b2b9ba0d129e949bfcd17b591fe</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>true</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>show_border</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a7a52247c4bcd3391b1b5499199f0095</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>filter_indicator</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>7b9306337ee8140f47fcf6d020465064</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>real_time</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>370ede9ad3e282d282ed259e37798b84</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>can_subscribe</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6fc38ca2c28e25811b8f3875c201a546</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>subscriber_widget</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>eb1cec9247503a8122572c2bd0dddf9a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_portal_preferences action="INSERT_OR_UPDATE">
+        <name>publisher_widget</name>
+        <portal_section display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_section>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5490383978e1f12d8cdb15547d857fbd</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>false</value>
+    </sys_portal_preferences>
+
+    <sys_grid_canvas_pane action="INSERT_OR_UPDATE">
+        <grid_canvas display_value="x_casemgmt_agent_workspace_canvas">0067e3c7959400dbfeb4219bfb91b895</grid_canvas>
+        <height>10</height>
+        <portal_widget display_value="Case Count by Status">c1f14e40233f87c2e29a5fac1c94f54d</portal_widget>
+        <posx>0</posx>
+        <posy>10</posy>
+        <sys_class_name>sys_grid_canvas_pane</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2b96fcb8ce2a6612d1eb844c0835ffad</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Count by Status</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_grid_canvas_pane_x_casemgmt_agent_workspace_widget_case_count_by_status</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <width>12</width>
+    </sys_grid_canvas_pane>
+
+</unload>

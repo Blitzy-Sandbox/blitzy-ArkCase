@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `x_casemgmt_case` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_db_object_13cae85e938b435009aa70d19dba10e0
+      Update record type       : Table
+      Update record target     : Case
+      Captured (instance time) : 2026-09-02 19:14:00
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (13cae85e938b435009aa70d19dba10e0), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    ServiceNow Update Set record-definition for the foundational `x_casemgmt_case`
+    custom table inside the scoped application `x_casemgmt`.
+
+    This table is the case-lifecycle anchor of the POC. It replaces the case-domain
+    subset of ArkCase's `acm_case_file` MySQL table (the JPA entity `CaseFile`
+    in acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/java/com/
+    armedia/acm/plugins/casefile/model/CaseFile.java) - converting the JPA
+    @Entity / @Table(name="acm_case_file") / @Inheritance(SINGLE_TABLE) pattern
+    into a ServiceNow scoped table whose discriminator collapses into a `type`
+    Choice rather than a class-name discriminator column.
+
+    This record authors ONLY table-level metadata (name, labels, parent class,
+    scope linkage, auto-numbering reference, and access flags). The 14 fields
+    on this table (number, type, status, priority, subject, description,
+    opened_date, closed_date, assigned_group, assigned_agent, requester_name,
+    requester_email — the 12 AAP-enumerated user-prompt fields — plus the
+    internal pending_reason choice and the virtual duration_to_close Function
+    Field) are authored as sys_dictionary records in the sibling
+    ../dictionary/ folder. The platform automatically inherits the standard
+    sys_* audit columns (sys_id,
+    sys_created_on, sys_created_by, sys_updated_on, sys_updated_by) by virtue
+    of being a sys_db_object record.
+
+    Constraints honored:
+      - Scoped-namespace exclusivity: every cross-reference resolves into the
+        x_casemgmt scope; no global-scope writes.
+      - No sys_id was hand-authored in any reference field, and the ids that
+        ARE present are the platform's own. The rebuild resolved the scope by
+        query (sys_scope?scope=x_casemgmt) and let ServiceNow serialize the
+        references, so what it wrote is literal, not a by-name token:
+        <sys_package> carries display_value="x_casemgmt Case Management" and
+        source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af; <sys_scope> carries display_value
+        only over that same scope-record id, with no `source` attribute; and
+        <number_ref> carries display_value="CASE" over the bare literal
+        sys_number record id 4fc55a26e01ab60d8ea5ce13ce35f6f3, with no
+        `source` attribute either. This is ServiceNow's native serialization
+        of a reference field and is AUTHORIZED by the refine PR's
+        native-capture directive, which supersedes the hand-authored origin
+        for this path (../docs/refine-run/PHASE1-REBUILD.md).
+      - The <sys_id> element below is the identity the platform assigned this
+        record when it created it (13cae85e938b435009aa70d19dba10e0): this
+        record's own primary key, not a reference to any other record, and
+        NOT derived from the table name. Re-running the rebuild would yield a
+        different id, so this file is not reproducible byte for byte by
+        regeneration; the no-hard-coded-sys_id rule is satisfied by
+        PROVENANCE (nothing here was composed by hand) rather than by the
+        absence of literal ids. Re-import matches the existing row on this
+        id, which is why the captured value must be preserved verbatim.
+      - super_class is empty: this table extends NOTHING. It does not extend
+        the OOB `task` table (which would write to global scope and violate
+        AAP Section 0.3.2). The platform still provides standard sys_* audit columns
+        because sys_db_object records always do.
+      - create_access_controls is false: ServiceNow auto-creates a default ACL
+        set when this is true. Since ../acl/ enumerates a precise role x table
+        x CRUD matrix with custom "Assigned only" conditions for case_agent,
+        the auto-generated ACLs would conflict and are explicitly suppressed
+        here.
+      - CROSS-SCOPE ACCESS IS LEAST PRIVILEGE: READ ONLY, AND THE COLUMNS ARE
+        BOOLEAN, NOT STRINGS. On sys_db_object only `access` is a string
+        (public | package_private); ws_access, read_access, create_access,
+        update_access, delete_access, alter_access, client_scripts_access and
+        configuration_access are all `boolean` (verified against sys_dictionary
+        on the target release). Assigning the string "public" to a boolean column
+        stores FALSE - an earlier revision of this artifact did exactly that -
+        and the platform then refuses EVERY cross-scope operation on this table:
+        "Read operation against 'x_casemgmt_case' from scope 'rhino.global' has
+        been refused due to the table's cross-scope access policy".
+        Exactly two columns are opened below, each because a capability
+        measurably depends on the READ it permits:
+          1. read_access : the REST Table API post-commit verification gate
+             (GET /api/now/table/x_casemgmt_case answered HTTP 403 as admin);
+             any Global-scope verification script (a Global GlideRecord read
+             silently reported getRowCount() == 0 on a fully populated table);
+             and the ATF client test runner, because the platform's own
+             Global-scope Script Include TestExecutorAjax.validateFormParameters
+             resolves the record for the "Open an Existing Record" step with a
+             plain GlideRecord, so without it every form-level test failed with
+             "Table 'x_casemgmt_case' does not have a record with id '...'".
+          2. ws_access : the same REST Table API path, which is refused outright
+             when this column is false.
+        create_access, update_access and delete_access are deliberately FALSE.
+        Application Access is a SEPARATE gate from the record ACLs: a Global or
+        foreign-scoped script using plain GlideRecord is not filtered by
+        ../acl/*.xml at all (only GlideRecordSecure applies record ACLs), and
+        Global code can additionally suppress this application's before-update
+        transition guards with setWorkflow(false). Leaving the three write
+        columns open therefore allowed any Global caller to create, modify or
+        delete case rows outside the manager/agent/viewer matrix of AAP
+        Section 0.5.6 and outside the state machine of AAP Section 0.5.5 -
+        measured on the target PDI, where a Global-scope GlideRecord insert,
+        update and delete against this table all succeeded. Closing them costs
+        this deliverable nothing: the seed script runs in scope, the portal REST
+        endpoints and every Script Include are in scope, the remediation script
+        writes only platform tables, and the ATF suite scored 16 of 20 with all
+        five columns false - the four failures being the Global READ path above
+        (ATF 15/16/17) and an unrelated ACL compile defect (ATF 07), with zero
+        failures among the 26 Record Update, 6 Record Insert and 7 Record Delete
+        steps that write these tables.
+        alter_access, client_scripts_access and configuration_access stay FALSE:
+        no other scope may reshape this table's schema, client scripts or
+        configuration. All eight are stated explicitly below rather than left to
+        a mis-typed string coercing to false.
+      - CACHE NOTE for anyone repairing a live instance by hand: writing these
+        columns flushes only the sys_db_object catalog, NOT
+        syscache_tabledescriptor, so the new values appear in the record while
+        the old policy is still enforced. Touch this table's collection
+        sys_dictionary row (name=<table>, element=NULL) afterwards to force the
+        descriptor rebuild. ../scripts/post_import_remediation.js does exactly
+        that and then verifies the effective access.
+      - The concrete scope identifier casemgmt is used throughout per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export.
+-->
+<record_update table="sys_db_object">
+    <sys_db_object action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <actions_access>false</actions_access>
+        <alter_access>false</alter_access>
+        <caller_access/>
+        <client_scripts_access>false</client_scripts_access>
+        <configuration_access>false</configuration_access>
+        <create_access>false</create_access>
+        <create_access_controls>false</create_access_controls>
+        <delete_access>false</delete_access>
+        <filter_extension/>
+        <is_df_table>false</is_df_table>
+        <is_extendable>false</is_extendable>
+        <label>Case</label>
+        <live_feed_enabled>false</live_feed_enabled>
+        <name>x_casemgmt_case</name>
+        <number_ref display_value="CASE">4fc55a26e01ab60d8ea5ce13ce35f6f3</number_ref>
+        <provider_class/>
+        <read_access>true</read_access>
+        <scriptable_table>false</scriptable_table>
+        <super_class/>
+        <sys_class_name>sys_db_object</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:13:59</sys_created_on>
+        <sys_id>13cae85e938b435009aa70d19dba10e0</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>Case</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_db_object_13cae85e938b435009aa70d19dba10e0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:15:45</sys_updated_on>
+        <update_access>false</update_access>
+        <user_role/>
+        <ws_access>true</ws_access>
+    </sys_db_object>
+</record_update>

@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_client`
+    record x_casemgmt_case_closed_readonly_enforce.
+
+    WHY THIS RECORD EXISTS
+    ======================
+    AAP Section 0.5.5 makes Closed a TERMINAL state: "Closed cases are
+    terminal and cannot be modified." The write side of that rule is
+    enforced by the before-update Business Rule
+    ../business_rules/x_casemgmt_block_terminal_closed.xml, which refuses
+    any change to a Closed row and surfaces that exact sentence. The READ
+    side - presenting a Closed case as a record that is finished rather
+    than one the form invites you to edit - is the UI Policy
+    ../ui_policy/x_casemgmt_case_closed_readonly.xml, which carries a
+    read-only action for each of the ten writable fields.
+
+    This client script exists because that UI Policy does not fully take
+    effect on this release, measured on the rendered form rather than
+    inferred:
+
+      - Opening CASE9000006 (status Closed) as admin, seven of the ten
+        fields came back protected - g_form.isDisabled() true, the input
+        carrying readonly="readonly" and the `readonly disabled` classes -
+        but `description` came back EDITABLE: isDisabled('description')
+        returned false, the textarea had no readonly attribute and no
+        readonly class, it took focus on load (it was the only white
+        control on an otherwise grey form), and typing into it changed the
+        value. Reproduced on three independent loads, so not a race.
+
+      - The UI Policy itself is not at fault: it is the only UI Policy on
+        the table, it holds all ten actions with Read only = True, and
+        `description` is a plain String dictionary field. Calling
+        g_form.setDisabled('description', true) by hand on the loaded form
+        applied immediately and correctly. The policy's description action
+        simply has no runtime effect at load time. The strongest
+        correlating signal is a platform exception logged five times on
+        every x_casemgmt_case form load - "Exception while evaluating NACM
+        configuration in text area: ReferenceError: renderNACMFieldLevel
+        is not defined", raised from runBeforeRender - i.e. the platform's
+        field-level access-control rendering path for TEXT AREAS fails
+        before render, and `description` is this form's only textarea.
+        That path is platform code in the global scope, so AAP Section
+        0.3.2 bars changing it; calling the supported g_form API from
+        scoped app content is the fix available to this application.
+
+      - The four Choice fields (type, status, priority, pending_reason)
+        are a second, narrower gap. The UI Policy styles them read-only
+        and g_form.isDisabled() answers true for them, but the underlying
+        <select> element is not actually inert: select.disabled stayed
+        false and only the HTML `readonly` attribute was set, which has no
+        effect on a <select>. Selecting a different Priority on the Closed
+        form therefore succeeded client-side and was not reverted. There
+        is no platform API that renders an already-drawn choice control as
+        static text - the platform does that SERVER-side, at render, which
+        is why the unconditionally read-only fields (number, opened_date,
+        closed_date) arrive as `sys_readonly.x_casemgmt_case.<field>`
+        inputs instead - so this script sets the DOM `disabled` property
+        on choice controls directly. A disabled control is not submitted
+        by the browser, which is exactly the representation the platform
+        itself uses for a server-side read-only field (renaming the input
+        to sys_readonly.* keeps it out of the POST), so this matches
+        platform semantics rather than working around them.
+
+    THE SECOND BEHAVIOUR IN THIS RECORD
+    ===================================
+    QA Issue 17's suggested fix asked for three things: the persisted
+    STATE restored after an aborted submit, the persisted ACTION SET
+    restored, and Closed fields/actions rendered read-only. The third is
+    the lockdown described above. The second is server-side, in
+    CaseTransitionValidator.canShowAction() and its `_storedRecord()`
+    helper in
+    ../script_includes/x_casemgmt_CaseTransitionValidator.xml, which
+    derive transition visibility from the stored row. The FIRST - the
+    field value - is BLOCK 1 of the script below.
+
+    The platform re-renders an aborted submit with the values that were
+    POSTED. Setting Status to Draft on an Open case and pressing Update
+    is refused by
+    ../business_rules/x_casemgmt_block_draft_backtransition.xml with the
+    verbatim "Cases cannot be returned to Draft." and nothing is
+    persisted, yet the returned form keeps showing Draft until the record
+    is reloaded. BLOCK 1 reads the stored status published on
+    `g_scratchpad` by the display Business Rule
+    ../business_rules/x_casemgmt_case_display_stored_state.xml and sets
+    the control back to it when, and only when, the two disagree. Every
+    other path - no scratchpad, an empty or unrecognised value, `status`
+    absent from the form, values already equal, any exception - is a
+    silent no-op that changes nothing.
+
+    The two blocks are ordered deliberately: BLOCK 1 runs first, so the
+    terminal-status test in BLOCK 2 is made against the status the
+    database holds rather than a status the server has just refused, and
+    so the correction is written before BLOCK 2 makes the control inert.
+
+    Neither block touches the message region. AAP Section 0.5.5 requires
+    the blocking error to be surfaced on the form, so the banner written
+    by the aborted save must survive the correction; g_form.setValue()
+    does not touch the message area and no message API is called here.
+    The one traced interaction - the "input"/"change" listeners that
+    ./x_casemgmt_case_flush_stale_messages.xml binds to the `status`
+    control, which do call g_form.clearMessages() - is discussed in BLOCK
+    1's comments, together with why a programmatic value assignment is
+    not expected to reach them and where the remedy would belong if
+    runtime measurement ever showed otherwise.
+
+    WHAT THIS DELIBERATELY DOES NOT DO
+    ==================================
+    It does not remove the form's Update verb. That is not an oversight:
+    AAP Section 0.5.5 requires the sentence "Closed cases are terminal and
+    cannot be modified." to be SURFACED on an attempt, which presupposes
+    that an attempt can still be made and answered. Locking the fields
+    removes the invitation to change the data; leaving Update in place
+    keeps the platform's own attempt path - and therefore the AAP's
+    required blocking message - reachable, including for the inline-list
+    and Table-API paths the Business Rule also guards.
+
+    It does not reverse anything when the status is not Closed. BLOCK 2's
+    early return leaves a non-Closed form's EDITABILITY exactly as the
+    dictionary and the field-level ACLs left it; the only thing BLOCK 1
+    can change on such a form is the `status` VALUE, and only to the value
+    the database already holds. Forcing fields writable in an else-branch
+    would undercut the Section 0.5.6 field-level ACLs on assigned_group
+    and assigned_agent, which is the same reason
+    ../ui_policy/x_casemgmt_case_closed_readonly.xml sets
+    reverse_if_false = false.
+
+    RELATIONSHIP TO THE OTHER CLIENT SCRIPT
+    =======================================
+    ./x_casemgmt_case_flush_stale_messages.xml (order 100) handles form
+    message hygiene on the same table. This record is order 200 so the two
+    run in a defined sequence, and neither depends on the other: that
+    script binds listeners and clears nothing until the user edits a
+    mandatory field, and this one reads a scratchpad value and writes at
+    most one field value. Their one point of contact is the `status`
+    control, which that script listens on and BLOCK 1 below may write to;
+    the analysis of that contact, and why it is not expected to flush the
+    blocking banner, is in BLOCK 1's comments.
+
+    NO HARDCODED sys_id (AAP Section 0.7.2): the field names below are
+    dictionary element names and the status value is the Choice value from
+    ../choices/sys_choice_case_status.xml. The record's own sys_id is
+    pinned - md5("x_casemgmt_case.client_script.closed_readonly") - so
+    that re-importing this file updates this row rather than inserting a
+    second copy.
+
+    Scope: x_casemgmt (no global-scope content, per AAP Section 0.3.2).
+-->
+<record_update table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>Two behaviours for x_casemgmt_case, both from QA Issue 17. FIRST, it puts the form back in step with the database after an aborted submit: the platform re-renders an aborted save with the POSTED values, so setting Status to Draft on an Open case and pressing Update leaves the form showing Draft even though the write was refused with the verbatim "Cases cannot be returned to Draft." and nothing was persisted. The block reads the stored status published on g_scratchpad by the display Business Rule ../business_rules/x_casemgmt_case_display_stored_state.xml, which obtains it by re-reading the row from the database by its own sys_id, and calls g_form.setValue('status', stored) only when the rendered value and the stored value disagree. Fail-safe: no scratchpad, an empty or unrecognised value, status absent from the form, values already equal or any exception are all silent no-ops that change nothing. It clears no message and does not reload: AAP Section 0.5.5 requires the blocking error to stay on the form, and g_form.setValue does not touch the message area. It runs before the lockdown below so the terminal-status test is made against the stored status and so the control is corrected before it is made inert. SECOND, the terminal-state form lockdown: on load, when status is Closed, disables the ten writable fields (subject, type, status, priority, description, requester_name, requester_email, assigned_group, assigned_agent, pending_reason) through g_form.setDisabled, and additionally sets the DOM disabled property on Choice controls because the platform's client-side read-only treatment sets only the inert HTML readonly attribute on a select. Backs up ../ui_policy/x_casemgmt_case_closed_readonly.xml, whose description action has no runtime effect on this release: measured on CASE9000006, g_form.isDisabled('description') returned false and the textarea was editable while the other nine fields were protected, correlating with the platform's repeated "renderNACMFieldLevel is not defined" text-area exception in runBeforeRender. Does not touch a non-Closed form (early return) and does not remove the Update verb, because AAP Section 0.5.5 requires the blocking message "Closed cases are terminal and cannot be modified." to be surfaced on an attempt. Enforcement of the rule itself remains server-side in ../business_rules/x_casemgmt_block_terminal_closed.xml; this record governs only what the form presents. Per AAP Sections 0.4.4, 0.5.5 and 0.7.2.</description>
+        <field/>
+        <global>true</global>
+        <isolate_script>false</isolate_script>
+        <messages/>
+        <name>x_casemgmt_case_closed_readonly_enforce</name>
+        <order>200</order>
+        <script><![CDATA[function onLoad() {
+    'use strict';
+
+    // =================================================================
+    // BLOCK 1 of 2 - PUT THE FORM BACK IN STEP WITH THE DATABASE AFTER
+    // AN ABORTED SUBMIT. QA Issue 17, the FIELD VALUE half.
+    //
+    // THE DEFECT. On an Open case, set Status to Draft and press Update
+    // once. ../business_rules/x_casemgmt_block_draft_backtransition.xml
+    // refuses the write, the verbatim "Cases cannot be returned to
+    // Draft." is displayed, and nothing is persisted - the list and a
+    // fresh REST read both still say Open and sys_mod_count is
+    // unchanged. But the platform re-renders an aborted submit with the
+    // values that were POSTED, so the form still shows Status = "Draft"
+    // until the user reloads: what is displayed and what is stored
+    // diverge, on the one field the whole state machine turns on.
+    //
+    // THE MECHANISM. The client cannot see the stored value on its own,
+    // so it is supplied through the platform's own channel: the display
+    // Business Rule
+    // ../business_rules/x_casemgmt_case_display_stored_state.xml
+    // re-reads the row from the database by its own sys_id with a fresh
+    // GlideRecord and publishes the result as
+    // g_scratchpad.x_casemgmt_stored_status. That rule never reads a
+    // status off `current`, because it is NOT established whether a
+    // display rule is handed the stored or the posted record on an abort
+    // re-render - see its header. This block reads that one string and
+    // corrects the control when, and only when, the two disagree.
+    //
+    // FAIL SAFE, DELIBERATELY. Every uncertain path is a silent no-op
+    // that changes nothing: no scratchpad (no display rule ran), an
+    // empty or absent value (the rule could not prove a stored status),
+    // a value this application does not recognise, `status` not on the
+    // form, the two values already equal, or any exception at all. The
+    // block only ever writes a value the server demonstrated against a
+    // fresh database read, so it cannot invent a state and cannot fight
+    // a user who is legitimately editing the field.
+    //
+    // IT CLEARS NO MESSAGE, AND MUST NOT. AAP Section 0.5.5 requires the
+    // blocking error to be surfaced on the form, so the banner from the
+    // aborted save has to survive this correction. g_form.setValue()
+    // does not touch the message area; nothing here calls
+    // g_form.clearMessages(), addErrorMessage(), addInfoMessage() or
+    // reloads the form, and nothing may be added that does.
+    //   One interaction was traced and is worth knowing about:
+    //   ./x_casemgmt_case_flush_stale_messages.xml (order 100, so its
+    //   listeners are already bound when this script runs at order 200)
+    //   registers native "input"/"change" listeners on the four
+    //   mandatory controls - `status` among them - that call
+    //   g_form.clearMessages(). Per the DOM specification a programmatic
+    //   value assignment fires neither event, and jQuery's
+    //   trigger('change') does not reach addEventListener handlers, so
+    //   setValue() here is not expected to trip them and the banner is
+    //   expected to stand. That expectation is stated, not assumed
+    //   proven: it is a runtime observation, and if a release ever did
+    //   dispatch a trusted-looking change event the remedy belongs in
+    //   that script (ignore events whose isTrusted is false), not here,
+    //   because suppressing or re-writing a message from this block is
+    //   forbidden either way.
+    //
+    // WHY THIS BLOCK RUNS FIRST. Three reasons, all about the terminal
+    // lockdown in BLOCK 2 reading a status it can trust: (1) BLOCK 2
+    // early-returns unless status is Closed, so on a Closed case whose
+    // posted status was something else the lockdown would otherwise skip
+    // the form entirely; (2) after this correction that test is made
+    // against the stored status rather than the rejected one; (3)
+    // correcting the value before BLOCK 2 disables the control avoids
+    // writing to a control this script has just made inert.
+    // =================================================================
+
+    // The closed enumeration of ../choices/sys_choice_case_status.xml.
+    // Used as an allowlist so a scratchpad value that is not a status
+    // this application recognises is never written to the control.
+    var KNOWN_STATUSES = ['Draft', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
+
+    /**
+     * Reconcile the `status` control with the stored row.
+     *
+     * Reads g_scratchpad.x_casemgmt_stored_status, published by the
+     * display Business Rule named above, and calls
+     * g_form.setValue('status', <stored>) only when it can see a real
+     * divergence. Silent no-op in every other case, including every
+     * failure. Never throws, never clears a message, never reloads.
+     */
+    function restoreStoredStatus() {
+        try {
+            // No display rule ran (or it ran outside a form render), so
+            // there is nothing authoritative to compare against.
+            if (typeof g_scratchpad === 'undefined' || !g_scratchpad) {
+                return;
+            }
+
+            var stored = g_scratchpad.x_casemgmt_stored_status;
+            if (stored === null || stored === undefined) {
+                return;
+            }
+            stored = String(stored).trim();
+
+            // The display rule publishes the empty string whenever it
+            // cannot prove a stored status: a new record, a row it could
+            // not re-read, or an exception. That is its way of saying
+            // "do nothing", and this is where it is honoured.
+            if (stored === '') {
+                return;
+            }
+
+            // A value outside the enumeration would mean the scratchpad
+            // is not describing this application's status field. Writing
+            // it would put an unrecognised value on the control, so it is
+            // logged and ignored instead.
+            if (KNOWN_STATUSES.indexOf(stored) === -1) {
+                if (typeof jslog === 'function') {
+                    jslog('x_casemgmt_case_closed_readonly_enforce: ignored an unrecognised stored ' +
+                        'status from the scratchpad; the form was left untouched.');
+                }
+                return;
+            }
+
+            // A view may omit `status`, and a field-level ACL may remove
+            // it from the form. Either way there is nothing to correct.
+            if (!g_form.hasField('status')) {
+                return;
+            }
+
+            var shown = g_form.getValue('status');
+            shown = (shown === null || shown === undefined) ? '' : String(shown).trim();
+
+            // The common case by far: a normal form load, where the
+            // rendered value IS the stored value. Nothing happens.
+            if (shown === stored) {
+                return;
+            }
+
+            // The correction. The form is showing a value the database
+            // does not hold - on the abort re-render, the value the
+            // server has just refused - so the control is set back to
+            // the stored one. setValue() is the supported API for this;
+            // it updates the form's model as well as the control, so
+            // BLOCK 2, the UI Policy and any later read all see the same
+            // value. The status field is left flagged as modified, which
+            // is the state the aborted submit had already left the form
+            // in; the difference is that its value now matches the row,
+            // so submitting it again is a no-op rather than a second
+            // rejected transition.
+            g_form.setValue('status', stored);
+
+            // Monitoring hook: one line in the browser console naming
+            // both values, so a verifier can see the correction happen
+            // and confirm no message was touched.
+            if (typeof jslog === 'function') {
+                jslog('x_casemgmt_case_closed_readonly_enforce: the form showed status "' + shown +
+                    '" while the stored row holds "' + stored + '"; the field was set back to the ' +
+                    'stored value. No message was cleared and the form was not reloaded.');
+            }
+        } catch (restoreError) {
+            // Message hygiene and value hygiene must never interfere
+            // with the form: a failure here leaves everything exactly as
+            // the platform rendered it.
+            if (typeof jslog === 'function') {
+                jslog('x_casemgmt_case_closed_readonly_enforce: could not reconcile the status field ' +
+                    'with the stored row: ' + restoreError);
+            }
+        }
+    }
+
+    restoreStoredStatus();
+
+    // =================================================================
+    // BLOCK 2 of 2 - TERMINAL-STATE FORM LOCKDOWN. QA Issue 17, the
+    // read-only half. Unchanged in behaviour by BLOCK 1 above, which
+    // only ever hands it the status the database actually holds.
+    // =================================================================
+
+    // The terminal status, spelled as the Choice VALUE in
+    // ../choices/sys_choice_case_status.xml.
+    var TERMINAL_STATUS = 'Closed';
+
+    // Every field the UI Policy protects, in form order. number,
+    // opened_date and closed_date are absent on purpose: they are
+    // unconditionally read-only in the dictionary, so the platform
+    // already renders them server-side as sys_readonly.* controls.
+    var FIELDS = [
+        'subject',
+        'type',
+        'status',
+        'priority',
+        'description',
+        'requester_name',
+        'requester_email',
+        'assigned_group',
+        'assigned_agent',
+        'pending_reason'
+    ];
+
+    // Only a Closed record is locked. On every other status this script
+    // returns having changed nothing at all, leaving the form as the
+    // dictionary and the field-level ACLs rendered it.
+    if (g_form.getValue('status') !== TERMINAL_STATUS) {
+        return;
+    }
+
+    for (var i = 0; i < FIELDS.length; i++) {
+        var field = FIELDS[i];
+
+        // A view may omit a field, and a field-level ACL may remove it
+        // from the form entirely. Either way there is nothing to disable
+        // and asking the platform to do it would log a client error.
+        if (!g_form.hasField(field)) {
+            continue;
+        }
+
+        // The supported API first. This is what closes the `description`
+        // gap: called here it applies, where the equivalent UI Policy
+        // action does not.
+        g_form.setDisabled(field, true);
+
+        // Then the one case the supported API cannot finish. For a
+        // <select> the platform's read-only treatment sets the HTML
+        // `readonly` attribute, which the specification defines as having
+        // no effect on a select, so the control stays operable. Setting
+        // the DOM property is what actually makes it inert. Guarded by
+        // tagName so nothing else on the form is touched, and by a
+        // null/undefined check because getControl() returns nothing for a
+        // field the platform renders without a single addressable
+        // control.
+        var control = g_form.getControl(field);
+        if (control && control.tagName === 'SELECT') {
+            control.disabled = true;
+        }
+    }
+}]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>c6e53b45c50d4b9325f281b7876590bb</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_closed_readonly_enforce</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_client_c6e53b45c50d4b9325f281b7876590bb</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <type>onLoad</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

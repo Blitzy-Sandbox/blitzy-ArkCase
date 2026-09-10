@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that enforces AAP Section 0.5.7's MANDATORY column contract on every
+    write to `x_casemgmt_case`, inside the scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.7 verbatim, x_casemgmt_case schema rows 5, 6, 11):
+        "subject         |  String(255)   |  Mandatory"
+        "description     |  String(4000)  |  Mandatory"
+        "requester_name  |  String(100)   |  Mandatory - captures external requester"
+
+    And AAP Section 0.7.3 Gate 1 verbatim:
+        "Data model | All 3 custom tables created with correct fields and
+         types | Zero missing mandatory fields"
+
+    WHY THIS RULE EXISTS (QA finding F15):
+        `mandatory = true` on a sys_dictionary row is a FORM-TIME and
+        UI-POLICY-TIME construct. The platform's mandatory-field validator
+        runs in the client form engine and in the record-producer/portal
+        submission engines; it does NOT run inside the server-side insert
+        or update pipeline. Consequently a caller reaching the table
+        through any non-form path bypasses it entirely.
+
+        MEASURED against this instance before this rule existed:
+            POST /api/now/table/x_casemgmt_case {}          -> HTTP 201
+        The platform accepted a BLANK SHELL case: no subject, no
+        description, no requester name, only an auto-number and the
+        dictionary default status of Draft. That row satisfies no part of
+        Section 0.5.7 and satisfies no part of Gate 1, yet it lands in the
+        case list, in both dashboards' aggregates, and (because the number
+        is issued regardless) in the anonymous portal status lookup.
+
+        The same gap is reachable from GlideRecord.insert() in a background
+        script, from a scoped Script Include, from an Import Set transform,
+        and from an inbound email action. This rule closes ALL of them at
+        once, because a before-insert/before-update Business Rule is the one
+        server-side hook every one of those paths runs through.
+
+    RELATIONSHIP TO THE PORTAL SUBMISSION GUARD (no duplication of intent):
+        ../script_includes/x_casemgmt_CasePortalService.xml validates the
+        same three fields in _validateSubmission() before it initializes a
+        GlideRecord, so the ANONYMOUS portal path already refuses a blank
+        submission with a caller-facing message and never reaches this rule
+        with an invalid row. That guard is deliberately kept: it produces a
+        portal-appropriate error payload and it runs before the flood guard
+        consumes a submission slot. This rule is the LAST line of defence
+        behind it - the one that also covers the Table API, background
+        scripts and every future write path that does not go through the
+        portal Script Include. Neither is redundant: the portal guard owns
+        the caller-facing contract, this rule owns the table invariant.
+
+    BEHAVIOR:
+        - Trigger          : BEFORE INSERT and BEFORE UPDATE on `x_casemgmt_case`
+        - Condition        : any of subject / description / requester_name
+                             resolves to empty or whitespace-only on the row
+                             AS IT WOULD BE STORED
+        - Action           : gs.addErrorMessage(...) naming the offending
+                             field, then current.setAbortAction(true)
+        - Other timing     : does NOT fire on delete or query. Delete is
+                             intentionally out of scope - AAP Section 0.5.6
+                             grants the manager role an UNQUALIFIED Delete
+                             and this rule must not narrow a granted
+                             privilege.
+
+    WHY THE CHECK IS UNCONDITIONAL ON UPDATE (and why that is safe here):
+        The check reads the value the row WOULD CARRY AFTER the write
+        (current.getValue), not the value the write supplied. A PATCH that
+        touches only `priority` on a conformant case therefore reads the
+        stored, populated subject and passes untouched - no update is made
+        harder than it was.
+
+        The check is NOT narrowed to "only when the field itself changed",
+        because `mandatory` means the STORED ROW may never be empty, which
+        is exactly what the form enforces: the case form refuses ANY save
+        while a mandatory field is blank, not merely a save that blanked it.
+        Section 0.7.3 Gate 1 is a statement about rows, not about writes.
+
+        The one risk of unconditional enforcement is making an already
+        non-conformant row unwritable. That risk was MEASURED away before
+        this rule was activated: all 13 rows on x_casemgmt_case - the 10
+        package demo cases from ../seed-data/cases/ plus the 3 rows later
+        QA fixtures left behind - carry non-empty subject, description and
+        requester_name. Zero rows violate the constraint, so zero rows
+        become unwritable. Any future artifact that seeds this table must
+        keep that true; ../scripts/seed_demo_data.js already populates all
+        three fields on every row it writes.
+
+    WHITESPACE IS EMPTY:
+        String(value).trim() === '' rejects ' ' and '\t' as well as ''. A
+        space-only subject satisfies a naive nil() check but carries no
+        information, renders as a blank cell in the case list, and produces
+        a blank line in the anonymous portal lookup. Section 0.5.7's
+        "Mandatory" is a statement about content, so the guard tests
+        content. This matches the trimming that
+        ../script_includes/x_casemgmt_CasePortalService.xml applies to the
+        same three fields on the portal path.
+
+    WHY current.getValue(element) RATHER THAN current[element]:
+        getValue() returns the underlying String (or null) for any field
+        type without constructing a GlideElement wrapper, so the same code
+        path is correct for all three columns and the loop stays
+        data-driven. A GlideElement obtained through property access
+        coerces to the empty string in some contexts and to the literal
+        'null' in others depending on release and on whether the field was
+        ever set; getValue() has one documented return contract.
+
+    ORDERING WITHIN THE BEFORE PHASE ON x_casemgmt_case (order = 50):
+        50 is the LOWEST order in this application's before-rule chain on
+        x_casemgmt_case, so a structurally invalid row is refused before
+        any state-machine rule spends work on it:
+
+            50  x_casemgmt_validate_case_mandatory_fields  (THIS RULE)
+            70  RESERVED - text-length guard
+            80  RESERVED - restricted-field guard
+           100  x_casemgmt_block_terminal_closed      (update)
+           100  x_casemgmt_set_opened_date            (insert)
+           200  x_casemgmt_block_draft_backtransition (update)
+           250  x_casemgmt_enforce_forward_transitions(update)
+           300  x_casemgmt_validate_assigned_agent_membership
+           400  x_casemgmt_clear_pending_reason_on_inprogress
+           500  x_casemgmt_set_closed_date
+
+        Orders 70 and 80 are RESERVED and deliberately left free; this rule
+        must not be renumbered into them.
+
+        Order alone is not a short circuit. setAbortAction(true) cancels
+        the WRITE; the platform still runs every remaining before rule and
+        reports the pending abort through current.isActionAborted(). The
+        rules at 100-500 already return early on that flag, so this rule
+        aborting first leaves the existing chain untouched and does not
+        suppress or reorder any of the three verbatim blocking messages
+        those rules own. The symmetric guard at the top of THIS rule's
+        script keeps it from stacking a mandatory-field message onto a save
+        some future lower-ordered rule has already rejected.
+
+    NO INLINE DUPLICATION OF ANOTHER RULE'S MESSAGE (AAP Section 0.7.4):
+        Section 0.7.4 fixes exactly four verbatim strings:
+            "All tasks must be closed before resolving this case."
+            "Cases cannot be returned to Draft."
+            "Closed cases are terminal and cannot be modified."
+            "No case found with that number."
+        None of them belongs to this rule and none of them is reproduced
+        here. Their owners are, respectively,
+        ../script_includes/x_casemgmt_CaseTransitionValidator.xml (surfaced
+        through the validate_resolved_transition subflow),
+        x_casemgmt_block_draft_backtransition,
+        x_casemgmt_block_terminal_closed and
+        ../script_includes/x_casemgmt_CasePortalService.xml. This rule
+        emits only its own target-side authored message, which names the
+        offending field so the caller can act on it.
+
+    EMAIL-DISABLED CONSTRAINT (AAP Section 0.7.2):
+        Zero gs.eventQueue() calls, zero gs.email() calls, zero
+        gs.notificationEngine() calls. The rule performs only the read,
+        the message and the abort.
+
+    SCOPED-NAMESPACE CONSTRAINT (AAP Section 0.7.2):
+        - <collection>x_casemgmt_case</collection>     scoped table
+        - <sys_scope>                                  the x_casemgmt scope record
+        - <sys_package>x_casemgmt</sys_package>        scoped application
+        - <access>package_private</access>             not callable cross-scope
+        Zero global-scope writes. Zero modifications to OOB tables. The
+        script body reads only scoped columns on the platform-injected
+        `current` GlideRecord.
+
+    NO-HARDCODED-SYS_ID CONSTRAINT (AAP Section 0.7.2):
+        - <collection> resolves the case table BY NAME (x_casemgmt_case)
+        - <sys_package> resolves the application record BY NAME (x_casemgmt)
+        - the script body performs ZERO GlideRecord lookups, therefore zero
+          lookups by sys_id literal
+        - the <sys_id> element below is THIS record's own deterministic
+          primary key (MD5 of "x_casemgmt_validate_case_mandatory_fields"),
+          which is permitted because the constraint applies to REFERENCE
+          FIELDS pointing at OTHER records, not to a record's own key
+
+    UPDATE-SET LOAD ORDER (AAP Section 0.5.2):
+        This sys_script record MUST be loaded AFTER:
+            - ../tables/x_casemgmt_case.xml
+            - ../dictionary/x_casemgmt_case_subject.xml
+            - ../dictionary/x_casemgmt_case_description.xml
+            - ../dictionary/x_casemgmt_case_requester_name.xml
+            - ../app/sys_app/x_casemgmt_case_management.xml
+        And BEFORE:
+            - ../seed-data/cases/x_casemgmt_case_demo_*.xml (every demo row
+              populates all three fields, so this rule admits all of them)
+
+    DETERMINISTIC SYS_ID:
+        sys_id = MD5("x_casemgmt_validate_case_mandatory_fields")
+               = 46b2e4e627993d8b706ade6c788dc2a1
+        32-character lowercase hex, so a re-import matches the existing row
+        on that id and updates it in place rather than inserting a
+        duplicate.
+
+    NOTE ON THE STORED `name` VALUE:
+        sys_script.name is max_length 40 on the platform, and this rule's
+        name is 41 characters, so the instance stores it truncated to
+        `x_casemgmt_validate_case_mandatory_field`. The full name is
+        retained here because it is the file identity and the
+        sys_update_name key; the same truncation already applies to the
+        shipped x_casemgmt_validate_assigned_agent_membership rule.
+        Identity is carried by <sys_id> and <sys_update_name>, neither of
+        which is affected.
+
+    VALIDATION GATE MAPPING (AAP Section 0.7.3):
+        - Gate 1 (Data model): "Zero missing mandatory fields". This rule is
+          what makes that statement true of ROWS and not only of dictionary
+          metadata.
+        - Gate 6 (Dashboards): "All widgets display data". A blank-shell
+          case pollutes the "Case Count by Status" donut and the
+          "Cases Opened in Last 30 Days" score with a row that has no
+          business content; refusing the insert keeps the aggregates
+          meaningful.
+        - Gate 7 (Update Set): the deterministic sys_id and the
+          reference-by-name collection ensure this rule re-imports with
+          zero preview errors.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-insert and before-update on x_casemgmt_case: refuses any write that would store an empty or whitespace-only subject, description or requester_name, naming the offending field via gs.addErrorMessage() and cancelling the write via current.setAbortAction(true). Closes QA finding F15 for the parent table: dictionary mandatory flags are form-time only, so POST /api/now/table/x_casemgmt_case {} previously returned HTTP 201 and stored a blank-shell case. Enforces AAP Section 0.5.7 (subject/description/requester_name Mandatory) and Section 0.7.3 Gate 1 (Zero missing mandatory fields) on every server-side write path - Table API, background script, Import Set, scoped Script Include. Order=50 is the lowest in the chain so a structurally invalid row is refused before the state-machine rules at 100-500 evaluate; orders 70 and 80 are reserved. Returns early on current.isActionAborted() so it never stacks a message onto an already-rejected save, and reproduces none of the four verbatim messages Section 0.7.4 fixes. Contains zero gs.eventQueue() calls per the email-disabled constraint.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_validate_case_mandatory_fields</name>
+        <order>50</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Server-side backstop for AAP Section 0.5.7's MANDATORY contract on
+    // x_casemgmt_case, and for Section 0.7.3 Gate 1 ("Zero missing
+    // mandatory fields").
+    //
+    // A sys_dictionary mandatory flag is enforced by the FORM engine, not by
+    // the insert/update pipeline, so every non-form write path bypassed it.
+    // Measured before this rule existed:
+    //     POST /api/now/table/x_casemgmt_case {}  ->  HTTP 201
+    // which stored a case with no subject, no description and no requester
+    // name. This rule is the one hook that all of the Table API, background
+    // scripts, Import Set transforms and scoped Script Includes run through.
+
+    // Stop if an earlier rule in the chain has already rejected this save.
+    //
+    // setAbortAction(true) cancels the WRITE, not the remaining before
+    // rules - the platform keeps running them and reports the pending abort
+    // through current.isActionAborted(). This rule is currently first at
+    // order 50, so the flag is normally false here; the guard is retained
+    // because orders 70 and 80 are RESERVED for future guards that would
+    // run ahead of nothing but could be renumbered below 50, and because it
+    // is the discipline every other rule in this chain follows. Returning
+    // here keeps an already-refused save from collecting a second,
+    // unrelated message on top of the one the caller needs to read.
+    if (current.isActionAborted()) {
+        return;
+    }
+
+    // Data-driven declaration of the three MANDATORY columns from AAP
+    // Section 0.5.7. `label` is the column_label the dictionary carries
+    // (../dictionary/x_casemgmt_case_subject.xml, _description.xml,
+    // _requester_name.xml), so the message names the field exactly as the
+    // caller sees it on the form and in the list header.
+    //
+    // Deliberately NOT included:
+    //   - `status`   : dictionary-mandatory with default_value='Draft', so it
+    //                  can never be empty on insert, and the state machine
+    //                  (orders 100-500) owns every subsequent value.
+    //   - `number`   : issued by the platform's Number Maintenance subsystem
+    //                  during the insert pipeline and read-only thereafter.
+    //   - `type`, `priority`, `requester_email`, `opened_date`,
+    //     `closed_date`, `assigned_group`, `assigned_agent`,
+    //     `pending_reason` : Section 0.5.7 marks none of them Mandatory.
+    //     assigned_group is required only ON the Draft -> Open transition,
+    //     which is the validate_open_transition subflow's contract reached
+    //     through x_casemgmt_enforce_forward_transitions at order 250 - not
+    //     a column-level invariant, and not this rule's concern.
+    var MANDATORY_FIELDS = [
+        { element: 'subject', label: 'Subject' },
+        { element: 'description', label: 'Description' },
+        { element: 'requester_name', label: 'Requester Name' }
+    ];
+
+    for (var i = 0; i < MANDATORY_FIELDS.length; i++) {
+        var element = MANDATORY_FIELDS[i].element;
+
+        // getValue() returns the underlying String, or null when the column
+        // was never set. It is used in preference to property access
+        // (current.subject) because it has one documented return contract
+        // across field types and releases, whereas a GlideElement wrapper
+        // coerces to '' in some contexts and to the literal 'null' in
+        // others. The value read is the value the row WOULD CARRY AFTER
+        // this write: on update, a PATCH that touches only `priority`
+        // reads the stored, populated subject and passes untouched, so no
+        // unrelated update is made harder than it was.
+        var value = current.getValue(element);
+
+        // Whitespace is empty. Section 0.5.7's "Mandatory" is a statement
+        // about content: a space-only subject renders as a blank cell in
+        // the case list and as a blank line in the anonymous portal
+        // lookup, so it is refused alongside '' and null. The same trimming
+        // is applied to these three fields on the portal path by
+        // x_casemgmt.CasePortalService._validateSubmission().
+        if (value === null || value === undefined || String(value).trim() === '') {
+            // gs.addErrorMessage() surfaces the message as a blocking
+            // banner at the top of the case form for a UI save, and is
+            // recorded in the session message list for a Table API call
+            // (whose own 403 body names this rule). Per AAP Section 0.7.1:
+            // "Surface all blocking errors on the form. Invalid transition
+            // attempts MUST produce a blocking error message visible on the
+            // form - silent failures or post-save error logs are
+            // unacceptable."
+            //
+            // The wording is target-side authored: AAP Section 0.7.4 fixes
+            // exactly four verbatim strings and none of them is a
+            // mandatory-field message, so no other rule's message is
+            // reproduced here. Naming the field is what makes the refusal
+            // actionable for a caller who cannot see the form.
+            gs.addErrorMessage(MANDATORY_FIELDS[i].label +
+                ' is mandatory and cannot be empty.');
+
+            // setAbortAction(true) cancels the database write. Both calls
+            // are required: without the message the write is refused with no
+            // visible diagnosis, and without the abort the message appears
+            // while the invalid row is still persisted.
+            current.setAbortAction(true);
+
+            // Return on the FIRST violation rather than reporting all
+            // three. One actionable message is what the form banner and the
+            // Table API response can each carry legibly, and the caller
+            // re-submits after fixing it, at which point the next violation
+            // - if any - is reported the same way.
+            return;
+        }
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>46b2e4e627993d8b706ade6c788dc2a1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_case_mandatory_fields</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_validate_case_mandatory_fields</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>

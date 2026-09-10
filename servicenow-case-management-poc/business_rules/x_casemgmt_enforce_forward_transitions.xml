@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that ENFORCES the FORWARD-transition preconditions of the case state
+    machine on the `x_casemgmt_case` table inside the scoped application
+    `x_casemgmt`, and that makes the natively authored Flow Designer state-machine
+    subflows load-bearing at the moment of the transition.
+
+    WHY THIS RULE EXISTS (Refine-PR Section 1, directives D1.2 / D1.3 / D1.6(a)):
+        The seven Flow Designer flows were re-authored natively on the PDI so that
+        the platform itself generated their runtime graph. Native authoring alone,
+        however, cannot satisfy the acceptance test, because a Flow Designer RECORD
+        trigger (`Created` / `Updated`) fires AFTER the database write commits. A
+        triggered flow can therefore observe a transition but can never abort it or
+        surface a form-level blocking error the way a before-update Business Rule
+        can. This rule closes that gap: it invokes the relevant validation subflow
+        SYNCHRONOUSLY, in the foreground, from the before-update pipeline, and
+        aborts the save with the subflow's verbatim message when the precondition
+        is not met.
+
+    TRANSITION MATRIX ROWS THIS RULE OWNS (AAP Section 0.5.5):
+        | From        | To          | Required condition                                        |
+        | Draft       | Open        | assigned_group populated                                  |
+        | Open        | In Progress | assigned_agent populated AND member of assigned_group     |
+        | In Progress | Pending     | none (no precondition)                                    |
+        | In Progress | Resolved    | every linked x_casemgmt_case_task has status = Closed      |
+        | Resolved    | Closed      | caller holds x_casemgmt_case_manager                      |
+
+    AND THE EDGES THEMSELVES (AAP Section 0.5.5 read as the complete legal set,
+    AAP Section 0.7.3 Gate 2 "All state transitions enforced for both case types"):
+        Every row above is also an EDGE, and only those edges are legal. Until
+        STEP 0 below existed, this rule dispatched purely on the PROPOSED status
+        and never looked at where the case was coming from, so a case could be
+        driven from Draft straight to Closed in one save - skipping the
+        assigned_group requirement, the agent-membership requirement and the
+        task-closure gate, and arriving in the terminal state with `closed_date`
+        empty because order 500 keys on the Resolved -&gt; Closed edge. STEP 0 now
+        validates previous -&gt; proposed against the adjacency list held in
+        x_casemgmt.CaseTransitionValidator.validateTransitionEdge() before any
+        target-precondition work is done.
+
+    VERBATIM ERROR MESSAGES (AAP Section 0.7.4 - NON-NEGOTIABLE). This rule never
+    composes its own wording; it surfaces exactly what
+    x_casemgmt.CaseTransitionValidator returns:
+        "Required field assigned_group is empty."
+        "Assigned agent must be set and must be a member of the assigned group."
+        "All tasks must be closed before resolving this case."
+        "Only case managers can close cases."
+
+    ORDER 250 - WHERE THIS SITS IN THE BEFORE-UPDATE CHAIN:
+            1) x_casemgmt_block_terminal_closed              (order=100)
+            2) x_casemgmt_block_draft_backtransition         (order=200)
+            3) x_casemgmt_enforce_forward_transitions        (order=250, THIS RULE)
+            4) x_casemgmt_validate_assigned_agent_membership (order=300)
+            5) x_casemgmt_clear_pending_reason_on_inprogress (order=400)
+            6) x_casemgmt_set_closed_date.xml                (order=500)
+
+        250 places this rule AFTER the two prohibition guards, so that the more
+        aggressive prohibitions win their messages first: a Closed -&gt; * attempt
+        surfaces "Closed cases are terminal and cannot be modified." at order 100
+        and an Any -&gt; Draft attempt surfaces "Cases cannot be returned to Draft."
+        at order 200, before this rule would ever look for a forward precondition.
+        250 also places it BEFORE the side-effect rules, so that a blocked
+        transition never gets a `closed_date` stamped or a `pending_reason`
+        cleared. `Draft` is deliberately absent from this rule's dispatch map
+        because order 200 already owns it.
+
+    ORDER ALONE IS NOT A SHORT CIRCUIT - WHY THE ABORT-STATE GUARD EXISTS:
+        `current.setAbortAction(true)` cancels the WRITE. It does NOT stop the
+        remaining rules in the before-update chain: ServiceNow continues to run
+        them and exposes the pending-abort state through
+        `current.isActionAborted()`. Ordering therefore decides only WHOSE
+        message is added first, not who runs. Without an explicit check, a
+        Closed -&gt; * attempt already rejected at order 100 would still reach this
+        rule and pay the full 8-10 second synchronous subflow execution before
+        adding a second, redundant diagnosis to a save that was never going to
+        happen. This rule therefore returns immediately when the action is
+        already aborted, and orders 300 / 400 / 500 carry the same guard so that
+        no later rule adds a message to, or mutates a field on, a rejected save.
+
+        Note on double messaging: order 300 re-validates agent membership only
+        when `assigned_agent` or `assigned_group` actually changed in the save, so
+        a status-only transition never produces two messages for the same fault.
+
+    ARCHITECTURE - TWO STEPS, ONE SOURCE OF TRUTH:
+        STEP 1 runs the natively authored subflow
+        (`x_casemgmt.validate_&lt;status&gt;_transition`) with
+        sn_fd.FlowAPI.getRunner().inForeground(), which is what causes the flow to
+        execute - and to write a real `sys_flow_context` row - on every genuine
+        transition. Each subflow contains the shared `Case Transition Guard`
+        Custom Action, whose script step calls
+        `new x_casemgmt.CaseTransitionValidator()`.
+
+        STEP 2 re-evaluates the same gate against the IN-FLIGHT `current` record
+        through the identical validator methods, and it is STEP 2 that decides.
+        The reason is precision, not distrust: the subflow loads the case from the
+        database and therefore sees the COMMITTED row, while a single save may
+        change `assigned_group` or `assigned_agent` in the same transaction as
+        `status`. Only `current` reflects the row as it will actually be
+        persisted. For a status-only save - which is what all six UI Actions and
+        the case form produce, and what every acceptance assertion exercises - the
+        two verdicts are identical and the subflow's verdict IS the decision. When
+        they diverge, the divergence is logged with gs.info and the in-flight
+        evaluation wins.
+
+        If sn_fd.FlowAPI is unavailable for any reason, STEP 1 logs a warning and
+        STEP 2 still enforces the gate - the rule fails closed onto the validator
+        rather than silently allowing an invalid transition.
+
+    BEHAVIOR:
+        - Trigger   : BEFORE UPDATE only, on the `x_casemgmt_case` table
+        - Condition : previous.status !== current.status AND the proposed status is
+                      one of Open / In Progress / Pending / Resolved / Closed
+        - On failure: gs.addErrorMessage(&lt;verbatim message&gt;) +
+                      current.setAbortAction(true) - a form-level blocking error,
+                      never a silent failure or a post-save log entry
+        - On insert : returns immediately (`previous` is null), so anonymous portal
+                      submissions that insert a Draft case are never blocked
+
+    FAIL-CLOSED IN BOTH DIRECTIONS THAT MATTER:
+        1) UNRECOGNISED STATUS VALUES ARE REFUSED. The six canonical statuses of
+           AAP Section 0.5.7 are the only values this rule will let through:
+           `Draft` passes to order 200, which owns the Any -&gt; Draft prohibition,
+           and the other five each have a gate here. Anything else - `Approved`,
+           a stale choice, a typo written straight through the Table API or a
+           scoped script - is REFUSED with a blocking message and
+           setAbortAction(true), and the offending value is logged server-side
+           (sanitized, never echoed to the user). A mandatory Choice dictionary
+           is NOT a server-side allowlist: the platform stores and displays a
+           value that is not a valid choice. An earlier revision returned
+           silently here, which let a direct write park a case in an
+           unrecognised state with every assignment, task-closure and
+           manager check skipped.
+        2) AN UNEVALUATED TRANSITION IS REFUSED. Validator construction, guard
+           dispatch AND verdict-shape validation all run inside one try/catch. A
+           Script Include resolution failure, a membership / task / role query
+           error or timeout, a malformed verdict, a non-boolean `ok`, or a
+           rejection carrying no message each produce an explicit deny: a
+           sanitized gs.error() for the operator, a generic blocking message for
+           the user, and current.setAbortAction(true). Enforcement never depends
+           on platform exception semantics.
+
+    ZERO HARDCODED FOREIGN sys_ids: the only 32-char hex literal in this file is
+    this record's own &lt;sys_id&gt;. The subflows are addressed by their
+    scope-qualified internal names, the role by its name, and the case by the
+    runtime sys_id of the record being saved.
+
+    SCOPE BINDING, AND WHY &lt;sys_scope&gt; CARRIES AN ID WHILE &lt;sys_package&gt; CARRIES A NAME:
+        &lt;sys_package&gt; is serialized by NAME with a `source` attribute, which is the
+        platform's own form and which the Update Set loader resolves by source.
+        &lt;sys_scope&gt; is serialized as the application record's sys_id, because the
+        loader resolves that column by sys_id ONLY. This was measured on the live
+        instance rather than assumed: a throwaway Update Set carrying the same
+        Business Rule three ways - &lt;sys_scope&gt;x_casemgmt&lt;/sys_scope&gt;, the same with
+        source="x_casemgmt", and the same with display_value - produced the preview
+        error "Could not find a record in sys_scope for column sys_scope referenced
+        in this update" for every by-name variant, and no problem at all for the
+        sys_id variant.
+
+        The sys_id form is nonetheless PORTABLE, which is the point of the rule in
+        AAP Section 0.7.2: the application record itself ships inside this package
+        (payload sys_app_82b99028936f74320d74d6f88357a5af) with that exact sys_id,
+        so on a fresh PDI the scope row is created first and every scoped record's
+        &lt;sys_scope&gt; resolves to it. Nothing is bound to an instance-specific id.
+        This value is a serialized reference field, not a runtime lookup: this
+        rule's executable script contains no sys_id literal and resolves the
+        validator, the subflows and the role by name.
+
+        This element is byte-identical to the corresponding element in the embedded
+        payload inside ../update-set/x_casemgmt_case_management_update_set.xml, so
+        the standalone artifact and the packaged record are the same record.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-update guard on x_casemgmt_case that enforces the forward-transition preconditions of the case state machine. On a status change it invokes the matching natively authored Flow Designer subflow (x_casemgmt.validate_open_transition, validate_in_progress_transition, validate_pending_transition, validate_resolved_transition, validate_closed_transition) synchronously with sn_fd.FlowAPI.getRunner().inForeground(), then re-evaluates the same gate against the in-flight record through x_casemgmt.CaseTransitionValidator and, on failure, calls gs.addErrorMessage() with the verbatim blocking message plus current.setAbortAction(true) so the error surfaces on the form. Order 250 runs after the Closed-terminal (100) and Any-to-Draft (200) prohibition guards and before the side-effect rules (300/400/500). FAIL-CLOSED: the six canonical statuses are an explicit allowlist - Draft passes to the order-200 rule that owns it, the other five are gated here, and any other value (a stale choice, a direct Table API or scripted write such as Approved) is refused with a blocking message and setAbortAction(true) rather than skipping every gate; and validator construction, guard dispatch and verdict-shape validation all run inside one try/catch, so an exception, a malformed verdict, a non-boolean ok or a rejection with no message produces an explicit deny with a sanitized server diagnostic and a generic user message instead of relying on platform exception semantics.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_enforce_forward_transitions</name>
+        <order>250</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script>(function executeRule(current, previous /*null when async*/) {
+    // ------------------------------------------------------------------
+    // Guard against the INSERT path. `previous` is null on insert, and a
+    // brand-new case has no prior status, so there is no forward
+    // transition to validate. Portal submissions insert with
+    // status = Draft and must never be blocked here.
+    // ------------------------------------------------------------------
+    if (!previous) {
+        return;
+    }
+
+    var previousStatus = String(previous.status);
+    var proposedStatus = String(current.status);
+
+    // Only a genuine status change is a transition. Field-only updates
+    // (subject, description, priority, assignment) are not this rule's
+    // concern and are left to the other before-update rules.
+    if (previousStatus === proposedStatus) {
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // Stop if an earlier rule in the chain has already rejected this save.
+    //
+    // setAbortAction(true) cancels the WRITE, not the remaining before-update
+    // rules - the platform keeps running them and reports the pending abort
+    // through current.isActionAborted(). Order 100
+    // (x_casemgmt_block_terminal_closed, Closed -&gt; *) and order 200
+    // (x_casemgmt_block_draft_backtransition, Any -&gt; Draft) both run first and
+    // both abort with their own verbatim message. Returning here means an
+    // already-rejected transition does not pay the 8-10 second synchronous
+    // subflow execution below, and does not collect a second diagnosis for a
+    // save that will never be persisted.
+    // ------------------------------------------------------------------
+    if (current.isActionAborted()) {
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // Map the proposed status onto the Flow Designer subflow that owns
+    // its precondition. The subflow internal names are the natively
+    // authored subflows in this scope; each one runs the shared
+    // `Case Transition Guard` Custom Action, which delegates to
+    // x_casemgmt.CaseTransitionValidator so there is a single source of
+    // truth for the transition rules and their verbatim messages.
+    //
+    // 'Draft' is deliberately absent: the Any -&gt; Draft prohibition is
+    // owned by x_casemgmt_block_draft_backtransition (order 200) and the
+    // Closed -&gt; * prohibition by x_casemgmt_block_terminal_closed
+    // (order 100). Both run before this rule.
+    // ------------------------------------------------------------------
+    var SUBFLOW_FOR_STATUS = {
+        'Open': 'validate_open_transition',
+        'In Progress': 'validate_in_progress_transition',
+        'Pending': 'validate_pending_transition',
+        'Resolved': 'validate_resolved_transition',
+        'Closed': 'validate_closed_transition'
+    };
+    var subflowName = SUBFLOW_FOR_STATUS[proposedStatus];
+    if (!subflowName) {
+        // ------------------------------------------------------------------
+        // ALLOWLIST, NOT A LOOKUP MISS. Reaching here means the proposed
+        // status is not one of the five this rule dispatches on. Exactly one
+        // value legitimately lands here - 'Draft' - because the Any -&gt; Draft
+        // prohibition belongs to x_casemgmt_block_draft_backtransition at
+        // order 200, which has already aborted the save with its own verbatim
+        // message. Every OTHER value is a status this application does not
+        // recognise, and it must NOT be allowed through.
+        //
+        // Why this matters: a Choice dictionary is not this rule's allowlist,
+        // and the two layers protect different paths. MEASURED on this release:
+        // `status` carries choice = 3, so the REST Table API silently DROPS an
+        // unrecognised value before any rule evaluates - the PATCH answers
+        // HTTP 200, the stored value is unchanged and sys_mod_count stays 0, so
+        // this branch is never reached from that path (see the register, section
+        // 4 item 15). What the branch guards is every OTHER way `status` can
+        // hold a value this application does not recognise: a stale choice left
+        // behind by a de-activated or renamed sys_choice row, and any write path
+        // that does not run dictionary choice validation. Returning without
+        // aborting, as an earlier revision did, would let such a value park a
+        // case in an unrecognised state with NO assignment check, NO task
+        // closure check and NO manager check: every order-250 gate skipped.
+        // It costs one map lookup, so it stays even though the common path
+        // cannot reach it.
+        // ------------------------------------------------------------------
+        if (proposedStatus === 'Draft') {
+            return;
+        }
+        // The offending value is recorded server-side, sanitized (newlines
+        // stripped, length capped) so a crafted value cannot forge log lines,
+        // and is deliberately NOT echoed back to the user.
+        var sanitized = proposedStatus.replace(/[\r\n\t]+/g, ' ');
+        if (sanitized.length &gt; 80) {
+            sanitized = sanitized.substring(0, 80) + '...';
+        }
+        gs.error('x_casemgmt_enforce_forward_transitions: refused a status this application does not' +
+                 ' recognise on case ' + String(current.getUniqueValue()) + ' (' + previousStatus +
+                 ' -&gt; "' + sanitized + '"). Only Draft, Open, In Progress, Pending, Resolved and Closed' +
+                 ' are valid; the write was aborted.');
+        gs.addErrorMessage('That is not a valid case status. A case may only be Draft, Open, In Progress, ' +
+                           'Pending, Resolved or Closed.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    var caseSysId = String(current.getUniqueValue());
+
+    // ------------------------------------------------------------------
+    // STEP 0 - validate the transition EDGE, i.e. previous -&gt; proposed.
+    //
+    // Everything below this point validates the PRECONDITION OF THE
+    // TARGET STATUS and nothing else: the subflow and the validator are
+    // both selected by `proposedStatus`. That answers "does this case
+    // satisfy what Resolved requires" but never "was this case allowed to
+    // reach Resolved from where it actually was". Without this step a
+    // single save moved a case straight from Draft to Closed: it skipped
+    // Open's assigned_group requirement, In Progress's agent-membership
+    // requirement and Resolved's task-closure gate, and it landed in the
+    // terminal state with closed_date empty, because
+    // x_casemgmt_set_closed_date (order 500) keys on the Resolved -&gt;
+    // Closed edge. All eight illegal skip/backward edges behaved the
+    // same way. AAP Section 0.5.5 is the complete set of legal edges and
+    // AAP Section 0.7.3 Gate 2 requires all of them to be enforced.
+    //
+    // The graph itself lives in x_casemgmt.CaseTransitionValidator so the
+    // Business Rule layer, the Flow Designer subflows and the Custom
+    // Action all share one definition.
+    //
+    // ORDER MATTERS, in three ways:
+    //   1) AFTER current.isActionAborted() above, so an already-rejected
+    //      save is not diagnosed twice.
+    //   2) AFTER the SUBFLOW_FOR_STATUS allowlist branch, so an
+    //      unrecognised TARGET status keeps its own message ("That is not
+    //      a valid case status...") and a proposed Draft keeps being
+    //      handled by x_casemgmt_block_draft_backtransition at order 200.
+    //   3) BEFORE the synchronous subflow run below, so an illegal edge
+    //      is refused in milliseconds instead of paying the several
+    //      seconds a foreground subflow costs.
+    //
+    // Fail CLOSED, exactly as STEP 2 does: this is an authorization-grade
+    // gate, so a verdict that cannot be computed or comes back malformed
+    // aborts the save rather than falling through to the target-only
+    // checks that were the whole defect.
+    // ------------------------------------------------------------------
+    var edgeVerdict;
+    try {
+        edgeVerdict = new x_casemgmt.CaseTransitionValidator()
+            .validateTransitionEdge(previousStatus, proposedStatus);
+        if (!edgeVerdict || typeof edgeVerdict !== 'object' || typeof edgeVerdict.ok !== 'boolean') {
+            throw 'the validator returned a malformed edge verdict (' + String(edgeVerdict) + ')';
+        }
+        if (edgeVerdict.ok === false &amp;&amp; (typeof edgeVerdict.error !== 'string' || edgeVerdict.error === '')) {
+            throw 'the validator rejected the edge without supplying a message';
+        }
+    } catch (edgeError) {
+        gs.error('x_casemgmt_enforce_forward_transitions: the transition edge could not be evaluated for' +
+                 ' case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus + ') - ' +
+                 edgeError + '. The save was aborted: an unevaluated transition is refused, never' +
+                 ' allowed.');
+        gs.addErrorMessage('This change could not be validated and has not been saved. Please try again, ' +
+                           'and tell your administrator if it keeps happening.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    if (!edgeVerdict.ok) {
+        // The message comes from the Script Include - for the two
+        // PROHIBITED rows of the matrix it is the VERBATIM AAP Section
+        // 0.7.4 text, and for a skip edge it names both the attempted
+        // edge and the legal next status. Never paraphrased here.
+        gs.addErrorMessage(edgeVerdict.error);
+        current.setAbortAction(true);
+        return;
+    }
+
+    // ------------------------------------------------------------------
+    // STEP 1 - run the Flow Designer subflow SYNCHRONOUSLY.
+    //
+    // Flow Designer record triggers (Created / Updated) fire AFTER the
+    // database write commits, so a triggered flow can never abort a save
+    // or surface a form-level blocking error. Invoking the subflow in the
+    // foreground from this before-update rule is what makes the
+    // state-machine flows load-bearing at the moment of the transition
+    // instead of after it.
+    // ------------------------------------------------------------------
+    var flowBlocked = null;
+    try {
+        var flowOutputs = sn_fd.FlowAPI.getRunner()
+            .subflow('x_casemgmt.' + subflowName)
+            .inForeground()
+            .withInputs({ case_sys_id: caseSysId })
+            .run()
+            .getOutputs();
+        flowBlocked = (String(flowOutputs['blocked']) === 'true');
+    } catch (flowError) {
+        // Fail closed onto the validator rather than silently allowing
+        // the transition: STEP 2 below still decides the outcome.
+        gs.warn('x_casemgmt_enforce_forward_transitions: subflow x_casemgmt.' + subflowName +
+                ' could not be executed for case ' + caseSysId + ' - ' + flowError +
+                '. Falling back to the in-flight CaseTransitionValidator evaluation.');
+    }
+
+    // ------------------------------------------------------------------
+    // STEP 2 - evaluate the same gate against the IN-FLIGHT record.
+    //
+    // The subflow reads the case from the database, so it sees the
+    // committed row. A single save may change `assigned_group` or
+    // `assigned_agent` in the same transaction as `status`; in that case
+    // the committed row is stale and only `current` reflects what will
+    // actually be persisted. This step therefore decides the outcome,
+    // using the identical x_casemgmt.CaseTransitionValidator methods the
+    // subflow's Custom Action calls, so both paths produce the same
+    // verbatim messages. For a status-only save - which is what all six
+    // UI Actions and the case form produce - the two verdicts are
+    // identical and the subflow's verdict IS the decision.
+    // ------------------------------------------------------------------
+    // Everything that decides the outcome is inside this try/catch, because
+    // this is the load-bearing authorization step for a direct update and it
+    // must fail CLOSED. Constructing the Script Include can throw (a scope
+    // resolution failure, a compile error in the include, an upgrade in
+    // flight); the guards themselves run GlideRecord and GlideAggregate
+    // queries against sys_user_grmember, sys_user_has_role and
+    // x_casemgmt_case_task, any of which can throw or time out; and a future
+    // edit could return something that is not a verdict at all. Without this
+    // wrapper any of those exits before the only explicit
+    // current.setAbortAction(true) below, and enforcement would then depend on
+    // platform exception semantics rather than on a deny decision this rule
+    // actually took.
+    var verdict;
+    try {
+        var validator = new x_casemgmt.CaseTransitionValidator();
+        if (proposedStatus === 'Open') {
+            verdict = validator.canTransitionToOpen(current);
+        } else if (proposedStatus === 'In Progress') {
+            verdict = validator.canTransitionToInProgress(current);
+        } else if (proposedStatus === 'Resolved') {
+            verdict = validator.canTransitionToResolved(current);
+        } else if (proposedStatus === 'Closed') {
+            verdict = validator.canTransitionToClosed(current, gs.getUserID());
+        } else {
+            // 'Pending' carries no precondition per the transition matrix.
+            verdict = { ok: true };
+        }
+        // VERDICT SHAPE IS VALIDATED, NOT ASSUMED. A missing verdict, a
+        // non-object, a non-boolean `ok`, or a rejection with no message would
+        // all read as "allowed" or as a blank blocking error, i.e. a silent
+        // failure - which AAP Section 0.7.1 forbids.
+        if (!verdict || typeof verdict !== 'object' || typeof verdict.ok !== 'boolean') {
+            throw 'the validator returned a malformed verdict for ' + previousStatus + ' -&gt; ' +
+                  proposedStatus + ' (' + String(verdict) + ')';
+        }
+        if (verdict.ok === false &amp;&amp; (typeof verdict.error !== 'string' || verdict.error === '')) {
+            throw 'the validator rejected ' + previousStatus + ' -&gt; ' + proposedStatus +
+                  ' without supplying a message';
+        }
+    } catch (validatorError) {
+        // Deny, explicitly. The diagnostic goes to the server log; the user
+        // gets a generic message that leaks no internals.
+        gs.error('x_casemgmt_enforce_forward_transitions: the transition guard could not be evaluated for' +
+                 ' case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus + ') - ' +
+                 validatorError + '. The save was aborted: an unevaluated transition is refused, never' +
+                 ' allowed.');
+        gs.addErrorMessage('This change could not be validated and has not been saved. Please try again, ' +
+                           'and tell your administrator if it keeps happening.');
+        current.setAbortAction(true);
+        return;
+    }
+
+    // Record any divergence so an operator can see when a combined
+    // field-and-status save made the committed row stale.
+    if (flowBlocked !== null &amp;&amp; flowBlocked !== !verdict.ok) {
+        gs.info('x_casemgmt_enforce_forward_transitions: subflow x_casemgmt.' + subflowName +
+                ' reported blocked=' + flowBlocked + ' while the in-flight evaluation reported blocked=' +
+                (!verdict.ok) + ' for case ' + caseSysId + ' (' + previousStatus + ' -&gt; ' + proposedStatus +
+                '). The in-flight evaluation decides because it reflects the row as it will be saved.');
+    }
+
+    if (!verdict.ok) {
+        // VERBATIM message from CaseTransitionValidator - do not paraphrase.
+        gs.addErrorMessage(verdict.error);
+        current.setAbortAction(true);
+    }
+})(current, previous);
+</script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>cbea5a36ef6efe5a077e0548c45468ce</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_enforce_forward_transitions</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_enforce_forward_transitions</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>

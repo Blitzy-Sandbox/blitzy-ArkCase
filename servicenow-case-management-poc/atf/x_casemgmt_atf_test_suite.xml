@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the ATF test suite
+    `x_casemgmt Case Management POC` and its 20 `sys_atf_test_suite_test`
+    membership links, inside the scoped application `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (Refine-PR Section 3, directive D3.2): the suite is
+    what makes the whole set runnable in ONE action - System Applications >
+    Automated Test Framework > Suites > "x_casemgmt Case Management POC" >
+    Run Test Suite. Each link carries `abort_on_failure = false`, so one red
+    test never masks the verdicts of the others.
+
+    EXECUTION ORDER is 100..2000, matching the ATF 01..ATF 20 numbering:
+    ATF 01-07 data model + ACL RBAC matrix, ATF 08-17 the state-machine
+    transition matrix (ATF 15-17 are the form-level legs), ATF 18-20 the
+    anonymous portal contracts.
+
+    PREREQUISITES FOR RUNNING: `sn_atf.runner.enabled` must be `true`, and a
+    browser client test runner must be open at `/atf_test_runner.do` for
+    ATF 15-17. Both are instance-level test-harness concerns and are
+    deliberately NOT captured into the Update Set. See
+    `../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` (ATF section) for the
+    captured suite verdict and the negative-control evidence.
+
+    XML ROOT: `<unload>`, matching `../dashboards/*.xml`, because the file
+    carries more than one record.
+
+    IDENTIFIERS: every `<sys_id>` is deterministic (md5 of a stable key) and
+    the only references are to records this package itself defines - the suite
+    and the twenty tests. No foreign sys_id literal appears in this file.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <sys_atf_test_suite action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <description>Regression suite for the x_casemgmt Case Management POC. Covers the data model and the ACL RBAC matrix (ATF 01-07), the state-machine transition matrix including the task-closure gate and every verbatim blocking message (ATF 08-17), and the anonymous portal contracts (ATF 18-20). Requires the instance property sn_atf.runner.enabled = true; ATF 15-17 additionally need a browser client test runner at /atf_test_runner.do.</description>
+        <input_filter />
+        <name>x_casemgmt Case Management POC</name>
+        <parent />
+        <sn_atf_tg_generated>false</sn_atf_tg_generated>
+        <sys_class_name>sys_atf_test_suite</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8e8c6de584ba8f081439ad5ee09ad1a1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt Case Management POC</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_8e8c6de584ba8f081439ad5ee09ad1a1</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_atf_test_suite>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>100</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>53428a5a8bb77020329c9698898e2768</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>4779cf2ff32768ffd2afaee103133709</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_53428a5a8bb77020329c9698898e2768</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 01 - Data model: case, task and party schema per AAP 0.5.7">4779cf2ff32768ffd2afaee103133709</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>200</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>b7c39b648a0c73af7e4f8b74c499d3a0</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>64dd92fb6ce07b6b62d2978edd0231f2</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_b7c39b648a0c73af7e4f8b74c499d3a0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 02 - RBAC: x_casemgmt_case_manager has full CRUD (AAP 0.5.6)">64dd92fb6ce07b6b62d2978edd0231f2</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>300</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2508dd52bc751bcd46957265033a485e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>afd33eebe6f49b746316b620f3886027</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_2508dd52bc751bcd46957265033a485e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 03 - RBAC: x_casemgmt_case_agent create, ASSIGNED-ONLY read/write, no delete">afd33eebe6f49b746316b620f3886027</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>400</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ccbd490d03fcfa783f0ee8c36decbc1d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>be4d720d4d1f4225fb87e1ec63314d00</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_ccbd490d03fcfa783f0ee8c36decbc1d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 04 - RBAC: x_casemgmt_case_viewer is read-only across all cases">be4d720d4d1f4225fb87e1ec63314d00</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>500</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>8542eadf8aa6429a796f8a8086f2dbf8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>3fd9e4a1d92dad9b1aed0b58ca382bb5</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_8542eadf8aa6429a796f8a8086f2dbf8</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 05 - Field-level ACLs on assigned_group and assigned_agent">3fd9e4a1d92dad9b1aed0b58ca382bb5</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>600</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>fc5de68fbec19a6c1a77fdca03bb4b2c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>f6256084e214d739604fe63b4bcba018</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_fc5de68fbec19a6c1a77fdca03bb4b2c</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 06 - RBAC mirror on x_casemgmt_case_task and x_casemgmt_case_party (manager, viewer)">f6256084e214d739604fe63b4bcba018</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>700</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>ec2f363ad518385fa17e2d9294b7df5d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>e76510c28032c3279ae68fe31b6aa61d</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_ec2f363ad518385fa17e2d9294b7df5d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 07 - RBAC: agent ASSIGNED-ONLY read/write on task and party (AAP 0.5.6 mirror)">e76510c28032c3279ae68fe31b6aa61d</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>800</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>163d8236822f3ca66130a072eb69cbd2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>9eca1a92704f7acf745e7560fa46728a</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_163d8236822f3ca66130a072eb69cbd2</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 08 - Transition Draft to Open requires assigned_group">9eca1a92704f7acf745e7560fa46728a</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>900</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2a5117d007ac7df91eb75db4c3743262</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>02867a68434b5b09351e8a5d43b67223</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_2a5117d007ac7df91eb75db4c3743262</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 09 - Transition Open to In Progress requires an assigned_agent in the assigned_group">02867a68434b5b09351e8a5d43b67223</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1000</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>0fb4f133119d4c8ff172c38bb30881ab</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>b6cc513ef49eb5be8f42f752cfaf960b</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_0fb4f133119d4c8ff172c38bb30881ab</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 10 - In Progress to Pending sets pending_reason, Pending to In Progress clears it">b6cc513ef49eb5be8f42f752cfaf960b</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1100</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>f18654d61f0cf9eda28fe196db04875f</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>c225a1c9cc36ac254b284caeea84a9ae</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_f18654d61f0cf9eda28fe196db04875f</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 11 - Task-closure gate blocks In Progress to Resolved with the verbatim message">c225a1c9cc36ac254b284caeea84a9ae</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1200</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5b2dc0d48933ed2c0ec2fb6c66918e47</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>60af3ed556ef6085dd5cb0b343ec1888</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_5b2dc0d48933ed2c0ec2fb6c66918e47</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 12 - Resolved to Closed requires the manager role and auto-sets closed_date">60af3ed556ef6085dd5cb0b343ec1888</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1300</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>32ca565edc296643e2e3fda86260a6a1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>8f85ec769b09e59e6d761aa58891de74</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_32ca565edc296643e2e3fda86260a6a1</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 13 - Prohibited transition: any status back to Draft">8f85ec769b09e59e6d761aa58891de74</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1400</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c8c4bf168aeab3023aacfd0cbde42db2</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>6fd42dceb3548cbb6e6535bd1df8c411</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_c8c4bf168aeab3023aacfd0cbde42db2</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 14 - Prohibited transition: Closed is terminal">6fd42dceb3548cbb6e6535bd1df8c411</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1500</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>60e72e1a0ad7cc5dd7926d09f43ae4b1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>b90847a8102f3e04bef26db08270b42c</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_60e72e1a0ad7cc5dd7926d09f43ae4b1</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 15 - Form: resolving a case with an open task is blocked on the form">b90847a8102f3e04bef26db08270b42c</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1600</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6f5430d5dc7b45ba52a6d6fcec524b94</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>058f262dab9141adcb30c3bd61667a78</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_6f5430d5dc7b45ba52a6d6fcec524b94</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 16 - Form: returning a case to Draft is blocked on the form">058f262dab9141adcb30c3bd61667a78</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1700</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>c4f8139ef433d3f9c89fe804f674adc8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>07f1427f80169c8644b47ead9d5c1b78</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_c4f8139ef433d3f9c89fe804f674adc8</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1800</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a9b9c2f05f5dd4e03d0ac74f360a3e20</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>a4fab153ebcda77e4c2d7b8905f7d19e</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_a9b9c2f05f5dd4e03d0ac74f360a3e20</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 18 - Portal contract: anonymous submit returns 201 with the new case number">a4fab153ebcda77e4c2d7b8905f7d19e</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>1900</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>a3b9219c4be3f037c48d9517b9a0877c</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>6e0aaff769e10fa94776c9722f94aa7b</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_a3b9219c4be3f037c48d9517b9a0877c</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 19 - Portal contract: lookup of a valid number returns only status, subject, opened_date">6e0aaff769e10fa94776c9722f94aa7b</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+    <sys_atf_test_suite_test action="INSERT_OR_UPDATE">
+        <abort_on_failure>false</abort_on_failure>
+        <order>2000</order>
+        <sys_class_name>sys_atf_test_suite_test</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>2633c99252314290fa8e4b62f2acec5a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>7ab5876adb5664a2e51acd22c663ab76</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy />
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_atf_test_suite_test_2633c99252314290fa8e4b62f2acec5a</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <test display_value="ATF 20 - Portal contract: lookup of an unknown number returns 404 with the verbatim message">7ab5876adb5664a2e51acd22c663ab76</test>
+        <test_suite display_value="x_casemgmt Case Management POC">8e8c6de584ba8f081439ad5ee09ad1a1</test_suite>
+    </sys_atf_test_suite_test>
+</unload>

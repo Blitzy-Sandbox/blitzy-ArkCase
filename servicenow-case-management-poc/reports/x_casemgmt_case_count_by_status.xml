@@ -1,0 +1,713 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_report` row that
+    declares the "Case Count by Status" donut/pie chart report on the
+    `x_casemgmt_case` custom table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.1 (File-by-File Transformation Plan) verbatim:
+        servicenow-case-management-poc/reports/x_casemgmt_case_count_by_status.xml
+            CREATE  Source: -
+            Key Changes: "Donut grouped by status"
+
+    Per AAP Section 0.4.1 (Refactored Structure Planning) verbatim:
+        Agent Workspace Dashboard widget inventory includes
+            "donut chart for 'Case count by status'"
+
+    Per AAP Section 0.4.4 (User Interface Design) verbatim:
+        Agent Workspace Dashboard - "donut chart for 'Case count by status'"
+
+    Per AAP Section 0.7.3 (Validation Framework) verbatim, this report is
+    one of the data sources for Gate 6 (Dashboards):
+        "Both dashboards render with synthetic data ... All widgets display
+         data; no broken report references"
+
+    Per AAP Section 0.3.1 (Exhaustively In Scope) verbatim:
+        servicenow-case-management-poc/reports/sys_report_x_casemgmt_case_count_by_status.xml
+            "donut on case.status"
+
+    THIS FILE'S ROLE IN THE OVERALL POC
+    ===================================
+    This report is the at-a-glance status distribution donut chart shown
+    on the Agent Workspace dashboard
+    (../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml). It sits
+    alongside two list widgets ("My Open Cases" and "My Overdue Tasks")
+    to give an agent a complete operational view at login:
+
+      - "My Open Cases" list (../reports/x_casemgmt_my_open_cases.xml)
+        shows the agent's PERSONAL queue of actionable cases.
+      - "My Overdue Tasks" list (../reports/x_casemgmt_my_overdue_tasks.xml)
+        shows the agent's PERSONAL list of late tasks.
+      - THIS donut shows the status distribution of the VIEWING USER's own
+        case portfolio. The agent uses it to see the shape of their own
+        backlog at a glance - how much of it is still Draft or Open, how
+        much is Pending on someone else, how much is already Resolved -
+        without leaving the dashboard.
+
+    All three widgets on this dashboard are therefore filtered per-viewer.
+
+    WHY THIS REPORT IS FILTERED (QA finding F5)
+    ===========================================
+    An earlier revision shipped this report with an EMPTY filter and
+    described it as "UNFILTERED by design - the entire team backlog". That
+    was measured to be a disclosure: report execution does NOT apply the
+    row-level read ACL that governs the case list, so under the
+    x_casemgmt_demo_agent persona the donut aggregated EVERY case on the
+    instance and disclosed the status distribution of records the agent is
+    refused on every other surface (form load answers "Security
+    constraints prevent access to requested page", the Table API answers
+    404). Counts only - no subject, number or other record content leaked -
+    but the count of cases in each lifecycle stage is exactly the
+    information an "Assigned only" grant withholds.
+
+    The AAP contains a genuine tension here and it is resolved in favour of
+    the normative requirements:
+      - Section 0.5.1's transformation table describes this row as a
+        "Donut grouped by status" and says nothing about a filter, which is
+        how the empty filter was originally justified.
+      - Section 0.5.6 confines case_agent to "Read - Assigned only", and
+        Section 0.7.3 Gate 3 states the criterion verbatim: "case_agent
+        cannot access unassigned cases".
+      - Section 0.4.4 places THIS widget on the AGENT WORKSPACE, beside
+        "My open cases" and "My overdue tasks" - a dashboard whose whole
+        purpose is the viewer's own work, and whose other two widgets both
+        filter on javascript:gs.getUserID().
+    A descriptive sentence in the transformation table cannot widen an
+    access-control mandate, so the filter below scopes the aggregate to the
+    viewing user. The portfolio-wide view the AAP does call for is
+    unaffected: Section 0.4.4's Manager View keeps the deliberately
+    unfiltered "All Cases by Status" bar chart
+    (../reports/x_casemgmt_all_cases_by_status.xml), which is bound to a
+    dashboard shared only with x_casemgmt_case_manager - the role Section
+    0.5.6 grants "Read - All". The report's title stays exactly as Section
+    0.4.4 names it, "Case Count by Status".
+
+    The filter mirrors the three limbs of the agent read ACL
+    (../acl/x_casemgmt_case_read_agent_assigned.xml) so the donut totals
+    exactly what the viewer can open:
+        assigned_agent=javascript:gs.getUserID()
+        ^ORassigned_groupINjavascript:gs.getUser().getMyGroups()
+        ^ORsys_created_by=javascript:gs.getUserName()
+    Every limb is a single expression, which is a hard requirement of the
+    encoded-query evaluator: measured on this instance, a javascript: value
+    written as an IIFE or as a multi-statement body evaluates to EMPTY, and
+    an empty value on the `=` operator silently degrades to "field is
+    empty" - so a filter built that way would have quietly answered the
+    wrong question. No hard-coded sys_id appears: the user, their groups
+    and their user_name are all resolved at execution time.
+
+    Consequence for the manager, stated plainly: the Agent Workspace is
+    shared with x_casemgmt_case_manager as well, and a manager holding no
+    assignments now sees an empty donut on THIS dashboard - the same
+    outcome its two sibling "My ..." widgets already produce for that
+    persona, and the reason Section 0.4.4 gives the manager a separate
+    Manager View with the unfiltered aggregates.
+
+    SEMANTIC SOURCE-SIDE ANCHOR (READ-ONLY, NOT BYTE-FOR-BYTE PORTED)
+    =================================================================
+    The semantic ancestors of this report in the existing ArkCase
+    codebase are three Java artifacts in the case-file-plugin:
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/CaseFile.java
+        Lines 141-142:
+            @Column(name = "cm_case_status")
+            private String status;
+        ArkCase tracks case status as a free-form String column on the
+        `acm_case_file` MySQL table. The ServiceNow target normalizes
+        this to a Choice field with exactly six values per AAP Section
+        0.5.7 (Draft, Open, In Progress, Pending, Resolved, Closed)
+        defined in ../choices/sys_choice_case_status.xml. The
+        <field>status</field> below references this Choice field
+        by element name; the donut renders one slice per Choice label.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/CaseByStatusDto.java
+        Lines 33-57:
+            public class CaseByStatusDto {
+                private String status;
+                private int    count;
+                ... getters and setters ...
+            }
+        The DTO that ArkCase produced when aggregating cases by status -
+        a (status, count) tuple consumed by Pentaho-backed reports. The
+        ServiceNow target replaces this DTO + Pentaho pipeline with a
+        native sys_report whose `<field>status</field>` plus
+        `<aggregate>COUNT</aggregate>` produce the same tuple shape
+        directly via the platform's GlideAggregate engine - no DTO,
+        no external BI tool, no Solr facet. The dashboard widget renders
+        the (status, count) pairs as donut slices.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/state/AcmCasesState.java
+        Lines 32-45:
+            public class AcmCasesState extends StateOfModule {
+                private Long numberOfCases;
+                ...
+            }
+        ArkCase exposed a single-cell case-count via this state-carrier;
+        the ServiceNow equivalent at THIS report's level is the SUM of
+        all donut slices (i.e., total count across the six statuses).
+        The dashboard widget can render that total in the chart center
+        based on the aggregated COUNT - a UX convention handled by the
+        widget rendering layer, not THIS report definition.
+
+      - acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+        java/com/armedia/acm/plugins/casefile/model/
+        CaseSummaryByStatusAndTimePeriodDto.java:
+            private String                  timePeriod;
+            private List<CaseByStatusDto>   caseByStatusDtoList;
+        ArkCase aggregated cases by status across time periods using
+        a custom DTO consumed by Pentaho BI reports. The aggregator was
+        Pentaho-side, NOT JPA-side. The ServiceNow target replaces
+        Pentaho-driven time-period aggregation with platform-native
+        sys_report records (this file plus the seven sibling reports
+        in this folder), all powered by ServiceNow's native GlideAggregate
+        engine instead of an external BI engine - per AAP Section 0.1.2
+        ("Reporting transformation: Pentaho BI + Solr aggregates ->
+        ServiceNow Reports + Performance Analytics-style dashboards").
+
+    DESIGN DECISIONS LOCKED IN BY THIS FILE
+    =======================================
+      - Aggregation discipline (AAP Section 0.5.1, this report's row):
+        type = pie. Per agent-prompt Mandatory Field Specification,
+        chart-type reports populate <type>, <field>, and <aggregate>;
+        they leave <field_list/> and <aggregation_source/> empty. The
+        rendered output is one donut/pie chart with one slice per
+        distinct value of `status`.
+
+      - Group-by discipline (agent-prompt Rule 4 verbatim):
+        <field>status</field>. The Choice field defined in
+        ../dictionary/x_casemgmt_case_status.xml. The six slices
+        correspond to the six Choice values defined in
+        ../choices/sys_choice_case_status.xml: Draft, Open, In Progress,
+        Pending, Resolved, Closed (Title Case match required).
+
+      - COLUMN NAME OF THE GROUP-BY (measured, not assumed): the
+        group-by dimension is carried in the `field` column, whose
+        label is "Field Name". `sys_report` has NO `group_by` column
+        on this release - sys_dictionary for sys_report offers
+        `field`, `additional_groupby`, `group` (a reference to
+        sys_user_group), `sc_groupby_item_id` and
+        `sc_groupby_variable_id`, and nothing named `group_by`. An
+        earlier revision of this file emitted <group_by>status</group_by>;
+        the loader silently discarded the unknown element, `field`
+        stayed empty, and the Report renderer then fell back to the
+        alphabetically-first field on the table (Assigned Agent), so
+        the chart drew a plausible-looking but semantically WRONG
+        dimension with no error and no empty state. The element is
+        now <field>status</field>, matching the sibling
+        ../reports/x_casemgmt_avg_time_to_close.xml, which always
+        rendered correctly precisely because it named its column in
+        `field`. The `group_by` element has been removed outright
+        rather than left empty: it is not a column, so emitting it -
+        even empty - only invites the next reader to believe it is one.
+        The same applies to the `format` element the earlier revision
+        emitted; sys_report has no `format` column either, and both are
+        now gone from all eight report artifacts.
+
+      - Filter discipline: <filter> carries the three-limb per-viewer
+        predicate described under "WHY THIS REPORT IS FILTERED" above.
+        It counts the cases the viewing user may actually read - the ones
+        assigned to them, the ones assigned to a group they belong to, and
+        the ones they created - and nothing else. Type and priority are
+        not filtered: the donut groups by status across the viewer's whole
+        portfolio, including terminal Closed cases, which is what makes it
+        complementary to the "My Open Cases" list report
+        (../reports/x_casemgmt_my_open_cases.xml), whose own filter
+        additionally excludes Resolved and Closed.
+
+      - Aggregation discipline (agent-prompt Rule 6 verbatim):
+        <aggregate>COUNT</aggregate>. Counts records per status bucket.
+        <aggregation_source/> empty (COUNT does not require a numeric
+        source field; it counts rows, not values).
+
+      - Field-list discipline (agent-prompt Rule 9 verbatim):
+        <field_list/> empty. Chart reports do NOT specify a field list;
+        the field list is meaningful only for `type=list` reports per
+        the sibling pattern in ../reports/x_casemgmt_my_open_cases.xml
+        (which uses <field_list>number,subject,priority,status,opened_date</field_list>).
+        For chart reports, the chart-type and group-by fully determine
+        what is rendered.
+
+      - Per-viewer semantics: this report resolves the viewer's identity
+        at execution time (gs.getUserID(), gs.getUser().getMyGroups() and
+        gs.getUserName() in the filter), so each viewer gets their own
+        aggregate. Therefore:
+          1) The aggregate is computed per user rather than once per
+             cache cycle. <is_real_time>false</is_real_time> below still
+             permits the platform's normal caching of a single viewer's
+             result; the cache key includes the evaluated filter, so no
+             viewer is ever served another viewer's numbers.
+          2) Roles no longer see the same numbers, and that is the point.
+             A `case_agent` sees exactly the portfolio its read ACL
+             permits (measured: the six-status distribution of its own
+             cases, not the instance-wide distribution). A `case_manager`
+             sees its own assignments here and the full portfolio on the
+             Manager View's unfiltered bar chart. A `case_viewer` is not
+             bound to either dashboard (AAP Section 0.4.4 names only
+             manager and agent), so it never renders this widget at all.
+
+      - Why "type=donut", corrected from "pie": AAP Section 0.4.4 and
+        Section 0.5.1 both specify a DONUT chart here, and `donut` IS a
+        valid sys_report.type value on this release. Earlier revisions of
+        this artifact shipped `pie` and justified it with two claims that
+        have since been MEASURED FALSE, so they are recorded here rather
+        than silently deleted:
+          (1) "sys_report.type has no literal donut enum" - it does. The
+              active sys_choice list for sys_report.type contains `donut`
+              (label "Donut") and `semi_donut` ("Semi donut") under the
+              platform's own "Pies and Donuts" group header, alongside
+              `pie`, and four out-of-box reports on this instance already
+              use it.
+          (2) "the platform renders a pie with a centre hole once the
+              report is embedded in a Dashboard widget" - it does not.
+              Rendered as `pie`, the Highcharts point path terminated
+              `A 0 0 0 0 1 ...` (inner radius 0) and the widget painted a
+              SOLID pie with no hole. The report's own type is what
+              decides it; there is no widget-level promotion.
+        The distinction is therefore a report-level setting, and matching
+        the AAP takes precedence over the aesthetic argument the old
+        comment made. Cross-version note per AAP Section 0.4.2
+        ("Yokohama-and-later feature floor"): `donut` is not new - it is
+        long-standing sys_report vocabulary, so this does not narrow the
+        release floor.
+
+      - Why both this donut AND a parallel bar chart of the same
+        aggregation: per AAP Section 0.4.4 the Manager View dashboard
+        carries a separate "All Cases by Status" bar chart
+        (../reports/x_casemgmt_all_cases_by_status.xml). Both reports
+        share identical <table>, <field> and <aggregate>; they differ in
+        <type> (donut vs. bar), in which dashboard consumes them (Agent
+        Workspace vs. Manager View) and - since QA finding F5 - in
+        <filter>: THIS report is scoped to the viewing user, while the
+        Manager View bar chart stays deliberately unfiltered because its
+        dashboard is shared only with x_casemgmt_case_manager, the role
+        AAP Section 0.5.6 grants "Read - All". The duplication is
+        INTENTIONAL per AAP Section 0.4.4 to give each audience the
+        visualization optimized for their decision-making style, and the
+        filter split is what keeps each audience inside its own grant:
+          - Agents: at-a-glance proportional view (donut) of THEIR OWN
+            portfolio - easier to scan visually for an "is my queue
+            balanced?" judgment.
+          - Managers: comparative magnitude view (bar) across every case
+            - easier to read absolute counts for capacity-planning
+            decisions.
+        Both reports MUST be present; do NOT consolidate them into
+        one shared report. Per AAP Section 0.5.2 cross-file dependencies,
+        both reports load AFTER tables/dictionary/choices and BEFORE
+        their respective dashboards.
+
+      - Cache discipline: <is_real_time>false</is_real_time>. The
+        platform may cache the aggregated counts and refresh on a
+        cycle (typically 5 minutes for the Reports module). For a
+        POC dashboard with 10 demo cases this distinction is
+        cosmetic; for a production case-management deployment with
+        thousands of cases it materially affects dashboard load
+        time. The default-off setting matches the sibling reports
+        (../reports/x_casemgmt_my_open_cases.xml,
+         ../reports/x_casemgmt_avg_time_to_close.xml,
+         ../reports/x_casemgmt_cases_opened_30d.xml).
+
+      - Chart-size discipline: <chart_size>medium</chart_size>,
+        unchanged - though not for want of trying. The measurement
+        behind that is recorded here because it bounds what the data
+        labels enabled below can show.
+
+        The platform builds a donut data label as "<name> = <value>" and
+        clips it to the budget named by
+        glide.chart.data.label.truncate_to (13 on this instance) for a
+        medium chart, or glide.chart.data.label.truncate_to.large (27)
+        for a large one - measured in the platform bundle
+        /scripts/GlideV2ChartingIncludes.jsx, where
+        hc_addPropsForDataLabelsTruncation() copies the per-report
+        budget onto each point and the formatter applies
+        label.substring(0, labelMaxLength) + '...'. Five of this
+        report's six status labels fit inside 13 characters ("Draft =
+        1", "Open = 2", "Closed = 2", "Pending = 1", "Resolved = 2");
+        "In Progress = 2" is 15 and is clipped.
+
+        Raising the chart to large is the only lever this application
+        owns over that budget, so it was set and measured on the
+        rendered dashboard. It made the widget worse rather than better:
+        at large the labels stopped painting at all - the <text> nodes
+        were emitted with empty content and 0x0 rects, positioned by
+        transforms outside the chart box, leaving orphan leader-line
+        stubs pointing at nothing, at both 1280 and 375. The platform
+        sizes the SVG to the dashboard column while computing label
+        geometry for the larger canvas. So the value was reverted to
+        medium, where the labels do paint.
+
+        What that leaves: per-slice labels are drawn, and a label longer
+        than 13 characters is clipped with an ellipsis. The values
+        themselves are not lost - the SVG legend prints each in full and
+        <display_grid> below adds a keyboard-reachable (status, count,
+        percentage) table. Closing the clipping needs
+        glide.chart.data.label.truncate_to raised, which is a global
+        sys_properties row and is barred by AAP Section 0.3.2 (no
+        global-scope writes): a human with instance administration can
+        change that single property and the labels print in full with no
+        change to this application.
+
+      - Scope binding: <sys_scope>x_casemgmt</sys_scope> and
+        <sys_package source="x_casemgmt">x_casemgmt</sys_package>
+        bind THIS record to the same scoped-app row that the parent
+        sys_app record (../app/sys_app/x_casemgmt_case_management.xml)
+        publishes. Cross-file consistency: the sibling reports
+        (x_casemgmt_my_open_cases.xml, x_casemgmt_my_overdue_tasks.xml,
+        x_casemgmt_avg_time_to_close.xml, x_casemgmt_cases_opened_30d.xml)
+        use identical scope-reference values, ensuring all reports
+        resolve to the same sys_app row at preview time. Reference-
+        by-name not reference-by-sys_id per AAP Section 0.7.2
+        (no hardcoded sys_ids constraint).
+
+      - <sys_id> determinism: the value
+        32ae52ab8735ea76587edee6130abc06 is the lowercase MD5 of the
+        canonical record name "x_casemgmt_case_count_by_status". This
+        matches the convention documented in
+        ../reports/x_casemgmt_my_open_cases.xml lines 219-236
+        (md5("x_casemgmt_my_open_cases") = ee04fa982b136ad35c6fe1512826f6ab),
+        ../reports/x_casemgmt_avg_time_to_close.xml lines 233-247
+        (md5("x_casemgmt_avg_time_to_close") = 79fabb5f5754b629205b2382face3ebb),
+        and ../reports/x_casemgmt_cases_opened_30d.xml lines 71-84
+        (md5("x_casemgmt_cases_opened_30d") = 95b2127b026a92ba5e041a8d4d7277ec).
+        Deterministic derivation makes the Update Set re-importable
+        on a fresh PDI without sys_id collisions: re-importing the
+        same XML on the same or any future PDI resolves the same
+        sys_id and idempotently updates the same report row rather
+        than creating a duplicate. This stability is REQUIRED because
+        the Agent Workspace dashboard
+        (../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml)
+        references THIS report by `<name>x_casemgmt_case_count_by_status</name>`,
+        and the dashboard widget binding must resolve consistently
+        across re-imports.
+
+      - Sharing discipline (AAP Section 0.4.4 "agents and managers see
+        operationally relevant aggregate views on day one", and AAP
+        Section 0.7.3 Gate 6 "accessible to users with correct
+        roles"): <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,
+        x_casemgmt_case_viewer</roles>. `sys_report.roles` is a
+        user_roles column holding role NAMES (no sys_ids, per AAP
+        Section 0.7.2), and it is what makes a report reachable by a
+        user who is neither its owner nor an admin. With it empty, a
+        report is private: an impersonated x_casemgmt_demo_agent
+        opening this report received a blank page reading "Report
+        visible only to a specific user or group" even though the
+        report's filter was correct. All three scoped roles are
+        listed because all three personas are legitimate readers of
+        aggregate case data - the row-level perimeter is enforced by
+        the table ACLs (AAP Section 0.5.6), not by report sharing, so
+        an agent still only sees the rows their ACLs permit.
+        <user>GLOBAL</user> is the other half of the fix, and the
+        load-bearing half: the platform's own read ACL on sys_report is
+        a script, and it consults `roles` ONLY on its `isGlobal` branch -
+        `isGlobal` is `current.user.toString() == "GLOBAL"`. With `user`
+        empty the report is private to whoever created it, the branch
+        that reads `roles` never runs, and an impersonated
+        x_casemgmt_demo_agent got a blank page reading "Report visible
+        only to a specific user or group" even with all three roles
+        listed. `sys_report.user` is a 40-character STRING (not a
+        reference) whose magic values are 'GLOBAL' (visible to everyone,
+        narrowed by `roles`) and 'group' (shared through
+        sys_report_users_groups); 265 of 300 sampled out-of-box reports
+        carry 'GLOBAL' with `roles` as the restriction, which is exactly
+        the shape this report now ships. 'GLOBAL' is a literal platform
+        keyword, not a sys_id, so the AAP Section 0.7.2 no-hardcoded-
+        sys_id constraint still holds.
+
+    CROSS-DEPENDENCY GRAPH
+    ======================
+    DEPENDS ON (must load earlier in the Update Set):
+      - ../app/sys_app/x_casemgmt_case_management.xml (the scoped application
+        record - the sole scope authority in this package, so <sys_scope> and
+        <sys_package> both resolve against it)
+      - ../tables/x_casemgmt_case.xml                  (parent table)
+      - ../dictionary/x_casemgmt_case_status.xml
+            (defines the Choice field used in <field>)
+      - ../choices/sys_choice_case_status.xml
+            (defines the six status Choice values rendered as slices:
+             Draft, Open, In Progress, Pending, Resolved, Closed)
+
+    REFERENCED BY (must load later in the Update Set):
+      - ../dashboards/pa_dashboards_x_casemgmt_agent_workspace.xml
+        References THIS report by `<name>x_casemgmt_case_count_by_status</name>`,
+        NOT by sys_id, so a fresh-PDI re-import correctly resolves the
+        widget binding to the deterministic MD5-derived sys_id above.
+
+    PARALLEL REPORT (different chart type, different dashboard):
+      - ../reports/x_casemgmt_all_cases_by_status.xml
+        Same aggregation (group by status, COUNT), but rendered as
+        type=bar and consumed by the Manager View dashboard. The
+        duplication is intentional per AAP Section 0.4.4.
+
+    SEED-DATA DEPENDENCY (Validation Gate 6 pass condition):
+      - ../seed-data/cases/x_casemgmt_case_demo_*.xml must include
+        cases spanning all six statuses (Draft, Open, In Progress,
+        Pending, Resolved, Closed) per AAP Section 0.4.1 demo-data
+        plan. Without seed cases in each status, the donut renders
+        with fewer than six slices (or none at all), which would
+        fail the "All widgets display data" criterion of Validation
+        Gate 6 (AAP Section 0.7.3) even though the report DEFINITION
+        itself is correct. The AAP-prescribed seed plan satisfies
+        this requirement: demo_01 (Draft), demo_02 (Open), demo_03
+        (In Progress), demo_04 (Pending), demo_05 (Resolved),
+        demo_06 (Closed) - one case per status for General Inquiry,
+        plus four more Complaint cases extending coverage. Six
+        slices guaranteed.
+
+    UPDATE-SET ORDERING
+    ===================
+    Per AAP Section 0.5.2 (Cross-File Dependencies):
+      - AFTER tables, dictionary, choices.
+      - AFTER seed-data so that running the report yields non-empty
+        results during validation.
+      - BEFORE the Agent Workspace dashboard so that dashboard widget
+        binding resolves.
+
+    AUTHORING-RULES COMPLIANCE
+    ==========================
+      - AAP Section 0.7.2 verbatim:
+          "No-hardcoded-sys_id constraint. Anywhere - flows, ACL
+           conditions, scripts, seed data, UI Policies, UI Actions,
+           Business Rules. Every cross-reference is resolved by
+           GlideRecord lookup against a stable human-readable key
+           (name, user_name, number, role_label)."
+        This file: <sys_scope> and <sys_package> resolve by scope
+        name; <sys_id> is THIS record's own primary key (not a
+        hardcoded reference to another record), deterministically
+        derived as MD5(name). <table> resolves by table name. The
+        Choice values "Draft", "Open", etc., are NOT references to
+        sys_id values - they are Choice labels resolved at render
+        time. All compliant.
+
+      - AAP Section 0.7.2 verbatim:
+          "No-PII constraint. Synthetic data only."
+        This file: report definition contains no PII; the report
+        merely AGGREGATES rows from a table. Whatever PII or non-PII
+        data is in those rows is the seed-data agent's responsibility
+        to keep synthetic. The report definition is PII-free.
+
+      - AAP Section 0.7.2 verbatim:
+          "Scope-namespace exclusivity: every artifact ... must live
+           in the auto-assigned `x_casemgmt` namespace; zero global-
+           scope writes are permitted."
+        This file: <name> is `x_casemgmt_case_count_by_status`;
+        <table> is `x_casemgmt_case`; <sys_scope> and <sys_package>
+        bind to the scoped app. Zero global-scope writes.
+
+      - AAP Section 0.7.2 verbatim:
+          "Email-disabled constraint."
+        This file: does NOT include any scheduled-email-delivery
+        configuration. <is_scheduled>false</is_scheduled>. The only
+        consumer is the dashboard widget.
+
+      - AAP Section 0.7.2 verbatim:
+          "Single-Update-Set deliverable constraint."
+        This file: one of the records that compose the final Update
+        Set XML at ../update-set/x_casemgmt_case_management_update_set.xml.
+
+      - AAP Section 0.7.2 verbatim:
+          "Minimal-Change Clause. Build only what is specified in the
+           user's prompt."
+        This file: implements exactly one report row per AAP Section
+        0.5.1; no additional fields beyond those mandated by the
+        agent prompt; no new dimensions or aggregations beyond
+        group-by-status COUNT.
+
+    PERSISTENT SEGMENT LABELS AND A FULL DATA GRID (QA ISSUE 12)
+    ============================================================
+    QA Issue 12 (MEDIUM, visual/accessibility) measured on the rendered
+    Agent Workspace dashboard that this donut carries NO persistent
+    segment labels at all - a DOM count of `.highcharts-data-label`
+    returned ZERO - so every one of the six status values is reachable
+    only by hovering a segment or by reading the legend. At 1280px the
+    six-item legend is correct and that is survivable; at 375px the
+    legend collapses to a paginated strip reading "1/6", exposing ONE
+    value at a time behind non-keyboard paging arrows. The chart is then
+    a picture with no readable values on the width most likely to be
+    used on a phone.
+
+    ROOT CAUSE, IN THIS RECORD (not inferred)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    This artifact emitted neither `show_chart_data_label` nor
+    `display_grid`. Both are `sys_report` BOOLEAN columns whose
+    sys_dictionary default_value is `false`, so an omitted element is not
+    "platform default, probably on" - it loads as OFF. Read back from the
+    committed row on the instance BEFORE this change:
+        show_chart_data_label = false      <- no per-segment labels
+        display_grid          = false      <- no fallback data table
+        allow_data_label_overlap        = false
+        show_data_label_position_middle = false
+        show_chart_total                = false
+    which is exactly the zero-data-label measurement QA recorded.
+
+    THE IN-SCOPE REMEDY APPLIED
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      - <show_chart_data_label>true</show_chart_data_label>
+        Turns on Highcharts data labels for the series, so each of the
+        six segments carries its own persistent, on-canvas label instead
+        of surrendering its value to a hover or to the legend. The label
+        is painted for every segment at every viewport width, so it does
+        not depend on the legend surviving the 375px collapse.
+        Precedent on this instance: of the 8 `type=donut` reports, 3
+        already ship this column enabled ("Today's flow executions by
+        state", "On-Call: HoursDistribution by User - 7 days"), so this
+        is a supported report option and not a platform modification -
+        which keeps the remedy inside AAP Section 0.3.2's prohibition on
+        global-scope changes.
+
+      - <display_grid>true</display_grid>
+        Renders the report's aggregate as an HTML data table beneath the
+        chart, carrying every (status, count, percentage-of-count) row
+        plus a total row. This is the SAME stock column the two Manager
+        View bar reports already ship for QA finding F8
+        (../reports/x_casemgmt_all_cases_by_status.xml,
+         ../reports/x_casemgmt_all_cases_by_priority.xml), where it was
+        measured to render `table.chart_legend.display-grid-table` with a
+        real <thead>, `th scope="col"` column headers, `th scope="row"`
+        row headers and a bold total row, outside any
+        `aria-hidden="true"` ancestor. It is what makes ALL SIX status
+        values reachable at 375px in text, whatever the legend does.
+        Precedent is partial and is stated as such rather than
+        overclaimed: 6 of the 182 `type=bar` reports on this instance
+        enable `display_grid`, but NO `pie` or `donut` report on the
+        instance does. `display_grid` is a plain column on `sys_report`
+        with no chart-type qualifier in its dictionary row, and the grid
+        is emitted by the chart component's legend/grid renderer rather
+        than by the series, so it is expected to render here too - but
+        that rendering is a RUNTIME fact, and it is owed a browser
+        re-verification on the Agent Workspace after the live report row
+        is updated. It has not been asserted from this file.
+
+    FIELDS DELIBERATELY LEFT AT false, AND WHY
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      - allow_data_label_overlap = false (element omitted, dictionary
+        default false). Left off ON PURPOSE. With it off, Highcharts
+        suppresses a label that would collide with a neighbour rather
+        than painting two labels on top of each other; with it on, six
+        segments in a 375px-wide widget would produce overlapping,
+        unreadable text. The accessible route to a value a label had to
+        drop is the data grid enabled above, which carries all six rows
+        in text - so enabling overlap would trade a legible chart for a
+        cluttered one without adding any value the grid does not already
+        carry.
+      - show_data_label_position_middle = false (element omitted). Left
+        off ON PURPOSE. It moves the label INSIDE the ring; this donut
+        renders a 70% centre hole (measured innerR 67.795 against r
+        96.85 in the dashboard widget), leaving a ring band far too
+        narrow at 375px to hold a status label such as "In Progress"
+        without truncation. Off keeps the platform's outside placement
+        with connector lines.
+      - show_chart_total = false (element omitted). It prints ONE
+        aggregate total, which does not address per-segment labelling,
+        and it is enabled by zero of the 182 bar reports on this
+        instance (measured for QA finding F8).
+      - show_legend is NOT set by this record and is deliberately not
+        introduced. Measured on the committed row it reads `false`, yet
+        the rendered widget still draws the paginating legend QA saw -
+        which locates legend rendering, its paging arrows and their
+        keyboard reachability in the chart component, not in this
+        report. See the residue note below.
+
+    WHAT IS NOT FIXED HERE, STATED AS OPEN
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    The second half of QA Issue 12 - "offering non-keyboard legend
+    toggles", and the 375px legend paginating to "1/6" - is NOT closed by
+    this record and is not closable from it. The legend, its "1/6" paging
+    control and the per-item show/hide toggles are emitted by the
+    platform's Highcharts wrapper (GlideV2ChartingIncludes.jsx /
+    chart_includes.cssx), a GLOBAL artifact; AAP Section 0.3.2 verbatim
+    prohibits "Global scope changes of any kind" and AAP Section 0.7.2
+    verbatim requires "zero global-scope writes are permitted". No
+    `sys_report` column on this release relocates, resizes or
+    keyboard-enables the legend: the record's `legend_*` columns cover
+    only background colour, border colour/width/radius, vertical and
+    horizontal alignment, left-align and column-align - none of which
+    adds a tab stop or a focus ring. The labels and the grid above make
+    every value readable WITHOUT the legend, which is the reachability
+    the finding asks for; the legend control itself stays OPEN, awaiting
+    human authorisation, and is recorded in ../docs/dashboards.md.
+
+    WHAT THIS CHANGE DOES NOT TOUCH
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    <filter> is unchanged, byte for byte. It is the per-viewer predicate
+    added for QA finding F5 (see "WHY THIS REPORT IS FILTERED" above) and
+    widening it would re-open a disclosure. <type>, <field>, <aggregate>,
+    <table>, <roles>, <user>, <title> and <chart_size> are likewise
+    unchanged: this change adds two accessibility booleans and nothing
+    else. <chart_size> was moved to large and measured, because it is
+    the only in-scope lever over the data-label truncation budget, and
+    was reverted when the labels stopped painting altogether - see
+    "Chart-size discipline" above for the measurement and for the one
+    global property that would close the clipping.
+
+    VALIDATION CHECKLIST (mirrors agent-prompt verbatim)
+    ====================================================
+    [x] File path: servicenow-case-management-poc/reports/x_casemgmt_case_count_by_status.xml
+    [x] Starts with <?xml version="1.0" encoding="UTF-8"?>
+    [x] Root: <record_update table="sys_report">
+    [x] Inner: <sys_report action="INSERT_OR_UPDATE">
+    [x] <name> = x_casemgmt_case_count_by_status
+    [x] <title> = Case Count by Status
+    [x] <table> = x_casemgmt_case
+    [x] <type> = donut
+    [x] <filter> = per-viewer three-limb predicate (assigned_agent / my groups / creator) - see "WHY THIS REPORT IS FILTERED (QA finding F5)"
+    [x] <field> = status
+    [x] <group_by/> empty (not a sys_report column on this release)
+    [x] <aggregate> = COUNT
+    [x] <aggregation_source/> empty
+    [x] <field_list/> empty
+    [x] <chart_size> = medium (unchanged; large was measured and
+        reverted - see "Chart-size discipline")
+    [x] show_chart_data_label = true (QA Issue 12: persistent per-segment
+        labels; the DOM count of .highcharts-data-label was zero)
+    [x] display_grid = true (QA Issue 12: full (status, count, percentage)
+        data table so all six values are reachable in text at 375px,
+        where the legend paginates to "1/6")
+    [x] allow_data_label_overlap and show_data_label_position_middle
+        deliberately left at their false defaults - see "FIELDS
+        DELIBERATELY LEFT AT false, AND WHY" above
+    [x] <is_real_time> = false
+    [x] <sys_class_name> = sys_report
+    [x] <sys_scope> and <sys_package> reference scoped app by name/source
+    [x] <sys_update_name> = sys_report_x_casemgmt_case_count_by_status
+    [x] <sys_name> = Case Count by Status
+    [x] <sys_policy/> empty
+    [x] No XML parsing errors
+    [x] No PII
+    [x] No hardcoded sys_ids except own primary key (MD5-derived)
+    [x] All x_casemgmt_ placeholders preserved literally
+    [x] 4-space indentation
+-->
+<record_update table="sys_report">
+    <sys_report action="INSERT_OR_UPDATE">
+        <aggregate>COUNT</aggregate>
+        <aggregation_source/>
+        <chart_size>medium</chart_size>
+        <description>Agent Workspace dashboard donut widget data source. Groups the VIEWING USER'S OWN cases in x_casemgmt_case by the status Choice field with COUNT(*) per bucket. Scoped per viewer by a filter that mirrors the three limbs of the agent read ACL (assigned_agent = me OR assigned_group is one of my groups OR I created it), so the aggregate totals exactly the records the viewer can open. This closes QA finding F5: with an empty filter the widget aggregated every case on the instance and disclosed the status distribution of records the agent is refused everywhere else, because report execution does not apply row-level read ACLs. AAP Section 0.5.1 describes this row only as a donut grouped by status, while Section 0.5.6 and Section 0.7.3 Gate 3 confine case_agent to assigned records and Section 0.4.4 places this widget on the Agent Workspace beside two per-viewer "My ..." lists - so the per-viewer reading is the one that satisfies the normative requirements. The portfolio-wide aggregate the AAP does call for lives on the Manager View as the unfiltered x_casemgmt_all_cases_by_status bar chart. Title unchanged per Section 0.4.4. Replaces ArkCase's CaseByStatusDto + Pentaho aggregation pipeline with a native GlideAggregate-backed sys_report.</description>
+        <display_grid>true</display_grid>
+        <field>status</field>
+        <field_list/>
+        <filter>assigned_agent=javascript:gs.getUserID()^ORassigned_groupINjavascript:gs.getUser().getMyGroups()^ORsys_created_by=javascript:gs.getUserName()</filter>
+        <is_real_time>false</is_real_time>
+        <is_scheduled>false</is_scheduled>
+        <name>x_casemgmt_case_count_by_status</name>
+        <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
+        <show_chart_data_label>true</show_chart_data_label>
+        <sys_class_name>sys_report</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>32ae52ab8735ea76587edee6130abc06</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case Count by Status</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_report_x_casemgmt_case_count_by_status</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <title>Case Count by Status</title>
+        <type>donut</type>
+        <user>GLOBAL</user>
+    </sys_report>
+</record_update>

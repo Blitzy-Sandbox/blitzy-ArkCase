@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for a `sys_rate_limit_rules`
+    record inside the scoped application `x_casemgmt` (Case Management).
+
+    PURPOSE (review finding F06; AAP Sections 0.4.3, 0.7.2):
+
+      A PLATFORM-NATIVE per-hour request ceiling on the unauthenticated
+      caller of the anonymous case-submission endpoint
+
+          POST /api/x_casemgmt/case_submit
+
+      declared by ./sys_ws_definition_x_casemgmt_case_submit.xml and
+      handled by ./sys_ws_operation_x_casemgmt_case_submit_post.xml.
+
+      This rule is DEFENCE IN DEPTH. The primary, shipped defence against
+      submission abuse is in script, in
+      ../../script_includes/x_casemgmt_CasePortalService.xml: the
+      `_admitAnonymousSubmission` method inserts first and then ranks the
+      new row among the same caller's rows inside a 60-second window under
+      a total order, withdrawing any row at or beyond the global ceiling or
+      at or beyond the tighter per-requester ceiling. That control is what
+      review finding F06 required and what bounds a burst.
+
+      This record bounds the SUSTAINED rate instead, and it does so at the
+      platform's own request-admission layer - before the operation script
+      runs, so a refused request costs no database work at all. It also
+      covers the one residue the in-script control cannot: rank can only be
+      computed over rows a query can already see, so a set of genuinely
+      simultaneous inserts that are mutually invisible can exceed the
+      window ceiling. A per-hour cap on the caller makes that residue
+      bounded rather than repeatable.
+
+    HONESTY ABOUT WHAT IS PROVEN (required, and deliberate):
+
+      THE EFFECTIVENESS OF THIS RULE IS NOT VERIFIED. It was authored from
+      the shipped REST records and from the shape of the 30 stock rows
+      readable on the development instance; it has NOT been exercised
+      against a live anonymous caller, because the instance is
+      deliberately empty at the end of this run and no writes were made to
+      it. Two things in particular are unproven: whether the platform
+      applies a rate-limit rule OWNED BY A SCOPED APPLICATION to an
+      inbound anonymous request on a scoped scripted REST resource, and
+      whether `api` / `api_resource` as spelled below bind to this
+      application's REST resource after commit (both columns are choice
+      fields the platform populates from its own REST registry).
+
+      VERIFY POST-COMMIT, in this order:
+
+        1. The rule installed and is active, and its resource bound:
+             GET /api/now/table/sys_rate_limit_rules
+                 ?sysparm_query=sys_id=e10d202203fa5a85dd185af381502031
+                 &sysparm_fields=name,api,api_resource,rest_api_resource,type,user,requests,active
+           Expect one row, active=true, and api_resource exactly
+           "POST /x_casemgmt/case_submit". An empty or altered
+           api_resource means the choice did not bind and the rule is
+           inert - fix it on the form, where the choice list is populated
+           from the live REST registry, and re-export.
+
+        2. The platform is counting real anonymous traffic against it -
+           this is the actual effectiveness check, and it needs one
+           anonymous POST to have happened first:
+             GET /api/now/table/sys_rate_limit_count
+                 ?sysparm_query=rate_limit_rule=e10d202203fa5a85dd185af381502031
+                 &sysparm_fields=user,request_count,count_start
+           Expect a row whose `user` is the guest user and whose
+           request_count tracks the anonymous submissions made. NO ROW
+           AFTER A SUCCESSFUL ANONYMOUS POST MEANS THIS RULE IS NOT IN
+           EFFECT, whatever step 1 showed.
+
+        3. Refusals, once the ceiling is crossed:
+             GET /api/now/table/sys_rate_limit_violations
+                 ?sysparm_query=rate_limit_rule=e10d202203fa5a85dd185af381502031
+                 &sysparm_fields=user,sys_created_on
+
+      Until step 2 returns a row, treat the in-script control as the ONLY
+      effective ceiling on this endpoint. That is why the in-script
+      control is not weakened anywhere on the strength of this file, and
+      why ../../docs/portal-pages.md records this rule as unverified.
+
+    THE CEILING, AND WHY THIS NUMBER:
+
+      <requests>60</requests> - the column is "Request limit per hour"
+      (sys_dictionary: sys_rate_limit_rules.requests, integer), so this is
+      60 anonymous submissions per hour for the guest user across the
+      whole instance.
+
+      Sized against measured use rather than guessed: the ATF suite makes
+      at most three anonymous POSTs per run (one valid submission through
+      the inbound-REST step and one malformed body in
+      ../../atf/x_casemgmt_atf_18_portal_contract_anonymous_submit_returns_201_with_the_new_case_number.xml),
+      a demo walkthrough submits a handful, and a real intake portal for a
+      POC of this size sees single-digit submissions per hour. 60 leaves
+      an order of magnitude of headroom above all of that while capping a
+      sustained flood at one submission a minute - below the in-script
+      window ceiling of 10 per 60 seconds, so this rule is the tighter of
+      the two on a sustained basis and the looser on a burst, which is the
+      intended division of labour between them.
+
+      Deliberately tighter than the sibling lookup rule
+      (./sys_rate_limit_rules_x_casemgmt_case_status_lookup.xml, 240/hour):
+      this endpoint WRITES, and every refused write still consumes a case
+      number from the auto-number sequence.
+
+    WHY type=User AND A LITERAL GUEST sys_id:
+
+      `type` is a choice with exactly three values on this release - All,
+      Role, User (sys_choice on sys_rate_limit_rules.type). The caller to
+      be bounded here is UNAUTHENTICATED, so it holds no role and `Role`
+      cannot address it; `All` would bound every caller of the resource
+      including internal ones. `User` pointed at the platform's stock
+      `guest` user is the only value that addresses exactly the
+      unauthenticated caller, which is who reaches this endpoint (the
+      operation and its definition both set
+      requires_authentication=false, so the platform serves the request as
+      guest, and every row created through it carries
+      sys_created_by=guest).
+
+      <user> therefore carries 5136503cc611227c0183e96598c4f706, the stock
+      guest user's sys_id, verified on the development instance by a
+      read-only lookup of sys_user?user_name=guest. That literal VIOLATES
+      AAP Section 0.7.2's no-hardcoded-sys_id constraint, and this file
+      claims no exception to it. No override in force supersedes Section
+      0.7.2, and nothing written here may narrow it.
+
+      It is one more instance of the capability gap that Section 0.7.2
+      cannot be met in this transport at all - reported, and counted with
+      the rest, in ../../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md Section
+      0.CR1.2. An Update Set payload field holds a literal value; there is
+      no script layer inside it in which a `user_name=guest` lookup could
+      run; and the platform offers no by-key form of a reference field.
+      What follows bounds the damage and is mitigation, NOT authorization:
+
+        - 5136503cc611227c0183e96598c4f706 is the platform's own stock
+          guest record and carries that same sys_id on every ServiceNow
+          instance, so unlike an instance-specific identifier it does not
+          break on a fresh PDI.
+        - display_value="guest" carries the human-readable key alongside
+          it, so a reader - and a maintainer re-pointing the rule - never
+          has to resolve the hex by hand.
+        - An unresolved reference makes the rule inert rather than wrong:
+          the ceiling would then apply to nobody, which the post-commit
+          verification prescribed above detects.
+
+      The human decision recorded in Section 0.CR1.2 for Section 0.7.2 as
+      a whole settles this row along with it.
+
+      If a future maintainer prefers this repo's key-in-the-text-node
+      convention (as used by
+      ../../seed-data/role_assignments/sys_user_has_role_x_casemgmt_demo_agent.xml),
+      the correct change is to re-point the rule on the form and re-export
+      - not to hand-edit the text node, because an unresolved `user`
+      silently makes the rule apply to nobody.
+
+    SCOPE AND TRANSPORTABILITY:
+
+      sys_rate_limit_rules extends sys_metadata (verified read-only:
+      sys_db_object.super_class -> sys_metadata), so it is an application
+      file: it carries sys_scope / sys_package / sys_update_name, is owned
+      by this scoped application, and travels inside the Update Set with
+      the rest of the package. Zero global-scope artifacts are introduced
+      by this file - <sys_scope> and <sys_package> both resolve to
+      x_casemgmt (AAP Section 0.7.2 scoped-namespace-only constraint), and
+      no ACL, business rule, property, email configuration or Store
+      dependency is created.
+
+    DERIVATION OF api / api_resource / rest_api_resource:
+
+      Taken from the shipped REST records themselves, not invented:
+        - `api` = "Case Submit" - the <name> of
+          ./sys_ws_definition_x_casemgmt_case_submit.xml.
+        - `api_resource` and `rest_api_resource` = "POST /x_casemgmt/case_submit"
+          - the stock rows on this instance format the resource as
+          "<METHOD> <path with the leading /api removed>" (e.g.
+          "POST /now/documents/{documentSysId}/syncDown" for an operation
+          whose default_operation_uri is
+          /api/now/documents/{documentSysId}/syncDown). The submit
+          operation's <default_operation_uri> is /api/x_casemgmt/case_submit
+          and its <http_method> is POST, giving the value below.
+        - `version` = "latest" - the definition carries no versioned
+          namespace and the operation's <web_service_version/> is empty,
+          which is the same shape as the stock rows that read "latest".
+
+    AUTHORED-ARTIFACT CONVENTIONS (matching every sibling in this package):
+
+      - <unload> root with a single <record_update table="..."> child.
+      - Inner element <sys_rate_limit_rules action="INSERT_OR_UPDATE"> for
+        idempotent re-import (AAP Section 0.7.1 round-trip verification).
+      - Elements ordered alphabetically, four-space indentation.
+      - Stable audit fields (admin / 2025-01-01 00:00:00) so re-generating
+        this file is byte-identical.
+      - <sys_update_name>sys_rate_limit_rules_<sys_id></sys_update_name> -
+        the format the platform itself uses on this table (observed on all
+        30 stock rows), which is why the update name embeds the sys_id
+        rather than a readable slug.
+      - THIS RECORD'S OWN <sys_id> is a fabricated 32-character lowercase
+        hex value, derived deterministically as
+        MD5("sys_rate_limit_rules_x_casemgmt_case_submit") =
+        e10d202203fa5a85dd185af381502031 so that re-generation is stable
+        and a re-import updates the same row instead of creating a second
+        one. A repository-wide grep for this value returned no other
+        occurrence, so it collides with nothing shipped.
+      - No PII: the only identifier in the file is the platform's own
+        guest user, and no requester name, address or case content
+        appears anywhere.
+
+    LOAD ORDER (AAP Section 0.5.2):
+
+      MUST load AFTER:
+        - ../../app/sys_app/x_casemgmt_case_management.xml (the scoped
+          application record - the sole scope authority in this package,
+          so <sys_scope> and <sys_package> both resolve against it)
+        - ./sys_ws_definition_x_casemgmt_case_submit.xml and
+          ./sys_ws_operation_x_casemgmt_case_submit_post.xml (this rule
+          names their API and resource; the rule installs regardless, but
+          its choice values only mean anything once the resource they
+          describe is registered)
+
+      Nothing depends on this record: it constrains an existing resource
+      and is referenced by no other artifact.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<record_update table="sys_rate_limit_rules">
+    <sys_rate_limit_rules action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <api>Case Submit</api>
+        <api_resource>POST /x_casemgmt/case_submit</api_resource>
+        <import_set_table/>
+        <name>x_casemgmt anonymous case submit (guest)</name>
+        <requests>60</requests>
+        <rest_api_resource>POST /x_casemgmt/case_submit</rest_api_resource>
+        <role/>
+        <sys_class_name>sys_rate_limit_rules</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>e10d202203fa5a85dd185af381502031</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt anonymous case submit (guest)</sys_name>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_rate_limit_rules_e10d202203fa5a85dd185af381502031</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table/>
+        <type>User</type>
+        <user display_value="guest">5136503cc611227c0183e96598c4f706</user>
+        <version>latest</version>
+    </sys_rate_limit_rules>
+</record_update>
+</unload>

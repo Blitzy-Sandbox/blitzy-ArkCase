@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_hub_flow_block` row shared by the
+    five validation subflows under ./ in the scoped application `x_casemgmt`.
+
+    PURPOSE
+        Flow Designer groups the flow-logic instances of a subflow into a block. Each
+        subflow's `Assign Subflow Outputs` logic instance - in both its draft and its
+        published-snapshot copy - points at this one block row, so all five subflows under
+        ./ depend on it.
+
+    WHY IT IS PACKAGED SEPARATELY
+        Flow Designer's per-flow capture emits the block rows whose sys_id equals the flow's
+        or snapshot's own sys_id implicitly, but not a standalone block shared across several
+        flows. Shipping it explicitly keeps the package self-contained: without it the five
+        subflows would import carrying a block reference that resolves to nothing on the
+        target instance.
+
+    LOAD ORDER
+        Must import before the five subflows under ./ that reference it.
+
+    PROVENANCE - THIS RECORD BODY IS PLATFORM-GENERATED, NOT HAND-AUTHORED
+        The <record_update> document below is ServiceNow's own serialization of the record,
+        captured from sys_update_xml.payload on the instance where the subflows were authored
+        through Flow Designer itself. Only whitespace indentation has been applied; every
+        element, attribute and field value is byte-identical to the platform's output.
+-->
+<record_update sys_domain="global" table="sys_hub_flow_block">
+    <sys_hub_flow_block action="INSERT_OR_UPDATE">
+        <label_cache/>
+        <name/>
+        <sys_class_name>sys_hub_flow_block</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-08-07 03:09:34</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>62b45329932e0710830ef82bdd03d6ff</sys_id>
+        <sys_mod_count>17</sys_mod_count>
+        <sys_name/>
+        <sys_overrides/>
+        <sys_package/>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name/>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-08-07 03:30:41</sys_updated_on>
+    </sys_hub_flow_block>
+</record_update>

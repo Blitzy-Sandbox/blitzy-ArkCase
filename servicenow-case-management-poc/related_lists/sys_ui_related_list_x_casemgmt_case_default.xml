@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Related Lists record-definition for the DEFAULT VIEW of the
+    `x_casemgmt_case` table in the scoped application `x_casemgmt`.
+
+    WHY THIS FILE EXISTS
+      AAP Section 0.4.4 requires the build to configure "Related Lists on the
+      case form for both `case_task` (parent = current case) and `case_party`
+      (parent = current case)". That is the mechanism by which an internal
+      user drives a case end to end from one screen: the case form has to
+      show the case's own tasks (so the operator can see what still blocks a
+      Resolved transition) and the case's parties (so the operator can see
+      who the case is about).
+
+      Until this file was added the package carried NO related-list record at
+      all, and none existed on the verification instance either: a query of
+      `sys_ui_related_list` for `nameSTARTSWITHx_casemgmt` returned zero rows.
+      The consequence was measured on the running application: the case form
+      rendered its `#related_lists_wrapper` container with a height of zero,
+      the form's "Configure Related Lists" slushbucket had an empty Selected
+      column, and the child rows that DO exist were unreachable from the
+      parent record. On CASE0000981 those unreachable children were
+      TASK0000276 (Open), TASK0000277 (Closed), PARTY0000159 (Person) and
+      PARTY0000160 (Organization) - i.e. the data was correct all along and
+      only the presentation metadata was missing.
+
+      Nothing else was wrong. The child tables already carry the reference
+      field the related list keys on (`x_casemgmt_case_task.case` and
+      `x_casemgmt_case_party.case`, both mandatory references to
+      `x_casemgmt_case` per AAP Section 0.5.7), and the read ACLs already
+      permit the parent's audience to read those children. The only missing
+      artifact was the one below.
+
+    WHAT THIS FILE PRODUCES ON THE CASE FORM
+        position 0  ->  Case Tasks    (x_casemgmt_case_task.case)
+        position 1  ->  Case Parties  (x_casemgmt_case_party.case)
+      Tasks come first because the task list is what gates the case
+      lifecycle: AAP Section 0.5.5 blocks the In Progress to Resolved
+      transition until every linked task has status Closed, with the verbatim
+      error "All tasks must be closed before resolving this case." An
+      operator who cannot see the task list cannot see why the transition was
+      refused, so the task list is the first thing the form should show below
+      the fields. Parties follow, matching the order the AAP itself uses when
+      it names the two lists.
+
+      No third related list is declared. AAP Section 0.7.2's MINIMAL CHANGE
+      CLAUSE means only the two lists the AAP names are configured, and the
+      sibling tables get no related-list record of their own because the AAP
+      asks for related lists on the case form only.
+
+    THE `related_list` VALUE FORMAT (measured, not assumed)
+      Each entry's `related_list` column is the string `<child table>.<field
+      on the child that references this table>`. This was verified against the
+      out-of-box related lists for the `incident` table on the verification
+      instance, whose seven entries read exactly:
+          task_sla.task, task_ci.task, task_cmdb_ci_service.task,
+          task_service_offering.task, incident.parent_incident,
+          sc_request.parent, interaction_related_record.task
+      So `x_casemgmt_case_task.case` means "every Case Task whose `case`
+      field points at the record on screen". A relationship-backed list would
+      instead read `REL:<sys_id of the sys_relationship>`; no relationship
+      record is needed here, and none is created, because both child tables
+      reach the parent through an ordinary reference field.
+
+    SERIALIZATION SHAPE (why the two entries live inside this one file)
+      `sys_ui_related_list` extends Application File (`sys_metadata`), so it
+      has `sys_scope`, `sys_package` and `sys_update_name` and can be carried
+      as an Update Set record in its own right.
+
+      `sys_ui_related_list_entry` does NOT extend Application File - its
+      `super_class` is empty and it has no `sys_scope`, no `sys_package` and
+      no `sys_update_name`. An entry therefore cannot be keyed as an Update
+      Set record of its own, which is why both entries are serialized inside
+      the same payload as their parent rather than as separate records. This
+      mirrors `sys_ui_list_element` under
+      ../list_layouts/sys_ui_list_x_casemgmt_case_default.xml, which is the
+      same structural situation on the sibling table.
+
+      The records below are emitted as sibling elements of one `<unload>`,
+      which is this package's dominant payload convention (782 of the 925
+      records in ../update-set/ use an `<unload>` root) and is the shape the
+      platform itself produces when it exports records. Each element carries
+      action="INSERT_OR_UPDATE" so a re-import updates the existing rows
+      instead of duplicating them.
+
+    THE `view` FIELD HOLDS THE LITERAL STRING "Default view"
+      `sys_ui_related_list.view` is declared as a reference to `sys_ui_view`,
+      yet every out-of-box row for a default-view related list stores the
+      literal text "Default view" in it - verified on the verification
+      instance against `sys_ui_related_incident_null`,
+      `sys_ui_related_sys_ux_children_null` and
+      `sys_ui_related_sys_rollback_sequence_null`, none of which point at a
+      real `sys_ui_view` row. A NAMED view instead stores that view's sys_id
+      (for example `sys_ui_related_cmdb_ci_hpux_server_cmdb_browse`). The
+      same asymmetry is documented on the sibling list-layout artifact. This
+      record is the DEFAULT view, so it stores the literal string, and the
+      `<view/>` attribute-free form is deliberately not used.
+
+    THE `sys_user` FIELD MUST STAY EMPTY
+      `sys_ui_related_list.sys_user` distinguishes a BASE definition (empty -
+      applies to everyone) from a PERSONALIZED one (a single user's own
+      choice of related lists, which silently overrides the base definition
+      for that user only). This record is the BASE definition, so
+      `<sys_user/>` is empty and every user of the application gets these two
+      lists. A verifier who finds a personalized row for this table should
+      delete it, because while one exists that user does not see the shipped
+      configuration. Personalized rows are per-user state, are never carried
+      by an Update Set, and are not part of this application.
+
+    NO DATA IS AFFECTED, AND NO SECURITY IS GRANTED
+      A related list only decides which child lists a form renders. It
+      creates no records, changes no field values, and grants nothing: what
+      each role can actually see in these lists is still decided by the
+      table-level and field-level ACLs in ../acl/. A `x_casemgmt_case_agent`
+      viewing an assigned case sees that case's tasks and parties; a
+      `x_casemgmt_case_viewer` sees them read only; neither gains access to
+      any row the ACL matrix in ../docs/acl-matrix.md does not already allow.
+
+    A CACHE CAVEAT THAT WAS MEASURED, NOT GUESSED
+      Creating these three rows is necessary but, on an instance that has
+      already rendered the case form once, not sufficient. The platform caches
+      the related-list definition for a (table, view) pair server side. If the
+      form was rendered BEFORE the definition existed, the server has cached
+      the empty answer, and inserting the rows afterwards through a non-UI
+      path (a direct REST insert, or a record import) does not invalidate that
+      cache. The observable symptom is precise and misleading: the
+      "Configure > Related Lists" slushbucket correctly shows both entries in
+      its Selected column, and the rows read back correctly from the tables,
+      yet the form still renders `#related_lists_wrapper` at zero height with
+      no list markup in the document at all and no related-list request on the
+      wire. A control table on the same instance in the same session renders
+      its own related lists normally, so nothing is broken except the cached
+      answer for this one table.
+
+      This was reproduced and then resolved on the verification instance. What
+      does NOT clear it: re-writing the same values over REST (an update that
+      dirties no field is a no-op, so no business rule fires). What DOES clear
+      it: re-saving the definition through the platform's own UI - open
+      "Configure > Related Lists" on the case form and press Save with the two
+      entries already selected. That processor deletes and reinserts the
+      definition through the path that invalidates the cache, after which the
+      form renders both lists immediately and keeps rendering them across
+      fresh loads. Flushing the instance cache is the heavier alternative.
+
+      A normal Update Set commit invalidates metadata caches as part of
+      committing, so a clean install is not expected to need this. It is
+      documented here because it is the one failure mode of this artifact that
+      looks like a bad record definition and is not, and because a verifier
+      who applies these rows by hand rather than by commit WILL hit it. The
+      same note appears in ../docs/deployment.md.
+
+    IDENTIFIERS
+      The three sys_ids below are pinned to the rows that the platform's own
+      related-list processor created on the verification instance, so this
+      file describes exactly the configuration that was observed rendering
+      both lists correctly. This is the same provenance rule the sibling
+      artifact ../list_layouts/sys_ui_list_x_casemgmt_case_default.xml
+      follows: prefer the identifiers the platform itself minted for this
+      table over locally invented ones.
+        a799833a93a6cf10830ef82bdd03d6ad   the definition
+        6799833a93a6cf10830ef82bdd03d6ae   entry, position 0, Case Tasks
+        eb99833a93a6cf10830ef82bdd03d6ae   entry, position 1, Case Parties
+      An earlier revision of this file carried locally derived MD5 identifiers
+      instead. They were replaced when the definition was re-saved through the
+      platform UI to clear the cache described above, because that processor
+      deletes and reinserts its rows rather than updating them in place, and
+      leaving the old values here would have meant shipping identifiers that
+      exist on no instance.
+
+      The identifiers are not load-bearing. The import engine matches the
+      definition on `sys_update_name`
+      (`sys_ui_related_x_casemgmt_case_null`, the platform's own naming for a
+      related-list definition on a null/default view), so a target instance
+      that already holds a definition for this table updates it rather than
+      gaining a second one. No reference field in this file points at a
+      foreign record by sys_id: the only sys_id-valued reference is each
+      entry's `list_id`, and it points at the definition declared in this same
+      document.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering)
+      MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scope authority)
+        - ../tables/x_casemgmt_case.xml (the table whose form is configured)
+        - ../tables/x_casemgmt_case_task.xml and
+          ../tables/x_casemgmt_case_party.xml (the child tables named in the
+          two entries; a related list whose child table does not yet exist is
+          dropped on import)
+        - ../dictionary/x_casemgmt_case_task_case.xml and
+          ../dictionary/x_casemgmt_case_party_case.xml (the reference fields
+          the two entries key on)
+      MUST LOAD BEFORE:
+        - ../seed-data/tasks/x_casemgmt_case_task_demo_*.xml and
+          ../seed-data/parties/x_casemgmt_case_party_demo_*.xml (so the demo
+          children are visible from their parent case immediately after
+          commit, which is what AAP Section 0.7.1 asks a verifier to confirm)
+      In ../update-set/x_casemgmt_case_management_update_set.xml this record
+      is placed immediately after the List Layout record for the same table,
+      because both are Default-view presentation metadata for
+      `x_casemgmt_case` and both have the same predecessors.
+
+    AAP COMPLIANCE
+      - AAP 0.4.4: related lists configured on the case form for case_task
+        and case_party, in that order.
+      - AAP 0.3.1: a serialized record-definition under
+        servicenow-case-management-poc/, covered by the section's
+        `**/*.xml` wildcard.
+      - AAP 0.7.2 scoped-namespace exclusivity: the definition carries the
+        scoped application's sys_scope and sys_package; no global related
+        list is touched, and no out-of-box table's form is modified.
+      - AAP 0.7.2 minimal change: exactly the two lists the AAP names, on
+        exactly the one form the AAP names.
+      - AAP 0.7.2 no hard-coded sys_id in a cross-artifact reference: the
+        only reference is internal to this document.
+      - No PII: table and field names only.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+    <!--
+        ===================================================================
+        RECORD [1] OF 3 - RELATED LIST DEFINITION (sys_ui_related_list)
+        ===================================================================
+        The Default-view related-list definition for the case table. `name`
+        holds the table whose form is being configured; `calculated_name` is
+        the platform's display value for the row and follows the out-of-box
+        pattern "<Table label> - <view>" (measured on
+        sys_ui_related_incident_null, whose calculated_name is
+        "Incident - Default view").
+
+        The definition's own `related_list`, `position`, `order_by` and
+        `filter` columns stay empty. They exist on this table but are unused
+        by the current platform serialization: the per-list values live on
+        the entry rows below. Every out-of-box definition row on the
+        verification instance leaves them empty, and a query for definitions
+        with a populated `related_list` returned zero rows instance-wide.
+    -->
+    <sys_ui_related_list action="INSERT_OR_UPDATE">
+        <calculated_name>Case - Default view</calculated_name>
+        <filter/>
+        <name>x_casemgmt_case</name>
+        <order_by/>
+        <position/>
+        <related_list/>
+        <sys_class_name>sys_ui_related_list</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>a799833a93a6cf10830ef82bdd03d6ad</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Case - Default view</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_ui_related_x_casemgmt_case_null</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <sys_user/>
+        <view>Default view</view>
+        <view_name/>
+    </sys_ui_related_list>
+    <!--
+        ===================================================================
+        RECORD [2] OF 3 - CASE TASKS ENTRY (sys_ui_related_list_entry)
+        ===================================================================
+        Renders every Case Task whose `case` reference points at the record
+        on screen. `filter` is empty on purpose: the list must show ALL of
+        the case's tasks, including the Closed ones, because the operator's
+        question at the Resolved gate is "which tasks are not Closed yet",
+        and that question cannot be answered by a list that hides the
+        Closed ones. `order_by` is empty so the list uses the child table's
+        own default order, and `group_by_field` is empty so the list renders
+        flat rather than grouped.
+    -->
+    <sys_ui_related_list_entry action="INSERT_OR_UPDATE">
+        <filter/>
+        <group_by_field/>
+        <list_id display_value="Case - Default view">a799833a93a6cf10830ef82bdd03d6ad</list_id>
+        <order_by/>
+        <position>0</position>
+        <related_list>x_casemgmt_case_task.case</related_list>
+        <sys_class_name>sys_ui_related_list_entry</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>6799833a93a6cf10830ef82bdd03d6ae</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_ui_related_list_entry>
+    <!--
+        ===================================================================
+        RECORD [3] OF 3 - CASE PARTIES ENTRY (sys_ui_related_list_entry)
+        ===================================================================
+        Renders every Case Party whose `case` reference points at the record
+        on screen, so the polymorphic party rows (party_type Person, with a
+        `person` reference to sys_user; or party_type Organization, with an
+        `organization` reference to core_company) are reachable from the
+        case they belong to. AAP Section 0.7.1 lists "People and
+        Organizations associated to cases as typed parties" among the
+        success criteria, and this entry is what makes that association
+        visible from the case.
+    -->
+    <sys_ui_related_list_entry action="INSERT_OR_UPDATE">
+        <filter/>
+        <group_by_field/>
+        <list_id display_value="Case - Default view">a799833a93a6cf10830ef82bdd03d6ad</list_id>
+        <order_by/>
+        <position>1</position>
+        <related_list>x_casemgmt_case_party.case</related_list>
+        <sys_class_name>sys_ui_related_list_entry</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>eb99833a93a6cf10830ef82bdd03d6ae</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    </sys_ui_related_list_entry>
+</unload>
