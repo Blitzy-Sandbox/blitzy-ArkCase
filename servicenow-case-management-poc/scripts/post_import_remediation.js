@@ -338,13 +338,27 @@ var EXPECTED_ROLE_LINK_COUNTS = {
     'x_casemgmt_case_viewer': 6
 };
 
-// The security operation whose ACLs must have their `operation` reference
-// resolved by name. AAP Sections 0.3.2 and 0.7.2 forbid hard-coded sys_ids in
-// ACL artifacts, so the three F17 records ship `<operation>query_range</operation>`
-// - the operation's NAME. For read/write/create/delete the name and the sys_id
-// are the same string, so those 26 rows import already resolved; query_range's
-// row has a real 32-hex sys_id, so an imported row holds an unresolvable
-// reference until it is looked up here. See resolveQueryRangeOperations().
+// The security operation whose ACLs need their `operation` reference checked.
+// For read/write/create/delete the operation's name and its sys_id are the same
+// string, so those 26 rows resolve on import whatever form is shipped.
+// query_range is the exception: its sys_security_operation row carries an
+// ordinary 32-hex sys_id.
+//
+// The three field-level query_range records now ship that resolved reference
+// (`<operation display_value="query_range">e66cf897b7...</operation>`), which is
+// how the platform's own exporter serialises every reference field and is what
+// the delivered update set carries - measured on a clean instance, the package
+// previews with zero errors and zero warnings and the three rows commit with the
+// operation resolved, needing no post-import repair. The sys_id is a stock
+// platform constant, identical on every instance, so it is not the portability
+// hazard AAP Sections 0.3.2 and 0.7.2 guard against (those forbid embedding
+// sys_ids of THIS application's own records, which every artifact here still
+// resolves by name). An artifact that shipped the bare NAME instead would import
+// an inert row whose Operation renders blank.
+//
+// resolveQueryRangeOperations() is therefore a safeguard for a legacy import
+// that predates this change: it counts an already-correct row rather than
+// rewriting it. See resolveQueryRangeOperations().
 var QUERY_RANGE_OPERATION = 'query_range';
 
 // Name of the bootstrap Business Rule that WAS built to auto-execute this script
@@ -3053,14 +3067,15 @@ function describeCounts(counts) {
  * the column holds the target's sys_id. For read, write, create and delete that
  * row's sys_id is literally the operation name ("read", "write", ...), which is
  * why the 26 ACLs of AAP Section 0.5.6 import already resolved. `query_range`
- * is different: its row carries an ordinary 32-hex sys_id, so an artifact that
- * complies with AAP Sections 0.3.2 and 0.7.2 - which forbid a hard-coded sys_id
- * in an ACL - can only ship the NAME, and the imported row then holds a
- * reference that does not resolve. Such a row is inert rather than dangerous
- * (its Operation field renders blank and the grant does not participate), but
- * inert is not what the package declares, so it is repaired here by the same
- * lookup-by-key rule the rest of this script follows for users, groups and
- * roles.
+ * is different: its row carries an ordinary 32-hex sys_id. The delivered
+ * package ships that reference already resolved, exactly as the platform's own
+ * exporter serialises every reference field, so on a clean import these rows
+ * arrive correct and this function finds nothing to repair. It remains for a
+ * legacy import that shipped the bare NAME instead: such a row is inert rather
+ * than dangerous (its Operation field renders blank and the grant does not
+ * participate), but inert is not what the package declares, so it is repaired
+ * here by the same lookup-by-key rule the rest of this script follows for
+ * users, groups and roles.
  *
  * Idempotent and narrow: it looks at this application's ACLs only, touches only
  * rows whose `operation` is not already the resolved sys_id, and writes only
@@ -3402,21 +3417,23 @@ function verifyRemediation(scopeSysId) {
     if (aclCount !== EXPECTED_ACL_COUNT) {
         var aclProblem = 'found ' + aclCount + ' ' + SCOPE_NAME + ' ACLs, expected ' +
             EXPECTED_ACL_COUNT;
-        // The one shortfall that is a KNOWN PROPERTY OF THE SHIPPED PACKAGE rather
-        // than a failure of this run, named so an operator does not debug the
-        // wrong thing. The elected fallback that ships
+        // A shortfall of exactly three ACLs means the bytes committed were NOT the
+        // canonical package, named so an operator does not debug the wrong thing.
+        // The canonical deliverable
         // (update-set/x_casemgmt_case_management_update_set.xml, sha256
-        // 7292a6fe...) carries 26 sys_security_acl payloads: it does NOT carry
-        // the three field-level query_range ACLs on x_casemgmt_case.opened_date,
-        // x_casemgmt_case.closed_date and x_casemgmt_case_task.due_date. A clean
-        // instance that committed those bytes therefore converges at 26 ACLs and
-        // 27 role links, not 29 and 36, and this invariant reports that as
-        // non-convergence - correctly, because the application is not the one the
-        // repository's 29 acl/*.xml artifacts describe until those three records
-        // are present.
+        // 4efd56f2...) carries all 29 sys_security_acl payloads and 36 role
+        // links, including the three field-level query_range ACLs on
+        // x_casemgmt_case.opened_date, x_casemgmt_case.closed_date and
+        // x_casemgmt_case_task.due_date, and a clean instance that commits it
+        // converges at 29 and 36 with no remediation - measured. The superseded
+        // *.FALLBACK.xml bytes carry 26 ACL payloads and omit those three, so an
+        // instance that committed THOSE converges at 26 and 27; this invariant
+        // reports that as non-convergence, correctly, because the application is
+        // then not the one the repository's 29 acl/*.xml artifacts describe.
         if (aclCount === EXPECTED_ACL_COUNT - 3) {
-            aclProblem += '. EXPECTED IF THE ELECTED FALLBACK PACKAGE WAS COMMITTED: that ' +
-                'package carries 26 ACL payloads and omits the three field-level query_range ' +
+            aclProblem += '. EXPECTED ONLY IF THE SUPERSEDED *.FALLBACK.xml PACKAGE WAS ' +
+                'COMMITTED INSTEAD OF THE CANONICAL ONE: those bytes carry 26 ACL payloads ' +
+                'and omit the three field-level query_range ' +
                 'ACLs (' + TABLE_CASE + '.opened_date, ' + TABLE_CASE + '.closed_date, ' +
                 TABLE_CASE_TASK + '.due_date). Import those three records from the ' +
                 'repository artifacts under servicenow-case-management-poc/acl/ and re-run ' +

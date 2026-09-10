@@ -7,8 +7,8 @@ This document captures the three-table schema for the ServiceNow scoped applicat
 The three tables are:
 
 - **`x_casemgmt_case`** — the case-file root record (12 user-prompt-specified fields plus a `pending_reason` choice field for the Pending state plus a virtual `duration_to_close` Function Field that powers the Manager View "Average Time to Close" widget — 14 fields total). **The 14 is not an AAP figure:** AAP Section 0.5.7 specifies the 12, `pending_reason` is added for the Pending state per AAP Sections 0.4.1 and 0.5.5, and `duration_to_close` is a documented addition to the Section 0.5.7 field set — a disclosed deviation from Section 0.7.1's "no additions", declared at [Additional field: duration_to_close (Function Field)](#additional-field-duration_to_close-function-field) (code review CR5, finding F14).
-- **`x_casemgmt_case_task`** — child tasks linked to a parent case via the `case` reference field (6 fields).
-- **`x_casemgmt_case_party`** — polymorphic party associations linked to a parent case (5 fields, `party_type` discriminator + conditional `person`/`organization` reference fields).
+- **`x_casemgmt_case_task`** — child tasks linked to a parent case via the `case` reference field (6 AAP Section 0.5.7 fields; **7** field-level dictionary rows in the delivered package, the seventh being the AAP-mandated `number` column — see the note below).
+- **`x_casemgmt_case_party`** — polymorphic party associations linked to a parent case (5 AAP Section 0.5.7 fields, `party_type` discriminator + conditional `person`/`organization` reference fields; **6** field-level dictionary rows in the delivered package, the sixth being the same AAP-mandated `number` column — see the note below).
 
 > **The two child tables each carry one column beyond their Section 0.5.7 field list, and it is
 > AAP-mandated rather than an addition (recorded 2026-09-09, code review CR5, alongside finding F14).**
@@ -19,6 +19,15 @@ The three tables are:
 > in-scope artifacts, and a `sys_number` counter has nothing to write into without a `number` column on
 > its table. It is recorded here for completeness rather than declared as a deviation the way
 > `duration_to_close` is: the counters are AAP deliverables and this column is what makes them work.
+>
+> **[QA4 2026-09-10 · F07 — RE-MEASURED ON THE DELIVERED PACKAGE, AND STILL EXACTLY TRUE.** "The shipping
+> package" above was written of the superseded 522-block revision. Re-measured on the package that ships —
+> `update-set/x_casemgmt_case_management_update_set.xml`, SHA-256
+> `5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983`, 3,282,299 bytes, 576
+> `<sys_update_xml>` blocks — the arity is unchanged: `x_casemgmt_case` **14** field-level `sys_dictionary`
+> rows, `x_casemgmt_case_task` **7**, `x_casemgmt_case_party` **6**, plus the **3** collection (table-level)
+> rows, for **30** `sys_dictionary` records and **90** `sys_documentation` label records in the package. The
+> extra column on each child table is `number` in both cases, exactly as stated above.**]
 
 The concrete scope identifier `x_casemgmt_` is used consistently throughout this repository. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in every record before the Update Set is exported.
 
@@ -112,9 +121,14 @@ can compute `AVG` only over a native database column or a Function Field. The ad
 that: it is a query-time derivation of two columns Section 0.5.7 *does* enumerate, and the shipped dictionary
 payload carries `function_field = true`, `read_only = true`, `display = false` and `audit = false`, so it adds no
 stored column to the three-table schema, no auditing, and no field a user sees on any form or list. It travels in
-the deliverable as exactly one block, `sys_dictionary_x_casemgmt_case_duration_to_close`, at line 343 of
+the deliverable as exactly one block, `sys_dictionary_x_casemgmt_case_duration_to_close` — block ordinal
+**159 of 576**, its `<name>` element at line **7,508** — of
 [`../update-set/x_casemgmt_case_management_update_set.xml`](../update-set/x_casemgmt_case_management_update_set.xml)
-(measured 2026-09-09 on the shipping package, SHA-256 `5a3c629f…`). **Read this as a disclosed deviation still
+(re-measured 2026-09-10, QA4 · F07, on the delivered package: SHA-256
+`5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983`, 3,282,299 bytes, 576 blocks. **This read
+"at line 343 … (measured 2026-09-09 on the shipping package, SHA-256 `5a3c629f…`)", which located the block
+inside the superseded 522-block revision; line 343 of the delivered file is not this block, so the old
+citation would have sent a reader to the wrong payload.**) **Read this as a disclosed deviation still
 awaiting human ratification, not as a closed item** — it is recorded here so that the verbatim-field-set
 constraint is visibly carrying one named exception rather than being silently broken. Deleting the field is not
 available as a correction on this release: the alternative offered against F14 ("remove it and compute the
@@ -141,10 +155,22 @@ itself ships (for example `pa_dm_task_telemetry.duration`) carries `function_fie
 With `virtual = false` the field immediately returned `18 Days` and `14 Days` on the two Closed demo cases.
 `post_import_remediation.js` now carries the same three attributes in its field spec and compares them on every
 run, so this cannot silently regress on an install.
+**[QA4 2026-09-10 · F07 — no run of that script is an install step for the delivered package, and none is
+needed to hold this flag.** The delivered bytes carry the corrected dictionary payload itself —
+`function_field = true`, `virtual = false`, `read_only = true`, `display = false`, `audit = false`, with
+`function_definition = glidefunction:datediff(closed_date,opened_date)` — all six read directly out of block
+159's payload in the delivered file — so the attributes land on the single native commit, which is how they were observed post-commit on 2026-09-10
+with nothing run afterwards. The sentence above is retained as the record of how the regression was fenced on
+the superseded candidates' remediation route, and that route is no longer a supported one: see the SUPPORTED
+INSTALL ROUTE and Validation Gates sections of [`../README.md`](../README.md).**]
 
 **A REST consumer sees this field as an epoch-offset datetime, not as a duration.** `glide_duration` is stored and
 transmitted as a datetime measured from the Unix epoch, and only the presentation layer renders it as a span. On
-`CASE9000006` the same field reads, measured on the live instance:
+`CASE9000006` the same field reads, measured 2026-09-09 on the then-live install *(dated 2026-09-10, QA4 · F07:
+the verification instance was torn down to a zero-state on purpose after the final gate — "instance zero-state
+confirmed at 2026-09-10T10:20:32Z, no residue remaining" — so these are dated readings of standard
+`glide_duration` behaviour and of this field's definition, not a surface a reader can query today. They
+reproduce on any install of the delivered package)*:
 
 | How it is read | Value |
 | --- | --- |
@@ -276,7 +302,7 @@ The trap has exactly two shapes, both following from the rule's normalisation pr
 | **Insert** — any new party whose discriminator was toggled | A new record has no prior discriminator, so nothing "changed"; on an insert, "both set" is indistinguishable from the caller's own incoherent input, which the rule must keep refusing |
 | **Update whose discriminator round-trips** — a stored Person party toggled Person → Organization → Person in one form session | The submitted `party_type` equals the stored one, so again nothing "changed" and the stale reference is refused rather than normalised |
 
-**The fix.** [`../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml`](../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml) is an `onChange` Client Script on `party_type` (table `x_casemgmt_case_party`, `order 200`) that clears the reference the new discriminator makes inapplicable — `organization` when `party_type` becomes `Person`, `person` when it becomes `Organization` — so the hidden field has no value left to carry into the POST. It clears the value **and** the reference display text in one `g_form.setValue(field, '', '')` call (the two-argument form would ask the server to resolve a display value; the three-argument form sets both directly), then sweeps the display input for text the user typed without selecting a row. It never touches the field the discriminator makes applicable, and it returns having changed nothing while `isLoading` is true, on an empty `party_type`, and on any discriminator value it does not recognise.
+**The fix.** [`../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml`](../client_scripts/x_casemgmt_case_party_clear_opposite_reference.xml) is an `onChange` Client Script on `party_type` (table `x_casemgmt_case_party`, `order 200`) that clears the reference the new discriminator makes inapplicable — `organization` when `party_type` becomes `Person`, `person` when it becomes `Organization` — so the hidden field has no value left to carry into the POST. It clears the value **and** the reference display text in one `g_form.setValue(field, '', '')` call (the two-argument form would ask the server to resolve a display value; the three-argument form sets both directly), then sweeps the display input for text the user typed without selecting a row. It never touches the field the discriminator makes applicable, and it returns having changed nothing while `isLoading` is true, on an empty `party_type`, and on any discriminator value it does not recognise. *(Measured 2026-09-10, QA4 · F07: this script travels inside the delivered package and lands on the commit — the delivered bytes carry **3** `sys_script_client` payloads, `x_casemgmt_case_party_clear_opposite_ref` on `party_type` among them, so no separate import of `../client_scripts/` is needed. An earlier revision of the package carried none of the three, which is why some documents in this repository describe the client-script layer as a repository-only artifact; on the delivered bytes it is not.)*
 
 **Why a UI Policy action cannot do this job.** `sys_ui_policy_action` is not entirely value-blind — it carries a `cleared` column ("Clear the field value"), which both existing actions set to `false`. It still cannot express this fix:
 
@@ -400,7 +426,7 @@ This section documents how the three ServiceNow tables semantically correspond t
 
 The following schema-level constraints are non-negotiable per AAP Section 0.7.1:
 
-- **Field set is non-negotiable.** No additions, no renames, no type relaxations beyond what is in AAP Section 0.5.7. **One named exception stands against this constraint, disclosed and unratified — 2026-09-09 (code review CR5, finding F14):** `x_casemgmt_case.duration_to_close`, the virtual `glide_duration` Function Field AAP Section 0.4.4's Manager View Widget 4 and Section 0.7.3 Validation Gate 6 cannot be satisfied without, is a thirteenth column in the shipped dictionary (fourteenth counting `pending_reason`, itself added per Sections 0.4.1 and 0.5.5). It is stated in full at [Additional field: duration_to_close (Function Field)](#additional-field-duration_to_close-function-field). Measured on the shipping package, it and `pending_reason` — whose addition AAP Sections 0.4.1 and 0.5.5 themselves direct — are the only two of `x_casemgmt_case`'s 14 field-level dictionary rows that Section 0.5.7 does not enumerate, and every remaining row carries a Section 0.5.7 field name unchanged.
+- **Field set is non-negotiable.** No additions, no renames, no type relaxations beyond what is in AAP Section 0.5.7. **One named exception stands against this constraint, disclosed and unratified — 2026-09-09 (code review CR5, finding F14):** `x_casemgmt_case.duration_to_close`, the virtual `glide_duration` Function Field AAP Section 0.4.4's Manager View Widget 4 and Section 0.7.3 Validation Gate 6 cannot be satisfied without, is a thirteenth column in the shipped dictionary (fourteenth counting `pending_reason`, itself added per Sections 0.4.1 and 0.5.5). It is stated in full at [Additional field: duration_to_close (Function Field)](#additional-field-duration_to_close-function-field). Measured on the shipping package, it and `pending_reason` — whose addition AAP Sections 0.4.1 and 0.5.5 themselves direct — are the only two of `x_casemgmt_case`'s 14 field-level dictionary rows that Section 0.5.7 does not enumerate, and every remaining row carries a Section 0.5.7 field name unchanged. *(Re-measured 2026-09-10, QA4 · F07, on the delivered package — SHA-256 `5565d986…983`, 3,282,299 bytes, 576 blocks — and unchanged: 14 field-level rows for `x_casemgmt_case`, of which exactly these two are outside Section 0.5.7. "The shipping package" in this bullet was written of the superseded 522-block revision.)*
 - **Choice values are non-negotiable.** Each Choice field's values match the user prompt verbatim.
 - **Mandatory flags are non-negotiable.** Every "Mandatory" cell in the schema tables MUST result in `mandatory = true` on the dictionary entry — AND in a server-side refusal of any write that would store the column empty, because the dictionary flag alone is enforced only by the form engine. See [Server-Side Enforcement of the Schema Contract](#server-side-enforcement-of-the-schema-contract).
 - **Conditional flags are non-negotiable.** `person` and `organization` form an exactly-one-of pair keyed on `party_type`: exactly one is populated on every stored row, never both and never neither.
@@ -412,6 +438,18 @@ The following schema-level constraints are non-negotiable per AAP Section 0.7.1:
 
 ## Verification
 
+**How to run this procedure, stated once (2026-09-10, QA4 · F07).** Every step below is a post-commit check: it
+presupposes that the delivered package —
+[`../update-set/x_casemgmt_case_management_update_set.xml`](../update-set/x_casemgmt_case_management_update_set.xml),
+SHA-256 `5565d986…983`, 3,282,299 bytes, 576 blocks — has been uploaded, previewed and committed on the
+instance you are checking. This project ran it on 2026-09-10 against its own single native commit of those
+exact bytes (preview 0 `type=error` / 0 `type=warning` / 0 problems of any type; Inserted 576 / Updated 0 /
+Deleted 0 / Collisions 0 / Total 576), and the verification instance was then torn down on purpose —
+*instance zero-state confirmed at 2026-09-10T10:20:32Z, no residue remaining*. **So do not expect to find the
+application already installed anywhere:** the durable artifact is the XML and its SHA-256, and every step
+below is one a reader executes on their own instance after committing it. No remediation script and no
+post-commit write is part of this procedure.
+
 The following verification gate is reproduced verbatim from AAP Section 0.7.3:
 
 | Gate | Criterion | Pass Condition |
@@ -422,8 +460,19 @@ Verification procedure (cross-reference [`validation-gates.md`](./validation-gat
 
 1. Open System Definition → Tables → filter `Name CONTAINS x_casemgmt_case`. Confirm exactly 3 records: `x_casemgmt_case`, `x_casemgmt_case_task`, `x_casemgmt_case_party`.
 2. Open `x_casemgmt_case` → confirm 14 fields (12 + `pending_reason` + `duration_to_close`). The `duration_to_close` Function Field is virtual/read-only/hidden and will appear in the dictionary list but not on the default form/list layout. For each Mandatory field per the schema table, confirm `mandatory = true`. For each Choice field, confirm choice values match verbatim.
-3. Open `x_casemgmt_case_task` → confirm 6 fields. Confirm reference targets and Mandatory flags.
-4. Open `x_casemgmt_case_party` → confirm 5 fields. Confirm `party_type` Choice values, conditional `person`/`organization` reference targets.
+3. Open `x_casemgmt_case_task` → confirm **7** field-level dictionary rows: Section 0.5.7's 6 plus the
+   AAP-mandated `number` column its `sys_number` counter writes into. Confirm reference targets and Mandatory
+   flags. *(Corrected 2026-09-10, QA4 · F07: this step read "confirm 6 fields", which contradicts this
+   document's own measured arity in the blockquote near the top and would make an operator reading a correct
+   install conclude a mismatch. The delivered package carries 7, measured.)*
+4. Open `x_casemgmt_case_party` → confirm **6** field-level dictionary rows: Section 0.5.7's 5 plus the same
+   AAP-mandated `number` column. Confirm `party_type` Choice values, conditional `person`/`organization`
+   reference targets. *(Corrected 2026-09-10, QA4 · F07: this step read "confirm 5 fields", for the same
+   reason. The delivered package carries 6, measured.)* Note the limit recorded in
+   [`PDI_LIMITATIONS_AND_KNOWN_ISSUES.md`](./PDI_LIMITATIONS_AND_KNOWN_ISSUES.md): `core_company` is
+   unreadable to all three scoped roles, so `organization` cannot be exercised by a persona — closing that
+   needs a global ACL or a stock-role grant, both forbidden by AAP Section 0.3.2. Verify the conditional pair
+   as `admin`.
 5. Open the `x_casemgmt_case_party_conditional_fields` UI Policy → confirm conditional show/hide rules.
 6. Open [`../numbers/sys_number_x_casemgmt_case.xml`](../numbers/sys_number_x_casemgmt_case.xml) → confirm format `CASE0000001` and Read-only flag on the field. Confirm the same Read-only flag on `x_casemgmt_case_task.number` and `x_casemgmt_case_party.number`; on any of the three, `PATCH /api/now/table/<table>/<sys_id> {"number":"<a value another row holds>"}` must answer HTTP 200 with the value **discarded** and a query on that number must return exactly one row.
 7. Confirm the mandatory contract holds on rows, not only on metadata. Each of these writes must answer **HTTP 403** naming the responsible rule and leave no row behind:

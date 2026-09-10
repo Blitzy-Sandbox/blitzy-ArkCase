@@ -832,8 +832,25 @@
     chk('the anonymous lookup returns the stored status', 'Draft', String(seen.status));
     chk('the anonymous lookup returns the stored subject', 'ATF-PORTAL-18 anonymous submission',
         String(seen.subject));
-    chk('the anonymous lookup returns the stored opened_date character for character',
-        submitted.getValue('opened_date'), String(seen.opened_date));
+    // lookupCase() emits opened_date as the DISPLAY value, not the raw column: see
+    // the block comment at the return statement of
+    // ../script_includes/x_casemgmt_CasePortalService.xml and
+    // ../docs/portal-pages.md. Emitting the raw column made this endpoint the only
+    // surface quoting UTC, seven hours away from the instant staff read on the case
+    // form, which AAP Section 0.7.3 Gate 5 does not permit. Both halves of the
+    // contract are asserted, so a well-formed but WRONG date still fails: the
+    // emitted string is character for character the display rendering of THIS
+    // submitted case's opened_date, and read back through the session timezone it
+    // denotes the same instant as the stored UTC column.
+    var submittedDisplay = String(submitted.opened_date.getDisplayValue() || '');
+    chkTrue('the submitted case renders an opened_date display value to compare against',
+        submittedDisplay.length &gt; 0);
+    chk('the anonymous lookup returns the stored opened_date as its display value, character for character',
+        submittedDisplay, String(seen.opened_date));
+    var seenRoundTrip = new GlideDateTime();
+    seenRoundTrip.setDisplayValue(String(seen.opened_date));
+    chk('the returned opened_date denotes the same instant as the stored UTC column',
+        submitted.getValue('opened_date'), String(seenRoundTrip.getValue()));
 
     var guestRows = [];
     var guestGr = new GlideRecord('x_casemgmt_case');

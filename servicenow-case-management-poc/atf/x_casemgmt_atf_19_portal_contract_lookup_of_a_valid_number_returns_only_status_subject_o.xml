@@ -432,21 +432,39 @@
     chk('the response carries EXACTLY the three whitelisted keys', 'opened_date,status,subject', keys.join(','));
     chk('status is the stored status', fixture.getValue('status'), String(body.status));
     chk('subject is the stored subject', fixture.getValue('subject'), String(body.subject));
-    // F7 - EXACT VALUE, not merely "populated". lookupCase() returns
-    // String(caseGr.getValue('opened_date') || '') - see
-    // ../script_includes/x_casemgmt_CasePortalService.xml - i.e. the RAW stored
-    // internal datetime, with no display-timezone conversion and no reformatting.
-    // Stored value and returned value are therefore directly comparable as strings
-    // and NO normalisation is applied to either side of the comparison below.
-    // A "populated" check would have passed on any non-empty string - another case's
-    // date, a placeholder, a display-formatted value - which is exactly what the
-    // portal contract in AAP Section 0.7.4 requires this test to exclude.
+    // EXACT VALUE, not merely "populated". lookupCase() emits opened_date as the
+    // DISPLAY value - String(caseGr.opened_date.getDisplayValue()) - see the block
+    // comment at the return statement of
+    // ../script_includes/x_casemgmt_CasePortalService.xml: emitting the raw column
+    // made this endpoint the ONLY surface in the application quoting UTC, so one
+    // record read 17:39:40 externally and 10:39:40 on the internal form. AAP
+    // Section 0.7.3 Gate 5 requires the CORRECT opened_date be returned, so the
+    // display value is the correct emission and the raw column is not.
+    //
+    // This assertion previously expected the raw column and was left behind by
+    // that fix. It now expects the display value - the contract the endpoint, the
+    // lookup panel's "Opened Date" label and ../docs/portal-pages.md all state -
+    // and it asserts BOTH halves of that contract, so a well-formed but WRONG
+    // date still fails: (1) the emitted string is character for character the
+    // display rendering of this very case's opened_date, and (2) read back through
+    // the session timezone it denotes the same instant as the stored UTC column.
+    // A "populated" check would have passed on any non-empty string - another
+    // case's date or a placeholder - which is what AAP Section 0.7.4 requires this
+    // test to exclude. Both comparisons render in the executing session's
+    // timezone, as the endpoint itself does.
     var storedOpened = fixture.getValue('opened_date');
+    var storedDisplay = String(fixture.opened_date.getDisplayValue() || '');
     chkTrue('the fixture has a stored opened_date to compare against',
         String(storedOpened || '').length &gt; 0);
-    chk('opened_date is EXACTLY the stored opened_date, character for character',
-        storedOpened, String(body.opened_date));
-    chkTrue('the returned opened_date is an internal-format datetime (YYYY-MM-DD hh:mm:ss)',
+    chkTrue('the fixture opened_date renders a display value to compare against',
+        storedDisplay.length &gt; 0);
+    chk('opened_date is EXACTLY the display rendering of the stored opened_date, character for character',
+        storedDisplay, String(body.opened_date));
+    var roundTrip = new GlideDateTime();
+    roundTrip.setDisplayValue(String(body.opened_date));
+    chk('the returned opened_date denotes the same instant as the stored UTC column',
+        storedOpened, String(roundTrip.getValue()));
+    chkTrue('the returned opened_date is a YYYY-MM-DD hh:mm:ss datetime',
         /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/.test(String(body.opened_date)));
     var FORBIDDEN = ["assigned_group", "assigned_agent", "description", "closed_date", "requester_name", "requester_email", "sys_id"];
     for (var i = 0; i &lt; FORBIDDEN.length; i++) {
@@ -462,7 +480,7 @@
     // run output never showed the payload these assertions were made against.
     var notes = [];
     notes.push('anonymous 200 body: ' + res.body);
-    notes.push('opened_date compared exactly: stored[' + storedOpened + '] returned[' + String(body.opened_date) + ']');
+    notes.push('opened_date compared exactly: stored_display[' + storedDisplay + '] returned[' + String(body.opened_date) + '] stored_utc[' + storedOpened + '] round_trip_utc[' + String(roundTrip.getValue()) + ']');
     notes.push('anonymous lookup of a valid number and the field whitelist: checks=' + checks + ' failures=' + fails.length +
         (fails.length ? ' :: ' + fails.join(' | ') : ''));
     stepResult.setOutputMessage(notes.join('\n'));

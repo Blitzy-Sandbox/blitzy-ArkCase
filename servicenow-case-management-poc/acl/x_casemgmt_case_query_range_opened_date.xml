@@ -214,7 +214,7 @@
         <condition/>
         <description>Field-level ACL granting the query_range operation on x_casemgmt_case.opened_date to x_casemgmt_case_manager, x_casemgmt_case_agent and x_casemgmt_case_viewer. Authored for QA finding F17, which reported every range predicate on this column (&gt;, &lt;, BETWEEN, 'at or after', 'last 30 days') being dropped from the query for non-admin callers - 0 rows plus a server ACL banner naming the query_range operation inside an HTTP 200 list page, and HTTP 403 'Insufficient rights to query records' over the Table API. Retained as an explicit scoped grant rather than a proven repair: re-verification could not reproduce the refusal, and a differential probe measured no difference against columns carrying no such ACL, so this record makes the range filtering implied by AAP Section 0.5.6 'Read - All' independent of the instance's default query_range posture. query_range shapes the query only; which rows are returned remains governed by each role's read ACL, so the agent still sees just its assigned set.</description>
         <name>x_casemgmt_case.opened_date</name>
-        <operation>query_range</operation>
+        <operation display_value="query_range">e66cf897b7300210240b06dd1e11a9fd</operation>
         <roles>x_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer</roles>
         <script/>
         <sys_class_name>sys_security_acl</sys_class_name>

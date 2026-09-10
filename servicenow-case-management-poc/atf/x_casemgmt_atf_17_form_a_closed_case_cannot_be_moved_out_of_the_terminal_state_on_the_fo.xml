@@ -2,7 +2,7 @@
 <!--
     ServiceNow Update Set record-definitions for the ATF test
     `ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form`
-    its 7 ordered `sys_atf_step` children and the 18 `sys_variable_value`
+    its 6 ordered `sys_atf_step` children and the 21 `sys_variable_value`
     rows that carry those steps' input values, inside the scoped application
     `x_casemgmt`.
 
@@ -67,7 +67,7 @@
     <sys_atf_test action="INSERT_OR_UPDATE">
         <active>true</active>
         <copied_from />
-        <description>Form-level companion to ATF 14 for the verbatim message "Closed cases are terminal and cannot be modified.". Runs in the ATF client test runner: the case form is opened, the status field is set and the form is submitted, so the block is exercised through the same UI path a user takes. AUTOMATED COVERAGE: the submit reaches the server, the stored row is proven unchanged, and step 7 asserts the blocking string CHARACTER-EXACTLY against the same fixture in the same transaction - so a missing or reworded message turns this test red. NOT AUTOMATED, BY FRAMEWORK LIMITATION: that the string is RENDERED on the form. ATF has no step type that can read the classic form error banner - its only text-on-page assertion is "Assert Text on Page (Custom UI)", which targets the Custom UI DOM rather than the platform form this test drives, and "Submit a Form" exposes only form_ui and assert_type inputs. The rendered wording is therefore a MANUAL observation: read it from the runner step-5 screenshot, per docs/ATF_MANUAL_TEST_PLAN.md. It is not counted as automated coverage anywhere.</description>
+        <description>Form-level companion to ATF 14 for the verbatim message "Closed cases are terminal and cannot be modified.". Runs in the ATF client test runner: the case form is opened for a Closed fixture and the Status field is asserted READ-ONLY - the form-level expression of the terminal state, because the application freezes a Closed case so Status cannot be set at all. An earlier shape of this test tried Set Field Values then Submit a Form and could not run: ATF returned "Unable to set field 'status' to value 'In Progress'. Field 'status' is not editable", the application enforcing the terminal state more strictly than that technique assumed. AUTOMATED COVERAGE: step 4 proves the form offers no way out of the terminal state, step 5 proves the stored row is still Closed, and step 6 asserts the blocking string CHARACTER-EXACTLY against the same fixture in the same transaction - so a missing or reworded message turns this test red. NOT AUTOMATED, BY FRAMEWORK LIMITATION: that the string is RENDERED on the form. ATF has no step type that can read the classic form error banner - its only text-on-page assertion is "Assert Text on Page (Custom UI)", which targets the Custom UI DOM rather than the platform form this test drives; and because Status is read-only here the form never reaches a submit, so this test produces no banner of its own to read. The read-only control itself IS visible in the runner step-4 screenshot (labelled "Read only - cannot be modified"), and the rendered wording remains a MANUAL observation per docs/ATF_MANUAL_TEST_PLAN.md. Neither is counted as automated coverage anywhere.</description>
         <enable_parameterized_testing>false</enable_parameterized_testing>
         <fail_on_server_error>false</fail_on_server_error>
         <name>ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form</name>
@@ -366,134 +366,145 @@
     <sys_atf_step action="INSERT_OR_UPDATE">
         <active>true</active>
         <callable_outputs />
-        <sys_variable_value action="delete_multiple" query="document_key=d229614eacaecf1d275c8dfb2e0140ce" />
         <copied_from />
-        <description>Set the following values on the form:
-</description>
-        <display_name>Set Field Values</display_name>
+        <description>Assert the following:
+The following fields are read only: Status
+With a failure timeout of 5 Seconds</description>
+        <display_name>Field State Validation</display_name>
         <inputs />
-        <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_fcae4a935332120028bc29cac2dc340e^id=d229614eacaecf1d275c8dfb2e0140ce" />
         <mugshots_cache_json />
-        <notes>Set status to In Progress on the form</notes>
+        <notes />
         <order>4</order>
-        <snapshot />
-        <step_config display_value="Set Field Values">fcae4a935332120028bc29cac2dc340e</step_config>
+        <step_config display_value="Field State Validation">1dfece935332120028bc29cac2dc3478</step_config>
         <sys_class_name>sys_atf_step</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>d229614eacaecf1d275c8dfb2e0140ce</sys_id>
+        <sys_id>ba2b32a4935f0f1009aa70d19dba1032</sys_id>
         <sys_mod_count>0</sys_mod_count>
-        <sys_name>Set Field Values</sys_name>
+        <sys_name>Field State Validation</sys_name>
         <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
         <sys_policy />
         <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-        <sys_update_name>sys_atf_step_d229614eacaecf1d275c8dfb2e0140ce</sys_update_name>
+        <sys_update_name>sys_atf_step_ba2b32a4935f0f1009aa70d19dba1032</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <table>x_casemgmt_case</table>
         <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
-        <timeout />
+        <timeout>1970-01-01 00:00:05</timeout>
         <warning_message />
     </sys_atf_step>
+    <sys_variable_value action="delete_multiple" query="document_key=ba2b32a4935f0f1009aa70d19dba1032" />
     <sys_variable_value action="INSERT_OR_UPDATE">
         <document>sys_atf_step</document>
-        <document_key>d229614eacaecf1d275c8dfb2e0140ce</document_key>
-        <order />
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>50</order>
         <sys_class_name>sys_variable_value</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>9fa3621543ae8270a2e1130be09d0713</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>status=In Progress^EQ</value>
-        <variable display_value="Field values">b3dba2465320220002c6435723dc34f0</variable>
-    </sys_variable_value>
-    <sys_variable_value action="INSERT_OR_UPDATE">
-        <document>sys_atf_step</document>
-        <document_key>d229614eacaecf1d275c8dfb2e0140ce</document_key>
-        <order />
-        <sys_class_name>sys_variable_value</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>e5a787c16f911248ea4b8b04767c968f</sys_id>
+        <sys_id>136bbaa4935f0f1009aa70d19dba1036</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <value>standard_ui</value>
-        <variable display_value="Form UI">946f3c1a0f23330072e6452bc4767eda</variable>
+        <variable display_value="Form UI">b1fefcde73633300b19898b8caf6a7af</variable>
     </sys_variable_value>
     <sys_variable_value action="INSERT_OR_UPDATE">
         <document>sys_atf_step</document>
-        <document_key>d229614eacaecf1d275c8dfb2e0140ce</document_key>
-        <order />
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>410</order>
         <sys_class_name>sys_variable_value</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>bd19397d995175a55a20bc2c7fdcec1b</sys_id>
+        <sys_id>176bbaa4935f0f1009aa70d19dba1037</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value />
+        <variable display_value="Not mandatory">787a9b535320220002c6435723dc3455</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>200</order>
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>576bbaa4935f0f1009aa70d19dba1036</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value />
+        <variable display_value="Visible">0cd9df135320220002c6435723dc3426</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>310</order>
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>5b6bbaa4935f0f1009aa70d19dba1037</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value />
+        <variable display_value="Not read only">e63a97535320220002c6435723dc34b8</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>300</order>
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9b6bbaa4935f0f1009aa70d19dba1036</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value>status</value>
+        <variable display_value="Read only">592a17535320220002c6435723dc34d7</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>400</order>
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>9f6bbaa4935f0f1009aa70d19dba1037</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <value />
+        <variable display_value="Mandatory">6e5a1b535320220002c6435723dc3498</variable>
+    </sys_variable_value>
+    <sys_variable_value action="INSERT_OR_UPDATE">
+        <document>sys_atf_step</document>
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>100</order>
+        <sys_class_name>sys_variable_value</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_id>d36bbaa4935f0f1009aa70d19dba1038</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
         <value>x_casemgmt_case</value>
-        <variable display_value="Table">424ca6465320220002c6435723dc34b5</variable>
-    </sys_variable_value>
-    <sys_atf_step action="INSERT_OR_UPDATE">
-        <active>true</active>
-        <callable_outputs />
-        <sys_variable_value action="delete_multiple" query="document_key=037bc357d30f101fc399d6e80e39b790" />
-        <copied_from />
-        <description>Submit the current form</description>
-        <display_name>Submit a Form</display_name>
-        <inputs />
-        <mugshots_cache_json />
-        <notes>Submit the form - the server rejects the transition out of Closed. The rendered error banner is a MANUAL observation from this step's runner screenshot - ATF cannot assert text on a classic form</notes>
-        <order>5</order>
-        <snapshot />
-        <step_config display_value="Submit a Form">be8e0a935332120028bc29cac2dc34e4</step_config>
-        <sys_class_name>sys_atf_step</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>037bc357d30f101fc399d6e80e39b790</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_name>Submit a Form</sys_name>
-        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
-        <sys_policy />
-        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
-        <sys_update_name>sys_atf_step_037bc357d30f101fc399d6e80e39b790</sys_update_name>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <table />
-        <test display_value="ATF 17 - Form: a Closed case cannot be moved out of the terminal state on the form">07f1427f80169c8644b47ead9d5c1b78</test>
-        <timeout />
-        <warning_message />
-    </sys_atf_step>
-    <sys_variable_value action="INSERT_OR_UPDATE">
-        <document>sys_atf_step</document>
-        <document_key>037bc357d30f101fc399d6e80e39b790</document_key>
-        <order />
-        <sys_class_name>sys_variable_value</sys_class_name>
-        <sys_created_by>admin</sys_created_by>
-        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>50fd331a2ae26ae24cdbafc51a8853e5</sys_id>
-        <sys_mod_count>0</sys_mod_count>
-        <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>standard_ui</value>
-        <variable display_value="Form UI">ae8b91c9ffa333008d3f5d9ad53bf1ba</variable>
+        <variable display_value="Table">80f953535320220002c6435723dc340f</variable>
     </sys_variable_value>
     <sys_variable_value action="INSERT_OR_UPDATE">
         <document>sys_atf_step</document>
-        <document_key>037bc357d30f101fc399d6e80e39b790</document_key>
-        <order />
+        <document_key>ba2b32a4935f0f1009aa70d19dba1032</document_key>
+        <order>210</order>
         <sys_class_name>sys_variable_value</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2025-01-01 00:00:00</sys_created_on>
-        <sys_id>02e1016bcdc5744283f6bd9d68f193de</sys_id>
+        <sys_id>df6bbaa4935f0f1009aa70d19dba1036</sys_id>
         <sys_mod_count>0</sys_mod_count>
         <sys_updated_by>admin</sys_updated_by>
         <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
-        <value>form_submitted_to_server</value>
-        <variable display_value="Assert type">c796d40497302200abe4bb7503ac4ad8</variable>
+        <value />
+        <variable display_value="Not visible">e81ad3535320220002c6435723dc340c</variable>
     </sys_variable_value>
     <sys_atf_step action="INSERT_OR_UPDATE">
         <active>true</active>
@@ -507,7 +518,7 @@
         <sys_element_mapping action="delete_multiple" query="table=var__m_atf_input_variable_1f39a288df60220062fe6c7a4df2639d^id=3a8ad407ba6d51a7e0e317d834adc241" />
         <mugshots_cache_json />
         <notes>The stored record is still Closed, so the form submission was aborted</notes>
-        <order>6</order>
+        <order>5</order>
         <snapshot />
         <step_config display_value="Record Validation">1f39a288df60220062fe6c7a4df2639d</step_config>
         <sys_class_name>sys_atf_step</sys_class_name>
@@ -607,7 +618,7 @@
         <inputs />
         <mugshots_cache_json />
         <notes>Assert the blocking message character-exactly against the fixture the form just submitted, then remove this test's synthetic fixtures</notes>
-        <order>7</order>
+        <order>6</order>
         <snapshot />
         <step_config display_value="Run Server Side Script">41de4a935332120028bc29cac2dc349a</step_config>
         <sys_class_name>sys_atf_step</sys_class_name>
@@ -697,25 +708,27 @@
     // ------------------------------------------------------------------------
     // VERBATIM MESSAGE, asserted before the fixtures are removed.
     //
-    // WHAT ATF CAN AND CANNOT SEE HERE. The submit in step 5 is refused by the
-    // server and step 6 proves the stored row did not change, but ATF ships no step
-    // type that can read the classic form's error banner: the only text-on-page
-    // assertion in the framework is "Assert Text on Page (Custom UI)", which targets
-    // the Custom UI DOM and not the platform form these tests drive, and the
-    // "Submit a Form" step exposes only `form_ui` and `assert_type` inputs. So the
-    // fact that the message is RENDERED is a MANUAL observation - see the runner's
-    // step-5 screenshot and docs/ATF_MANUAL_TEST_PLAN.md - and is not claimed as
-    // automated coverage anywhere.
+    // WHAT ATF CAN AND CANNOT SEE HERE. Step 4 proves the form offers no way out of
+    // the terminal state - the application freezes a Closed case, so Status is
+    // read-only and cannot be set at all - and step 5 proves the stored row is still
+    // Closed. ATF ships no step type that can read the classic form's error banner:
+    // the only text-on-page assertion in the framework is "Assert Text on Page
+    // (Custom UI)", which targets the Custom UI DOM and not the platform form these
+    // tests drive. Here the form never reaches a submit, so this test raises no
+    // banner of its own to read. That the message is RENDERED is therefore a MANUAL
+    // observation - see docs/ATF_MANUAL_TEST_PLAN.md - and is not claimed as
+    // automated coverage anywhere; what the runner's step-4 screenshot does show is
+    // the Status control disabled and labelled read-only.
     //
     // What IS automated is the string itself. Without the block below this test could
     // pass while the message was missing or reworded, because nothing it asserted
     // depended on the wording. Asserting the exact string here, in the same
-    // transaction and against the same fixture the form just submitted, means a
+    // transaction and against the same fixture the form just proved frozen, means a
     // missing or altered message turns this test RED.
     var gate = new GlideRecord('x_casemgmt_case');
     chkTrue('the fixture case is still present for the message assertion',
         gate.get('518799bb2fe107d3647146a08b3af61d'));
-    chk('the case is still Closed, so the refused submit changed nothing',
+    chk('the case is still Closed, and the frozen form offered no way to change it',
         'Closed', gate.getValue('status'));
     var validator = new x_casemgmt.CaseTransitionValidator();
     var verdict = validator.validateNoBacktransition(gate.getValue('status'), 'In Progress');

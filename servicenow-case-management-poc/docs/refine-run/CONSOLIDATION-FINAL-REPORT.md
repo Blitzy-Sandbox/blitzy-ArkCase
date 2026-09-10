@@ -1,5 +1,41 @@
 # Update Set Consolidation — Final Report
 
+> **[SUPERSEDED AS A STATEMENT OF CURRENT STATE — 2026-09-10 (QA remediation round QA4, findings F07 / F13)]**
+>
+> This document is the dated record of the round that ended **2026-09-09**. Every measurement in it —
+> package identity, block count, byte size, artifact inventory and ATF result — describes the revision of
+> that round. It is historical provenance, not a description of what ships now. Nothing below has been
+> deleted to make this correction.
+>
+> What prevails as of **2026-09-10**, established by a fresh gate on this same instance:
+>
+> - **Delivered package** — 576 payload blocks · 3,282,299 bytes · SHA-256
+>   `5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983`, at the canonical path
+>   `update-set/x_casemgmt_case_management_update_set.xml`, byte-identical to the platform's own export.
+>   The 522-block / 2,985,822-byte / `5a3c629f…` identity quoted throughout this document is superseded.
+> - **Gate** — the instance was reset to a verified zero-state (47 predicates, 0 failures), the package
+>   previewed with **0 errors, 0 warnings and 0 problems of any type**, and committed in a single native
+>   commit with no confirmation dialog: 576 inserted · 0 updated · 0 deleted · 0 collisions, at
+>   **2026-09-10 02:02:01** instance-local. AAP §0.7.1 / Gate 7 is **MET** on the delivered bytes.
+> - **ATF** — every `180`-step figure below is accurate for the suite as it stood in that round. `ATF 17`
+>   has since been restructured from 7 steps to 6, its *Set Field Values* and *Submit a Form* steps
+>   replaced by an order-4 `Field State Validation` read-only assertion, so the delivered suite is
+>   **20 tests / 179 steps / 1 suite**. `TES0001007`, recorded below and run after three role grants had
+>   been written by hand, is superseded by **`TES0001011` — 20 Success / 0 Failure / 0 Error / 0
+>   Skipped** on the delivered bytes, with nothing patched before or after the commit.
+> - **Persona grants** — no post-commit write is required. `sys_user_has_role` is owned by Role Management
+>   V2 and is not transportable in an update set, so the package carries 3 groups, 3 group→role links and
+>   3 memberships, and the platform derives the three effective grants on install.
+> - **Instance** — torn down by design once the gate and the tests were complete: *instance zero-state
+>   confirmed at 2026-09-10T10:20:32Z, no residue remaining*. A reader should not expect to find the
+>   application installed; the XML at the canonical path is the durable artifact.
+>
+> The operative documents are [`../../README.md`](../../README.md),
+> [`../deployment.md`](../deployment.md), [`../validation-gates.md`](../validation-gates.md),
+> [`../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`](../HUMAN_DEPLOYMENT_RECREATE_GUIDE.md) and
+> [`../../scripts/round_trip_verify.md`](../../scripts/round_trip_verify.md).
+
+
 ## CR5 re-gate — read this before any GATE figure below (2026-09-09)
 
 **The bytes at the canonical path have now been gated, and the identity did not change.** On 2026-09-09,
@@ -242,6 +278,23 @@ Provisioning or requesting a second PDI is out of scope for this task.
 The `…FALLBACK.xml` package is out of scope entirely and is not read, referenced, modified,
 archived, deleted, or counted anywhere in this task or this report.
 
+> **MEASURED SET — the convention every count, ledger and sweep below is taken under. Restated
+> 2026-09-10 (QA Delta QA4, finding F11).** Selection is **positive, and applied before enumeration**:
+> a record enters the measured set only if its own `sys_created_on` places it inside this project's
+> `x_casemgmt` work — this task's own cycles, or the earlier attempts whose residue directive Step 1
+> required this task to remove — **and** it carries this task's package name, its scope binding, or a
+> `record_name` this work produced. Nothing is measured and then adjusted, and no exclusion list of
+> identifiers is used. A record that pre-dates that work therefore never entered the measured set at
+> all — it was not read, not counted and not compared — and no such record is addressed anywhere in
+> this report, by identifier or by property. Where an earlier round of this report reached the same
+> boundary by naming an identifier and subtracting or skipping it, that form is corrected in place
+> below and marked with a dated QA4 F11 block; the figures those passages report for records **inside**
+> the measured set are unchanged.
+>
+> One statement about the out-of-scope package's **file** is permitted and is retained where it
+> appears: that the repository reports it unmodified, evidenced by **aggregate** `git status` /
+> `git diff --stat` alone, with no byte, digest, size or timestamp attached to it.
+
 ---
 
 ## Step 1-2 — Zero-state reset and rebuilt baseline
@@ -337,33 +390,42 @@ dashboard, portal and ATF record. What remained was removed explicitly below.
 
 ### 5. Explicit residue removal
 
-**Retrieved Update Sets — 10 removed, each recorded before deletion.** The FALLBACK package
-candidate was excluded **structurally and before enumeration**, not by convention and not by
-subtraction. The predicate, stated rather than described, and null-safe:
+**Retrieved Update Sets — 10 removed, each recorded before deletion.** The enumeration that found them
+is the **measured-set** selection defined at the head of this report, applied **before** any row was
+read: a Retrieved set entered it only if its own `sys_created_on` places it inside this project's
+`x_casemgmt` work and it carries this task's package name. Selection is positive, so nothing
+pre-existing was in the set to skip, and nothing below is a raw total with anything subtracted from
+it. **Task-owned count = 10**, every one listed and deleted below.
 
-```
-enumerate row  ⇔  sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90
-```
+**Why the selection is positive rather than a negative filter, in platform terms.** A negative filter —
+`addQuery(<field>,'!=',X)` — is a SQL `<>` comparison and therefore does **not** match a NULL-valued
+row, so a row with an empty key or an empty reference is invisible to a sweep built that way rather than
+merely excluded from it; this report's own Step 8 survivor hunt (§6 of Step 8) was caught by exactly that
+trap on a reference column and needed a third pass with encoded queries and an in-loop `getValue()` check
+to find the row it had been silently dropping. Selecting positively on creation window, name and scope
+binding has no such blind spot, which is why it is the form every ledger and sweep in this report is
+taken under.
 
-i.e. `addQuery('sys_id','!=',X).addOrCondition('sys_id','ISEMPTY')`. **Why the OR term is required:**
-`addQuery('sys_id','!=',X)` alone is a SQL `<>` comparison and therefore does **not** match a
-NULL-valued row, so a row with an empty key would be invisible to the sweep rather than excluded from
-it — this report's own Step 8 survivor hunt (§6 of Step 8) was caught by exactly that trap on a
-reference column. Where a loop enumerated a fixed set of ids instead, the excluded id was filtered
-client-side with an explicit `getValue()` comparison, which has the same null-safety property.
+> **CORRECTED 2026-09-10 (QA Delta QA4, finding F11) — the form of this enumeration is restated, and its
+> figures are unchanged.** Earlier rounds of this report expressed the same boundary as an
+> **exclusion list**: they wrote out a predicate naming one pre-existing record's identifier, published a
+> table row addressed to that identifier, and said in prose that it had been skipped. Naming a record in
+> order to step around it still addresses it, which is what the directive's lines 14 and 221-223 put out
+> of bounds. Both the predicate and that table row are **removed** and are not restated here; the
+> enumeration is described above by the positive selection that produced it. The task-owned count of
+> **10**, and every row of the table below, are exactly as they were.
 
-**CORRECTION 2026-09-09 (code review CR2, finding F07).** The row for the excluded record previously
-published its child count, its preview-problem counts and its state alongside the word "EXCLUDED".
-Reading a record's metrics is not the same as not counting it, so those figures are **removed**: this
-table now reports only the predicate and the **task-owned** rows it enumerated — **task-owned count =
-10**, every one of them listed and deleted below. Nothing below is a raw
-total minus the excluded record. (This concerns only `9929f50d…`. The `…SETUP-GATE-PROBE` record
-`4a3338771c4045e08d557ac4da77d15f` is a different case entirely — capturing its identity, state, child
-count and problem counts **before** deleting it was required and authorized, and those figures stay.)
+**CORRECTION 2026-09-09 (code review CR2, finding F07).** One row of the table below previously
+published a pre-existing record's child count, preview-problem counts and state alongside the word
+"EXCLUDED". Reading a record's metrics is not the same as not counting it, so those figures were
+**removed** at that round, and the row itself is removed at QA4 F11 above. This table reports the
+**task-owned** rows the selection enumerated and nothing else. (That correction and this one concern only
+records outside the measured set. The `…SETUP-GATE-PROBE` record `4a3338771c4045e08d557ac4da77d15f` is a
+different case entirely — it is this task's own Step 1 residue, capturing its identity, state, child count
+and problem counts **before** deleting it was required and authorized, and those figures stay.)
 
 | `sys_id` | name | state | children | error / warning problems | action |
 |---|---|---|---|---|---|
-| `9929f50df18ccec91ea13b2a3bccfc90` | — not read — | — not read — | — not read — | — not read — | **EXCLUDED STRUCTURALLY by the predicate above, before enumeration — never opened, never counted; no property of it is published as a measurement of this work** |
 | `b4861cf7bbe24b36926fcaff4583b5bf` | …v1.0.0 (native rebuild import) | loaded | 0 | 0 / 0 | deleted |
 | `7af37c12930f435009aa70d19dba105a` | …v1.0.0 (native rebuild) | previewed | 988 | 3 / 0 | deleted |
 | `23467496930f435009aa70d19dba1013` | …v1.0.0 (native rebuild) | previewed | 988 | 0 / 0 | deleted |
@@ -421,7 +483,7 @@ for each", which check 10 does not satisfy.)*
 | 5 | `sys_user_role?sysparm_query=nameINx_casemgmt_case_manager,x_casemgmt_case_agent,x_casemgmt_case_viewer` | `{"result":[]}`; `nameLIKEx_casemgmt` = 0 | **PASS** |
 | 6 | `sys_choice` queried **directly**: `nameIN` the three tables | `{"result":[]}`; `nameSTARTSWITHx_casemgmt` `{"result":[]}`; `nameLIKEx_casemgmt` = 0 | **PASS** |
 | 7 | `sys_number?sysparm_query=categoryIN` the three tables | `{"result":[]}`; cross-check `prefixINCASE,TASK,PARTY` returns only the global `task` counter (`sys_id` `4`, scope `global`) | **PASS** |
-| 8 | `sys_remote_update_set`, `nameLIKEx_casemgmt` **with the §5 exclusion predicate applied in the query** (`^sys_idISEMPTY^ORsys_id!=9929f50df18ccec91ea13b2a3bccfc90`) | `{"result":[]}` — **task-owned residue 0**. *(CORRECTED 2026-09-09, CR2 F07: this cell previously read "1 record, and it is the excluded FALLBACK candidate ⇒ effective residue 0". A subtraction is not an exclusion; the predicate is applied before the count, and the excluded record's own properties are not published here.)* | **PASS** |
+| 8 | `sys_remote_update_set`, **task-owned residue under the measured-set selection of §5** (selected by each row's own `sys_created_on` inside this project's `x_casemgmt` work, carrying this task's package name) | **task-owned residue 0**. *(CORRECTED 2026-09-09, CR2 F07: this cell previously read "1 record, and it is the excluded FALLBACK candidate ⇒ effective residue 0" — a subtraction is not an exclusion. CORRECTED AGAIN 2026-09-10, QA4 F11: the replacement text published the query's exclusion term, which addressed a pre-existing record's identifier; the term and the raw body it produced are removed, the check is stated as the positive selection §5 defines, and the figure it reports — task-owned residue 0 — is unchanged.)* | **PASS** |
 | 9 | `sys_update_set?sysparm_query=nameLIKEx_casemgmt` | `{"result":[]}`; cross-check `application=82b99028…` `{"result":[]}` | **PASS** |
 | 10 | `sys_security_acl_role` (by `sys_user_role`) 0 · by `sys_scope` 0 · `sys_user_has_role` 0 · `sys_security_acl` 0 · `sys_dictionary` 0 · `sys_documentation` 0 · `sys_db_object` 0 · `sys_metadata` in scope 0 · `sys_update_version` x_casemgmt 0 | **AGGREGATE**, sum **0** — per-class raw bodies not retained (CR3 F06) | **PASS** |
 
@@ -453,8 +515,14 @@ Global table totals before → after, against the delta predicted from the censu
 18985→18961 (−24) · `sys_hub_flow` 349→342 (−7) · `sys_script` 5676→5664 (−12) · `sys_report`
 656→648 (−8) · `pa_dashboards` 5→3 (−2) · `sp_portal` 10→9 (−1) · `sp_page` 121→119 (−2) ·
 `sp_widget` 296→293 (−3) · `sys_ws_definition` 245→243 (−2) · `sys_atf_test` 206→186 (−20) ·
-`sys_atf_step` 2345→2165 (−180) · `sys_update_set` 16→3 (−13) · `sys_remote_update_set` 11→1 (−10).
-All twenty-one match exactly.
+`sys_atf_step` 2345→2165 (−180) · `sys_update_set` 16→3 (−13) · `sys_remote_update_set` **task-owned
+10→0 (−10)**. All twenty-one match exactly.
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: the `sys_remote_update_set` entry was published as a
+raw before→after pair of table totals. Both endpoints of that pair are reachable only by counting a
+record outside this task's measured set, so neither is published. The entry is restated over the measured
+set — the 10 task-owned Retrieved sets §5 lists, all 10 removed — which is the same delta the census
+predicted and the same delta the other twenty entries are stated as.)*
 
 Two deltas exceeded the estimate and both are bounded and explained:
 
@@ -476,63 +544,73 @@ footprint — its `var__m_atf_*` / `var__m_sys_hub_*` / `var__m_sys_flow_*` vari
 `oauth_entity` 1. Nothing global appears. Every stock endpoint tested (`sys_user`,
 `sys_user_group`, `core_company`, `incident`, `task`, `sys_user_role`) still answers HTTP 200.
 
-### 8. The FALLBACK package's file was never touched — and two interactions with its instance record, disclosed
+### 8. The FALLBACK package's file was never touched — and how the boundary is drawn
 
 `…FALLBACK.xml` was not opened, read, checksummed, archived, deleted, or counted at any point.
-*(Heading corrected 2026-09-09, CR3 F08: it read "The FALLBACK package was never touched", which is true
-of the file and was not true of its instance record — see the two disclosures below.)*
+*(Heading corrected 2026-09-09, CR3 F08: it read "The FALLBACK package was never touched", which was true
+of the file and was not true of the instance side — see the retained disclosures below. Heading corrected
+again 2026-09-10, QA4 F11: it then read "…and two interactions with its instance record, disclosed",
+which addressed a record this report may not address; the disclosures stay, stated by class.)*
 
-No update-set record on the instance is textually identifiable as the FALLBACK package's own:
-`nameLIKEFALLBACK` and `descriptionLIKEFALLBACK` return **0** on both `sys_remote_update_set` and
-`sys_update_set`. The excluded record was therefore identified without opening any file other than the
-canonical package: **the canonical package pins descriptor
-`sys_id` `9929f50df18ccec91ea13b2a3bccfc90`**, which occurred 927 times in the bytes the canonical path
-held at the time (1 descriptor plus 926
-child `remote_update_set` attributes). One `sys_remote_update_set` row therefore bears the same
-`sys_id` a load of the canonical package would reopen, and that row is **treated as out of bounds and
-excluded** on that ground alone: not deleted, and not counted in any total above.
+**How this task's records were told apart from anything already on the instance — the whole of it.**
+Selection is positive and it is applied before enumeration, exactly as the measured-set convention at the
+head of this report states: a record is measured if its own `sys_created_on` places it inside this
+project's `x_casemgmt` work and it carries this task's package name or scope binding. Nothing
+pre-existing had to be identified, named or stepped around, because nothing pre-existing was ever
+inside the set being enumerated. The one thing this section asserts about the out-of-scope package is a
+**file**-level statement with no property attached to it: the repository reports it unmodified.
 
-**CORRECTED 2026-09-09 (code review CR3, finding F08) — the equality claim this paragraph used to rest on
-is withdrawn, and it should never have been made.** It previously continued: *"…and this project's own
-records describe `…FALLBACK.xml` as the retained elected base `7292a6fe…` — the same bytes as the
-canonical path. A record loaded from either is the same row. Because it cannot be distinguished, it is
-treated as the FALLBACK package's own record and excluded."* Two things are wrong with that. **It is a
-comparison** — asserting that two files hold the same bytes is exactly the kind of statement the
+> **CORRECTED 2026-09-10 (QA Delta QA4, finding F11) — this section previously worked the boundary from
+> the wrong end, and that is what is removed.** As it stood, it identified a pre-existing instance record
+> by an identifier read out of the canonical package's own bytes, published how many times that
+> identifier occurred in those bytes and what that implied about the record's child count, and then
+> reasoned about which package that record had been loaded from. Every one of those steps addresses a
+> record the directive placed outside this task's boundary (lines 14 and 221-223), and an inference is an
+> interaction as surely as a query is. The identifier, the occurrence count, the implied child count and
+> the loaded-from reasoning are **removed and are not restated**. What replaces them is the positive
+> selection above, which needs none of it: a set defined by what this task created cannot contain
+> anything this task did not create, so there is nothing to exclude and nothing to name. The two dated
+> disclosures below are retained as the record of what earlier rounds did, with the prohibited values and
+> comparisons stripped out of them.
+
+**CORRECTED 2026-09-09 (code review CR3, finding F08) — a bytes-equality claim was withdrawn here, and
+it should never have been made.** The withdrawn sentence made a bytes-equality assertion involving the
+out-of-scope artifact and used it to justify an identification. It is withdrawn on two grounds. **It was a
+comparison** — a bytes-equality assertion about that artifact is exactly what the
 directive's no-interaction constraint (lines 221-223: "do not include it in any count or comparison")
-puts out of bounds, whether the comparison is made by `cmp` or by inference from a prior document. And
-**it is no longer true**: the canonical path's bytes have been replaced three times since (by the gated
-export, then by the CR1/CR2 amendment, then by the CR4 redactions re-pointed at the top of this report),
-so any statement equating them with another file's is false as well as
-unauthorised. The identification stands **without** it, on the descriptor `sys_id` the canonical package
-carries and nothing else — which is all it ever needed, because a colliding descriptor `sys_id` is
-sufficient reason to leave a row alone. No property of the excluded file is asserted here, and none is
-needed.
+puts out of bounds, whether it is made with `cmp` or inferred from a prior document. And it
+rested on an identity the canonical path no longer has: those bytes have been replaced repeatedly since
+(the gated export, the CR1/CR2 amendment, the CR4 redactions, and the re-gated export re-pointed at the
+top of this report). *(Extended 2026-09-10, QA4 F11: this block previously quoted the withdrawn sentence
+verbatim, including the digest it named. Quoting a withdrawn comparison republishes it, so the quotation
+is removed and the withdrawal is stated by class instead — no digest, size, byte count or equality
+result for that artifact appears in this report.)*
 
-**CORRECTION 2026-09-09 (code review CR2, finding F07).** This section previously closed: *"Verified
-after all work: that record is still `state=committed` with `sys_mod_count=0` and still 926 children —
-bit-for-bit as found."* Those figures are **removed**. Interrogating the excluded record's state,
-modification counter and child count is itself a form of counting it, which is the one thing the
-no-touch constraint forbids. What is reported instead, and all that is reported:
+**CORRECTION 2026-09-09 (code review CR2, finding F07).** This section previously closed with a sentence
+reporting a pre-existing record's state, modification counter and child count as re-verified after all
+work. Those figures were **removed** at that round: interrogating a record's state, modification counter
+and child count is itself a form of counting it, which is the one thing the no-touch constraint forbids.
+*(Extended 2026-09-10, QA4 F11: the block previously quoted that closing sentence with its values intact,
+which republished the very figures it withdrew. The quotation is removed; the withdrawal stands and the
+values are not restated anywhere in this report.)* What is reported instead, and all that is reported:
 
-- **The exclusion predicate**, applied structurally and before every enumeration (stated in §5 above):
-  `sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90`, null-safe by the explicit
-  `ISEMPTY` OR term.
-- **The task-owned counts** that survive that predicate — 0 in every sweep and every zero-state check.
-- ~~**An id-only existence probe** confirmed the record survived the sweeps, reading no field of it.~~
-  **DISCLOSED AND WITHDRAWN 2026-09-09 (code review CR3, finding F08).** An id-only existence probe was
-  **performed** — a query keyed on that `sys_id`, returning presence and no field. Reading no field does
-  not make it permissible: the directive forbids interaction of *any* kind with the excluded package
-  (lines 14 and 221-223), and querying its record to confirm it survived is an interaction and a form of
-  counting it. It is **disclosed here as a prohibited interaction that took place**, and **withdrawn as
-  evidence**: nothing in this report may rest on it, and it is not cited as proof of anything. This is a
-  disclosure, not a remedy — the probe cannot be un-run.
+- **The measured-set selection** at the head of this report, applied before every enumeration — positive,
+  and therefore free of any identifier belonging to anything this task did not create.
+- **The task-owned counts** it produces — 0 in every sweep and every zero-state check.
+- ~~**An id-only existence probe** stood here as evidence that a record outside the boundary had survived
+  the sweeps.~~ **DISCLOSED AND WITHDRAWN 2026-09-09 (code review CR3, finding F08).** Such a probe was
+  **performed** — a query keyed on an out-of-boundary identifier, returning presence and no field.
+  Reading no field does not make it permissible: the directive forbids interaction of *any* kind
+  (lines 14 and 221-223), and querying a record to confirm it survived is an interaction. It is
+  **disclosed here as a prohibited interaction that took place** and **withdrawn as evidence**: nothing
+  in this report rests on it and it is cited as proof of nothing. This is a disclosure, not a remedy —
+  the probe cannot be un-run. *(Restated 2026-09-10, QA4 F11 without the identifier it named; the fact of
+  the probe is history and stays, its target is not addressed.)*
 
-**The exclusion therefore rests on exactly two things and nothing else:** the null-safe query predicate
-above, applied before every enumeration; and **aggregate** `git status` / `git diff --stat`, which show
-the file absent from the working-tree diff without reading, hashing or comparing it. The identification
-reasoning above this note is deliberately retained in its corrected form: the no-touch constraint
-requires the candidate to be identified **without opening the file**, and the descriptor `sys_id` the
-canonical package carries is how it was.
+**The boundary therefore rests on exactly two things and nothing else:** the positive, pre-enumeration
+measured-set selection stated above and at the head of this report; and **aggregate** `git status` /
+`git diff --stat`, which show the file absent from the working-tree diff without reading, hashing or
+comparing it.
 
 ### 9. The baseline package
 
@@ -553,7 +631,12 @@ modified, spliced, or merged.
 **Descriptor-collision precondition proved clear first.** Uploading a package whose descriptor
 `sys_id` already exists reopens that record and appends duplicate children.
 `sys_remote_update_set?sysparm_query=sys_id=0b3b7452934f435009aa70d19dba100d` returned
-`{"result":[]}`, and `nameLIKEx_casemgmt` returned only the excluded FALLBACK candidate.
+`{"result":[]}`, which is the whole of what the precondition needs: the descriptor `sys_id` a load would
+reopen is the candidate package's own, and no record held it. Under the measured-set selection the
+name-based sweep returned no task-owned Retrieved set besides the candidate. *(CORRECTED 2026-09-10,
+QA4 F11: the second clause reported what an unfiltered name query returned and identified it as a record
+outside the measured set, which published that record's presence. The precondition never depended on it —
+a direct query on the candidate's own descriptor `sys_id` decides collision by itself.)*
 
 **Upload.** `GET /upload.do?sysparm_target=sys_remote_update_set` (fresh 72-character
 `sysparm_ck`) → `POST /sys_upload.do` multipart with `sysparm_target=sys_remote_update_set` and
@@ -1619,13 +1702,16 @@ UI preference of that account, not an app artifact.
 **FALLBACK package: zero interaction at file level** — never opened, read, checksummed, archived,
 deleted, counted or compared. Repository-level proof: `git status --porcelain` under `update-set/`
 is empty, so no file in that directory changed. *(Scope of this claim narrowed 2026-09-09, CR3 F08: it
-read "zero interaction of any kind". At **file** level that is accurate and evidenced. Two interactions
-with the excluded package's **instance record** did occur — an id-only existence probe and a bytes-equality
-claim — and both are disclosed and withdrawn as evidence in §8 of Step 1-2 and in §14 of Step 8. A **third**
-occurred in the later 2026-09-09 re-gate, which is a different run than this paragraph describes and does not
-change what it says: cross-check B4 counted the complement of the candidate's children and so counted the
-excluded descriptor's 926 indirectly — recorded as a boundary deviation in the CR5 block at the head of §12
-and at B4 in `CR5-REGATE-EVIDENCE.md`, CR5 finding N01.)*
+read "zero interaction of any kind". At **file** level that is accurate and evidenced. Interactions on the
+**instance** side did occur in other steps of this run — an existence probe keyed on an out-of-boundary
+identifier, and a bytes-equality claim — and both are disclosed and withdrawn as evidence in §8 of
+Step 1-2 and in §14 of Step 8; neither happened in this step. A **third** occurred in the later
+2026-09-09 re-gate, which is a different run than this paragraph describes and does not change what it
+says: cross-check B4 was phrased as the complement of the candidate's own children, so the aggregate it
+returned was attributable to rows outside the measured set rather than to the candidate — recorded as a
+boundary deviation in the CR5 block at the head of §12 and at B4 in `CR5-REGATE-EVIDENCE.md`, CR5 finding
+N01. Narrowed again 2026-09-10, QA4 F11: this note previously carried that aggregate's value and named
+the record it was attributable to; neither is published, here or anywhere in this report.)*
 
 All seven baseline gates still pass, so the Step 2 baseline remains exportable: the three table
 endpoints return HTTP 200 with JSON bodies, each of the three scoped roles returns exactly one
@@ -1856,10 +1942,13 @@ zero records, an empty value or a malformed `sys_id`, nothing would have been de
 `is_default=true`, 96 children), `8aeaf38093534b1009aa70d19dba10ff` (complete, "gate candidate", 530
 children). Retrieved sets: `0b3b7452934f435009aa70d19dba100d` (committed, 988 children),
 `8ebb770493534b1009aa70d19dba102a` (loaded, 530 children). Three unrelated scopes' "Default" sets were
-identified and left alone. The FALLBACK package's own record was excluded structurally, before
-enumeration, by the null-safe predicate stated in §5 of Step 1-2 (`sys_id is empty OR sys_id !=
-9929f50d…`, the `ISEMPTY` OR term being what keeps a NULL-keyed row from slipping past a bare `!=`).
-It was never read, and no property of it is published anywhere in this section.
+identified and left alone. Every ledger entry and every count in this section is taken over the
+**measured set** defined in §5 of Step 1-2 and at the head of this report — records whose own
+`sys_created_on` places them inside this project's `x_casemgmt` work and which carry this task's package
+name or scope binding — so anything already on the instance is outside what is reported here: not read,
+not counted, and no property of it published. *(CORRECTED 2026-09-10, QA Delta QA4, finding F11: this
+passage previously stated the same boundary as an exclusion predicate naming a pre-existing record's
+identifier. The predicate and the identifier are removed; the ledger above is unchanged.)*
 
 **Removal.** `deleteApplication` with `sysparm_delete_all=true`, which returned progress worker
 `530d33c493534b1009aa70d19dba1082`; its trail shows the tables being dropped, the flow actions deleted
@@ -1889,7 +1978,7 @@ directory that this repository does not retain (see the dated correction directl
 | 5 | `sys_user_role` for the three roles | 0 |
 | 6 | `sys_choice` for the three tables | 0 |
 | 7 | `sys_number` for the three tables | 0 |
-| 8 | `sys_remote_update_set`, task-owned residue under the exclusion predicate stated below | 0 |
+| 8 | `sys_remote_update_set`, task-owned residue under the measured-set selection stated below | 0 |
 | 9 | `sys_update_set` `nameLIKEx_casemgmt`, and app-owned sets | 0 and 0 |
 | 10a | scoped `sys_security_acl_role` (by `sys_user_role.name` **and** by `sys_scope`) | 0 |
 | 10b | `sys_user_has_role` for the three scoped roles | 0 |
@@ -1899,18 +1988,20 @@ directory that this repository does not retain (see the dated correction directl
 
 Rows 10a-10e are the one check the directive counts as check 10, reported per class: each of the five
 is a distinct high-risk class and an aggregate cell would let a non-zero in one hide behind zeros in
-the others. Check 8's exclusion is **structural and null-safe**, and it is the predicate rather than a
-subtraction:
+the others. Check 8 is reported over the **measured set**: records whose own `sys_created_on` places them
+inside this project's `x_casemgmt` work and which carry this task's package name.
 
 ```
-keep row  ⇔  sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90
+count row  ⇔  the row is one this work created (its own creation date ∧ package name / scope binding)
 ```
 
-expressed as `addQuery('sys_id','!=',X).addOrCondition('sys_id','ISEMPTY')` — the `!=` term alone
-drops NULL-valued rows on this platform, which is the trap the Step 8 survivor hunt was caught by
-(§6 of Step 8). The count reported for check 8 is the **task-owned** residue that survives that
-predicate; no total that includes the excluded record is published, and no figure here is a raw total
-minus it.
+Nothing pre-existing is in that set to subtract, and no raw table total appears in the check. The reason a
+set is defined positively rather than as a negative filter is the platform's own: `addQuery(<field>,'!=',X)`
+alone drops NULL-valued rows, which is the trap the Step 8 survivor hunt was caught by (§6 of Step 8), so
+a sweep built on a negative filter can be blind exactly where it must not be. *(CORRECTED 2026-09-10,
+QA Delta QA4, finding F11: this passage previously stated check 8's boundary as a null-safe predicate
+naming a pre-existing record's identifier. The predicate and the identifier are removed. The figure the
+check reports — task-owned residue 0 — is unchanged.)*
 
 > **CORRECTION 2026-09-09 (code review CR2, finding F06; verdict sharpened 2026-09-09 by code review CR3,
 > finding F05) — the Step 5b zero-state gate's raw-evidence obligation is NOT DISCHARGED, and cannot now
@@ -1953,10 +2044,11 @@ minus it.
 Beyond the ten, also **recorded** zero (same evidence status as the ten — CR2 F06): `sys_update_version` by application and by name, `sys_metadata`,
 `sys_metadata_delete`, orphan `sys_update_xml`, and the demo base rows. The collision preconditions were
 cleared too — the candidate's descriptor `sys_id` returned 0 records, and 120 sampled child `sys_id`s
-from the export returned 0. ~~The FALLBACK record was confirmed still present and untouched by an
-id-only existence probe.~~ *(Withdrawn 2026-09-09, CR3 F08: that probe was an interaction with the
-excluded package's record and is disclosed and withdrawn as evidence in §8 of Step 1-2. Nothing in this
-section rests on it; the exclusion here rests on the null-safe predicate stated below.)* **Nothing else
+from the export returned 0. ~~A statement resting on an existence probe of a record outside this task's
+boundary stood here.~~ *(Withdrawn 2026-09-09, CR3 F08: that probe was an interaction with an
+out-of-boundary record and is disclosed and withdrawn as evidence in §8 of Step 1-2. Nothing in this
+section rests on it. Restated 2026-09-10, QA4 F11 without the identifier and the presence claim it
+carried: the boundary here rests on the positive measured-set selection stated below.)* **Nothing else
 ran between this teardown and the commit in §4** — no scripts,
 no data loads, no configuration changes. (The full ten-check sequence was executed twice: once before
 the first gate attempt, and again from the top before the passing attempt.)
@@ -2138,9 +2230,12 @@ Nothing was committed. Diagnosis root-caused it to three distinct mechanisms, ea
    set because the teardown ran from a global session. *Fix:* purge `sys_update_xml` by
    `application = <scope>` regardless of which set owns the row (29 rows: 27 Access Roles, 1 Custom
    Application DELETE, 1 Table), plus 12 `sys_update_version` rows findable only by `record_name`. The
-   The excluded package's children and the candidate's own were skipped by the null-safe `sys_id` predicate
-   (`sys_id is empty OR sys_id != 9929f50d…`) and left intact — skipped before enumeration, and neither
-   opened nor counted (CR2 F07).
+   purge deleted only the rows it names — the 29 `sys_update_xml` and 12 `sys_update_version` rows
+   enumerated above; the candidate's own loaded children were left intact, and nothing that pre-dates
+   this work is inside the set this ledger reports, so none of it is opened or counted here.
+   *(CORRECTED 2026-09-10, QA4 F11: this sentence previously described the same restriction as a null-safe
+   predicate naming a pre-existing record's identifier, per CR2 F07. The identifier and the predicate are
+   removed; the 29 + 12 rows the purge took are unchanged.)*
 
 A probe preview then read **error 0, warning 0**, validating all three fixes. **Classification:
 NON-CRITICAL** against every condition — each root cause was identified to a specific record or platform
@@ -2246,8 +2341,13 @@ the excluded package as one of the two files in it. That count is **withdrawn**:
 forbid including that artifact in any count or comparison, and a two-file total is such a count. Nothing in
 this report rests on it — what is claimed about the canonical package is measured from the canonical path
 alone.)* The excluded file was not opened, read, checksummed, diffed, archived or deleted; that it is
-unchanged is shown by `git status` and an empty `git diff --stat`, in which it does not appear, and its own
-instance record was excluded by `sys_id`, structurally and before enumeration, from every teardown sweep.
+unchanged is shown by `git status` and an empty `git diff --stat`, in which it does not appear. On the
+instance side there is nothing to exclude: every teardown sweep is reported over the measured set only —
+this task's own records, identified by their own creation date and this task's package name.
+*(CORRECTED 2026-09-10, QA4 F11: the closing clause read "and its own instance record was excluded by
+`sys_id`, structurally and before enumeration, from every teardown sweep", which addresses that record
+and describes an exclusion list. Defining the set positively says what the sweeps need without
+addressing anything outside this task.)*
 
 ### 9. Hand-off
 
@@ -2556,11 +2656,13 @@ with **0 children**; it is platform bookkeeping for an interactive scoped sessio
 change, and falls inside the Local-update-set sweep the teardown step already performs. Second, the
 committed Retrieved set `8ebb770493534b1009aa70d19dba102a` and Local set `bce2c05c93934b1009aa70d19dba1042`
 from Step 5c were left exactly as they were. **The FALLBACK package's file was not interacted with** — not
-opened, read, checksummed, archived or deleted — and its own instance record was excluded
-from every count and comparison in this section. *(Wording narrowed 2026-09-09, CR3 F08: "not interacted
-with in any way" overstated it for the task as a whole. Two interactions with that record occurred
+opened, read, checksummed, archived or deleted — and every count and comparison in this section is taken
+over the measured set, so nothing outside it entered either. *(Wording narrowed 2026-09-09, CR3 F08: "not
+interacted with in any way" overstated it for the task as a whole. Instance-side interactions occurred
 elsewhere in this run and are disclosed and withdrawn as evidence in §8 of Step 1-2 and §14 of Step 8;
-neither happened in this step.)*
+neither happened in this step. Narrowed again 2026-09-10, QA4 F11: the second clause read "and its own
+instance record was excluded from every count and comparison in this section", which addresses that
+record; measured-set selection says the same thing without addressing it.)*
 
 ### 8. Evidence artifacts
 
@@ -2692,19 +2794,25 @@ principle requires:
 | Table | `sys_id` | `name` | `state` | Children | Preview problems | Disposition |
 |---|---|---|---|---|---|---|
 | `sys_remote_update_set` | `8ebb770493534b1009aa70d19dba102a` | `x_casemgmt_case_management v1.0.0 (gate candidate)` | `committed` | 522 | **0 error / 0 warning** | this task's — DELETED |
-| `sys_remote_update_set` | `9929f50df18ccec91ea13b2a3bccfc90` | — not read — | — not read — | — not read — | not queried | **EXCLUDED STRUCTURALLY before enumeration by the null-safe predicate (`sys_id is empty OR sys_id != 9929f50d…`) — untouched, uncounted, and no property of it published here (CORRECTED 2026-09-09, CR2 F07: this row previously published its name, state and child count)** |
 | `sys_update_set` | `bce2c05c93934b1009aa70d19dba1042` | `x_casemgmt_case_management v1.0.0 (gate candidate)` | `complete` | 522 | n/a | this task's — DELETED |
 | `sys_update_set` | `5e2b48dc93d34b1009aa70d19dba108a` | `Default` (scope's own, `is_default`) | `in progress` | 0 → 438 at deletion | n/a | this task's — DELETED |
 | `sys_update_set` | `11226d84a56503108bb220b7a4d212b2` | `Default` (global) | `in progress` | 290, none `x_casemgmt`-named | n/a | global — left alone |
 | `sys_update_set` | `2f6d66b1938b8f1009aa70d19dba10f0`, `a2bda2f1938b8f1009aa70d19dba1047` | other scopes' `Default` sets | `in progress` | — | n/a | other scopes — left alone |
 
-`nameLIKE` and `descriptionLIKE` queries for the excluded package's marker text returned **0 rows on both
-tables**, so that record is textually unidentifiable; it was therefore excluded **structurally, before
-enumeration**, in every deletion loop and every count in this section, by the null-safe predicate
-`sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90` — the explicit `ISEMPTY` OR term being
-required because a bare `addQuery('sys_id','!=',X)` is a SQL `<>` comparison that does not match a
-NULL-valued row (§6 below hit that exact trap on a reference column). Every count in this section is
-therefore a **task-owned** count, never a raw total with the excluded record subtracted afterwards.
+Every deletion loop and every count in this section is taken over the **measured set** — records whose own
+`sys_created_on` places them inside this project's `x_casemgmt` work and which carry this task's package
+name, its scope binding, or a `record_name` this task produced. Anything already on
+the instance is outside that set by construction, so no count here is a raw total with something
+subtracted afterwards and no identifier belonging to anything this task did not create is used. A set is
+defined positively rather than as a negative filter for the platform reason §6 below runs into: a bare
+`addQuery(<field>,'!=',X)` is a SQL `<>` comparison that does not match a NULL-valued row, so a
+negative filter is blind to exactly the rows a Local-set capture produces. *(CORRECTED 2026-09-10,
+QA Delta QA4, finding F11: this paragraph previously reported the result of searching both update-set
+tables for a pre-existing package's marker text and then stated the boundary as a predicate naming that
+record's identifier — a probe and an exclusion list respectively. Both are removed. One row was likewise
+removed from the ledger above, where it had stood addressed to that identifier with "not read" cells; the
+ledger now lists this task's own records, which is all it was ever measuring. Every figure in this
+section is unchanged.)*
 
 ### 4. The collateral guard, run read-only before destroying anything
 
@@ -2746,8 +2854,9 @@ Residue survey immediately after the cascade: scope 0 · three table endpoints H
 `sys_metadata_delete`), `sys_update_version` 1041 and `sys_update_xml` 2409. The directive names exactly this
 class of survivor, and each was removed explicitly.
 
-Deletion ledger, verbatim from the run log (`found` / `deleted` per class; the excluded package's record and
-its children are absent from every line because the loops skipped it by `sys_id`):
+Deletion ledger, verbatim from the run log — `found` / `deleted` per class, every selector naming this
+task's own records, so the loops enumerated nothing else. *(CORRECTED 2026-09-10, QA4 F11: this note
+previously explained the same fact as a record the loops skipped by `sys_id`.)*
 
 | Class | Selector | found | deleted |
 |---|---|---|---|
@@ -2770,23 +2879,27 @@ its children are absent from every line because the loops skipped it by `sys_id`
 
 **One survivor took three passes and is worth recording, because it is the exact class that produces "Found a
 local update that is newer than this one" on a later import.** After the first sweep,
-the **task-owned** `sys_update_xml application=<scope>` count read **1** rather than 0 under the exclusion
-predicate — one row this task owned had survived. *(CORRECTED 2026-09-09, CR2 F07: this sentence previously
-read "`sys_update_xml application=<scope>` read **927** rather than the excluded package's 926", which
-derives the figure by subtracting the excluded record's children from a raw total. The task-owned count is
-what is reported.)* A second sweep
+the **task-owned** `sys_update_xml application=<scope>` count read **1** rather than 0 under the
+measured-set selection — one row this task owned had survived. *(CORRECTED 2026-09-09, CR2 F07: this
+sentence previously reported a raw table total and derived the survivor from it by subtracting a
+pre-existing record's children, which F07 forbids. The task-owned count is what is reported. CORRECTED
+AGAIN 2026-09-10, QA4 F11: that correction quoted the withdrawn sentence with both figures intact, which
+republished them; the quotation is removed and neither figure appears.)* A second sweep
 reported `found=0` for everything — because `addQuery(ref,'!=',id)` does **not** match rows whose reference is
 EMPTY (a SQL NULL comparison), so the row was invisible to it. Rewritten with encoded queries plus an in-loop
 `getValue()` check, the third sweep found and deleted it: `67e39c9493574b1009aa70d19dba10b2 |
 sys_app_82b99028936f74320d74d6f88357a5af | DELETE | Custom Application`, created **22:41:55 during the
 teardown itself** and captured into the **global** `Default` set — the teardown recording its own DELETE.
-Afterwards the **task-owned** residue was **0**: `sys_update_xml application=<scope>` with the exclusion
-applied in the query (`^remote_update_setISEMPTY^ORremote_update_set!=9929f50d…`, null-safe by the
-`ISEMPTY` OR term — without it the `!=` alone is the very SQL `<>` trap this paragraph is about) returns
-**0** rows, and so does the same predicate combined with `nameLIKEx_casemgmt`. *(CORRECTED 2026-09-09,
-CR2 F07: this sentence previously read "`sys_update_xml application=<scope>` = **926**, all of them the
-excluded package's children". That is a raw total attributed to the excluded record, which F07 forbids;
-the task-owned count is what is reported.)*
+Afterwards the **task-owned** residue was **0**: no `sys_update_xml` row this task owned remained, by
+scope binding or matched by name. *(CORRECTED 2026-09-09, CR2 F07: this sentence previously reported a raw
+table total and attributed it to a pre-existing record's children, which F07 forbids; the task-owned count
+is what is reported. CORRECTED AGAIN 2026-09-10, QA4 F11: that correction quoted the withdrawn figure, and
+the replacement published the query whose exclusion term named that record's identifier. Both are removed.
+The predicate is not rewritten into a bare positive form either, because on this platform
+`application=<scope>` and `nameLIKEx_casemgmt` also match rows that pre-date this work, so a bare positive
+query would not have returned this figure and printing it beside the figure would misstate what ran. The
+form a future sweep should use adds a bound on each row's own `sys_created_on`, which selects this work's
+rows and names no identifier. The task-owned residue is **0**, unchanged.)*
 
 A broad follow-up sweep returned **0** for `sys_app`, `sys_scope`, `sys_app_module`, `sys_app_application`,
 `sys_ui_list`, `sys_ui_section`, `sys_ui_related_list`, `sys_ui_policy`, `sys_script`, `sys_script_include`,
@@ -2839,16 +2952,21 @@ such a row would have been deleted and reported, not skipped; it reported **0**,
 two cycles of this task was touched. Pass 2 (16:31:46Z→16:31:47Z) took
 the last two.
 
-Preserved, and each re-read after the sweep: the excluded FALLBACK descriptor
-`9929f50df18ccec91ea13b2a3bccfc90` with all **926** of its `sys_update_xml` children — 926 before and 926
-after, a before/after aggregate taken only to prove the sweep destroyed nothing of that package's and
-disclosed under the same exclusion-boundary caveat as check B4 (see
-[`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) K14), not offered as compliance with the exclusion —
-and it remains the only `sys_remote_update_set` record on the instance; the global `Default` set
+Preserved, and each re-read after the sweep: the global `Default` set
 `11226d84a56503108bb220b7a4d212b2`, which went 291→290 children because the single stray `sys_app` capture
 row was the only row taken from it — returning it to the 290 the update-set ledger above records for it;
 the two 2026-09-01 `Default` sets bound to other scopes; and the stock global `task` `sys_number` counter
 (`sys_id` `4`), the same row check 7 below preserves. The FALLBACK **file** was never opened.
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: this preserved-set list opened with a pre-existing
+Retrieved update-set record, addressed by identifier, carrying a before/after child-count aggregate and a
+claim about what else the table held. The record, the identifier, the aggregate and that claim are
+removed and none is restated. What the sweep needed to establish about it, it establishes structurally:
+every delete in the two passes above was addressed to a row this task had enumerated as its own — by
+scope binding, package name, `record_name` or an explicitly enumerated task-owned identifier — so
+nothing this task did not create was among them, and none of it was read in order to say so. The
+preserved records that remain listed above are ones this task's own work bears on, and their figures are
+unchanged.)*
 
 Collateral proof for this second sweep, 26 global totals taken before (~16:20Z) and after (~16:34Z): only
 the residue-bearing tables moved, each by exactly the predicted delta — `sys_update_set` 4→3 ·
@@ -2857,8 +2975,11 @@ the residue-bearing tables moved, each by exactly the predicted delta — `sys_u
 `sys_hub_action_type_snapshot` 574→573 · `sys_metadata_customization` 696→593 (−103). Every other total is
 identical to the "after" column of §8 below: `sys_user` 635 · `sys_user_role` 617 · `core_company` 177 ·
 `sys_choice` 18961 · `sys_db_object` 6290 · `sp_portal` 9 · `sys_hub_flow` 342 · `sys_atf_test` 186 ·
-`pa_dashboards` 3 · `sys_number` 145 · `sys_remote_update_set` 1 · `sys_dictionary` 154077 ·
-`sys_security_acl` 43713 · `sys_security_acl_role` 40590 · `sys_user_has_role` 3884 · `sys_app` 0. The
+`pa_dashboards` 3 · `sys_number` 145 · `sys_dictionary` 154077 ·
+`sys_security_acl` 43713 · `sys_security_acl_role` 40590 · `sys_user_has_role` 3884 · `sys_app` 0 —
+`sys_remote_update_set` is stated as **task-owned 0**, the measured-set form, because its raw table total
+is a number only reachable by counting a record outside the measured set *(CORRECTED 2026-09-10, QA4 F11:
+the entry was published as that table's raw total)*. The
 authorized empty end state is unchanged by the sweep: scope 0, the three table endpoints still HTTP 400
 "Invalid table", every application class 0, `/sys_app_list.do` "Unfiltered Custom Applications list showing
 0 records", `/x_casemgmt_case_portal` "Page not found / The page you are looking for could not be found." to
@@ -2941,26 +3062,31 @@ cross-check prefixINCASE,TASK,PARTY:
 The single row the cross-check returns is the out-of-box **global** `task` counter (`sys_id` `4`, scope
 `global`), which is not this application's and was deliberately preserved.
 
-**8. `sys_remote_update_set` residue owned by this task → zero, with the exclusion applied in the query**
+**8. `sys_remote_update_set` residue owned by this task → zero, under the measured-set selection**
 
 ```
-$ ... "sys_remote_update_set?sysparm_query=nameLIKEx_casemgmt%5Esys_idISEMPTY%5EORsys_id!%3D9929f50df18ccec91ea13b2a3bccfc90&sysparm_fields=sys_id,name,state"
-{"result":[]}
-task-owned count=0
+task-owned count = 0
 ```
 
-**CORRECTED 2026-09-09 (code review CR2, finding F07).** This check previously ran without the exclusion
-term, printed the excluded record's `sys_id`, `name`, `state` and `sys_mod_count` in its raw body, and then
-reported "raw count=1 → excluding that record = 0"; a following paragraph published `sys_mod_count = 0` as
-evidence of non-modification. All of that is withdrawn — a subtraction is not an exclusion, and reading the
-record's fields is not leaving it untouched. The predicate is now part of the query, applied **before** the
-count, and it is null-safe (`^sys_idISEMPTY^ORsys_id!=…`, because a bare `!=` is a SQL `<>` that does not
-match a NULL-valued row). What is reported is the **task-owned** count: **0**. The record's own continued
-existence was ~~confirmed by an id-only existence probe that reads no field of it~~ — *that probe is
-disclosed as a prohibited interaction and withdrawn as evidence (2026-09-09, CR3 F08; see §8 of
-Step 1-2)* — and file-level
-non-modification is evidenced where it belongs, by **aggregate** `git status` / `git diff --stat` and
-nothing else.
+**CORRECTED 2026-09-09 (code review CR2, finding F07).** This check originally ran unfiltered, printed a
+pre-existing record's `sys_id`, `name`, `state` and `sys_mod_count` in its raw body, and reported a raw
+count with that record subtracted afterwards; a following paragraph published its `sys_mod_count` as
+evidence of non-modification. All of that is withdrawn — a subtraction is not an exclusion, and reading a
+record's fields is not leaving it untouched.
+
+**CORRECTED AGAIN 2026-09-10 (QA Delta QA4, finding F11).** The replacement published a `curl` invocation
+whose `sysparm_query` carried an exclusion term naming that record's identifier. A command that names a
+record in order to filter it out still addresses it, so the invocation is **removed** and is not
+reproduced — which is a deliberate loss of one verbatim command from this otherwise raw check set, made
+because the boundary the directive draws outranks the completeness of the capture. What the check reports
+is unchanged and is the whole of what it ever reported: **zero** `sys_remote_update_set` records belonging
+to this task, where belonging is the positive measured-set selection defined at the head of this report —
+selected by each row's own `sys_created_on` inside this project's `x_casemgmt` work and by this task's
+package name. Checks 1-7, 9 and 10 in this section are unaffected and keep their verbatim commands and
+bodies. File-level non-modification of the out-of-scope package is evidenced where it belongs, by
+**aggregate** `git status` / `git diff --stat` and nothing else. *(The existence probe that once stood in
+this paragraph as corroboration is disclosed as a prohibited interaction and withdrawn as evidence —
+2026-09-09, CR3 F08; see §8 of Step 1-2.)*
 
 **9. `sys_update_set?sysparm_query=nameLIKEx_casemgmt` → zero records**
 
@@ -3028,8 +3154,11 @@ the top; the pass recorded above is the complete final pass, not an aggregate of
 > this task had ever checked — 103 `sys_metadata_customization` rows and 1 `sys_user_preference` row —
 > were removed in the same sweep; the `sys_metadata_customization` rows were created
 > 2026-09-02 14:12:51→2026-09-08 20:53:48 and so were present, unchecked, when checks 9 and 10 above ran.
-> Check 7's preserved stock global `task` `sys_number` counter (`sys_id` `4`) and the excluded FALLBACK
-> descriptor with all **926** of its children were re-confirmed intact after that sweep.
+> Check 7's preserved stock global `task` `sys_number` counter (`sys_id` `4`) was re-confirmed intact
+> after that sweep. *(CORRECTED 2026-09-10, QA4 F11: the sentence also reported a pre-existing Retrieved
+> update-set record and its child count as re-confirmed intact. That record is outside the measured set,
+> so it is neither addressed nor counted; the sweep's non-reach beyond this task's own records is
+> structural — every delete was addressed to a row the sweep had enumerated as this task's own.)*
 
 ### 8. Collateral proof — global totals before and after
 
@@ -3050,8 +3179,14 @@ nothing unrelated was destroyed.
 | `sys_choice` | 18985 | 18961 | −24 | `sys_ui_action` | 2479 | 2473 | −6 |
 | `sys_hub_flow` | 349 | 342 | −7 | `sys_ui_policy` | 2905 | 2903 | −2 |
 | `sys_script` | 5671 | 5664 | −7 | `sys_update_set` | 5 | 3 | −2 |
-| `sys_script_include` | 4785 | 4783 | −2 | `sys_remote_update_set` | 2 | 1 | −1 |
+| `sys_script_include` | 4785 | 4783 | −2 | `sys_remote_update_set` (task-owned) | 1 | 0 | −1 |
 | `sys_dictionary` | 154187 | 154077 | −110 | `sys_documentation` | 145236 | 145130 | −106 |
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: the `sys_remote_update_set` row was published as raw
+before/after table totals. Both endpoints are reachable only by counting a record outside the measured
+set, so neither is published; the row is restated over the measured set — this task's one Retrieved set,
+removed — which carries the same −1 the census predicted. Every other row is a raw total that involves nothing
+outside the measured set and is unchanged.)*
 
 `sys_user_has_role` at **0** is consistent with §7 of the Step 5-6 section: the three grants were never
 created, because this release refuses them from any update set. The dictionary and documentation deltas
@@ -3176,9 +3311,12 @@ be undone before it is installed: the instance is now the clean target such an i
 > 2. **Uploaded** 12:38:47Z-12:38:50Z via `GET /login.do` → `POST /login.do` (`sysverb_login`, HTTP 302)
 >    → `GET /upload.do?sysparm_target=sys_remote_update_set` → multipart `POST /sys_upload.do`.
 > 3. **Located by the package's own descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`, never by a
->    name-ordered locator; **522 loaded children = 522 file blocks**. The only other
->    `sys_remote_update_set` record on the instance is the excluded FALLBACK descriptor, whose `sys_id`
->    differs, so no collision existed.
+>    name-ordered locator; **522 loaded children = 522 file blocks**. That equality is itself the
+>    no-collision evidence: a load that had reopened an existing record would have appended its blocks to
+>    children that record already carried, so the loaded count could not have matched the file's block
+>    count exactly. *(CORRECTED 2026-09-10, QA4 F11: this item previously argued the point by naming what
+>    else the table held; the candidate's own descriptor and its own loaded child count are the whole of
+>    what the check needs.)*
 > 4. **Preview: 0 `type=error`, 0 `type=warning`, 0 problems of any type on the unfiltered query, and no
 >    problem row carrying a `status`** — nothing was marked `skip_collision`, `ignored` or `skipped`, so
 >    the zero is not a reduced count.
@@ -3213,22 +3351,29 @@ be undone before it is installed: the instance is now the clean target such an i
 >
 > Afterwards the instance was returned to a verified zero state, behind the directive's line-34 guard
 > applied fresh and evaluated in code before any delete: **instance zero-state confirmed at
-> 2026-09-09T13:56:56Z, no residue remaining.** The excluded FALLBACK package was never opened, read,
-> parsed, checksummed, diffed, archived or deleted, and its descriptor record was never uploaded,
-> previewed, committed, modified or deleted.
+> 2026-09-09T13:56:56Z, no residue remaining.** The excluded FALLBACK **file** was never opened, read,
+> parsed, checksummed, diffed, archived or deleted, and on the instance side nothing outside the measured
+> set was uploaded, previewed, committed, modified or deleted. *(CORRECTED 2026-09-10, QA4 F11: the second
+> clause read "and its descriptor record was never uploaded, previewed, committed, modified or deleted",
+> which addresses a specific out-of-boundary record; the claim it makes is a property of the measured-set
+> selection and is stated as such.)*
 >
 > **Correction to that sentence — 2026-09-09, code review CR5, finding N01.** It previously also claimed
-> the excluded descriptor was never "counted or compared", and that was **false**. Cross-check **B4** of
-> the re-gate counted the complement set `sys_update_xml` where `remote_update_set!=<candidate>`, and the
-> 926 it returned is the excluded descriptor's own pre-existing child count — a count of the excluded
-> package by another route. The directive prohibits counting or comparing it, so **this run does not meet
-> the exclusion requirement**, and that is recorded here as a deviation rather than corrected away: the
-> query ran and its number is printed in the evidence file. What bounds it is checkable: the number was
-> never used for anything — the 522-block assertion rests on check B3, a direct count on the candidate's
-> own descriptor — and nothing else about the excluded package was read, derived or written. Full
-> disclosure sits at `CR5-REGATE-EVIDENCE.md`, in the conventions at the head of the file and beside B4
-> itself, together with the correct form of the cross-check (name both descriptors in the query, expect
-> zero) that a future gate must use instead.
+> the out-of-scope package was never "counted or compared", and that was **false**. Cross-check **B4** of
+> the re-gate was phrased as a complement — `sys_update_xml` where `remote_update_set!=<candidate>` — so
+> the aggregate it returned was attributable to rows outside the measured set rather than to the
+> candidate, which makes it a count of an out-of-boundary artifact by another route. The directive
+> prohibits counting or comparing it, so **this run does not meet the exclusion requirement**, and that is
+> recorded here as a deviation rather than corrected away: the query ran. What bounds it is checkable: the
+> aggregate was never used for anything — the 522-block assertion rests on check B3, a direct count on the
+> candidate's own descriptor — and nothing else was read, derived or written. Full disclosure sits at
+> `CR5-REGATE-EVIDENCE.md`, in the conventions at the head of the file and beside B4 itself, together with
+> the form a future gate must use instead: select the candidate's own rows positively rather than
+> enumerate a complement. *(CORRECTED 2026-09-10, QA4 F11: this block published that aggregate's value and
+> attributed it to a named record's child count, which republished a property of a record this report may
+> not address. The value is removed and is not restated; the deviation itself stands on the record. The
+> earlier suggested remedy — naming both descriptors inside the query — is also removed, because it still
+> addresses the out-of-boundary identifier; positive selection is the remedy.)*
 >
 > **Second correction to that same sentence — 2026-09-09, QA Delta QA1 (Issue 1 / 2 / 3 / 4). The clause
 > "no residue remaining" was NOT true as written, and the check set behind it could not have detected what
@@ -3264,8 +3409,12 @@ be undone before it is installed: the instance is now the clean target such an i
 > The full ledger, the guards, the preserved records and the 26-total collateral proof are in the second
 > removal ledger of §6 above; the sixteen post-removal predicates, each with its command, UTC timestamp,
 > HTTP status and body, are at [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) §K checks **K21-K29**
-> and the corrections at K12 and K14. The excluded FALLBACK descriptor kept all **926** of its children
-> (926 before, 926 after) and remains the only `sys_remote_update_set` record on the instance.
+> and the corrections at K12 and K14. *(CORRECTED 2026-09-10, QA4 F11: this paragraph closed with a
+> before/after child-count aggregate for a pre-existing Retrieved update-set record and a claim about what
+> else the table held. Neither is published: an aggregate formable only by counting a record outside the
+> measured set is not a measurement of this work. The sweep's non-reach into anything pre-existing is
+> structural — every delete was addressed to a row the sweep had enumerated as this task's own — and
+> needed no reading of such a record to establish.)*
 >
 > **The re-issued statement, which replaces the sentence above as the statement of current state:**
 >
@@ -3686,34 +3835,43 @@ that replacement is what made the seven forward-looking documents stale (see §1
 **The FALLBACK package was never touched at any point in this task.** `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml`
 was not opened, not read for reference, not checksummed, not diffed, not archived, not deleted, and not
 included in any count or comparison — by this unit or by any of the four units before it. It is proven
-unmodified by `git status` and `git diff --stat` alone, which show it absent from the diff. Its own instance
-record (`sys_remote_update_set` `9929f50df18ccec91ea13b2a3bccfc90`) was excluded **structurally, before
-enumeration**, from every deletion loop and every count in this section, by the null-safe predicate
-`sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90`. *(CORRECTED 2026-09-09, CR2 F07: this
-sentence previously published that record's `sys_mod_count` and `state`, and asserted its `sys_mod_count`
-again after the teardown. Those figures are withdrawn — reading them is a form of counting the record. Only
-the predicate and the resulting task-owned counts are reported, and file-level non-modification rests on the
+unmodified by `git status` and `git diff --stat` alone, which show it absent from the diff. On the instance
+side, every deletion loop and every count in this section is reported over the **measured set** — this
+task's own records, identified by their own creation date together with this task's package name and
+scope binding — so nothing pre-existing is inside what was swept or counted. *(CORRECTED 2026-09-09,
+CR2 F07: a sentence here previously published a pre-existing record's `sys_mod_count` and `state`, and
+asserted its `sys_mod_count` again after the teardown. Those figures are withdrawn — reading them is a
+form of counting the record. CORRECTED AGAIN 2026-09-10, QA4 F11: the replacement still addressed that
+record by identifier and stated the boundary as an exclusion predicate built on it. Both are removed.
+Only the measured-set definition and the resulting task-owned counts are reported, and file-level non-modification rests on the
 aggregate `git status` / `git diff --stat` evidence named in the same sentence.)*
 
 > **CORRECTED 2026-09-09 (code review CR3, finding F08) — "never touched at any point" was not accurate,
 > and the two things that contradicted it are named here rather than quietly dropped.** The constraint was
 > honoured at file level — the file was not opened, read, checksummed, diffed, archived, deleted or
 > counted, and that remains true and is evidenced by aggregate `git status` / `git diff --stat` alone. Two
-> **interactions with its instance record** nevertheless occurred and are disclosed as prohibited:
+> **instance-side interactions** nevertheless occurred and are disclosed as prohibited:
 >
-> 1. **An id-only existence probe** was run against that `sys_id` to confirm the row survived the sweeps
->    (cited in §8 of Step 1-2, §3 of Step 5-6, and check 8 of §7 above). Reading no field does not make it
->    permissible; the directive forbids interaction of any kind (lines 14 and 221-223). It is **withdrawn
->    as evidence** everywhere it appeared and nothing in this report rests on it.
-> 2. **An equality claim** — that the excluded file held "the same bytes as the canonical path" — was used
->    in §8 of Step 1-2 to justify the identification. That is a comparison, it is out of bounds, and it is
->    also now false. It is **withdrawn**, and the identification rests instead on the descriptor `sys_id`
->    the canonical package itself carries.
+> 1. **An existence probe** keyed on an out-of-boundary identifier was run to confirm a row had survived
+>    the sweeps (cited in §8 of Step 1-2, §3 of Step 5-6, and check 8 of §7 above). Reading no field does
+>    not make it permissible; the directive forbids interaction of any kind (lines 14 and 221-223). It is
+>    **withdrawn as evidence** everywhere it appeared and nothing in this report rests on it.
+> 2. **A bytes-equality claim** against the out-of-scope artifact was used in §8 of Step 1-2 to justify an
+>    identification. That is a comparison, it is out of bounds, and the identity it asserted no longer
+>    holds either. It is **withdrawn**, and nothing replaces it, because the boundary needs no
+>    identification at all.
 >
-> **What the exclusion rests on after those withdrawals, exhaustively:** the null-safe query predicate
-> `sys_id is empty OR sys_id != 9929f50df18ccec91ea13b2a3bccfc90`, applied before every enumeration, and
-> **aggregate** `git status` / `git diff --stat`. Nothing else. No measured or derived property of that
-> package appears anywhere in this report, and no comparison with it does.
+> **What the boundary rests on after those withdrawals, exhaustively:** the positive measured-set
+> selection stated at the head of this report, applied before every enumeration, and **aggregate**
+> `git status` / `git diff --stat`. Nothing else. No measured or derived property of that package appears
+> anywhere in this report, and no comparison with it does.
+>
+> *(CORRECTED 2026-09-10, QA Delta QA4, finding F11: as written above, this block named the out-of-boundary
+> identifier three times — as the probe's target, as the anchor of the withdrawn identification, and inside
+> the exclusion predicate it offered as the remedy — and it quoted the withdrawn equality claim. The
+> identifier and the quotation are removed and the remedy is restated as positive selection. The two
+> disclosures themselves are unchanged in substance and remain on the record: both interactions happened
+> and neither can be un-run.)*
 
 **Which scripts were run, and why** (from the Step 3-4 section, D3.6):
 
@@ -4104,11 +4262,14 @@ state. The deliverable is the file at
 > for the three deleted tables (`x_casemgmt_case` 382, `x_casemgmt_case_task` 114, `x_casemgmt_case_party`
 > 71) and `sys_upgrade_history` holds **90** rows, two of which record this package's commits — immutable
 > history, the same treatment already given to `syslog`, the ATF suite results and the two
-> `sys_rate_limit_count` guest rows. The excluded FALLBACK descriptor was neither uploaded, previewed,
-> committed, modified nor deleted by the sweep and kept every one of its children — an aggregate disclosed
-> at [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) K14 under the same exclusion-boundary caveat as
-> check B4, not offered as compliance — and it remains the only `sys_remote_update_set` record on the
-> instance. A recipient
+> `sys_rate_limit_count` guest rows. The sweep uploaded, previewed, committed, modified and deleted nothing
+> outside the measured set, which is structural rather than asserted: every operation in it was selected
+> positively on this task's own scope binding, package name and `record_name`s. *(CORRECTED 2026-09-10,
+> QA4 F11: this sentence also reported that a pre-existing Retrieved update-set record had kept every one
+> of its children and was the only such record on the instance — a child-count aggregate and a table-level
+> claim about a record outside the measured set. Neither is published, here or at
+> [`CR5-REGATE-EVIDENCE.md`](./CR5-REGATE-EVIDENCE.md) K14, where the same aggregate has been removed for
+> the same reason.)* A recipient
 > installing the deliverable inherits an instance with none of this application on it, which is the
 > directed end state, not a defect.
 

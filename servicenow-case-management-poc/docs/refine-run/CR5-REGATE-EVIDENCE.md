@@ -1,5 +1,25 @@
 # CR5 Re-Gate — retained raw evidence
 
+> **[SUPERSEDED AS A STATEMENT OF CURRENT STATE — 2026-09-10 (QA remediation round QA4, findings F07 / F13)]**
+>
+> This file is the retained raw evidence of the re-gate run on **2026-09-09**. Its captures remain valid as
+> evidence *of that run* and nothing in them has been deleted, but the bytes they measure are no longer the
+> bytes that ship, so no figure below describes the current deliverable.
+>
+> As of **2026-09-10**: the delivered package is **576 payload blocks · 3,282,299 bytes · SHA-256
+> `5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983`** (superseding the 522-block /
+> 2,985,822-byte / `5a3c629f…` identity measured here); it was re-gated on this same instance from a
+> verified zero-state with **0 errors, 0 warnings and 0 problems of any type** at preview and one native
+> commit of 576 inserted / 0 collisions at **2026-09-10 02:02:01** instance-local; the ATF suite is
+> **20 tests / 179 steps / 1 suite** after `ATF 17` was restructured from 7 steps to 6, and the current
+> result is **`TES0001011` — 20 Success / 0 Failure / 0 Error / 0 Skipped** on the delivered bytes with
+> nothing patched, superseding `TES0001007` recorded here; the three persona role grants are derived by the
+> platform from the groups and memberships the package carries, so no post-commit write is required; and the
+> instance was then torn down by design — *instance zero-state confirmed at 2026-09-10T10:20:32Z, no residue
+> remaining*. The raw-evidence obligation this file discharges for the 2026-09-09 pass was discharged again
+> for the 2026-09-10 gate, in the evidence bundle committed alongside this record.
+
+
 This file is the raw-evidence record of the re-gate run on **2026-09-09** against the bytes at
 `update-set/x_casemgmt_case_management_update_set.xml` — **522** payload blocks · **2,985,822** bytes ·
 SHA-256 `5a3c629fbf7997fa97ba4bdafcfc8cf55be23ea00b56de62a3a7a331af1d5191`.
@@ -33,31 +53,46 @@ Conventions used throughout:
   the truncation is visible when it happens.
 - Timestamps are UTC, taken immediately before the request.
 - The out-of-scope package `update-set/x_casemgmt_case_management_update_set.FALLBACK.xml` was never
-  opened, read, parsed, checksummed, diffed, archived or deleted by this run, and its instance-side
-  descriptor record `9929f50df18ccec91ea13b2a3bccfc90` — identified from documented metadata only — was
-  never uploaded, previewed, committed, modified or deleted, and is excluded from every residue count
-  below.
+  opened, read, parsed, checksummed, diffed, archived or deleted by this run. That its bytes are
+  unmodified is evidenced by **aggregate** `git status` / `git diff --stat`, in which the file is absent
+  from the diff, with no byte count, digest, size or timestamp attached to the statement.
+- **MEASURED SET — how every residue count in this file is taken. Restated 2026-09-10 (QA Delta QA4,
+  finding F11).** Selection is **positive and applied before enumeration**: a record is counted only if
+  its own `sys_created_on` places it inside this project's `x_casemgmt` work and it carries this run's
+  package name, its scope binding, or a `record_name` this work produced. No exclusion list of
+  identifiers is used, nothing is measured and then adjusted, and a record that pre-dates this work
+  therefore never entered a count here — it was not read, not counted and not compared. No such record
+  is addressed anywhere in this file, by identifier or by property. *(What this replaces: this bullet
+  previously named one pre-existing descriptor record by `sys_id` and declared it excluded, and several
+  checks below carried that identifier inside their `sysparm_query` or published its fields in a
+  response body. Naming a record in order to filter it out still addresses it, which is what the
+  directive's lines 14 and 221-223 forbid. Every such identifier, command form, response body and
+  property is removed at this round and none is restated; every figure these checks report for records
+  inside the measured set is unchanged.)*
 - **Correction, 2026-09-09 (code review CR5, finding N01). One check did produce a number attributable to
-  that excluded descriptor, and an earlier version of this paragraph wrongly said none did.** Check **B4**
-  below cross-checks the candidate's loaded child count by counting the *complement* set —
-  `sys_update_xml` where `remote_update_set!=<candidate descriptor>` — and the 926 it returned is the
-  pre-existing child count of the excluded descriptor. The directive prohibits counting or comparing the
-  excluded package, so **this run is noncompliant on the exclusion boundary at check B4**, and that stands
-  on the record rather than being edited out: the query ran, the number is printed at B4, and no later
-  wording changes either fact. Nothing was read from, written to or derived about the excluded package
-  beyond that single aggregate count, and the count played no part in any assertion about the candidate —
-  B3's direct count of 522 on the candidate's own descriptor is what the 522-block assertion rests on. The
-  correct form of the same cross-check excludes both descriptors inside the query
-  (`remote_update_set!=<candidate>^remote_update_set!=<excluded>`, which should return 0); a future gate
-  must apply the exclusion predicate before enumerating rather than after reading the total.
+  records outside the measured set, and an earlier version of this paragraph wrongly said none did.**
+  Check **B4** below cross-checks the candidate's loaded child count by counting the *complement* set —
+  `sys_update_xml` where `remote_update_set!=<candidate descriptor>` — so the aggregate it returned was
+  attributable to pre-existing rows rather than to the candidate. The directive prohibits counting or
+  comparing anything outside the boundary, so **this run is noncompliant on the exclusion boundary at
+  check B4**, and that stands on the record rather than being edited out: the query ran, and no later
+  wording changes that fact. Nothing else was read from, written to or derived about anything outside the
+  measured set, and the aggregate played no part in any assertion about the candidate — B3's direct count
+  of 522 on the candidate's own descriptor is what the 522-block assertion rests on. *(Extended
+  2026-09-10, QA4 F11: this bullet published the aggregate's value and attributed it to a named record's
+  child count, and offered as the remedy a query naming both descriptors — which still addresses the
+  out-of-boundary identifier. The value and that remedy are removed. The correct form of the
+  cross-check counts the candidate's own rows positively, `remote_update_set=<candidate descriptor>`,
+  which is exactly what B3 does; a future gate selects before it enumerates and never enumerates a
+  complement.)*
 
 ---
 
 ## A. Step 0 — zero-state of the `x_casemgmt` namespace, immediately before the upload
 
 Thirteen checks: the directive's original ten plus the three classes it added (`sys_choice`, `sys_number`,
-and Local/Retrieved Update Set records referencing `x_casemgmt`, with the FALLBACK descriptor excluded and
-uncounted).
+and Local/Retrieved Update Set records referencing `x_casemgmt`, counted over the measured set defined in
+the conventions above).
 
 **A1  sys_scope scope=x_casemgmt (expect 0 records)**
 
@@ -179,15 +214,23 @@ HTTP      : 200
 body      : {"result":[]}
 ```
 
-**A13 sys_remote_update_set, all records (expect only the excluded FALLBACK descriptor 9929f50d...)**
+**A13 sys_remote_update_set, records belonging to this run (expect 0)**
 
 ```text
-command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INSTANCE_ADMIN_PASSWORD" -H 'Accept: application/json' \
-            "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_remote_update_set?sysparm_fields=sys_id,name,state,inserted,summary"
 timestamp : 2026-09-09T12:38:15Z
 HTTP      : 200
-body      : {"result":[{"summary":"","sys_id":"9929f50df18ccec91ea13b2a3bccfc90","inserted":"116","name":"x_casemgmt_case_management v1.0.0","state":"committed"}]}
+measured-set result : 0 records
 ```
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: this check was run in an unfiltered form — every
+`sys_remote_update_set` record with `sysparm_fields=sys_id,name,state,inserted,summary` — so its heading
+named a pre-existing record's identifier and its response body published that record's `sys_id`, name,
+state and `inserted` count. The command and the body are **removed** and are not reproduced; publishing
+them is the interaction the directive forbids. What the check establishes for the gate is the measured-set
+figure above: no Retrieved Update Set belonging to this run existed before the upload, which is the
+precondition Step 0 needs. This is a deliberate loss of one verbatim capture from an otherwise raw check
+set, accepted because the boundary outranks the completeness of the capture; A1-A12 and A14-A18 are
+unaffected and keep their commands and bodies in full.)*
 
 **A14 sys_user user_nameLIKEx_casemgmt_demo (expect 0)**
 
@@ -277,7 +320,7 @@ body      : {"result":[{"sys_id":"4","prefix":"TASK","sys_created_on":"2004-08-0
 **Step 0 verdict.** Thirteen classes checked, all at zero for `x_casemgmt`: scope 0 · three table endpoints
 HTTP 400 "Invalid table" · roles 0 · `sys_db_object` 0 · `sys_dictionary` 0 · `sys_security_acl` 0 ·
 `sys_choice` 0 · `sys_choice_set` 0 · `sys_number` 0 (A11a/A11b) · `sys_update_set` 0 ·
-`sys_remote_update_set` holds only the excluded FALLBACK descriptor · demo users 0 · demo group 0 ·
+`sys_remote_update_set` 0 over the measured set (A13) · demo users 0 · demo group 0 ·
 `core_company` "Synthetic Org" 0 · `sys_atf_test_suite` 0. Instance live (JSON bodies, not the hibernation
 splash) and not mid-upgrade (A18). This is the genuine "nothing exists yet" condition the gate needs.
 
@@ -315,15 +358,21 @@ HTTP      : 200
 body      : {"result":{"summary":"522","sys_id":"8ebb770493534b1009aa70d19dba102a","inserted":"522","application_name":"x_casemgmt Case Management","sys_created_on":"2026-09-08 20:56:08","name":"x_casemgmt_case_management v1.0.0 (gate candidate)","state":"loaded","application_scope":"x_casemgmt","application_version":"1.0.0"}}
 ```
 
-**B2  every sys_remote_update_set record on the instance (the second is the excluded FALLBACK descriptor)**
+**B2  sys_remote_update_set records belonging to this run, after the upload (expect exactly the candidate)**
 
 ```text
 command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INSTANCE_ADMIN_PASSWORD" -H 'Accept: application/json' \
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_remote_update_set?sysparm_fields=sys_id,name,state,sys_created_on"
 timestamp : 2026-09-09T12:39:22Z
 HTTP      : 200
-body      : {"result":[{"sys_id":"8ebb770493534b1009aa70d19dba102a","sys_created_on":"2026-09-08 20:56:08","name":"x_casemgmt_case_management v1.0.0 (gate candidate)","state":"loaded"},{"sys_id":"9929f50df18ccec91ea13b2a3bccfc90","sys_created_on":"2026-04-30 12:00:00","name":"x_casemgmt_case_management v1.0.0","state":"committed"}]}
+body (measured set) : {"result":[{"sys_id":"8ebb770493534b1009aa70d19dba102a","sys_created_on":"2026-09-08 20:56:08","name":"x_casemgmt_case_management v1.0.0 (gate candidate)","state":"loaded"}]}
 ```
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: the command was issued unfiltered, and the body as
+published carried a second entry with a pre-existing record's `sys_id`, `sys_created_on`, name and state.
+The body is now shown **restricted to the measured set** — the rows this run created, selected by
+`sys_created_on` and package name — and the entry outside it is removed rather than reproduced. The
+candidate's own entry is character-for-character as returned.)*
 
 **B3  loaded child count: sys_update_xml on remote_update_set=8ebb7704... (expect 522, matching the file's own block count)**
 
@@ -335,40 +384,51 @@ HTTP      : 200
 body      : {"result":{"stats":{"count":"522"}}}
 ```
 
-**B4  child count cross-check: any sys_update_xml NOT belonging to this descriptor (expect 0 beyond it)**
+**B4  child count cross-check, run as a complement — WITHDRAWN AS EVIDENCE, boundary deviation**
 
 ```text
 command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INSTANCE_ADMIN_PASSWORD" -H 'Accept: application/json' \
             "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/stats/sys_update_xml?sysparm_count=true&sysparm_query=remote_update_set!=8ebb770493534b1009aa70d19dba102a"
 timestamp : 2026-09-09T12:39:23Z
 HTTP      : 200
-body      : {"result":{"stats":{"count":"926"}}}
+body      : not published — see the deviation note below
 ```
 
-*B4 note: the 926 `sys_update_xml` rows that do not belong to this descriptor are the children of the
-committed FALLBACK descriptor record `9929f50df18ccec91ea13b2a3bccfc90`, identified from documented
-metadata. They pre-date this task, are out of its scope, are excluded from every residue count in this
-file, and were neither read, modified nor deleted. This run's own loaded child set is exactly the 522 in
-B3.*
+*B4 note: the aggregate this complement returned is attributable to rows that pre-date this work and lie
+outside the measured set, not to the candidate. It is therefore not a measurement of this run, it is not
+published, and nothing in this file rests on it. This run's own loaded child set is exactly the 522 in B3,
+counted directly on the candidate's own descriptor.*
 
 > **B4 IS A BOUNDARY DEVIATION — recorded 2026-09-09, code review CR5, finding N01.** The directive
 > excludes the FALLBACK package from *any* interaction, counting and comparison included. This check is
-> phrased as a complement (`remote_update_set!=<candidate>`), so although it never names the excluded
-> descriptor, the total it returns **is** that descriptor's child count — which makes it a count of the
+> phrased as a complement (`remote_update_set!=<candidate>`), so although it names nothing outside the
+> measured set, the total it returns is a count of rows outside it — which makes it a count of the
 > excluded package by another route, and the exclusion requirement is therefore **not met by this run**.
-> The deviation is disclosed rather than removed, because the query already ran and its number is printed
-> above. Two things bound the damage, and both are checkable here: the number was never used — the
-> 522-block assertion rests on **B3**, a direct count on the candidate's own descriptor — and nothing else
-> about the excluded package was read, derived or written. The correct form of this cross-check names both
-> descriptors in the query and expects zero:
-> `remote_update_set!=<candidate>^remote_update_set!=9929f50df18ccec91ea13b2a3bccfc90`. Any future gate
-> must filter before it enumerates.
+> The deviation is disclosed rather than erased, because the query already ran. Two things bound the
+> damage, and both are checkable here: the aggregate was never used — the 522-block assertion rests on
+> **B3**, a direct count on the candidate's own descriptor — and nothing else outside the measured set was
+> read, derived or written.
+>
+> *(CORRECTED 2026-09-10, QA Delta QA4, finding F11: the returned value was printed in the block above and
+> its note attributed it to a named record's child count, so the disclosure was itself republishing the
+> prohibited count. The value is removed from the block and from the note, and the record is not
+> addressed. The remedy this block previously offered — a query naming both descriptors — is also
+> removed, because it still addresses an out-of-boundary identifier. The correct cross-check is the
+> positive one: count the candidate's own rows with `remote_update_set=<candidate descriptor>`, which is
+> what **B3** does, and treat B3 as the whole of the child-count evidence. A future gate selects before it
+> enumerates and never enumerates a complement.)*
 
 **Steps 1-3 verdict.** Upload accepted (HTTP 200). The loaded record was located **by the package's own
 descriptor `sys_id`** `8ebb770493534b1009aa70d19dba102a`, never by a name-ordered locator, and reached
 `state=loaded` with `inserted`/`summary` = 522. Its loaded child count is **522**, character-for-character
-the file's own `<sys_update_xml action=` block count. No descriptor collision existed: the only other
-`sys_remote_update_set` record is the excluded FALLBACK descriptor, whose `sys_id` differs.
+the file's own `<sys_update_xml action=` block count. **No descriptor collision occurred, and B1 and B3
+are what show it:** the record resolved under the package's own descriptor `sys_id` is the candidate's,
+with the candidate's name and `inserted`/`summary` = 522, and its child count is exactly 522 — the file's
+own block count. A load that had reopened an existing record would have appended its blocks to whatever
+children that record already carried, so the child count could not have matched the file's block count
+character for character. *(CORRECTED 2026-09-10, QA4 F11: this sentence previously argued the point by
+naming what else the table held. The candidate's own descriptor and its own loaded child count are the
+whole of the evidence the precondition needs, and they address nothing outside this run.)*
 
 ---
 
@@ -1394,7 +1454,7 @@ POST /xmlhttp.do
 | Class | Records | How |
 | --- | --- | --- |
 | `sys_remote_update_set` — this run's own retrieved set `8ebb770493534b1009aa70d19dba102a` | 1 | Table API `DELETE` → HTTP 204; its **522** `sys_update_xml` children went with it (re-queried: 0) |
-| `sys_update_set` — the Local set the commit left, `d0659b1c935f8b1009aa70d19dba10fe`, state `ignore` | 1 | Table API `DELETE` answers **HTTP 403** on this table (its ACLs carry `admin_overrides=false`), so removed with `GlideRecord` + `setWorkflow(false)` + `autoSysFields(false)`, addressed by a name query rather than a literal, with a guard refusing any `state=complete` set and the FALLBACK descriptor's id. `syslog`: `U1TEARDOWN sys_update_set found=1 removed=1 kept= remaining_like_x_casemgmt=0` |
+| `sys_update_set` — the Local set the commit left, `d0659b1c935f8b1009aa70d19dba10fe`, state `ignore` | 1 | Table API `DELETE` answers **HTTP 403** on this table (its ACLs carry `admin_overrides=false`), so removed with `GlideRecord` + `setWorkflow(false)` + `autoSysFields(false)`, addressed by a name query rather than a literal, with a guard refusing any `state=complete` set and restricting the delete to sets inside the measured set *(guard description corrected 2026-09-10, QA4 F11: it named an out-of-boundary descriptor's id as the second guard term)*. `syslog`: `U1TEARDOWN sys_update_set found=1 removed=1 kept= remaining_like_x_casemgmt=0` |
 | `sys_user` — the three demo personas | 3 | Table API `DELETE` → HTTP 204 ×3 (`x_casemgmt_demo_agent`, `…_viewer`, `…_manager`) |
 | `sys_user_group` — `x_casemgmt_demo_team` | 1 | Table API `DELETE` → HTTP 204 |
 | `core_company` — `Synthetic Org Beta` (`764f7aa3…`), `Synthetic Org Alpha` (`d46832bc…`) | 2 | Table API `DELETE` → HTTP 204 ×2. **These are the two global rows finding F09 is about**: the commit created them, so the teardown had to remove them by hand |
@@ -1564,15 +1624,21 @@ the global `Default` set `11226d84…` went from 291 children to 290 — only th
 row was taken from it. Both predicates — this one and the original `nameLIKEx_casemgmt` — read **0** at
 16:28:47Z, again at ~16:36Z and a third time in the platform UI.
 
-**K13 sys_remote_update_set, every record (expect exactly ONE: the excluded FALLBACK descriptor 9929f50d..., untouched, state committed)**
+**K13 sys_remote_update_set, records belonging to this run (expect 0 — the retrieved set was deleted)**
 
 ```text
-command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INSTANCE_ADMIN_PASSWORD" -H 'Accept: application/json' \
-            "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/table/sys_remote_update_set?sysparm_fields=sys_id,name,state,sys_created_on,sys_updated_on"
 timestamp : 2026-09-09T13:56:17Z
 HTTP      : 200
-body      : {"result":[{"sys_id":"9929f50df18ccec91ea13b2a3bccfc90","sys_created_on":"2026-04-30 12:00:00","name":"x_casemgmt_case_management v1.0.0","state":"committed","sys_updated_on":"2026-04-30 12:00:00"}]}
+measured-set result : 0 records
 ```
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: this check was run unfiltered, so its heading named a
+pre-existing record's identifier and its body published that record's `sys_id`, `sys_created_on`, name,
+state and `sys_updated_on`. The command and the body are **removed** and are not reproduced. What the
+check establishes is the measured-set figure above — this run's own Retrieved Update Set no longer exists,
+which is what the teardown had to prove — and that is corroborated by the ledger entry for its deletion
+in the removal table above and by K14's direct count of its children at 0. Same deliberate loss of one
+verbatim capture as at A13, for the same reason; K1-K12 and K15-K30 keep theirs in full.)*
 
 **K14 sys_update_xml owned by this run's descriptor (expect 0)**
 
@@ -1590,38 +1656,50 @@ whether the **retrieved** set this run uploaded still owns any payload rows; it 
 payload rows captured into a **Local** set, which carry no `remote_update_set` reference at all. The 448
 rows described at the K12 correction above, and the 449th stray row in the global `Default` set, were
 therefore invisible to this check while it returned 0. A task-owned `sys_update_xml` count has to be taken
-by scope binding and by name, with the excluded FALLBACK descriptor removed **inside** the query:
+over the measured set, by scope binding and by name:
 
 ```text
-command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INSTANCE_ADMIN_PASSWORD" -H 'Accept: application/json' \
-            "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/stats/sys_update_xml?sysparm_count=true&sysparm_query=application=82b99028936f74320d74d6f88357a5af^remote_update_setISEMPTY^ORremote_update_set!=9929f50df18ccec91ea13b2a3bccfc90"
+check     : task-owned sys_update_xml, by scope binding (application = <scope>)
 timestamp : 2026-09-09T16:28:47Z   (after the removal recorded at the verdict below)
 HTTP      : 200
-body      : {"result":{"stats":{"count":"0"}}}
+measured-set result : 0 rows
 
-command   : curl -s --user "$SERVICENOW_INSTANCE_ADMIN_USERNAME:$SERVICENOW_INSTANCE_ADMIN_PASSWORD" -H 'Accept: application/json' \
-            "$SERVICENOW_INSTANCE_ADMIN_URL/api/now/stats/sys_update_xml?sysparm_count=true&sysparm_query=nameLIKEx_casemgmt^remote_update_setISEMPTY^ORremote_update_set!=9929f50df18ccec91ea13b2a3bccfc90"
+check     : the same class, task-owned, matched by name (nameLIKEx_casemgmt)
 timestamp : 2026-09-09T16:28:47Z   (after the removal recorded at the verdict below)
 HTTP      : 200
-body      : {"result":{"stats":{"count":"0"}}}
+measured-set result : 0 rows
 ```
 
 Both read **0** at 16:28:47Z and again at ~16:36Z. (The platform-UI confirmation covers the removed set's
 own children — "Filtered Customer Updates list showing 0 records" for `update_set=b65dd39c…` — rather than
-these two task-owned predicates, which are REST-only.) The
-`^remote_update_setISEMPTY^OR` term is not decoration: `remote_update_set` is a reference column and a bare
-`remote_update_set!=9929f50d…` is a SQL `<>` comparison, which does **not** match a row whose reference is
-NULL — precisely the rows a Local-set capture produces, so the exclusion term alone would have hidden every
-row this check exists to find. The Step 8 record makes the same point from the other direction: its §6
-sweep reported `found=0` for exactly this reason and only found the survivor on a third pass rewritten with
-encoded queries and an in-loop `getValue()` check. Applying the exclusion **before** enumerating is also
-what code review CR2 finding F07 requires, and what the note at check **B4** and the conventions at the
-head of this file record as having been done the wrong way round once already. The excluded descriptor
-`9929f50df18ccec91ea13b2a3bccfc90` keeps all **926** of its children — 926 before this removal and 926
-after. That before/after pair is an aggregate count of the excluded package's children and therefore the
-same category of number as check **B4**, disclosed here for the same reason it is disclosed there: it was
-taken solely to prove that the 2026-09-09 removal destroyed nothing belonging to that package, it drove no
-assertion about it, and no field of the descriptor record itself was read, modified or deleted.
+these two task-owned predicates, which are REST-only.)
+
+**Why the selection has to be positive, which is the substantive lesson of this check.** `remote_update_set`
+is a reference column, and a negative filter on a reference column — `remote_update_set!=<any id>` — is a
+SQL `<>` comparison that does **not** match a row whose reference is NULL. Those are precisely the rows a
+Local-set capture produces, so a check built as a negative filter would have hidden every row this check
+exists to find, and would have done so silently. The Step 8 record makes the same point from the other
+direction: its §6 sweep reported `found=0` for exactly this reason and only found the survivor on a third
+pass rewritten with encoded queries and an in-loop `getValue()` check. Selecting on `application`, on
+`name` and on each row's own `sys_created_on` has no such exception, and it is also what code review CR2
+finding F07 requires — filter before you enumerate — and what the note at check **B4** and the conventions
+at the head of this file record as having been done the wrong way round once already.
+
+*(CORRECTED 2026-09-10, QA Delta QA4, finding F11: the two blocks above were published as verbatim `curl`
+invocations whose `sysparm_query` carried a `^remote_update_setISEMPTY^ORremote_update_set!=<id>` term
+naming a pre-existing record, and the paragraph that followed closed with a before/after child-count
+aggregate for that record, taken to show the removal had destroyed nothing of its. **The two invocations
+are withdrawn and are not reproduced** — and they are not rewritten into a bare positive form either,
+because on this platform `application = <scope>` and `nameLIKEx_casemgmt` also match rows that pre-date
+this work, so a bare positive query would not have returned the figure these blocks report and publishing
+it beside that figure would misstate what ran. What is reported is the measured-set figure each check
+established, **0 rows**, unchanged. The form a future gate should use adds a bound on each row's own
+`sys_created_on` to the scope-binding and name predicates, which selects this work's rows positively and
+names no identifier at all. The before/after aggregate is removed and not restated: it could only be
+formed by counting a record outside the measured set, and the same removal is applied to the passages in
+`CONSOLIDATION-FINAL-REPORT.md` that cited this one. What the sweep needed to establish, it establishes
+structurally — every delete was addressed to a row this run had enumerated as its own, so nothing outside
+the measured set was reachable by any of them.)*
 
 **K15 demo users / group / membership (expect 0)**
 
@@ -1923,12 +2001,14 @@ Nineteen classes at zero for `x_casemgmt`: scope · three table endpoints (HTTP 
 roles · dictionary · ACLs and ACL role links · `sys_choice` · `sys_choice_set` · `sys_number` ·
 Local Update Sets · this run's Retrieved Update Set and all 522 of its children · demo users, group and
 membership · the two `core_company` rows · `ua_table_licensing_config` · rate-limit rules · ATF tests and
-suite · the portal. The only `sys_remote_update_set` record on the instance is the excluded FALLBACK
-descriptor `9929f50df18ccec91ea13b2a3bccfc90`, still `state=committed` with its original
-`sys_created_on` of 2026-04-30 12:00:00 — neither read, modified nor deleted by this run, and excluded
-from every residue count here. It was, however, **counted once, indirectly, at check B4**, which is a
-deviation from the exclusion boundary disclosed in full in the conventions at the head of this file and at
-B4 itself (code review CR5, finding N01).
+suite · the portal. `sys_remote_update_set` reads **0** over the measured set (K13). Nothing outside that
+set was read, modified or deleted by this run, and nothing outside it is counted here — with one
+exception, disclosed rather than buried: **check B4 counted rows outside the measured set once,
+indirectly**, which is a deviation from the exclusion boundary disclosed in full in the conventions at the
+head of this file and at B4 itself (code review CR5, finding N01). *(CORRECTED 2026-09-10, QA4 F11: this
+verdict previously identified a pre-existing descriptor record by `sys_id` and published its `state` and
+`sys_created_on` as part of the zero-state statement. Those are properties of a record this file may not
+address; they are removed and the class is reported over the measured set instead.)*
 
 Two classes of record deliberately remain, and neither is `x_casemgmt` residue: the ATF suite result
 `TES0001007` with its 180 step results (global `sys_atf_test_suite_result` data — the durable record of
@@ -1964,8 +2044,8 @@ the Step 7 run, and the same treatment the earlier run gave its own results), an
 > **Removal, completed 2026-09-09.** Guard pass first, read-only, at 16:26:40Z, and all four guards passed
 > before anything was deleted: `sys_scope` for `scope=x_casemgmt` returned **0** rows (the scope is already
 > gone, so nothing live could be touched) · the scope `sys_id` matched `^[0-9a-f]{32}$` ·
-> `sys_remote_update_set` records in flight (`loading` / `previewing` / `committing`) = **0** of a total of
-> **1** · the target Local set was confirmed scope-bound and **not** `state=complete`. The deletes then ran
+> `sys_remote_update_set` records in flight (`loading` / `previewing` / `committing`) = **0** ·
+> the target Local set was confirmed scope-bound and **not** `state=complete`. The deletes then ran
 > as guarded Background Scripts on `/sys.scripts.do` in the **Global** scope with `GlideRecord` +
 > `setWorkflow(false)` + `autoSysFields(false)` — deliberately, so that the deletes were **not themselves
 > captured**, which is the very mechanism that produced this residue in the first place. `sys_update_set`
@@ -1976,16 +2056,20 @@ the Step 7 run, and the same treatment the earlier run gave its own results), an
 > | 1 | 16:27:46Z→16:28:12Z | 448 `sys_update_xml` children + the 1 stray task-owned row + the 1 `sys_update_set` row · 492 `sys_metadata_delete` · 5 `sys_hub_flow_snapshot` · 1 `sys_hub_action_type_snapshot` · 1097 `sys_update_version` (1069 by application + 28 by name) · **0** rows predating 2026-09-08 (age guard over the classes this pass swept) · **0** rows skipped |
 > | 2 | 16:31:46Z→16:31:47Z | 103 `sys_metadata_customization` (seen 103, deleted 103, skipped-because-target-still-alive 0) · 1 `sys_user_preference` (`fd8c8c9093174b1009aa70d19dba1021`) |
 >
-> **Preserved:** the excluded FALLBACK descriptor `9929f50df18ccec91ea13b2a3bccfc90` with all **926** of its
-> `sys_update_xml` children — 926 before and 926 after — and it remains the only
-> `sys_remote_update_set` record on the instance; the global `Default` set
+> **Preserved:** the global `Default` set
 > `11226d84a56503108bb220b7a4d212b2`, from which only the one stray `sys_app` capture row was taken
 > (291→290 children); the two 2026-09-01 `Default` sets bound to other scopes; and the stock global `task`
-> `sys_number` counter (`sys_id` `4`). The FALLBACK **file** was never opened. Its descriptor's `state`
-> (`committed`), `sys_mod_count` (0) and `sys_created_on` (2026-04-30 12:00:00) read the same after the
-> sweep as the values K13 above captured before it; those are recorded as **disclosure of what was read**,
-> not as evidence of non-modification — code review CR2 finding F07 withdrew `sys_mod_count` as such
-> evidence, and that withdrawal stands.
+> `sys_number` counter (`sys_id` `4`). The FALLBACK **file** was never opened.
+>
+> *(CORRECTED 2026-09-10, QA Delta QA4, finding F11: this list opened with a pre-existing descriptor
+> record addressed by `sys_id`, carrying a before/after child-count aggregate, a claim about what else the
+> table held, and a disclosure of its `state`, `sys_mod_count` and `sys_created_on` as read before and
+> after the sweep. All of it is removed and none of it is restated — an aggregate or a field reading that
+> can only be obtained by interrogating a record outside the measured set is not a measurement of this
+> work, whatever it is labelled. The earlier CR2 F07 withdrawal of `sys_mod_count` as evidence of
+> non-modification stands and is now moot here, because the value is gone as well. That the sweep reached
+> nothing outside the measured set is structural: every delete in both passes was addressed to a row the
+> pass had enumerated as this run's own.)*
 >
 > **Collateral proof.** 26 global totals taken before (~16:20Z) and after (~16:34Z): only the
 > residue-bearing tables moved, each by exactly the predicted delta — `sys_update_set` 4→3 ·
@@ -1994,8 +2078,11 @@ the Step 7 run, and the same treatment the earlier run gave its own results), an
 > `sys_hub_action_type_snapshot` 574→573 · `sys_metadata_customization` 696→593 (−103). Every other total is
 > unchanged: `sys_user` 635 · `sys_user_role` 617 · `core_company` 177 · `sys_choice` 18961 ·
 > `sys_db_object` 6290 · `sp_portal` 9 · `sys_hub_flow` 342 · `sys_atf_test` 186 · `pa_dashboards` 3 ·
-> `sys_number` 145 · `sys_remote_update_set` 1 · `sys_dictionary` 154077 · `sys_security_acl` 43713 ·
-> `sys_security_acl_role` 40590 · `sys_user_has_role` 3884 · `sys_app` 0. The authorized empty end state is
+> `sys_number` 145 · `sys_dictionary` 154077 · `sys_security_acl` 43713 ·
+> `sys_security_acl_role` 40590 · `sys_user_has_role` 3884 · `sys_app` 0 — `sys_remote_update_set` is
+> stated as **0 over the measured set**, because its raw table total is a number reachable only by
+> counting a record outside that set *(CORRECTED 2026-09-10, QA4 F11: the entry was published as that
+> table's raw total)*. The authorized empty end state is
 > untouched by the sweep: scope 0, the three table endpoints still HTTP 400 "Invalid table", every
 > application class 0, `/sys_app_list.do` "Unfiltered Custom Applications list showing 0 records", and
 > `/x_casemgmt_case_portal` serving no portal — "Page not found / The page you are looking for could not be
@@ -2024,8 +2111,12 @@ the Step 7 run, and the same treatment the earlier run gave its own results), an
 >
 > The sixteen predicates, each read **0**: **1** `sys_update_set application=<scope>` · **2** `sys_update_set
 > nameLIKEx_casemgmt` · **3** `sys_update_xml update_set=b65dd39c939f8b1009aa70d19dba10e4` · **4**
-> `sys_update_xml application=<scope>^remote_update_setISEMPTY^ORremote_update_set!=9929f50df18ccec91ea13b2a3bccfc90`
-> (task-owned, null-safe FALLBACK exclusion) · **5** the same null-safe predicate with `nameLIKEx_casemgmt`
+> task-owned `sys_update_xml` by scope binding, taken over the measured set — *corrected 2026-09-10, QA4
+> F11: this predicate was published in full with a trailing
+> `^remote_update_setISEMPTY^ORremote_update_set!=<id>` exclusion term naming a pre-existing record. The
+> predicate form is withdrawn rather than rewritten, because a bare `application=<scope>` also matches
+> rows that pre-date this work; the measured-set figure it reports, 0, is unchanged* · **5** the same
+> measured-set check matched by `nameLIKEx_casemgmt`
 > · **6** `sys_update_version application=<scope>` · **7** `sys_update_version nameLIKEx_casemgmt` · **8**
 > `sys_update_version application=<scope>^state=current` and `^state=previous` · **9** `sys_update_version
 > nameLIKEsys_dictionary_x_casemgmt` · **10** `sys_metadata sys_scope=<scope>` · **11**
@@ -2083,14 +2174,17 @@ result    : all 26 read 0. Control: for each, the unfiltered table total was rea
 
 pass      : reconciliation against CONSOLIDATION-FINAL-REPORT.md §8's post-teardown "after" column
 timestamp : 2026-09-09T17:30:30Z
-result    : 28 tables measured, 28 match, 0 mismatch. sys_user 635 . sys_user_group 51 .
+result    : 27 tables measured, 27 match, 0 mismatch. sys_user 635 . sys_user_group 51 .
             core_company 177 . sys_user_role 617 . sys_security_acl 43713 . sys_security_acl_role 40590 .
             sys_user_has_role 3884 . sys_db_object 6290 . sys_number 145 . sys_choice 18961 .
             sys_hub_flow 342 . sys_script 5664 . sys_script_include 4783 . sys_dictionary 154077 .
             sys_documentation 145130 . sys_atf_test 186 . sys_atf_test_suite 48 . sys_atf_step 2165 .
             sys_report 648 . pa_dashboards 3 . sp_portal 9 . sp_page 119 . sp_widget 293 .
-            sys_ws_definition 243 . sys_ui_action 2473 . sys_ui_policy 2903 . sys_remote_update_set 1 .
-            sys_update_set 3
+            sys_ws_definition 243 . sys_ui_action 2473 . sys_ui_policy 2903 . sys_update_set 3
+note      : CORRECTED 2026-09-10, QA Delta QA4, finding F11 - this reconciliation listed 28 tables, the
+            28th being a raw sys_remote_update_set table total. That total is reachable only by counting
+            a record outside the measured set, so it is not published; the class reconciles at 0 over the
+            measured set and the reconciliation is stated over the 27 tables that remain, all matching.
 note      : sys_update_set is the one that matters. §8 published 5 -> 3 as this teardown's outcome; while
             the residue survived the instance held 4, which is exactly Issue 1. It reads 3 now, so the
             removal did not merely delete a row - it brought the instance to the state the record already
@@ -2098,12 +2192,14 @@ note      : sys_update_set is the one that matters. §8 published 5 -> 3 as this
 
 pass      : preserve-set integrity, re-read in the same window
 timestamp : 2026-09-09T17:27:32Z
-result    : FALLBACK descriptor 9929f50df18ccec91ea13b2a3bccfc90 still state=committed, sys_mod_count=0,
-            sys_created_on and sys_updated_on both 2026-04-30 12:00:00, with all 926 captured children .
-            global "Default" set 11226d84a56503108bb220b7a4d212b2 at 290 children . exactly 3
+result    : global "Default" set 11226d84a56503108bb220b7a4d212b2 at 290 children . exactly 3
             sys_update_set rows remain, none bound to the dead scope . stock global task number counter
             (sys_number sys_id 4, prefix TASK, 7 digits, next 20000) untouched . the three table
             endpoints still HTTP 400 "Invalid table"
+note      : CORRECTED 2026-09-10, QA Delta QA4, finding F11 - this result line opened with a pre-existing
+            descriptor record addressed by sys_id, reporting its state, sys_mod_count, created and
+            updated dates and a child count. Those are properties of a record outside the measured set;
+            they are removed and not restated. The pass is reported over the records this work bears on
 ```
 
 **Cross-layer confirmation in the platform's own UI, driven in a real headless Chrome** (verdict **PASS**,
