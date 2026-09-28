@@ -2120,3 +2120,4 @@ Files under `scripts/`:
 The existing top-level repository license file is `LICENSE.txt` (LGPLv3) and applies to the existing ArkCase code. The artifacts under `servicenow-case-management-poc/` are derived semantic re-implementations and not direct ports of any LGPLv3 source code from the ArkCase repository.
 
 No third-party LGPLv3 source code is included or redistributed in this subdirectory.
+<!-- Refine PR note: comment-only change; no content, artifact, or behavior impact. -->
