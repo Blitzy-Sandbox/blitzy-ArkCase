@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script_client`
+    (Client Script) row that keeps the message region of the internal
+    `x_casemgmt_case` form honest, inside the scoped application
+    `x_casemgmt`.
+
+    WHY THIS FILE EXISTS - QA FINDING F14
+      "Blocked-save banners accumulate instead of flushing." Reproduction
+      as filed:
+        1. Open a case whose mandatory fields are empty.
+        2. Click Update - the platform refuses the save client-side and
+           writes an 86-character banner naming Subject, Description and
+           Requester Name.
+        3. Fill Subject.
+        4. Click Update again - a SECOND banner (77 characters, naming the
+           two fields still empty) is APPENDED into `#output_messages`
+           without the first being flushed.
+      The screen then asserts two contradictory things at once: the stale
+      banner still names Subject as empty while Subject visibly contains
+      the text the user just typed. Each retry adds another 40.5px of
+      banner, pushing the form down. Expected behaviour is that the stale
+      banner is REPLACED.
+
+      The platform writes the new banner without clearing the old one, and
+      that write is not ours to intercept - so this script removes the
+      stale banner at the only other moment that makes it stale: the
+      moment the user edits one of the mandatory fields the banner is
+      talking about. By the time the next save is attempted the region is
+      empty, so the platform's fresh banner is the only banner on screen
+      and it describes the form's actual state.
+
+    WHY onLoad, NOT onSubmit AND NOT onChange
+      An onSubmit flush is correct only if the platform writes its
+      mandatory-field banner AFTER onSubmit client scripts run. That
+      ordering is not relied on here: the platform is documented to abort
+      the submit when a mandatory field is empty without reaching onSubmit
+      client scripts, which would leave the flush unrun on exactly the
+      saves that produce these banners - the accumulation would be
+      untouched - and the ordering was not established on the verification
+      instance, so an onSubmit implementation would rest on an unverified
+      assumption.
+
+      A single onChange script cannot cover the form: `sys_script_client`
+      has ONE `field` column, and `x_casemgmt_case` has FOUR mandatory
+      fields - subject, status, description and requester_name, each
+      carrying mandatory=true in ../dictionary/ and each rendering one of
+      the four red asterisks on the form. An onChange script per field
+      would mean four client-script records for one behaviour, against the
+      AAP Section 0.7.2 minimal-change clause.
+
+      An onLoad script binds all four in one record: it asks
+      `g_form.getControl()` for each mandatory field's control and
+      registers "input" and "change" listeners that call
+      `g_form.clearMessages()`. "input" catches the first keystroke, a
+      paste, a drag-and-drop and a browser autofill; "change" catches a
+      choice selection and a commit-on-blur.
+
+    WHY THIS CANNOT ERASE A MESSAGE THAT STILL MATTERS
+      The flush is triggered only by a USER EDIT, which always happens
+      strictly BEFORE the save that writes the next message - so a freshly
+      written banner can never be erased by it. In particular the three
+      verbatim state-machine messages that AAP Section 0.7.4 makes
+      non-negotiable, and that QA verified character-exact at 52, 34 and 49
+      characters -
+          "All tasks must be closed before resolving this case."
+          "Cases cannot be returned to Draft."
+          "Closed cases are terminal and cannot be modified."
+      - are written server-side by ../business_rules/ during the save and
+      rendered into `#output_messages` when the form comes back. Nothing in
+      this script runs at that point: it binds listeners on load and then
+      waits for a user edit. Those banners therefore still appear, and
+      still persist across a fresh reload, exactly as before. They are
+      cleared only if the user goes on to edit a mandatory field, which is
+      the same "the screen should stop describing a state the form has left"
+      contract the banner accumulation violated.
+
+    WHY `isolate_script` IS false
+      The script binds DOM events to the field controls returned by
+      `g_form.getControl()` and reads the message container to avoid
+      pointless work while the user types, so it needs the non-isolated
+      client environment. `sys_dictionary` gives `isolate_script` the
+      default value false for `sys_script_client` (verified on the
+      instance: read_only=false, no attributes, default_value=false), but
+      a scoped application sets it to true when the row is INSERTED, so
+      the value below is stated explicitly rather than left to the insert
+      default. Nothing in the script writes to the DOM: it adds listeners
+      and calls the documented `g_form.clearMessages()`.
+
+    FAILURE BEHAVIOUR
+      Every step is guarded. A field whose control is absent - not on this
+      view, or denied to the current user by the field-level ACLs in
+      ../acl/ - is skipped, not treated as an error. A failure inside the
+      flush is swallowed and reported through the platform's own
+      client-side logger (`jslog`), because message hygiene must never
+      interfere with data entry. The script also records how many controls
+      it bound, which is the monitoring hook a verifier reads in the
+      browser console.
+
+    SCOPE AND FOOTPRINT
+      - Table: x_casemgmt_case (this application's own table).
+      - UI Type: All (10) - desktop UI16 and Service Portal alike. The
+        public portal pages in ../portal/ do not render this form; they use
+        their own widgets and are unaffected either way.
+      - Global: true, so the script applies to every view of the form
+        rather than one named view.
+      - Inherited (applies_extended): false - no table extends
+        x_casemgmt_case.
+      - It creates no records, changes no field values, enforces no
+        security and alters no field order. Nothing global is touched: the
+        row carries the scoped application's sys_scope and sys_package.
+
+    IDENTIFIERS
+      sys_id 86c130f8d9751167631b8438610153ef is deterministic - it is the
+      first 32 hex characters of the MD5 of the canonical string
+      "x_casemgmt_case.client_script.flush_stale_messages":
+        printf '%s' 'x_casemgmt_case.client_script.flush_stale_messages' | md5sum | cut -c1-32
+      so regenerating this file is byte-deterministic, and the SAME sys_id
+      is the row that exists on the verification instance. Its
+      `sys_update_name` is sys_script_client_86c130f8d9751167631b8438610153ef
+      (client scripts are keyed on sys_id, not on name), which is the key
+      the import engine matches on.
+
+    CROSS-REFERENCES (AAP Section 0.5.2 dependency ordering)
+      MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml (scope authority)
+        - ../tables/x_casemgmt_case.xml (the table it is attached to)
+        - ../dictionary/x_casemgmt_case_*.xml (the four mandatory fields it
+          binds must exist)
+      RELATED:
+        - ../form_layout/sys_ui_section_x_casemgmt_case_default.xml - the
+          single-column layout of the same form (QA findings F9 and F13).
+        - ../business_rules/x_casemgmt_block_draft_backtransition.xml,
+          ../business_rules/x_casemgmt_block_terminal_closed.xml and the
+          Resolved-transition guard - the writers of the three verbatim
+          banners this script is careful not to disturb.
+
+    AAP COMPLIANCE
+      - AAP 0.7.1 "Surface all blocking errors on the form": preserved and
+        improved - the banner on screen now describes the form's current
+        state instead of a state it has left.
+      - AAP 0.7.4 the three verbatim messages are untouched, still
+        server-written and still persistent across a reload.
+      - AAP 0.7.2 scoped-namespace exclusivity: scoped sys_scope and
+        sys_package, no global artifact touched.
+      - AAP 0.7.2 minimal change: one record, one behaviour, no field
+        added, removed, relabelled or retyped.
+      - AAP 0.3.2 no global-scope write.
+      - No PII: field names only.
+      - No hardcoded sys_id references: the script names fields by their
+        element names and calls documented g_form API only.
+-->
+<record_update table="sys_script_client">
+    <sys_script_client action="INSERT_OR_UPDATE">
+        <active>true</active>
+        <applies_extended>false</applies_extended>
+        <condition/>
+        <description>Form message hygiene for x_casemgmt_case (QA finding F14). On load, binds an input/change listener to the four mandatory fields (subject, status, description, requester_name) that calls g_form.clearMessages() when the user edits one, so the stale mandatory-field banner from a refused save is flushed before the next save writes its own. Prevents the accumulated, self-contradicting banners F14 reports (screen claiming Subject is empty while Subject contains text). Cannot erase a freshly written message - the flush happens on user edit, strictly before the next save - so the three verbatim AAP 0.7.4 state-machine banners still surface and still persist across a fresh reload. onLoad rather than onSubmit because the platform's client-side mandatory check aborts the submit before onSubmit client scripts run, and rather than onChange because sys_script_client.field holds a single field while this table has four mandatory fields.</description>
+        <field/>
+        <global>true</global>
+        <isolate_script>false</isolate_script>
+        <messages/>
+        <name>x_casemgmt_case_flush_stale_messages</name>
+        <order>100</order>
+        <script><![CDATA[function onLoad() {
+    // -----------------------------------------------------------------
+    // QA finding F14 - "Blocked-save banners accumulate instead of
+    // flushing". When a save is refused because a mandatory field is
+    // empty, the platform APPENDS its banner into #output_messages
+    // without flushing the banner left by the previous attempt. Filling
+    // one of the named fields and retrying therefore leaves the screen
+    // asserting two contradictory things at once - the stale banner
+    // still names Subject as empty while Subject visibly contains text -
+    // and every retry adds another 40.5px of banner.
+    //
+    // The fix is to flush the message region at the ONLY moment the
+    // contradiction can be created: when the user edits one of the
+    // mandatory fields the stale banner is talking about. Clearing then
+    // is safe by construction - the flush happens strictly BEFORE the
+    // next save attempt, so it can never erase a freshly written
+    // message, and a message that was never contradicted is never
+    // touched: a server-written banner survives a fresh reload
+    // untouched, which is what AAP Section 0.7.4 requires of the three
+    // verbatim state-machine messages ("All tasks must be closed before
+    // resolving this case.", "Cases cannot be returned to Draft.",
+    // "Closed cases are terminal and cannot be modified.").
+    //
+    // WHY THIS IS AN onLoad SCRIPT AND NOT onSubmit OR onChange
+    //   An onSubmit flush is only correct if the platform writes its
+    //   mandatory-field banner AFTER onSubmit client scripts run, and
+    //   that ordering was deliberately not relied on: the platform is
+    //   documented to abort the submit when a mandatory field is empty
+    //   without reaching onSubmit client scripts, which would leave the
+    //   flush unrun on precisely the saves that produce these banners.
+    //   A single onChange script would fix only ONE field -
+    //   sys_script_client.field holds one field name - and this table
+    //   has four mandatory fields (subject, status, description,
+    //   requester_name, all mandatory=true in sys_dictionary), so a
+    //   per-field script would leave three of the four contradictions
+    //   in place. Binding all four from one onLoad script keeps the
+    //   application to a single client-script record (AAP Section 0.7.2
+    //   minimal change) while covering every field the banner can name.
+    // -----------------------------------------------------------------
+    'use strict';
+
+    // The mandatory fields of x_casemgmt_case - the only fields the
+    // platform's mandatory-field banner can ever name on this form.
+    // Kept as an explicit list rather than derived at runtime because
+    // g_form exposes no "list the mandatory fields" API, and because an
+    // explicit list makes the intended coverage reviewable.
+    var MANDATORY_FIELDS = ['subject', 'status', 'description', 'requester_name'];
+
+    // UI16 renders form-level messages into this container; each banner
+    // is a child carrying the class "outputmsg".
+    var MESSAGE_CONTAINER_ID = 'output_messages';
+    var MESSAGE_CLASS = 'outputmsg';
+
+    // Marker property so a control is never bound twice, e.g. if the
+    // platform re-runs onLoad against a DOM that is already wired.
+    var BOUND_FLAG = 'xCasemgmtFlushStaleMessagesBound';
+
+    /**
+     * True when at least one form-level message is currently on screen.
+     * Used only to avoid pointless work while the user types; when the
+     * container cannot be inspected the answer is TRUE, so the flush
+     * still happens and message hygiene never depends on the probe.
+     */
+    function messagesPresent() {
+        try {
+            var box = document.getElementById(MESSAGE_CONTAINER_ID);
+            if (!box) {
+                return true;
+            }
+            return box.getElementsByClassName(MESSAGE_CLASS).length > 0;
+        } catch (probeError) {
+            return true;
+        }
+    }
+
+    /**
+     * Flush the stale banner. Wrapped so that no failure in message
+     * hygiene can ever interfere with data entry on the form.
+     */
+    function flushStaleMessages() {
+        try {
+            if (messagesPresent()) {
+                g_form.clearMessages();
+            }
+        } catch (flushError) {
+            // Monitoring hook: surfaces in the browser console via the
+            // platform's own client-side logger, without breaking the
+            // form.
+            if (typeof jslog === 'function') {
+                jslog('x_casemgmt_case_flush_stale_messages: could not clear form messages: ' + flushError);
+            }
+        }
+    }
+
+    var bound = 0;
+    var skipped = [];
+
+    for (var i = 0; i < MANDATORY_FIELDS.length; i++) {
+        var fieldName = MANDATORY_FIELDS[i];
+        var control = null;
+
+        try {
+            control = g_form.getControl(fieldName);
+        } catch (controlError) {
+            control = null;
+        }
+
+        // A control is absent when the field is not on this view or the
+        // field-level ACLs in the application's acl/ folder deny the
+        // current user access to it. Both are legitimate states, so the
+        // field is skipped rather than treated as an error.
+        if (!control || !control.addEventListener) {
+            skipped.push(fieldName);
+            continue;
+        }
+
+        if (control[BOUND_FLAG]) {
+            continue;
+        }
+        control[BOUND_FLAG] = true;
+
+        // "input" catches the first keystroke, a paste, a drag-and-drop
+        // and a browser autofill; "change" catches a choice selection
+        // and a commit-on-blur. Both are registered because neither
+        // covers every control type on its own, and the messagesPresent()
+        // guard makes the second call of a pair a no-op.
+        control.addEventListener('input', flushStaleMessages, false);
+        control.addEventListener('change', flushStaleMessages, false);
+        bound++;
+    }
+
+    if (typeof jslog === 'function') {
+        jslog('x_casemgmt_case_flush_stale_messages: bound ' + bound + ' of ' +
+            MANDATORY_FIELDS.length + ' mandatory field control(s)' +
+            (skipped.length ? '; not on form or not readable: ' + skipped.join(', ') : ''));
+    }
+}
+]]></script>
+        <sys_class_name>sys_script_client</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>86c130f8d9751167631b8438610153ef</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_flush_stale_messages</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_client_86c130f8d9751167631b8438610153ef</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <table>x_casemgmt_case</table>
+        <type>onLoad</type>
+        <ui_type>10</ui_type>
+        <view/>
+    </sys_script_client>
+</record_update>

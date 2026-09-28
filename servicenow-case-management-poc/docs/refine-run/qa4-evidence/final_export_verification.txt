@@ -1,0 +1,93 @@
+QA4 FRESH EXPORT VERIFICATION — 2026-09-10T03:32:50Z
+file: fresh_export5.xml | bytes: 3219020 | sha256: 72c86b0316f1e12f8208f5f2dc91c3a0aeb9b9b17310c357b295c53ad1ea6b0f
+
+[1] DESCRIPTOR
+    sys_id               = 9aff12ec931b0f1009aa70d19dba107a
+    name                 = x_casemgmt_case_management v1.0.0
+    state                = loaded
+    application_scope    = x_casemgmt
+    application_version  = 1.0.0
+    remote_sys_id        = 50bf16ac931b0f1009aa70d19dba10df
+    sys_created_on       = 2026-09-10 03:32:15
+    top-level: {'sys_remote_update_set': 1, 'sys_update_xml': 577} | block actions: {'INSERT_OR_UPDATE': 577}
+    'AMENDED' present: False | records: 1526 | distinct sys_ids: 1452
+
+[2] ARTEFACT COUNTS
+    43 expectations checked, 0 differ (all exact)
+
+[3] ACL OPERATION REFERENCES (the defect fixed this pass)
+    x_casemgmt_case.closed_date        operation=e66cf897b7300210240b06dd1e11a9fd display_value='query_range' resolves=True
+    x_casemgmt_case.opened_date        operation=e66cf897b7300210240b06dd1e11a9fd display_value='query_range' resolves=True
+    x_casemgmt_case_task.due_date      operation=e66cf897b7300210240b06dd1e11a9fd display_value='query_range' resolves=True
+
+[4] APP-FILE COMPLETENESS
+    instance app metadata: 596  carried: 596  missing: 0
+
+[5] DANGLING REFERENCES
+      544 occ /  47 distinct   sys_variable_value.variable
+      180 occ /  14 distinct   sys_atf_step.step_config
+       57 occ /  21 distinct   sys_variable_value.value
+       10 occ /   1 distinct   sys_hub_flow_logic_instance_v2.logic_definition
+        4 occ /   1 distinct   sys_hub_trigger_instance_v2.trigger_definition
+        3 occ /   1 distinct   sys_security_acl.operation
+        2 occ /   1 distinct   sys_rate_limit_rules.user
+        2 occ /   1 distinct   sys_hub_step_instance.step_type
+        1 occ /   1 distinct   sys_hub_action_plan.snapshot
+    app-artefact classes dangling: {'sys_security_acl.operation': (3, ['e66cf897b7300210240b06dd1e11a9fd']), 'sys_hub_action_plan.snapshot': (1, ['2f5392e893970f1009aa70d19dba1085'])}
+
+
+QA4 FRESH EXPORT VERIFICATION (FINAL) — 2026-09-10T03:58:23Z
+file: fresh_export6.xml | bytes: 3221610 | sha256: 0bc733f9ced05010af534eb4ac47eaffa95aee31b6b7a4b84ba5a514e324a6fe
+
+[1] DESCRIPTOR
+    sys_id               = 8dc06260935b0f1009aa70d19dba1068
+    name                 = x_casemgmt_case_management v1.0.0
+    state                = loaded
+    application_name     = x_casemgmt Case Management
+    application_scope    = x_casemgmt
+    application_version  = 1.0.0
+    remote_sys_id (local set) = 3390a620935b0f1009aa70d19dba1077
+    top-level: {'sys_remote_update_set': 1, 'sys_update_xml': 577} | block actions: {'INSERT_OR_UPDATE': 577}
+    'AMENDED' present: False | records: 1526 | distinct sys_ids: 1452 | unparseable payloads: 0 | xmllint: OK
+
+[2] ARTEFACT COUNTS
+    Record set is identical to fresh_export5.xml: 0 sys_ids only in export6, 0 only in export5.
+    export5 passed all 43 curated artefact expectations exactly (section above), so export6 does too.
+    Sole payload difference vs export5: sys_app.can_edit_in_studio false -> true (set natively on the
+    instance before re-publish, because the platform's own Delete Application action and Studio both
+    require it; no hand editing of the exported XML).
+
+[3] ACL OPERATION REFERENCES
+    x_casemgmt_case.closed_date        operation=e66cf897b7300210240b06dd1e11a9fd display_value='query_range' resolves=True
+    x_casemgmt_case.opened_date        operation=e66cf897b7300210240b06dd1e11a9fd display_value='query_range' resolves=True
+    x_casemgmt_case_task.due_date      operation=e66cf897b7300210240b06dd1e11a9fd display_value='query_range' resolves=True
+
+[4] APP-FILE COMPLETENESS
+    596/596 app metadata files carried (established on export5; export6 carries the same record set).
+
+[5] DANGLING REFERENCES (unchanged from export5)
+      544/47 sys_variable_value.variable | 180/14 sys_atf_step.step_config | 57/21 sys_variable_value.value
+      10/1 sys_hub_flow_logic_instance_v2.logic_definition | 4/1 sys_hub_trigger_instance_v2.trigger_definition
+      3/1 sys_security_acl.operation (stock sys_security_operation row, same class as read/write)
+      2/1 sys_rate_limit_rules.user | 2/1 sys_hub_step_instance.step_type
+      1/1 sys_hub_action_plan.snapshot -> 2f5392e893970f1009aa70d19dba1085 (transient compile id the
+          platform's own action publish records but never persists; proven absent instance-side)
+
+================================================================================
+FINAL DELIVERABLE (export10) - verified 2026-09-10T09:07:18Z
+================================================================================
+file                : update-set/x_casemgmt_case_management_update_set.xml
+sha256              : 5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983
+bytes               : 3282299
+blocks              : 576 (all INSERT_OR_UPDATE, 0 DELETE, 0 AMENDED)
+records / distinct  : 1528 / 1454, 0 unparseable
+descriptor          : 985923a493574f1009aa70d19dba1087  x_casemgmt_case_management  x_casemgmt 1.0.0
+local set           : 5329676493574f1009aa70d19dba10c1 (publish cycle 10, 467 app files + 116 captured data rows)
+provenance          : platform Publish-to-Update-Set + UpdateSetExport, downloaded via export_update_set.do, no post-export edit
+zero-state before   : 47/47 predicates, 0 FAIL (phase step5b_teardown_final_export10)
+preview gate        : 0 errors, 0 warnings, 0 problems of any type
+commit              : 576 inserted / 0 updated / 0 deleted / 0 collisions, one native UI click, 2026-09-10 02:02:01
+post-commit census  : 55/55 predicates, 0 FAIL; app metadata files 595
+ATF                 : 20 tests / 179 steps / 1 suite
+harness             : 13/13 PASSED (repo script, unmodified)
+supersedes          : export9 4efd56f2..., export8 a2ac2ab9..., export6 0bc733f9..., export5 72c86b03...

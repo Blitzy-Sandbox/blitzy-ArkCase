@@ -1,0 +1,614 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `case` field on the `x_casemgmt_case_party` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_dictionary_x_casemgmt_case_party_case
+      Update record type       : Dictionary
+      Update record target     : Case Party.Case
+      Captured (instance time) : 2026-09-02 19:14:17
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (23daa09e938b435009aa70d19dba10bd), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    ServiceNow Update Set record-definition for the `sys_dictionary` row that
+    declares the `case` Reference field on the `x_casemgmt_case_party` custom
+    table inside the scoped application `x_casemgmt`.
+
+    Per AAP Section 0.5.7 (Data-Model Mapping verbatim) for x_casemgmt_case_party:
+
+        Field     Type                          Constraints
+        case      Reference -> x_casemgmt_case   Mandatory
+
+    THIS FIELD IS THE PARENT LINKAGE that ties every case-party row back to
+    its parent case. It is the cornerstone of the AAP's "Polymorphic
+    association via single-table choice + UI Policy" pattern (AAP Section
+    0.4.3) - without it, a party row is a free-floating Person+Organization
+    association with no semantic anchor to any case, and the polymorphic
+    party-table model collapses into meaningless data. Every other field on
+    x_casemgmt_case_party (party_type, person, organization, role_label)
+    describes WHAT KIND of party association exists; only `case` describes
+    WHICH case the party is associated to.
+
+    Critical behaviors that depend on this field (AAP Sections 0.4.3, 0.4.4,
+    0.5.6, 0.5.7):
+
+      1. RELATED-LIST ELIGIBILITY ON THE CASE FORM - NECESSARY, NOT
+         SUFFICIENT, AND CURRENTLY NOT SATISFIED
+         (AAP Section 0.4.4 "Internal user UI" requirement: "configures
+          Related Lists on the case form for both `case_task` (parent =
+          current case) and `case_party` (parent = current case)")
+         This entry's `<reference>x_casemgmt_case</reference>` element is
+         what makes a parties related list POSSIBLE: it registers the
+         inbound relationship the platform offers when a form's related
+         lists are configured. It does NOT by itself put a related list on
+         the case form. A related list appears only when the parent form's
+         related-list configuration (`sys_ui_related_list` plus its
+         `sys_ui_related_list_entry` rows) names it, and THAT
+         CONFIGURATION WAS NEVER AUTHORED for this POC.
+         Measured on the verification instance: `sys_ui_related_list` holds
+         zero rows for `x_casemgmt_case` (and zero for any `x_casemgmt`
+         table) against 1545 rows instance-wide, and on a real case record
+         the form's `#related_lists_wrapper` element renders at a bounding
+         height of 0 CSS pixels with class `tabs_disabled` and no tabs - so
+         a user cannot see a case's parties from the case form even though
+         the party rows exist. The AAP-mandated case-people /
+         case-organizations rendering (semantic-equivalent of ArkCase's
+         Cases.PeopleController and Cases.OrganizationsController AngularJS
+         controllers under acm-standard-applications/arkcase) is therefore
+         an open gap, tracked in
+         ../docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md. Removing
+         `<reference>` here would make the gap unfixable; keeping it means
+         the gap closes as soon as the related-list configuration is
+         authored and captured.
+
+      2. ACL "ASSIGNED ONLY" CASCADE FOR CASE_AGENT
+         (../acl/x_casemgmt_case_party_*.xml)
+         Per AAP Section 0.5.6: case_agent has "Assigned only" CRUD access.
+         For parties, "Assigned only" propagates THROUGH this field: a
+         case_agent may read/write a party row ONLY IF the parent case
+         (resolved by `current.case`) satisfies the case-level "Assigned
+         only" condition (assigned_agent = current user OR assigned_group
+         contains current user). The ACL condition scripts on
+         x_casemgmt_case_party therefore traverse this reference to evaluate
+         authorization:
+            current.case.assigned_agent == gs.getUserID()
+              || gs.getUser().isMemberOf(current.case.assigned_group.toString())
+         This dot-walk chain (`current.case.assigned_agent`,
+         `current.case.assigned_group`) requires that this dictionary
+         entry's `<reference>` correctly target `x_casemgmt_case` so the
+         platform can dereference the parent case's columns at ACL
+         evaluation time. The same pattern applies to the sibling
+         x_casemgmt_case_task table via ../dictionary/x_casemgmt_case_task_case.xml.
+
+      3. CONDITIONAL FIELD VISIBILITY VIA party_type CHOICE
+         (../ui_policy/x_casemgmt_case_party_conditional_fields.xml)
+         The polymorphism collapse pattern (AAP Section 0.4.3) makes
+         x_casemgmt_case_party.party_type the discriminator that decides
+         whether the `person` field (Reference -> sys_user) or the
+         `organization` field (Reference -> core_company) is visible and
+         required. The UI Policy at the path above enforces the conditional
+         visibility. This `case` field is OUTSIDE the polymorphism - it is
+         ALWAYS visible and ALWAYS mandatory, regardless of party_type,
+         because the parent-case linkage is universal across both Person
+         and Organization parties. AAP Section 0.5.7's constraint column
+         is simply "Mandatory" with no qualifier - in contrast to
+         x_casemgmt_case_party.person ("Conditional: required if
+         party_type = Person") and x_casemgmt_case_party.organization
+         ("Conditional: required if party_type = Organization") which DO
+         carry conditional qualifiers.
+
+      4. SEED-DATA POPULATION VIA NUMBER LOOKUP
+         (../seed-data/parties/x_casemgmt_case_party_demo_*.xml,
+          ../scripts/seed_demo_data.js)
+         Per AAP Section 0.5.2 reference-resolution rules: "Case
+         references (e.g., on case_task.case, case_party.case, demo
+         task/party seed) -> look up x_casemgmt_case by `number`." The
+         seed-data XMLs and the idempotent seed_demo_data.js script
+         resolve the parent-case sys_id at seed time via:
+            var caseGr = new GlideRecord('x_casemgmt_case');
+            caseGr.addQuery('number', 'CASE0000001');
+            caseGr.query();
+            if (caseGr.next()) { partyGr.case = caseGr.sys_id; }
+         There are NO hard-coded sys_id literals in any seed file
+         pointing into this column - all references resolve by the
+         human-readable case number, per AAP Section 0.7.2 "no
+         hardcoded sys_id constraint" applied to seed data. AAP
+         Section 0.7.4 minimum demo-data thresholds explicitly require
+         "at least one Person and one Organization party per demo case
+         to exercise the polymorphic UI policy" - which mandates that
+         multiple party rows resolve to the SAME parent-case sys_id
+         via this column.
+
+      5. CASCADE-DELETE BEHAVIOR (reference_cascade_rule = cascade)
+         (this dictionary entry's `<reference_cascade_rule>` element)
+         When a parent x_casemgmt_case row is deleted, the platform
+         deletes this row's child parties with it.
+
+         SUPERSEDES the earlier `none` value. QA finding F18 measured
+         what `none` combined with `<mandatory>true</mandatory>`
+         actually produces on this instance: deleting the parent case
+         returned HTTP 204 and the child SURVIVED, still holding the
+         deleted parent's sys_id, so the column answered
+         {'display_value': '', 'link': '.../x_casemgmt_case/<gone>'} - a
+         MANDATORY REFERENCE RESOLVING TO NOTHING. The row can never be
+         saved from its own form again (the mandatory field is
+         unfillable from a value that displays as blank), it is absent
+         from every case's Parties related list because no live parent
+         claims it, and "manual cleanup surfaces operator awareness" is
+         not what happens: the parent delete succeeds with no warning,
+         no message and no audit signal naming the children it
+         stranded.
+
+         WHAT THIS DELETES, AND WHAT IT DOES NOT. Cascade removes the
+         ASSOCIATION row on x_casemgmt_case_party and nothing else. The
+         `person` (sys_user) and `organization` (core_company) rows the
+         association points AT are untouched - they live in the global
+         identity and company tables, this application never owns them,
+         and AAP Section 0.3.2 forbids writing to them at all. The
+         earlier concern about "organization-typed parties that might be
+         cross-referenced elsewhere in the corporate graph" was
+         therefore misplaced: the corporate graph is on core_company,
+         which no cascade from this column can reach. What cascade
+         removes is exactly the case-to-party link that has no meaning
+         once the case is gone - which is what AAP Section 0.1.1 says
+         this table IS, a collapse of ArkCase's two ASSOCIATION tables
+         acm_person_assoc and acm_person_org_assoc, never a party
+         registry.
+
+         WHY `cascade` AND NOT ONE OF THE OTHER FOUR OPTIONS. The
+         platform offers none | clear | cascade | delete |
+         delete_no_workflow | restrict:
+           * `clear` leaves the child holding an EMPTY mandatory field -
+             still unsavable from its own form, and still in no related
+             list. It trades a dangling reference for a missing one.
+           * `restrict` refuses the parent delete while children exist,
+             which would REVOKE A GRANTED PRIVILEGE: AAP Section 0.5.6
+             gives x_casemgmt_case_manager Delete with no qualifier at
+             all.
+           * `delete_no_workflow` suppresses the children's own business
+             rules and audit on removal - the opposite of the visibility
+             the original rationale was reaching for.
+           * `delete` removes the child but does not continue down a
+             further cascade chain. It is equivalent here, because
+             x_casemgmt_case_party has no children of its own;
+             `cascade` is chosen for being the platform's canonical
+             expression of a parent-child composition and for remaining
+             correct if a grandchild table is ever added.
+
+         MEASURED after the change: a fixture case with one child task
+         and one child party was deleted (HTTP 204); both children were
+         then absent (HTTP 404 on direct read), and an orphan sweep over
+         the whole of x_casemgmt_case_party and x_casemgmt_case_task
+         returned zero rows whose `case` fails to resolve. A case with no
+         children still deletes cleanly, so the Delete grant is intact.
+         The sibling ../dictionary/x_casemgmt_case_task_case.xml carries
+         the same `cascade` value for the same reason, so the two
+         compositions behave identically.
+
+    Semantic source-side reference (read-only, NOT byte-for-byte ported):
+      - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonAssociation.java
+        lines 90-100:
+            @Column(name = "cm_person_assoc_parent_id")
+            private Long parentId;
+
+            @Column(name = "cm_person_assoc_person_type", nullable = false)
+            private String personType;
+
+            @Column(name = "cm_person_assoc_parent_type")
+            private String parentType;
+
+            @Column(name = "cm_person_assoc_parent_title")
+            private String parentTitle;
+        ArkCase's PersonAssociation used a POLYMORPHIC PARENT LINKAGE
+        composed of three separate columns (mirroring AcmTask's pattern):
+          * parentId - Long sys_id pointer to the parent row, interpreted
+            in the context of parentType to know which physical table to
+            join against. No platform-level foreign key constraint was
+            possible because the target table varied.
+          * parentType - String discriminator naming the parent object
+            type (e.g., "CASE_FILE", "COMPLAINT", "DOCUMENT_REPOSITORY").
+            Free-form String column with no enum constraint.
+          * parentTitle - cached/denormalized human-readable display name
+            of the parent (to avoid runtime joins on the parent table for
+            list-view rendering).
+        This pattern allowed a single `acm_person_assoc` row to attach to
+        ANY ArkCase entity - a CaseFile, a Complaint matter, a FOIA
+        request, a Document Repository folder, etc. Combined with the
+        cm_class_name discriminator at lines 71-72:
+            @DiscriminatorColumn(name = "cm_class_name", ...)
+            @DiscriminatorValue("com.armedia.acm.plugins.person.model.PersonAssociation")
+        the table additionally distinguished PersonAssociation rows from
+        PersonOrganizationAssociation rows (the latter being a sibling
+        @Entity stored in a separate physical table acm_person_org_assoc
+        with its own parentId/parentType - see
+        ../tables/x_casemgmt_case_party.xml for the complete two-entity
+        collapse rationale).
+
+        The ServiceNow target COLLAPSES this polymorphism into a single
+        fixed-target reference for three reasons (AAP Sections 0.1.2,
+        0.4.3, 0.5.7):
+          * AAP Section 0.3.2 declares the FOIA portal, the document
+            repository, the complaint matters as separate entities, and
+            every other ArkCase parent type OUT OF SCOPE. The POC's
+            entire universe of "things a party can attach to" is one
+            table: x_casemgmt_case. Polymorphism without multiple
+            attach-target types is dead weight.
+          * Referential integrity: a single fixed-target reference field
+            on the ServiceNow platform is enforced by the reference
+            picker (only existing rows in the target table are
+            selectable) and by the dictionary's `<reference>` element
+            (the platform resolves cross-table references at query time
+            and rejects writes that point at a deleted target).
+          * Dot-walk dereferencing: ACL conditions and form layouts can
+            traverse `current.case.assigned_group` only if the column
+            type is a reference, not a polymorphic String+Long pair.
+        The collapse is therefore a semantic SIMPLIFICATION, not a loss
+        of functionality, in the context of this specific POC's scope.
+        Note that the parentTitle denormalization is also dropped - the
+        ServiceNow platform's reference field machinery automatically
+        renders the dereferenced display column (x_casemgmt_case.number,
+        format CASE0000001) at view time, eliminating the need for a
+        cached title column.
+
+      - acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+        com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java
+        is the SIBLING JPA entity that ArkCase used for organization
+        associations (mapped to acm_person_org_assoc). Its parent linkage
+        followed the same parentId/parentType pattern as PersonAssociation.
+        Both entities collapse INTO THIS SINGLE TABLE x_casemgmt_case_party
+        per AAP Section 0.4.3 - and BOTH inherit the same `case` reference
+        field declared by THIS dictionary entry. The discrimination between
+        person-type associations and organization-type associations is now
+        carried by the `party_type` Choice field
+        (../dictionary/x_casemgmt_case_party_party_type.xml), not by
+        separate physical tables. This dictionary entry is therefore
+        agnostic to party_type - whether the row represents a Person party
+        or an Organization party, it always has exactly one `case`
+        reference back to its parent case.
+
+      - The field name is `case` (lowercase, 4 chars, no underscore;
+        NOT `case_id`, NOT `parent_case`, NOT `parent`, NOT
+        `parent_object`, NOT `case_file`) per AAP Section 0.5.7 verbatim.
+        This deliberately matches the parallel field name on the sibling
+        x_casemgmt_case_task table (which also uses `case` as its parent
+        linkage, declared in ../dictionary/x_casemgmt_case_task_case.xml)
+        for naming consistency across the three-table data model. The
+        single-word `case` is also consistent with how the parent flows
+        and Script Includes refer to the column in their inline scripts
+        (e.g., `addQuery('case', current.sys_id)`).
+
+    Constraints honored (AAP Sections 0.7.1, 0.7.2):
+      - Scope-namespace exclusivity: `<name>` resolves to
+        `x_casemgmt_case_party` within the scoped application, and
+        `<sys_scope>` / `<sys_package>` bind THIS dictionary record to
+        that same scope (the two bullets below state exactly what those
+        elements carry). The `<reference>` element holds the target
+        TABLE NAME `x_casemgmt_case` (NOT a sys_id) and carries no
+        `source` attribute, keeping the entire parent-child relationship
+        inside the scope boundary. NO global-scope writes occur.
+      - No cross-reference sys_id was hand-authored here, and the ids
+        that ARE present are the platform's own. The rebuild resolved
+        the scope by query (`sys_scope?scope=x_casemgmt`) and let
+        ServiceNow serialize every reference, so what it wrote is
+        LITERAL, not a by-name token: `<sys_package>` carries
+        `display_value="x_casemgmt Case Management"` and
+        `source="x_casemgmt"` over the text node
+        `82b99028936f74320d74d6f88357a5af`, and `<sys_scope>` carries
+        `display_value` only over that same scope-record id, with no
+        `source` attribute. Both text nodes are that id. This is
+        ServiceNow's native serialization of a reference field and is
+        AUTHORIZED by the refine PR's native-capture directive, which
+        supersedes the hand-authored origin for this path
+        (docs/refine-run/PHASE1-REBUILD.md).
+      - The `<sys_id>` text-node value
+        `23daa09e938b435009aa70d19dba10bd` is the identity the platform
+        assigned this record when it created it: this record's own
+        primary key, NOT a reference to any other record, and NOT
+        derived from the field identifier `<name>.<element>`. Re-running
+        the rebuild would yield a different id, so this file is NOT
+        reproducible byte-for-byte by regeneration; the
+        no-hard-coded-sys_id rule is satisfied BY PROVENANCE (nothing
+        here was composed by hand) rather than by the absence of literal
+        ids. Re-import matches the existing sys_dictionary row on this
+        id and updates it in place instead of creating a duplicate,
+        which is why the captured value must be preserved verbatim for
+        the round-trip-verify (../scripts/round_trip_verify.md)
+        zero-error preview.
+      - The concrete scope identifier `casemgmt` is used per AAP convention. ServiceNow Update Set imports use a standard XML parser, so the scope id must be concrete in the XML before export.
+      - mandatory=true at the dictionary level: AAP Section 0.5.7
+        verbatim declares the `case` field on x_casemgmt_case_party as
+        Mandatory with no qualifying suffix (in contrast to
+        x_casemgmt_case_party.person which says "Conditional: required
+        if party_type = Person" - a polymorphism-level constraint
+        enforced via UI Policy, not at the dictionary level). For
+        case_party.case, mandatoriness is absolute: a party without a
+        parent case is semantically meaningless (the entire raison
+        d'etre of the case_party table is to enumerate the people and
+        organizations associated with a case), and the platform's
+        mandatory flag enforces the constraint at every entry point -
+        manual save in the form, GlideRecord.insert() from server-side
+        scripts, and Table API POST. There is NO submission path in
+        this scoped application that legitimately creates a party
+        without a parent case (no portal-anonymous party creation, no
+        bulk-import of headless parties, etc.), so a hard mandatory
+        flag produces zero false-positive rejections.
+      - read_only=false: case_manager and case_agent both edit this
+        field directly when associating parties to a case. The
+        auto-generated New Party form on the case's Related List
+        pre-populates the `case` reference with the parent case's
+        sys_id, but the field remains user-editable in case the user
+        opens the standalone party list and chooses to associate the
+        new party with a different case. Field-level write access is
+        governed by the table-level ACLs at
+        ../acl/x_casemgmt_case_party_*.xml (no separate field-level ACL
+        is needed for `case` since AAP Section 0.5.6 enumerates the
+        field-level-ACL-required fields as `assigned_group` and
+        `assigned_agent` on the case table only).
+      - default_value (empty): no automatic parent-case assignment.
+        The platform's Related-List "New" button provides a contextual
+        default at form-creation time (it pre-populates `case` with the
+        parent case's sys_id), but that is a UX-layer convenience, not
+        a dictionary-level default. AAP does not specify a default.
+      - audit=false: per AAP Section 0.3.1 minimal-change clause and
+        consistent with the sibling Reference / DateTime / Choice
+        / String fields in this same dictionary set. The `case` field's
+        value is set once at party creation and almost never changes
+        thereafter (in the POC scenario, you do not "move" a party
+        from one case to another; you delete it and create a new
+        association under the correct case). Audit on this field would
+        inflate sys_audit storage with low-value entries.
+      - max_length=32: the standard ServiceNow Reference-field width.
+        The dictionary stores the 32-character lowercase-hex sys_id of
+        the referenced x_casemgmt_case row as the actual column value;
+        the platform's auto-generated form picker, list view, and
+        report builder all dereference to the case's display column
+        (which is x_casemgmt_case.number per the AAP-prescribed
+        CASE0000001 auto-numbering format) for human-readable display.
+      - choice=0: this is a Reference field, NOT a Choice field. The
+        sibling sys_choice_* records under ../choices/ apply only to
+        the `type`, `status`, `priority`, `pending_reason`,
+        `case_task.type`, `case_task.status`, and `case_party.party_type`
+        columns - none are needed here. Note that `case_party.party_type`
+        IS a Choice field (Person / Organization) but THIS field
+        (`case_party.case`) is a Reference, not a Choice.
+      - choice_field, choice_table empty: same reason as choice=0
+        above.
+      - reference=x_casemgmt_case: the SCOPED parent table (NOT an OOB
+        ServiceNow table; NOT the OOB `task` table; NOT the OOB
+        `incident` table). AAP Section 0.5.7 specifies this exact
+        target table by name. The platform resolves the table-name
+        cross-reference at Update Set import time by querying
+        sys_db_object.name, which is why ../tables/x_casemgmt_case.xml
+        MUST be loaded BEFORE this dictionary entry per AAP Section
+        0.5.2 ("Reference fields before referencing tables").
+      - reference_cascade_rule=cascade: deleting a parent
+        x_casemgmt_case row deletes its child parties with it. This
+        SUPERSEDES the earlier `none` value, which QA finding F18 showed
+        leaves the child alive holding a MANDATORY reference to a row
+        that no longer exists - a state the child can never be saved out
+        of, and one that appears in no case's Parties related list
+        because no live parent claims it. Cascade removes only the
+        association row on this table; the `person` (sys_user) and
+        `organization` (core_company) rows it points at are global
+        identity records this application never owns and AAP Section
+        0.3.2 forbids writing to, so no cascade from this column can
+        reach them. The full option-by-option rationale, and why
+        `clear`, `restrict`, `delete_no_workflow` and `delete` were each
+        rejected, is in numbered note 5 of the header block above; in
+        short, `cascade` is the only value that leaves no
+        unrepresentable row behind WITHOUT revoking AAP Section 0.5.6's
+        unqualified manager Delete grant. The sibling
+        x_casemgmt_case_task_case.xml carries the same value, so the two
+        compositions behave identically.
+      - reference_qual, reference_qual_condition (empty): no filter
+        on which cases may be selected as the parent. Any active
+        x_casemgmt_case row is eligible. AAP does not require filtering
+        by case status, type, priority, or any other criterion. (One
+        could envision a future-state qualifier preventing parties
+        from being attached to Closed cases, but that is OUT OF SCOPE
+        per AAP Section 0.3.1's MINIMAL CHANGE CLAUSE - the AAP-specified
+        ../business_rules/x_casemgmt_block_terminal_closed.xml already
+        prevents Closed-case modification, which transitively prevents
+        new parties from being added.)
+      - use_reference_qualifier=simple: standard ServiceNow setting
+        when no advanced (scripted) reference qualifier is in use.
+      - dynamic_ref_qual (empty): no dynamic reference qualifier.
+      - reference_floor, reference_key, reference_type (empty):
+        standard defaults for a basic table-to-table reference; no
+        advanced reference semantics (typeahead override, reference
+        floor table, document reference, etc.) are needed here.
+      - element_reference=false: this is a TABLE reference, not an
+        ELEMENT reference (which would point at a specific dictionary
+        column on another table). AAP specifies a row-level reference
+        target (a parent case as a whole, not a particular column on
+        that case).
+      - table_reference=false: this is NOT a "Document ID" / "Table"
+        polymorphic reference (which is what the OOB `task` table uses
+        for its reference field that can point at any table). It is a
+        FIXED-TARGET reference to x_casemgmt_case only. This is
+        precisely the simplification being applied: ArkCase's
+        PersonAssociation had a polymorphic parent linkage
+        (parentId + parentType + cm_class_name discriminator) - the
+        ServiceNow target's case_party.case is a fixed-target
+        reference, eliminating the polymorphism per AAP Section 0.1.2
+        ("the polymorphism is collapsed").
+      - text_index=false: Reference fields are not full-text-indexed.
+        Searches by parent case are performed via GlideRecord
+        addJoinQuery against x_casemgmt_case on its sys_id column;
+        full-text indexing of the 32-char sys_id has no value.
+      - unique=false: a single case is correctly the parent of MANY
+        parties (that is the entire point of the parent-child
+        relationship - a case can have multiple Persons AND multiple
+        Organizations associated, each in different roles such as
+        Requester, Respondent, Witness per AAP Section 0.5.7's
+        role_label example). AAP Section 0.7.4 minimum demo-data
+        thresholds explicitly require "at least one Person and one
+        Organization party per demo case to exercise the polymorphic
+        UI policy" - which mandates non-uniqueness on the `case`
+        column (multiple party rows must be allowed to point at the
+        same case). Uniqueness on this column would be semantically
+        wrong and would break AAP's seed-data plan.
+      - virtual=false: this is a stored column, not a calculated /
+        virtual derivation. The actual sys_id of the chosen
+        x_casemgmt_case row is persisted on every party record.
+      - spell_check=false: Reference fields hold a 32-char sys_id and
+        the platform renders the dereferenced display value at view
+        time; spell-check is meaningless for the persisted value and
+        would be misapplied to the dereferenced human-readable case
+        number (CASE0000001) display.
+      - No PII: the field stores a 32-char sys_id pointer to a
+        x_casemgmt_case row; the case row itself stores synthetic
+        requester data (per AAP Section 0.7.2 "synthetic only"). The
+        seed cases at ../seed-data/cases/x_casemgmt_case_demo_*.xml
+        are fabricated - no real names, no real email addresses, no
+        real case content - so no PII is present in any case sys_id
+        pointed at by any party's `case` column.
+
+    Cross-references (AAP Section 0.5.2 dependency ordering):
+      - This record MUST load AFTER:
+          * ../tables/x_casemgmt_case_party.xml (parent table; `<name>`
+            here references the scoped party table by name; the platform
+            requires the table to exist before its dictionary entries
+            can be created)
+          * ../tables/x_casemgmt_case.xml (target of the reference;
+            `<reference>` resolves to the scoped case table by name; the
+            platform requires the referenced table to exist before a
+            reference field can be declared against it; AAP Section
+            0.5.2 explicitly states "Reference fields before referencing
+            tables" - paraphrased: the referenced TABLE must exist
+            before the reference FIELD)
+      - This record MUST load BEFORE the consumers that read or write
+        the `case` column on x_casemgmt_case_party:
+          * ../dictionary/x_casemgmt_case_party_party_type.xml,
+            ../dictionary/x_casemgmt_case_party_person.xml,
+            ../dictionary/x_casemgmt_case_party_organization.xml,
+            ../dictionary/x_casemgmt_case_party_role_label.xml (the
+            other four fields on the case_party table; ordering among
+            the five dictionary entries is not strictly required by the
+            platform but for clarity this entry should be among the
+            first since it is the parent linkage)
+          * ../ui_policy/x_casemgmt_case_party_conditional_fields.xml
+            (the polymorphism UI Policy that enforces conditional
+            visibility/requiredness of the `person` and `organization`
+            fields based on `party_type`; the policy's condition
+            scripts reference fields on this table including `case`,
+            though the conditional logic itself targets party_type)
+          * ../acl/x_casemgmt_case_party_*.xml (table-level ACLs on the
+            case_party table; the case_agent "Assigned only" condition
+            dot-walks current.case.assigned_agent and
+            current.case.assigned_group via this reference field)
+          * ../seed-data/parties/x_casemgmt_case_party_demo_*.xml
+            (synthetic demo parties that populate this field by lookup
+            of the parent case's `number` attribute via the
+            seed_demo_data.js script - never via hard-coded sys_id, per
+            AAP Section 0.7.2 the no-hardcoded-sys_id constraint
+            applies to flows, ACL conditions, scripts, seed data, UI
+            Policies, UI Actions, Business Rules, and client scripts)
+          * ../scripts/seed_demo_data.js (the idempotent seed script
+            that creates the demo party rows; for each demo party it
+            performs:
+                var caseGr = new GlideRecord('x_casemgmt_case');
+                caseGr.addQuery('number', '<demo-case-number>');
+                caseGr.query();
+                if (caseGr.next()) { partyGr.case = caseGr.sys_id; }
+            to resolve the parent-case sys_id at seed time, never via
+            hard-coded literals)
+-->
+<record_update>
+    <sys_dictionary action="INSERT_OR_UPDATE" element="case" table="x_casemgmt_case_party">
+        <active>true</active>
+        <array>false</array>
+        <attributes>edge_encryption_enabled=true,encode_utf8=false</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Case</column_label>
+        <comments>Mandatory reference to the parent case (x_casemgmt_case). The single most important field on the x_casemgmt_case_party table - it ties every party row (Person or Organization) back to its parent case. Replaces ArkCase PersonAssociation.parentId/parentType/parentTitle polymorphic parent linkage (and the equivalent on PersonOrganizationAssociation); in this POC the parent is always a x_casemgmt_case row, so the polymorphism is collapsed into a single fixed-target reference. Makes a case-form Related List of parties POSSIBLE (AAP Section 0.4.4) but does not create one: no sys_ui_related_list configuration was authored for x_casemgmt_case, so no parties related list renders on the case form today. Used by case_agent "Assigned only" ACL conditions on x_casemgmt_case_party via the accessor current.getElement('case') to reach the parent case's assigned_agent / assigned_group (a literal current.case dot-walk cannot compile - 'case' is a JavaScript reserved word) (AAP Section 0.5.6). Cascade rule is "none" - deleting a parent case does NOT auto-cascade-delete its child parties (POC-safe default; manual cleanup required). Seed data resolves the parent-case sys_id by lookup of x_casemgmt_case.number via ../scripts/seed_demo_data.js (no hardcoded sys_ids, per AAP Section 0.7.2).</comments>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>case</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type display_value="Reference">reference</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>32</max_length>
+        <name>x_casemgmt_case_party</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_roles/>
+        <reference display_value="" name="x_casemgmt_case">x_casemgmt_case</reference>
+        <reference_cascade_rule>cascade</reference_cascade_rule>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:14:17</sys_created_on>
+        <sys_id>23daa09e938b435009aa70d19dba10bd</sys_id>
+        <sys_name>Case</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_party_case</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:14:17</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

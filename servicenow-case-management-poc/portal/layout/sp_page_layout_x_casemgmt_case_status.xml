@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the SERVICE PORTAL PAGE
+    LAYOUT of the CASE STATUS LOOKUP page (`x_casemgmt_case_status`) inside
+    the scoped application `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (the defect it closes)
+    ...........................................
+    Identical in cause to the sibling
+    ./sp_page_layout_x_casemgmt_case_submit.xml: a Service Portal page
+    renders only what its layout chain places on it -
+
+        sp_page  <-  sp_container  <-  sp_row  <-  sp_column  <-  sp_instance
+                                                                     |
+                                                                     +-> sp_widget
+
+    and this package shipped none of those four records. The status page
+    therefore answered HTTP 200 anonymously and painted a blank viewport:
+    no case-number input, no Look Up button, and - the user-visible
+    consequence for AAP Validation Gate 5 - the verbatim not-found text
+    "No case found with that number." never appeared on screen even though
+    the endpoint returned it correctly. The lookup widget was healthy all
+    along; it was embedded nowhere.
+
+    WHAT IT AUTHORS (one record each, in dependency order)
+    .....................................................
+      1. sp_container  "Case Status Lookup - Container 1" -> parents to the page
+      2. sp_row        row 1 of that container
+      3. sp_column     full-width (size 12) column of that row
+      4. sp_instance   places ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml
+                       in that column
+
+    One full-width widget matches AAP Section 0.4.4's description of Page 2 -
+    "a single input (case number) and a result panel" - and the widget
+    renders its own <h2>Case Status Lookup</h2> heading, so
+    `sp_instance.title` is left EMPTY to avoid a duplicate heading.
+
+    Field choices, reference-resolution rationale and the measured
+    preview-resolution rule are documented in full in the sibling file
+    ./sp_page_layout_x_casemgmt_case_submit.xml; they are identical here.
+
+    THIS RECORD SET MUST LOAD AFTER:
+      - ../../app/sys_app/x_casemgmt_case_management.xml  (the scope)
+      - ../pages/sp_page_x_casemgmt_case_status.xml       (the parent page)
+      - ../widgets/sp_widget_x_casemgmt_case_lookup_widget.xml (the widget
+        placed here, which calls
+        ../rest/sys_ws_definition_x_casemgmt_case_status_lookup.xml)
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3)
+    ...........................................
+      Gate 5 ("Portal - lookup"): "Status lookup returns correct data for
+      valid case number - Correct status/subject/opened_date returned;
+      'not found' message for invalid number." These four records are what
+      let a human - rather than a curl command - see either outcome.
+
+    DETERMINISTIC IDENTIFIERS
+    .........................
+    Every `sys_id` below is the MD5 of its own `sys_update_name`:
+      sp_container_x_casemgmt_case_status         -> 7ec26735abd11959ba2b6a91190b42b2
+      sp_row_x_casemgmt_case_status               -> b353f7cdd3a40c07dd8ed6a9393d38d4
+      sp_column_x_casemgmt_case_status            -> 159071b339bfd27dcae48de4e32e4fb3
+      sp_instance_x_casemgmt_case_lookup_widget   -> 5971ae890ee47d43b66ffbc8ca7f6eb4
+    The referenced page (8881e418f5d24b17b641505a4f1dc814) and widget
+    (e992deb0bd1657f36a38f5af6a46aeb2) sys_ids are the ones those two
+    records already declare in this package.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sp_container action="INSERT_OR_UPDATE">
+    <aria_label>Case status lookup</aria_label>
+    <background_color/>
+    <background_image/>
+    <background_style/>
+    <bootstrap_alt>false</bootstrap_alt>
+    <class_name>m-t-lg</class_name>
+    <container_class_name/>
+    <name>Case Status Lookup - Container 1</name>
+    <order>1</order>
+    <semantic_tag>main</semantic_tag>
+    <sp_page display_value="Case Status Lookup">8881e418f5d24b17b641505a4f1dc814</sp_page>
+    <subheader>false</subheader>
+    <sys_class_name>sp_container</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>7ec26735abd11959ba2b6a91190b42b2</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Case Status Lookup - Container 1</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_container_x_casemgmt_case_status</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <width>container</width>
+</sp_container>
+<sp_row action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <sp_column/>
+    <sp_container display_value="Case Status Lookup - Container 1">7ec26735abd11959ba2b6a91190b42b2</sp_container>
+    <sys_class_name>sp_row</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>b353f7cdd3a40c07dd8ed6a9393d38d4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_row_x_casemgmt_case_status</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_row>
+<sp_column action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <size>12</size>
+    <size_lg/>
+    <size_sm/>
+    <size_xs/>
+    <sp_row display_value="1">b353f7cdd3a40c07dd8ed6a9393d38d4</sp_row>
+    <sys_class_name>sp_column</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>159071b339bfd27dcae48de4e32e4fb3</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_column_x_casemgmt_case_status</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_column>
+<sp_instance action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <advanced_placeholder_dimensions>false</advanced_placeholder_dimensions>
+    <async_load>false</async_load>
+    <class_name/>
+    <color>default</color>
+    <css/>
+    <glyph/>
+    <id/>
+    <order>1</order>
+    <preserve_placeholder_size>false</preserve_placeholder_size>
+    <roles/>
+    <short_description>Places the Case Lookup Widget on the unauthenticated case status lookup page.</short_description>
+    <size>md</size>
+    <sp_column display_value="1">159071b339bfd27dcae48de4e32e4fb3</sp_column>
+    <sp_widget display_value="Case Lookup Widget">e992deb0bd1657f36a38f5af6a46aeb2</sp_widget>
+    <sys_class_name>sp_instance</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>5971ae890ee47d43b66ffbc8ca7f6eb4</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Case Lookup Widget</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_instance_x_casemgmt_case_lookup_widget</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <url/>
+    <widget_parameters/>
+</sp_instance>
+</unload>

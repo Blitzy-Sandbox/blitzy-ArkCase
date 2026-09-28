@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `x_casemgmt_case_party` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_db_object_c4da2c5e938b435009aa70d19dba10fa
+      Update record type       : Table
+      Update record target     : Case Party
+      Captured (instance time) : 2026-09-02 19:14:03
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (c4da2c5e938b435009aa70d19dba10fa), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    ServiceNow Update Set record-definition for the polymorphic
+    `x_casemgmt_case_party` custom table inside the scoped application
+    `x_casemgmt`.
+
+    This table is the centerpiece of the AAP's "Polymorphic association via
+    single-table choice + UI Policy" pattern (AAP Section 0.4.3). It COLLAPSES
+    TWO ArkCase JPA entities into a single ServiceNow scoped table:
+
+      1. com.armedia.acm.plugins.person.model.PersonAssociation
+         (acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+         com/armedia/acm/plugins/person/model/PersonAssociation.java),
+         JPA-mapped to the MySQL table `acm_person_assoc` and using
+         `cm_class_name` as a single-table-inheritance discriminator with
+         a @ManyToOne(optional=false) Person reference.
+
+      2. com.armedia.acm.plugins.person.model.PersonOrganizationAssociation
+         (acm-plugins/acm-default-plugins/acm-person-plugin/src/main/java/
+         com/armedia/acm/plugins/person/model/PersonOrganizationAssociation.java),
+         JPA-mapped to the MySQL table `acm_person_org_assoc` and using the
+         same `cm_class_name` discriminator with @ManyToOne(optional=false)
+         references to BOTH Person AND Organization.
+
+    The collapse strategy:
+      - Two MySQL tables -> one ServiceNow scoped table (x_casemgmt_case_party).
+      - The class-name discriminator (`cm_class_name`) is replaced by a
+        `party_type` Choice field with values Person and Organization, defined
+        in ../dictionary/x_casemgmt_case_party_party_type.xml and enumerated
+        in ../choices/sys_choice_case_party_party_type.xml.
+      - The @ManyToOne Person reference is replaced by the `person` field
+        (Reference -> sys_user), defined in
+        ../dictionary/x_casemgmt_case_party_person.xml.
+      - The @ManyToOne Organization reference is replaced by the `organization`
+        field (Reference -> core_company), defined in
+        ../dictionary/x_casemgmt_case_party_organization.xml.
+      - The parentId / parentType / parentTitle fields collapse into a single
+        `case` reference field (Reference -> x_casemgmt_case), defined in
+        ../dictionary/x_casemgmt_case_party_case.xml. Conceptually, the parent
+        type is fixed to "case" in this POC.
+      - The personType / personToOrganizationAssociationType strings collapse
+        into a single `role_label` String(100) field, defined in
+        ../dictionary/x_casemgmt_case_party_role_label.xml.
+      - The conditional visibility of `person` (when party_type=Person) and
+        `organization` (when party_type=Organization) is enforced by the UI
+        Policy in ../ui_policy/x_casemgmt_case_party_conditional_fields.xml.
+
+    Out-of-scope ArkCase fields explicitly NOT replicated per AAP Section 0.3.2:
+      - Audit fields (created/modified/creator/modifier) - the platform supplies
+        sys_created_on, sys_created_by, sys_updated_on, sys_updated_by, sys_id
+        automatically because this is a sys_db_object record.
+      - notes (PersonAssociation.notes column)
+      - tags @ElementCollection (PersonAssociation -> acm_person_assoc_tag)
+      - description (PersonOrganizationAssociation.cm_description)
+      - primaryContact / defaultOrganization booleans
+      - personDescription, parentTitle (rendering hints used by the AngularJS UI)
+
+    This file authors ONLY table-level metadata (name, labels, parent class,
+    scope linkage, auto-numbering reference, and access flags). The 5 fields
+    enumerated in the AAP (case, party_type, person, organization, role_label)
+    are authored as sys_dictionary records in the sibling ../dictionary/
+    folder. The platform automatically inherits the standard sys_* audit
+    columns by virtue of this record being a sys_db_object.
+
+    Constraints honored:
+      - Scoped-namespace exclusivity: every cross-reference resolves into the
+        x_casemgmt scope; no global-scope writes.
+      - No sys_id was hand-authored in any reference field, and the ids that
+        ARE present are the platform's own. The rebuild resolved the scope by
+        query (sys_scope?scope=x_casemgmt) and let ServiceNow serialize the
+        references, so what it wrote is literal, not a by-name token:
+        <sys_package> carries display_value="x_casemgmt Case Management" and
+        source="x_casemgmt" over the text node
+        82b99028936f74320d74d6f88357a5af; <sys_scope> carries display_value
+        only over that same scope-record id, with no `source` attribute; and
+        <number_ref> carries display_value="PARTY" over the bare literal
+        sys_number record id 2358f94646aa1afdf84c10b836dce064, with no
+        `source` attribute either. This is ServiceNow's native serialization
+        of a reference field and is AUTHORIZED by the refine PR's
+        native-capture directive, which supersedes the hand-authored origin
+        for this path (../docs/refine-run/PHASE1-REBUILD.md).
+      - The <sys_id> element below is the identity the platform assigned this
+        record when it created it (c4da2c5e938b435009aa70d19dba10fa): this
+        record's own primary key, not a reference to any other record, and
+        NOT derived from the table name `x_casemgmt_case_party`. Re-running
+        the rebuild would yield a different id, so this file is not
+        reproducible byte for byte by regeneration; the no-hard-coded-sys_id
+        rule is satisfied by PROVENANCE (nothing here was composed by hand)
+        rather than by the absence of literal ids. Re-import matches the
+        existing row on this id, which is why the captured value must be
+        preserved verbatim.
+      - super_class is empty: this table extends NOTHING. It does not extend
+        the OOB `task` or `incident` tables (which would write to global scope
+        and violate AAP Section 0.3.2). The fact that the ArkCase source
+        entities used JPA single-table inheritance (InheritanceType.SINGLE_TABLE)
+        does NOT mean the ServiceNow target should extend an OOB table - the
+        polymorphism is implemented declaratively through the `party_type`
+        Choice field, not through table inheritance. The platform still
+        provides standard sys_* audit columns because sys_db_object records
+        always do.
+      - extension_model is empty: this is not an extended table; it is a
+        free-standing user-data table.
+      - is_extendable is false: this POC table is not designed to be
+        sub-classed. The polymorphism is at the row level via party_type, not
+        at the schema level via subclassing.
+      - create_access_controls is false: ServiceNow auto-creates a default
+        ACL set when this is true. Since ../acl/x_casemgmt_case_party_*.xml
+        enumerates a precise role x table x CRUD matrix that mirrors the
+        case-table ACL pattern (case_manager full access; case_agent restricted
+        to parties belonging to assigned cases; case_viewer read-only), the
+        auto-generated ACLs would conflict and are explicitly suppressed here.
+      - The reference targets sys_user (for `person`) and core_company (for
+        `organization`) are OOB ServiceNow tables that this record does NOT
+        modify. They are referenced ONLY via dictionary entries in
+        ../dictionary/, never via super_class.
+      - CROSS-SCOPE ACCESS IS LEAST PRIVILEGE: READ ONLY, AND THE COLUMNS ARE
+        BOOLEAN, NOT STRINGS. On sys_db_object only `access` is a string
+        (public | package_private); ws_access, read_access, create_access,
+        update_access, delete_access, alter_access, client_scripts_access and
+        configuration_access are `boolean`. An earlier revision declared all of
+        them as the string "public", which a boolean column coerces to FALSE, so
+        the platform refused every cross-scope operation on this table ("Read
+        operation against 'x_casemgmt_case_party' from scope 'rhino.global' has
+        been refused due to the table's cross-scope access policy"). That broke
+        the REST Table API verification gate, every global-scope verification
+        script, and the ATF client test runner, whose Global-scope
+        TestExecutorAjax resolves form records with a plain GlideRecord - all
+        three of which need only READ. read_access and ws_access are therefore
+        emitted as boolean true below and create_access, update_access and
+        delete_access as boolean FALSE: Application Access is a separate gate
+        from ../acl/*.xml (plain GlideRecord in another scope is not filtered by
+        record ACLs, and Global code can suppress this application's
+        before-update guards with setWorkflow(false)), so an open write column
+        let any Global caller mutate this table outside the role matrix of AAP
+        Section 0.5.6. alter_access, client_scripts_access and
+        configuration_access stay explicitly FALSE. See
+        ../tables/x_casemgmt_case.xml for the full measurement record, the
+        evidence that no capability depends on cross-scope writes, and the
+        syscache_tabledescriptor cache note.
+      - The concrete scope identifier casemgmt is used throughout per AAP convention; ServiceNow Update Set imports use a standard XML parser, so the scope id is concrete in the XML before export. The one
+        source="x_casemgmt" attribute the platform emitted sits on
+        <sys_package>; <sys_scope> and <number_ref> carry no source attribute,
+        so on import those two references are matched by the literal sys_id
+        text node they hold, and this record itself is matched by its own
+        captured sys_id. Portability therefore rests on the referenced scope,
+        package and sys_number rows arriving with those same ids (they travel
+        in this same Update Set), not on a by-name lookup.
+
+    Cross-Update-Set load ordering (per AAP Section 0.5.2):
+      - This record MUST be loaded AFTER ../app/sys_app/x_casemgmt_case_management.xml and
+        ../app/sys_app/x_casemgmt_case_management.xml.
+      - This record MUST be loaded AFTER
+        ../numbers/sys_number_x_casemgmt_case_party.xml (referenced by
+        number_ref).
+      - This record MUST be loaded AFTER ../tables/x_casemgmt_case.xml because
+        ../dictionary/x_casemgmt_case_party_case.xml (loaded after this record)
+        creates a Reference column whose target is x_casemgmt_case.
+      - This record MUST be loaded BEFORE all
+        ../dictionary/x_casemgmt_case_party_*.xml records (they reference this
+        table by `name`).
+      - This record MUST be loaded BEFORE all
+        ../acl/x_casemgmt_case_party_*.xml records.
+      - This record MUST be loaded BEFORE
+        ../ui_policy/x_casemgmt_case_party_conditional_fields.xml (the UI
+        Policy references this table by `name`).
+      - This record MUST be loaded BEFORE all
+        ../seed-data/parties/x_casemgmt_case_party_demo_*.xml records.
+-->
+<record_update table="sys_db_object">
+    <sys_db_object action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <actions_access>false</actions_access>
+        <alter_access>false</alter_access>
+        <caller_access/>
+        <client_scripts_access>false</client_scripts_access>
+        <configuration_access>false</configuration_access>
+        <create_access>false</create_access>
+        <create_access_controls>false</create_access_controls>
+        <delete_access>false</delete_access>
+        <filter_extension/>
+        <is_df_table>false</is_df_table>
+        <is_extendable>false</is_extendable>
+        <label>Case Party</label>
+        <live_feed_enabled>false</live_feed_enabled>
+        <name>x_casemgmt_case_party</name>
+        <number_ref display_value="PARTY">2358f94646aa1afdf84c10b836dce064</number_ref>
+        <provider_class/>
+        <read_access>true</read_access>
+        <scriptable_table>false</scriptable_table>
+        <super_class/>
+        <sys_class_name>sys_db_object</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:14:02</sys_created_on>
+        <sys_id>c4da2c5e938b435009aa70d19dba10fa</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>Case Party</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_db_object_c4da2c5e938b435009aa70d19dba10fa</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:15:46</sys_updated_on>
+        <update_access>false</update_access>
+        <user_role/>
+        <ws_access>true</ws_access>
+    </sys_db_object>
+</record_update>

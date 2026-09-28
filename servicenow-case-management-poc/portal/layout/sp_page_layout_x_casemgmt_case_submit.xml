@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definitions for the SERVICE PORTAL PAGE
+    LAYOUT of the CASE SUBMISSION page (`x_casemgmt_case_submit`) inside the
+    scoped application `x_casemgmt`.
+
+    WHY THIS FILE EXISTS (the defect it closes)
+    ...........................................
+    A Service Portal page renders nothing on its own. `sp_page` holds only
+    page-level metadata (slug, title, anonymous-access flags); the content of
+    a page is a chain of FOUR separate records:
+
+        sp_page  <-  sp_container  <-  sp_row  <-  sp_column  <-  sp_instance
+                                                                     |
+                                                                     +-> sp_widget
+
+    Neither this package nor the target instance carried a single row of that
+    chain, so both public pages loaded (HTTP 200, no login wall) and painted
+    a completely blank white viewport: 0 forms, 0 inputs, 0 buttons, and
+    `GET /api/now/sp/page?id=x_casemgmt_case_submit` answering
+    `containers: []`. The submission and lookup widgets were fully authored
+    and healthy the whole time - they were simply orphaned, embedded nowhere.
+
+    An earlier revision of `../pages/sp_page_x_casemgmt_case_submit.xml`
+    attempted to express the layout as a JSON document in an element called
+    `page_internal`. That element is NOT a field of `sp_page` on this release
+    (its columns are category, css, draft, dynamic_title_structure,
+    human_readable_url_structure, id, internal, omit_watcher, public, roles,
+    seo_script, short_description, title, use_seo_script), so the platform
+    discarded it silently on import. THIS file replaces that inert JSON with
+    the four real records the renderer reads.
+
+    WHAT IT AUTHORS (one record each, in dependency order)
+    .....................................................
+      1. sp_container  "Submit a Case - Container 1"  -> parents to the page
+      2. sp_row        row 1 of that container
+      3. sp_column     full-width (size 12) column of that row
+      4. sp_instance   places ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml
+                       in that column
+
+    The single full-width column matches AAP Section 0.4.4's description of
+    Page 1 - "a simple form with five inputs ... displays a confirmation
+    panel" - which is one widget, full width, and nothing else. The widget
+    itself renders its own <h2>Submit a Case</h2> heading and swaps in the
+    confirmation widget after a successful POST, so the `sp_instance.title`
+    is deliberately left EMPTY: setting it would paint a second, duplicate
+    heading above the form.
+
+    FIELD CHOICES (each copied from the shape the platform itself writes -
+    read off the out-of-box `404` page's own layout chain on the target
+    instance, so nothing here is invented):
+      sp_container.width       = `container`  (the standard fixed-width
+                                 Bootstrap container the OOB pages use)
+      sp_container.class_name  = `m-t-lg`     (the OOB top-margin class, so
+                                 the form is not flush against the header)
+      sp_column.size           = 12           (full width of the 12-column
+                                 Bootstrap grid)
+      sp_instance.active       = true          (an inactive instance renders
+                                 nothing - this is the flag that would
+                                 silently re-blank the page)
+      sp_instance.size         = md, color = default, order = 1  (OOB defaults)
+      sp_instance.sys_class_name = sp_instance (sp_instance is an extendable
+                                 table; the base class is what the renderer
+                                 expects for a plain widget placement)
+
+    REFERENCE RESOLUTION (AAP Section 0.5.2 dependency ordering)
+    ...........................................................
+    The four records reference each other, and the instance references the
+    widget, by the package's own deterministic `sys_id` values - the same
+    convention the package already uses for every other INTRA-PACKAGE
+    metadata reference, for example `sp_portal.homepage` pointing at this
+    page and `sys_ws_operation.web_service_definition` pointing at its
+    scripted REST service. That is a deliberate distinction from the
+    seed-data references (`case`, `organization`, `person`, `assigned_*`),
+    which AAP Section 0.5.2 requires to resolve by human-readable key and
+    which therefore carry no sys_id anywhere.
+
+    It is also what makes the layout survive an Update Set preview on a
+    fresh instance. Measured on the target PDI: the preview engine resolves
+    a reference whose value is a sys_id when that sys_id is present EITHER
+    in the target database OR as another canonically-named
+    (`<table>_<sys_id>`) block of the same Update Set, and reports
+    "Could not find a record in <table> for column <column> referenced in
+    this update" otherwise - including for a value that is a display value
+    or number, even when the target row exists. A seven-record probe of
+    exactly this chain (a new widget plus container/row/column/instance
+    referencing it) previewed with ZERO problems.
+
+    THIS RECORD SET MUST LOAD AFTER:
+      - ../../app/sys_app/x_casemgmt_case_management.xml   (the scope)
+      - ../pages/sp_page_x_casemgmt_case_submit.xml        (the parent page)
+      - ../widgets/sp_widget_x_casemgmt_case_submission_widget.xml (the widget
+        placed here, which in turn embeds
+        ../widgets/sp_widget_x_casemgmt_case_confirmation_widget.xml at
+        runtime through $sp.getWidget())
+
+    VALIDATION-GATE MAPPING (AAP Section 0.7.3)
+    ...........................................
+      Gate 4 ("Portal - submission"): "Case created from unauthenticated
+      portal submission - Case appears in internal list with Draft status
+      and correct case number." Without these four records the gate can only
+      ever pass at the REST layer; with them the user-facing page renders
+      the five inputs, submits, and shows the returned case number.
+
+    DETERMINISTIC IDENTIFIERS
+    .........................
+    Every `sys_id` below is the MD5 of its own `sys_update_name`, so
+    re-generating this file is byte-identical and no random GUIDs appear:
+      sp_container_x_casemgmt_case_submit             -> 062ae69ebc2fbbdddf116b1df0e78654
+      sp_row_x_casemgmt_case_submit                   -> 585f95040e23064c31edb2f4200f8ee3
+      sp_column_x_casemgmt_case_submit                -> 293bfde54e2e41d776858ac0c0b2623f
+      sp_instance_x_casemgmt_case_submission_widget   -> 57db32ab0d3f77509dc1c0df98576e0b
+    The referenced page (6a1f3c2ffd653613304512a734aab83b) and widget
+    (b40f252d17be5fa3b3bb85cb79ca8d2f) sys_ids are the ones those two
+    records already declare in this package.
+-->
+<unload unload_date="2025-01-01 00:00:00">
+<sp_container action="INSERT_OR_UPDATE">
+    <aria_label>Case submission</aria_label>
+    <background_color/>
+    <background_image/>
+    <background_style/>
+    <bootstrap_alt>false</bootstrap_alt>
+    <class_name>m-t-lg</class_name>
+    <container_class_name/>
+    <name>Submit a Case - Container 1</name>
+    <order>1</order>
+    <semantic_tag>main</semantic_tag>
+    <sp_page display_value="Submit a Case">6a1f3c2ffd653613304512a734aab83b</sp_page>
+    <subheader>false</subheader>
+    <sys_class_name>sp_container</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>062ae69ebc2fbbdddf116b1df0e78654</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Submit a Case - Container 1</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_container_x_casemgmt_case_submit</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <width>container</width>
+</sp_container>
+<sp_row action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <sp_column/>
+    <sp_container display_value="Submit a Case - Container 1">062ae69ebc2fbbdddf116b1df0e78654</sp_container>
+    <sys_class_name>sp_row</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>585f95040e23064c31edb2f4200f8ee3</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_row_x_casemgmt_case_submit</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_row>
+<sp_column action="INSERT_OR_UPDATE">
+    <aria_label/>
+    <class_name/>
+    <order>1</order>
+    <semantic_tag/>
+    <size>12</size>
+    <size_lg/>
+    <size_sm/>
+    <size_xs/>
+    <sp_row display_value="1">585f95040e23064c31edb2f4200f8ee3</sp_row>
+    <sys_class_name>sp_column</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>293bfde54e2e41d776858ac0c0b2623f</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_column_x_casemgmt_case_submit</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+</sp_column>
+<sp_instance action="INSERT_OR_UPDATE">
+    <active>true</active>
+    <advanced_placeholder_dimensions>false</advanced_placeholder_dimensions>
+    <async_load>false</async_load>
+    <class_name/>
+    <color>default</color>
+    <css/>
+    <glyph/>
+    <id/>
+    <order>1</order>
+    <preserve_placeholder_size>false</preserve_placeholder_size>
+    <roles/>
+    <short_description>Places the Case Submission Widget on the unauthenticated case submission page.</short_description>
+    <size>md</size>
+    <sp_column display_value="1">293bfde54e2e41d776858ac0c0b2623f</sp_column>
+    <sp_widget display_value="Case Submission Widget">b40f252d17be5fa3b3bb85cb79ca8d2f</sp_widget>
+    <sys_class_name>sp_instance</sys_class_name>
+    <sys_created_by>admin</sys_created_by>
+    <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+    <sys_id>57db32ab0d3f77509dc1c0df98576e0b</sys_id>
+    <sys_mod_count>0</sys_mod_count>
+    <sys_name>Case Submission Widget</sys_name>
+    <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+    <sys_policy/>
+    <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+    <sys_update_name>sp_instance_x_casemgmt_case_submission_widget</sys_update_name>
+    <sys_updated_by>admin</sys_updated_by>
+    <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+    <title/>
+    <url/>
+    <widget_parameters/>
+</sp_instance>
+</unload>

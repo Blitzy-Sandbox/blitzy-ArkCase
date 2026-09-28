@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business
+    Rule) row x_casemgmt_case_display_stored_state, inside the scoped
+    application `x_casemgmt`.
+
+    WHY THIS RECORD EXISTS - QA Issue 17, the FIELD VALUE half
+    ==========================================================
+    Issue 17's suggested fix reads "Restore the persisted state/action set
+    after an aborted submit and render Closed fields/actions read-only
+    while retaining server enforcement." Two thirds of that were already
+    delivered: ../ui_policy/x_casemgmt_case_closed_readonly.xml plus
+    ../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml render a
+    Closed case read-only, and CaseTransitionValidator.canShowAction() in
+    ../script_includes/x_casemgmt_CaseTransitionValidator.xml derives the
+    ACTION SET from the stored row through its `_storedRecord()` helper.
+    The remaining third is the FIELD VALUE, and this record supplies the
+    one fact the client needs to correct it.
+
+    THE MEASURED DEFECT
+      On an Open case, set Status = Draft and press Update once:
+        - ../business_rules/x_casemgmt_block_draft_backtransition.xml
+          aborts the write and surfaces the verbatim AAP Section 0.7.4
+          sentence "Cases cannot be returned to Draft."
+        - nothing is persisted: the list and a fresh REST read both still
+          say Open and sys_mod_count is unchanged.
+        - but the re-rendered form still shows Status = "Draft" until the
+          user reloads.
+      What is DISPLAYED and what is STORED therefore diverge, on the one
+      field the whole state machine turns on, with an error banner beside
+      it explaining that the change did not happen.
+
+    WHY THE CORRECTION CANNOT BE MADE CLIENT SIDE ALONE
+      The platform re-renders an aborted submit with the values that were
+      POSTED. A client script can read what is on the form but has no
+      authoritative view of what is in the database, so it cannot tell a
+      value the user is legitimately editing from a value the server has
+      already refused. This record supplies that missing fact through the
+      platform's own channel for exactly this purpose - `g_scratchpad`,
+      populated by a `display` Business Rule and read by the onLoad client
+      script ../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml.
+      No GlideAjax processor, no synchronous client call, no second round
+      trip: one string travels with the form the platform was already
+      rendering.
+
+    THE OPEN QUESTION THIS RECORD IS WRITTEN TO SURVIVE EITHER WAY
+      It is NOT established, on this release and on the abort re-render
+      specifically, whether the platform hands a `display` Business Rule
+      the STORED row or the POSTED one in `current`. That question is
+      deliberately not answered by assumption here, and nothing in this
+      script depends on the answer: it never reads a status off `current`.
+      It re-reads the row from the database by its own sys_id with a fresh
+      GlideRecord, exactly as
+      ../script_includes/x_casemgmt_CaseTransitionValidator.xml does in
+      `_storedRecord()`, so the published value is the stored one whichever
+      record `current` turns out to be.
+        - If `current` is the POSTED record, the fresh read still returns
+          the committed row, the client sees a real divergence and
+          corrects the field.
+        - If `current` is already the STORED record, the fresh read agrees
+          with it, the published value equals what the form is showing,
+          and the client does nothing.
+      Both outcomes are correct. The second one is also what happens if a
+      future release were to serve this read from a cache holding the
+      posted values: the two values would agree, the client would find no
+      divergence to prove, and it would leave the form alone. The
+      mechanism can therefore be wrong about nothing - it either corrects
+      a divergence it can demonstrate against the database, or it is a
+      no-op.
+
+    FAIL SAFE BY CONSTRUCTION
+      Every exit path publishes the empty string, which the client script
+      treats as "nothing to correct":
+        - `g_scratchpad` absent (the rule running outside a form render):
+          return before touching anything.
+        - a NEW record, i.e. no sys_id yet: there is no stored row to
+          describe, so nothing is published.
+        - the row cannot be re-read - deleted between render and read, or
+          denied to the running user by the read ACLs in ../acl/, since
+          scoped GlideRecord applies them: publish nothing.
+        - any exception at all: swallowed, logged through `gs`, empty
+          string published.
+      The empty string is written FIRST, before the read is attempted, so
+      that no later failure can leave a stale value from an earlier render
+      in place. A form load can therefore never fail, and can never be
+      slowed by more than one primary-key read, because of this rule.
+
+    WHAT THIS RECORD DELIBERATELY DOES NOT DO
+      - It does not enforce anything. Enforcement stays exactly where it
+        was, in the before-update rules
+        (../business_rules/x_casemgmt_block_terminal_closed.xml,
+        ../business_rules/x_casemgmt_block_draft_backtransition.xml,
+        ../business_rules/x_casemgmt_enforce_forward_transitions.xml) and
+        in the Script Include they share. This rule is read-only: `when`
+        is display and all four `action_*` flags are false, so it cannot
+        run on an insert, an update, a delete or a query.
+
+        `<when>` SERIALIZES AS `before_display`, NOT `display`. The
+        choice list stores the value `before_display` behind the label
+        `display`, measured directly on this release:
+
+            GET /api/now/table/sys_choice
+                ?sysparm_query=name=sys_script^element=when
+                &sysparm_fields=value,label
+              -> before / after / async_always / async / before_display
+                 with before_display carrying the label "display"
+
+            GET /api/now/table/sys_script?sysparm_query=when=display
+              -> 0 rows
+            GET /api/now/table/sys_script?sysparm_query=when=before_display
+              -> 592 rows
+
+        The Table API coerces the label form to the stored value on a
+        direct write, which is why this row is correct on the instance it
+        was created on. An Update Set import does NOT coerce: it writes
+        the serialized string through, and `display` is not a member of
+        the choice list, so a file carrying it would import a rule that
+        matches no trigger and silently never fires - the failure mode
+        being a form that quietly stops correcting itself, with no error
+        anywhere. The value below is therefore the stored one. The prose
+        in this header still says "display" where it means the kind of
+        rule, because that is the label a reader sees in the UI.
+      - It does not write to `current` or to any record. It publishes one
+        string onto the scratchpad and returns.
+      - It does not touch the message area, and it must not: AAP Section
+        0.5.5 requires the blocking error to be SURFACED on the form, so
+        the banner written by the aborted save has to survive the
+        correction that follows it. Nothing here calls
+        gs.addErrorMessage(), gs.addInfoMessage() or any message API, and
+        the client half calls no message API either.
+      - It does not attempt to reconcile the six transition buttons. That
+        is already done server-side by `canShowAction()`, which is the
+        single source of truth for transition visibility per AAP Section
+        0.7.2; restating its role-and-status logic in the browser is
+        refused, and this record does not do it. It publishes a stored
+        FIELD VALUE and nothing else.
+
+    IDENTIFIERS
+      sys_id 298a77ab4eb05c0158ed129ab9d45415 is deterministic - the MD5
+      of the canonical string
+      "x_casemgmt_case.business_rule.display_stored_state":
+        printf '%s' 'x_casemgmt_case.business_rule.display_stored_state' | md5sum | cut -c1-32
+      the same derivation the sibling artifacts in this package use, so
+      regenerating this file is byte-deterministic. The value was checked
+      against every file in this package and appears in none of them, so
+      the record cannot collide with an existing row.
+
+    NO HARDCODED sys_id (AAP Section 0.7.2)
+      `collection` resolves the table BY NAME, `sys_package` resolves the
+      application BY NAME, and the only sys_id the script handles is read
+      off the record being displayed at run time
+      (current.getUniqueValue()). The sole sys_id literals in this file
+      are this record's own primary key and `sys_scope`, which follows the
+      sibling convention.
+
+    UPDATE SET LOAD ORDER (AAP Section 0.5.2)
+      MUST LOAD AFTER:
+        - ../app/sys_app/x_casemgmt_case_management.xml  (scope authority)
+        - ../tables/x_casemgmt_case.xml                  (its table)
+        - ../dictionary/x_casemgmt_case_status.xml       (the field it reads)
+      RELATED:
+        - ../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml
+          the only consumer of the scratchpad value; the two are useless
+          apart and are documented together in
+          ../docs/state-machine.md.
+
+    ORDER
+      order = 10. Business Rules are ordered within their `when` phase, so
+      this display rule does not compete with the before-update chain
+      (50 - 500) at all; 10 simply keeps it first among display rules, so
+      the scratchpad is populated before any display rule added later can
+      run.
+
+    SCOPE AND FOOTPRINT
+      Scope x_casemgmt, package x_casemgmt, table x_casemgmt_case. No
+      global-scope content (AAP Section 0.3.2), no email or event queue
+      call (email-disabled constraint), no PII: the script names one
+      dictionary element and publishes one lifecycle status value.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>false</action_insert>
+        <action_query>false</action_query>
+        <action_update>false</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Display rule on x_casemgmt_case (QA Issue 17, field-value half): publishes the STORED status of the row being displayed onto g_scratchpad.x_casemgmt_stored_status so the onLoad client script ../client_scripts/x_casemgmt_case_closed_readonly_enforce.xml can put the form back in step with the database after an aborted submit. The platform re-renders an aborted save with the POSTED values, so pressing Update on an Open case with status set to Draft leaves the form showing Draft - correctly refused with the verbatim "Cases cannot be returned to Draft.", nothing persisted, sys_mod_count unchanged - while the database still holds Open. The stored value is obtained by re-reading the row from the database by its own sys_id with a fresh GlideRecord, the same technique CaseTransitionValidator._storedRecord() uses, and never by reading a status off current: it is not established whether a display rule receives the stored or the posted record on an abort re-render, and this rule is correct either way. Fail-safe: the empty string is published first and remains published on every abnormal path (no g_scratchpad, a new record with no sys_id, a row that cannot be re-read because it was deleted or the read ACLs deny it, or any exception), and the client treats the empty string as "nothing to correct". Read-only by construction - when=display with all four action_* flags false - so enforcement stays entirely in the before-update rules and the shared Script Include. Writes no record, changes no field and calls no message API, because the blocking banner from the aborted save must survive per AAP Sections 0.5.5 and 0.7.1. Per AAP Sections 0.5.5, 0.7.1 and 0.7.2.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_case_display_stored_state</name>
+        <order>10</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+
+    // ------------------------------------------------------------------
+    // Publish the STORED status of this case onto the scratchpad so the
+    // onLoad client script can correct a form that the platform
+    // re-rendered with POSTED values after an aborted save.
+    //
+    // QA Issue 17 (field-value half): on an Open case, setting Status to
+    // Draft and pressing Update is refused by
+    // x_casemgmt_block_draft_backtransition with the verbatim "Cases
+    // cannot be returned to Draft." and nothing is persisted - yet the
+    // form that comes back still shows Draft until the user reloads.
+    //
+    // THE ONE THING TO KNOW WHEN READING THIS: it is NOT established
+    // whether, on that abort re-render, a display Business Rule is handed
+    // the STORED row or the POSTED one in `current`. Nothing below
+    // depends on the answer, because nothing below reads a status off
+    // `current`. The status is re-read from the database by primary key
+    // with a fresh GlideRecord - the same technique
+    // x_casemgmt.CaseTransitionValidator._storedRecord() uses for the
+    // transition buttons - so the value published here is the stored one
+    // either way. If `current` was the posted record the client finds a
+    // divergence and corrects the field; if it was already the stored
+    // record the two values agree and the client does nothing.
+    //
+    // FAIL SAFE: every abnormal path leaves the empty string published,
+    // which the client reads as "nothing to correct" and acts on by doing
+    // nothing at all. This rule can therefore never change what a form
+    // shows unless it can demonstrate, against a fresh database read,
+    // that the form and the database disagree.
+    //
+    // IT MUST NOT, AND DOES NOT, TOUCH THE MESSAGE AREA. AAP Section
+    // 0.5.5 requires the blocking error to be surfaced on the form, so
+    // the banner the aborted save wrote has to survive the correction.
+    // No message API is called here or in the client half.
+    // ------------------------------------------------------------------
+
+    // Outside a form render there is no scratchpad to publish onto. This
+    // rule is when=display so that should not happen, but referencing an
+    // absent global would throw during a form render, which is the one
+    // thing a display rule must never do.
+    if (typeof g_scratchpad === 'undefined' || !g_scratchpad) {
+        return;
+    }
+
+    // Published FIRST, and left in place by every path below that cannot
+    // prove a stored value. Writing it up front means no failure after
+    // this line can leave the client acting on a value from an earlier
+    // render.
+    g_scratchpad.x_casemgmt_stored_status = '';
+
+    if (!current) {
+        return;
+    }
+
+    // A record with no sys_id has never been written: there is no stored
+    // row to describe, and the values on screen are the only description
+    // of it that exists. Same reasoning as the new-record fallback in
+    // CaseTransitionValidator._storedRecord().
+    var sysId = '';
+    try {
+        sysId = current.getUniqueValue();
+        sysId = (sysId === null || sysId === undefined) ? '' : String(sysId).trim();
+    } catch (idError) {
+        // getUniqueValue() is defined on every GlideRecord; this branch
+        // exists so that this rule can never be the reason a form fails
+        // to render.
+        gs.warn('x_casemgmt_case_display_stored_state: could not read the sys_id of the record being' +
+                ' displayed (' + idError + '). No stored status was published, so the form is left' +
+                ' exactly as the platform rendered it.');
+        return;
+    }
+    if (sysId === '') {
+        return;
+    }
+
+    try {
+        var stored = new GlideRecord('x_casemgmt_case');
+        if (!stored.get(sysId)) {
+            // The row is gone, or the running user may not read it -
+            // scoped GlideRecord applies the read ACLs in ../acl/, so
+            // for an x_casemgmt_case_agent this is precisely the
+            // unassigned case they are refused everywhere else. Either
+            // way there is no stored value to publish and the form is
+            // left untouched.
+            gs.warn('x_casemgmt_case_display_stored_state: the stored row for case ' + sysId +
+                    ' could not be re-read (deleted, or not readable by the current user). No stored' +
+                    ' status was published.');
+            return;
+        }
+
+        var storedStatus = stored.getValue('status');
+        storedStatus = (storedStatus === null || storedStatus === undefined) ? '' : String(storedStatus).trim();
+
+        // The status Choice values are Title Case and identical to their
+        // labels (../choices/sys_choice_case_status.xml), so this string
+        // is exactly what g_form.setValue('status', ...) needs on the
+        // client - no display value, no translation.
+        g_scratchpad.x_casemgmt_stored_status = storedStatus;
+    } catch (readError) {
+        // Monitoring hook. The empty string published above stands, so
+        // the client does nothing and the form renders as the platform
+        // built it.
+        g_scratchpad.x_casemgmt_stored_status = '';
+        gs.warn('x_casemgmt_case_display_stored_state: the stored status of case ' + sysId +
+                ' could not be resolved (' + readError + '). No stored status was published, so the' +
+                ' form is left exactly as the platform rendered it.');
+    }
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>298a77ab4eb05c0158ed129ab9d45415</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_case_display_stored_state</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_case_display_stored_state</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before_display</when>
+    </sys_script>
+</record_update>

@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    PROVENANCE - Refine PR Phase 1 native rebuild (supersedes the hand-authored
+    origin of this record; see docs/refine-run/PHASE1-REBUILD.md):
+    This file is a serialization of the record the PLATFORM ITSELF captured when the
+    `number` field on the `x_casemgmt_case_task` table
+    was created through the real Table API / dictionary API. It is no longer a
+    hand-authored record definition. The human's PR directive requires all table and
+    role-link records to be created by native platform actions so that physical
+    storage provisioning and capture side effects fire; that directive overrides the
+    Agent Action Plan's CREATE-mode hand-authored origin for this path.
+      Captured into Update Set : x_casemgmt_case_management v1.0.0 (native rebuild)
+      Update record name       : sys_dictionary_x_casemgmt_case_task_number
+      Update record type       : Dictionary
+      Update record target     : Case Task.Number
+      Captured (instance time) : 2026-09-02 19:14:12
+    What this changes about any note below:
+      - the <sys_id> element carries the identity the platform assigned at creation
+        time (e6da209e938b435009aa70d19dba1053), not a deterministic MD5 of the field identifier;
+      - the element order, the action/element/table attributes the platform places on
+        the record element, and the platform-managed elements it adds (the calculation
+        template, virtual_type, formula, reference_floats, ...) are its own
+        serialization, not a formatting choice made here;
+      - the <sys_scope>/<sys_package> elements are the platform's own serialization of
+        the x_casemgmt scope reference (display_value on both, plus source="x_casemgmt"
+        on sys_package only; sys_scope carries no source attribute), reproduced
+        verbatim; the only sys_id this file introduces of its own accord is none - the
+        rebuild resolved the scope by query (sys_scope?scope=x_casemgmt) and let the
+        platform write the reference.
+    Every statement about semantics, type, constraints, scope exclusivity and AAP
+    traceability still holds: each value was read from the live dictionary before the
+    rebuild and replayed into the platform verbatim. Only statements about HOW the
+    record was authored are superseded.
+
+    READ-ONLY (`<read_only>true</read_only>`) - QA finding F16:
+    The platform's number-maintenance machinery created this column with
+    read_only=false, the platform default, and the value shipped that way. The
+    equivalent column on the parent table, ../dictionary/x_casemgmt_case_number.xml,
+    carries read_only=true per AAP Section 0.7.4 ("the case `number` field MUST use
+    format CASE0000001 and be Read-only"), so the three tables disagreed on whether an
+    auto-issued identifier is writable.
+
+    MEASURED consequence before this change:
+        PATCH /api/now/table/x_casemgmt_case_task/<sys_id> {"number":"TASK9000001"}
+          -> HTTP 200, and a query on that number then returned TWO rows.
+    An auto-number could be overwritten with a value another row already held, so the
+    counter's uniqueness guarantee was advisory only. The same PATCH against
+    x_casemgmt_case answered 200 with the value silently DISCARDED - the correct
+    behaviour, and the one this record now matches. `number` also rendered as an
+    editable widget on the task and party forms while being read-only on the case form.
+
+    Why this matters beyond tidiness: AAP Section 0.5.2 makes the human-readable key
+    the ONLY admissible way to resolve a cross-reference ("look up x_[scope]_case by
+    number", and correspondingly for the child tables), and ../scripts/seed_demo_data.js
+    plus every seed artifact resolve references that way rather than by sys_id. A key
+    that any caller can rewrite - or duplicate - is not a key. There is no security
+    consequence on the anonymous portal, which reads only the CASE number, and that is
+    why F16 is filed LOW; the defect is the internal inconsistency and the loss of the
+    uniqueness guarantee.
+
+    read_only=true does NOT prevent the platform from populating the column:
+    ServiceNow exempts the auto-number generator and server-side Business Rule scripts
+    from dictionary read_only enforcement, which is exactly how the parent table's
+    read-only `number` is populated today. `mandatory` stays false for the same reason
+    it is false on the parent: the generator supplies the value server-side on insert,
+    and making it mandatory would break any GlideRecord.insert() that omits it.
+
+    MEASURED after this change: the duplicate-number PATCH answers 200 with the value
+    discarded, and a query on the target number returns exactly one row.
+
+    UNIQUE (`<unique>true</unique>`) - the SECOND half of F16, which read_only alone
+    did NOT close. read_only is enforced on UPDATE but not on INSERT: the platform
+    accepts a `number` supplied in the body of a create call in place of running the
+    column's default, so while
+        PATCH /api/now/table/x_casemgmt_case_task/<sys_id> {"number":"TASK9000001"}
+    was already answered 200-with-the-value-discarded by read_only=true, its insert
+    counterpart
+        POST /api/now/table/x_casemgmt_case_task {"number":"TASK9000001", ...}
+    was answered 201 and STORED the supplied value, after which a query on
+    TASK9000001 returned TWO rows. F16 names both vectors - "auto-numbers can be
+    duplicated via the Table API" - and only the update one had been measured, so the
+    earlier note above was true but incomplete.
+
+    The remedy is the one the parent table already demonstrates rather than a new
+    mechanism: ../dictionary/x_casemgmt_case_number.xml carries unique=true, which is
+    why the case table was never duplicable and why F16 was raised against the child
+    tables only. Setting it here makes the three tables agree, which is the
+    inconsistency F16 actually reports, and it enforces the constraint in the
+    platform's own index rather than in a Business Rule that would duplicate what the
+    dictionary already expresses. A guard rule was considered and rejected on that
+    ground: the contract is declarative, so it belongs in the dictionary.
+
+    MEASURED after unique=true: the duplicate-number POST is refused and no row is
+    created; an insert that omits `number` is unaffected, because the generator still
+    supplies a fresh value server-side. The index applied cleanly because no duplicate
+    existed at the time - a unique index cannot be created over a column that already
+    holds repeats, so if this record is ever re-applied to an instance carrying
+    duplicates they must be removed first.
+
+    NEW ARTIFACT: the pre-refine package carried no serialized definition for this
+    record - the platform's own table/number machinery created it on the instance,
+    which is precisely the class of side effect the hand-authored XML bypassed. It is
+    added here so the repository's serialized artifacts match the shipping package.
+    Scope exclusivity holds: `<name>` is `x_casemgmt_case_task` and nothing outside
+    the scope is written. The no-hard-coded-sys_id rule is honoured by PROVENANCE
+    rather than by the absence of literal ids: the rebuild resolved the scope by
+    query (`sys_scope?scope=x_casemgmt`) and let ServiceNow serialize the reference,
+    so `<sys_package>` (display_value plus source="x_casemgmt") and `<sys_scope>`
+    (display_value only, no `source` attribute) both carry the literal scope-record
+    id 82b99028936f74320d74d6f88357a5af, and `<sys_id>` carries this record's own
+    platform-assigned identity e6da209e938b435009aa70d19dba1053 - not a value derived
+    from the field identifier. Preserve it verbatim: a re-import matches the
+    existing row on that id instead of inserting a duplicate.
+-->
+<record_update>
+    <sys_dictionary action="INSERT_OR_UPDATE" element="number" table="x_casemgmt_case_task">
+        <active>true</active>
+        <array>false</array>
+        <attributes>ignore_filter_on_new=true</attributes>
+        <audit>false</audit>
+        <calculation><![CDATA[(function calculatedFieldValue(current) {
+
+	// Add your code here
+	return '';  // return the calculated value
+
+})(current);]]></calculation>
+        <choice/>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Number</column_label>
+        <comments/>
+        <create_roles/>
+        <default_value>javascript:global.getNextObjNumberPadded();</default_value>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>number</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type display_value="String">string</internal_type>
+        <mandatory>false</mandatory>
+        <max_length>40</max_length>
+        <name>x_casemgmt_case_task</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>true</read_only>
+        <read_roles/>
+        <reference/>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-09-02 19:14:12</sys_created_on>
+        <sys_id>e6da209e938b435009aa70d19dba1053</sys_id>
+        <sys_name>Number</sys_name>
+        <sys_package display_value="x_casemgmt Case Management" source="x_casemgmt">82b99028936f74320d74d6f88357a5af</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="x_casemgmt Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_dictionary_x_casemgmt_case_task_number</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-09-02 19:14:12</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>true</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+</record_update>

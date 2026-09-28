@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ServiceNow Update Set record-definition for the `sys_script` (Business Rule)
+    row that holds the four free-text fields of the `x_casemgmt_case` table -
+    subject, description, requester_name and requester_email - to their
+    DECLARED maximum lengths on every write path. The table and this rule both
+    live in the scoped application `x_casemgmt`.
+
+    PURPOSE (AAP Section 0.5.7 verbatim, x_casemgmt_case schema):
+        | subject         | String(255)  | Mandatory |
+        | description     | String(4000) | Mandatory |
+        | requester_name  | String(100)  | Mandatory |
+        | requester_email | String(100)  | Optional  |
+
+    Those four lengths are declared in
+        ../dictionary/x_casemgmt_case_subject.xml         (max_length 255)
+        ../dictionary/x_casemgmt_case_description.xml     (max_length 4000)
+        ../dictionary/x_casemgmt_case_requester_name.xml  (max_length 100)
+        ../dictionary/x_casemgmt_case_requester_email.xml (max_length 100)
+    and, until this rule existed, NOTHING ENFORCED THEM ON A WRITE.
+
+    THE GAP THIS RULE CLOSES
+
+        The declared max_length is a dictionary constraint, and the
+        platform applies it in two places only, neither of which is the
+        write itself:
+
+          1. On a FORM, for a string column of 255 or fewer characters,
+             the rendered input carries an HTML maxlength attribute. The
+             browser then stops accepting further characters SILENTLY -
+             there is no counter and no notice - so 300 characters typed
+             into Subject become the first 255 with nothing said. Worse,
+             a string column LONGER than 255 is backed by a TEXT column
+             and its textarea is rendered with NO maxlength attribute at
+             all, so Description accepted 4100 characters client-side
+             against a declared 4000.
+
+          2. At storage, an over-length value is cut to fit. The row is
+             written, the save reports success, and the difference
+             between "stored in full" and "stored minus the end" is
+             invisible to whoever wrote it.
+
+        Both behaviours were reproduced on this application: a 300-character
+        Subject was truncated to 255 with no counter anywhere on the form,
+        and a 4100-character Description was accepted by the textarea with
+        no maxlength attribute present.
+
+        For a case-management record that is the wrong trade. The end of a
+        long description is where the material sentence of a complaint
+        usually sits; losing it while telling the author the case saved
+        means neither they nor the agent who later reads the case has any
+        way to know that anything was lost. Refusing the write and naming
+        the field costs one edit and loses nothing.
+
+    WHAT THIS RULE CAN AND CANNOT SEE - MEASURED, NOT ASSUMED
+
+        The platform coerces an over-length value for a VARCHAR-backed
+        column (any declared length of 255 or fewer) BEFORE the before
+        rules run, so by the time this rule reads the field the value is
+        already cut to fit and the original length is unrecoverable in
+        script. Measured on this instance:
+
+            PATCH x_casemgmt_case/<sys_id> {"subject": 300 chars}
+                -> HTTP 200, stored length 255   (rule saw 255, passed)
+            PATCH x_casemgmt_case/<sys_id> {"description": 4001 chars}
+                -> HTTP 403 aborted by THIS rule, stored value unchanged
+            PATCH x_casemgmt_case/<sys_id> {"description": 4000 chars}
+                -> HTTP 200, stored length 4000
+
+        So the coverage is:
+
+          description      (4000, TEXT-backed) - ENFORCED HERE. This is
+            the field that mattered: it is the only one whose form control
+            renders with no maxlength attribute at all, so it accepted
+            4100 characters from the browser, and it is the field whose
+            tail carries the substance of a long complaint. An over-length
+            description is now refused on EVERY write path.
+
+          subject / requester_name / requester_email (255/100/100,
+            VARCHAR-backed) - the checks below are the correct invariant
+            and are kept, but on this platform they cannot fire from a
+            write that arrived over-length, because the coercion above
+            has already happened. Their residual exposure is bounded
+            elsewhere and differently: on a FORM the rendered input
+            carries a maxlength attribute, so the browser refuses the
+            keystrokes and no over-length value is ever submitted; on the
+            ANONYMOUS PORTAL path
+            ../script_includes/x_casemgmt_CasePortalService.xml refuses
+            all four with an HTTP 400 naming the field, BEFORE any
+            GlideRecord exists and therefore before any coercion. What is
+            left is a caller writing >255 characters into subject through
+            the Table API and being answered HTTP 200 for a value stored
+            at 255. That is platform field coercion, not something a
+            business rule can intercept, and the only script-level
+            alternative - raising the declared max_length so the value
+            survives to be judged - is prohibited: AAP Section 0.5.7
+            fixes these as String(255)/String(100) and Section 0.7.1
+            forbids type relaxations.
+
+          The three checks are therefore retained deliberately rather
+          than deleted: they cost one string comparison each, they hold
+          if a future platform release stops coercing, and deleting them
+          would leave the rule silently asserting a narrower invariant
+          than its name.
+
+    WHY A BUSINESS RULE AND NOT A CLIENT SCRIPT OR A DICTIONARY ATTRIBUTE
+
+        A client script or a form annotation would only cover the form,
+        and the form is not the only writer: the Table API, an import set,
+        a fix script and a flow all write this table and none of them
+        renders a maxlength attribute. A before-insert/before-update
+        business rule is the only place the constraint holds for EVERY
+        write path, and it is the same layer at which the six sibling
+        rules in this folder enforce the state machine.
+
+        No dictionary attribute achieves it either. max_length is already
+        declared correctly on all four fields; the omission was never
+        declarative, so there is nothing to add there.
+
+        The anonymous portal path is guarded a second time, earlier and
+        with a better error surface, by
+            ../script_includes/x_casemgmt_CasePortalService.xml
+        whose _validateSubmission() refuses an over-length submission with
+        an HTTP 400 naming the offending field before any GlideRecord is
+        initialized. That is deliberate redundancy, not duplication: the
+        endpoint answers the caller in the shape a REST client can act on
+        (a { error, fields } body), while THIS rule is the guarantee that
+        no write path anywhere can persist an over-length value. If the
+        endpoint's validation were bypassed or removed, the row still
+        could not be written.
+
+    BEHAVIOR
+
+        - Trigger          : BEFORE INSERT and BEFORE UPDATE on
+                             `x_casemgmt_case`
+        - Condition        : none declared (the script decides, because
+                             the check is per-field and a condition
+                             string cannot express four independent
+                             length tests)
+        - Action on failure: gs.addErrorMessage('<field label> must be
+                             <limit> characters or fewer. The value
+                             supplied is <n> characters.') for EACH
+                             offending field, then
+                             current.setAbortAction(true)
+        - Action on pass   : nothing; the rule mutates no field and adds
+                             no message
+        - Other timing     : does NOT fire on delete or query
+
+        Every offending field is reported in the same save rather than
+        only the first. A caller who pasted an over-length subject AND an
+        over-length description should learn both facts in one attempt;
+        stopping at the first would make correcting the record a series of
+        rejected saves.
+
+        The message quotes the limit and the length received. Both numbers
+        describe the writer's own input against a limit the dictionary
+        already publishes on the form, so nothing internal is disclosed,
+        and the writer can fix the value in one edit instead of bisecting
+        it.
+
+    ORDER = 70
+
+        This rule runs FIRST in the before-rule chain on x_casemgmt_case,
+        ahead of block_terminal_closed (100), set_opened_date (100),
+        block_draft_backtransition (200), enforce_forward_transitions
+        (250), validate_assigned_agent_membership (300),
+        clear_pending_reason_on_inprogress (400) and set_closed_date
+        (500).
+
+        Running first is correct because a length violation is a property
+        of the VALUE, independent of any status transition: a 4001-
+        character description is refused whether the save also happens to
+        be a legal Draft -> Open transition or an illegal rewind to Draft.
+        Reporting it before the state-machine rules speak means the writer
+        reads the concrete, fixable fact first.
+
+        Orders 50 and 80 are RESERVED for sibling guards on this same
+        table and MUST NOT be reused by this rule.
+
+    ORDER IS NOT A SHORT CIRCUIT
+
+        setAbortAction(true) cancels the WRITE, not the rule chain: the
+        platform runs every remaining before rule and exposes the pending
+        abort through current.isActionAborted(). The early return below on
+        that flag is what keeps this rule from stacking a length message
+        on top of a save some other rule already refused - the same guard
+        the order-300, order-400 and order-500 rules carry. Because this
+        rule runs first, the flag is normally false when it is consulted;
+        the guard matters when an order-50 sibling has already refused the
+        save, and it is present for that case rather than as decoration.
+
+    WHY THE MANDATORY CASE IS NOT HANDLED HERE
+
+        An empty value is not an over-length value, and this rule says
+        nothing about it: an absent or blank field passes every check
+        below and is left to the mandatory guard that owns that concern.
+        Inlining a "field is required" message here would put two rules in
+        the business of the same failure and would produce two messages for
+        one mistake.
+
+    NO ARKCASE SOURCE-SIDE ANALOG
+
+        ArkCase enforced field lengths declaratively through JPA column
+        definitions on the entity - see
+          acm-plugins/acm-default-plugins/acm-case-file-plugin/src/main/
+            java/com/armedia/acm/plugins/casefile/model/CaseFile.java
+        where @Column(name = "cm_case_title") and friends map onto MySQL
+        VARCHAR columns whose length the database itself refuses to exceed
+        (MySQL in strict mode raises "Data too long for column" and the
+        transaction rolls back). The behaviour this rule restores is
+        therefore the SOURCE-SIDE behaviour: a write that does not fit is
+        refused, not shortened. ServiceNow's TEXT-backed storage for
+        >255-character columns does not raise, so the guarantee has to be
+        re-established in script. There is no ArkCase Java class this rule
+        is ported from; it is target-side authored to preserve a source-
+        side invariant the target platform does not provide.
+
+    SCOPED-APPLICATION FIELDS
+
+        - <collection>x_casemgmt_case</collection>  the scoped table this
+          rule is attached to, referenced BY NAME
+        - <sys_scope>82b99028936f74320d74d6f88357a5af</sys_scope> and
+          <sys_package>x_casemgmt</sys_package> place the rule inside the
+          scoped application, matching every sibling rule in this folder
+        - <access>package_private</access> - the rule is not callable from
+          outside the scope, matching every sibling rule
+        - <advanced>true</advanced> - required for a rule whose behaviour
+          lives in <script> rather than in the declarative
+          set-field/add-message columns
+        - <sys_domain>global</sys_domain> - the instance is not
+          domain-separated; matches every sibling rule
+
+    NO HARDCODED sys_id REFERENCES
+
+        The only sys_id literals in this file are <sys_id> (this record's
+        own identity, required for the Update Set to be idempotent) and
+        <sys_scope> (the scope record's identity, carried identically by
+        every sibling record in this application). The rule's SCRIPT
+        contains no sys_id literal and resolves nothing by sys_id: it
+        reads four fields of `current` by name and compares string
+        lengths. Per AAP Section 0.7.2's no-hardcoded-sys_id constraint.
+-->
+<record_update table="sys_script">
+    <sys_script action="INSERT_OR_UPDATE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>false</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_casemgmt_case</collection>
+        <condition/>
+        <description>Before-insert/update on x_casemgmt_case: refuses any write whose subject exceeds 255 characters, description exceeds 4000, requester_name exceeds 100 or requester_email exceeds 100 - the four max_length values declared in AAP Section 0.5.7 and in the dictionary entries under ../dictionary/. Every offending field is named in its own gs.addErrorMessage() ('&lt;label&gt; must be &lt;limit&gt; characters or fewer. The value supplied is &lt;n&gt; characters.') and the write is cancelled with current.setAbortAction(true), so an over-length value can never be persisted by ANY write path. This closes a silent-data-loss gap: the platform enforces max_length only as an HTML maxlength attribute on forms - absent altogether on the &gt;255-character description textarea, which accepted 4100 characters - and then cuts the value to fit at storage while reporting the save as successful, so the end of a long description was lost with nothing said to its author. Coverage measured on this instance: description is TEXT-backed and is ENFORCED here (a 4001-character description is answered HTTP 403 with the stored value unchanged; 4000 is accepted), while subject, requester_name and requester_email are VARCHAR-backed and are coerced to fit by the platform BEFORE the before rules run (a 300-character subject is answered HTTP 200 and stored at 255), so their checks below are the correct invariant but cannot fire from a coerced write; those three are bounded instead by the form's rendered maxlength attribute and by the anonymous portal endpoint's HTTP 400, and raising their declared max_length to make the value observable is prohibited by AAP Sections 0.5.7 and 0.7.1. A form-layer control cannot close this, because the Table API, import sets, fix scripts and flows write this table without rendering any attribute; a before rule is the only layer that covers every path. Order=70 places this rule FIRST in the before-rule chain, ahead of block_terminal_closed (100), set_opened_date (100), block_draft_backtransition (200), enforce_forward_transitions (250), validate_assigned_agent_membership (300), clear_pending_reason_on_inprogress (400) and set_closed_date (500), because a length violation is a property of the value and is independent of any status transition; orders 50 and 80 are reserved for sibling guards. Dual-triggered (action_insert AND action_update) because both paths can carry an over-length value. Early-returns on current.isActionAborted() so it never stacks a message on a save another rule already refused. Says nothing about empty values - the mandatory concern belongs to a separate guard. The anonymous portal path is additionally guarded, earlier and with an HTTP 400 { error, fields } body, by x_casemgmt.CasePortalService._validateSubmission(); this rule is the guarantee that holds when that path is not the writer. Type-agnostic: fires for both General Inquiry and Complaint. Contains zero gs.eventQueue() calls per the email-disabled constraint and zero hardcoded sys_id literals.</description>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>x_casemgmt_validate_case_text_lengths</name>
+        <order>70</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous /*null when async*/) {
+    // Per AAP Section 0.5.7 (x_casemgmt_case schema), these four fields
+    // carry a declared maximum length:
+    //
+    //     | Field           | Type         | Constraint |
+    //     | subject         | String(255)  | Mandatory  |
+    //     | description     | String(4000) | Mandatory  |
+    //     | requester_name  | String(100)  | Mandatory  |
+    //     | requester_email | String(100)  | Optional   |
+    //
+    // The declaration lives in the dictionary entries under
+    // ../dictionary/, and the platform honours it as an HTML maxlength
+    // attribute on forms and as a cut-to-fit at storage. Neither is a
+    // refusal: the form drops keystrokes past the limit without a counter
+    // or a notice, the >255-character description textarea is rendered
+    // with no maxlength attribute at all, and the write itself succeeds
+    // with the tail of the value missing. This rule is the refusal, and
+    // it is placed in the before chain so it covers every write path -
+    // form, Table API, import set, fix script and flow alike.
+    //
+    // WHAT THIS RULE CAN OBSERVE. The platform coerces an over-length
+    // value for a VARCHAR-backed column (declared length 255 or fewer)
+    // BEFORE the before rules run, so subject, requester_name and
+    // requester_email arrive here already cut to fit and their original
+    // length is unrecoverable in script. Measured on this instance: a
+    // PATCH sending a 300-character subject answered HTTP 200 and stored
+    // 255, while a PATCH sending a 4001-character description was aborted
+    // by this rule with the stored value unchanged. description is
+    // TEXT-backed - the platform does not coerce it - which is why the
+    // check below is the effective guard for exactly the field that had
+    // no client-side maxlength and the most to lose. The other three
+    // checks are the correct invariant and are kept for the case where a
+    // write path delivers an uncoerced value, but they are not what
+    // bounds those fields today: the form's maxlength attribute and the
+    // portal endpoint's HTTP 400 do. See the file header for the full
+    // measurement and for why raising the declared max_length to make the
+    // value observable is prohibited by AAP Sections 0.5.7 and 0.7.1.
+    //
+    // The single source of truth for the limits is the table below. It
+    // is authored here rather than read from sys_dictionary at runtime on
+    // purpose: a sys_dictionary lookup would add four queries to every
+    // insert and update of this table to re-learn four constants that the
+    // AAP fixes, and a rule that derived its own limits from the schema
+    // could be silently relaxed by an unrelated dictionary edit. The
+    // labels match the dictionary column_labels so the message a user
+    // reads names the field the way the form does.
+
+    var LENGTH_LIMITS = [
+        { name: 'subject',         label: 'Subject',         maxLength: 255 },
+        { name: 'description',     label: 'Description',     maxLength: 4000 },
+        { name: 'requester_name',  label: 'Requester Name',  maxLength: 100 },
+        { name: 'requester_email', label: 'Requester Email', maxLength: 100 }
+    ];
+
+    // Skip if an earlier rule in the chain has already rejected this save.
+    // setAbortAction(true) cancels the WRITE, not the rule chain - the
+    // platform runs every remaining before rule and exposes the pending
+    // abort through current.isActionAborted(). Returning here keeps a
+    // save that a sibling guard already refused from also collecting
+    // length messages, so the user reads the one message that explains
+    // the refusal. This rule runs at order 70, so the flag is normally
+    // false when it is read; the guard exists for the case where an
+    // order-50 sibling has already refused the save.
+    if (current.isActionAborted()) {
+        return;
+    }
+
+    // Collect EVERY violation before deciding, so a save carrying two
+    // over-length fields reports both. Stopping at the first would turn
+    // correcting the record into a series of rejected saves, each
+    // revealing one more problem.
+    var violations = [];
+    for (var i = 0; i < LENGTH_LIMITS.length; i++) {
+        var spec = LENGTH_LIMITS[i];
+
+        // getValue() is used rather than current[spec.name] because the
+        // property form returns a GlideElement wrapper, and reading
+        // .length on the wrapper yields undefined rather than the
+        // character count - a comparison that would silently never fire.
+        // getValue() returns the underlying string (or null), and the
+        // String() coercion makes .length meaningful for both. An empty
+        // or null column becomes '' (length 0) and therefore passes -
+        // emptiness is the mandatory guard's concern, not this rule's.
+        var value = String(current.getValue(spec.name) || '');
+
+        if (value.length > spec.maxLength) {
+            violations.push({
+                label: spec.label,
+                maxLength: spec.maxLength,
+                actual: value.length
+            });
+        }
+    }
+
+    if (violations.length === 0) {
+        // Nothing to say. The rule mutates no field and adds no message
+        // on the normal path, so it is invisible to every write that
+        // respects the declared lengths - which is every write the
+        // application makes today: the longest values among the seeded
+        // rows are a 69-character subject, a 106-character description,
+        // a 25-character requester_name and a 28-character
+        // requester_email.
+        return;
+    }
+
+    for (var v = 0; v < violations.length; v++) {
+        var violation = violations[v];
+
+        // gs.addErrorMessage() surfaces the message at the top of the
+        // case form when the write arrives through the UI, and the
+        // platform reports the abort to a Table API caller as an HTTP
+        // 403 naming the rule that refused it. Per AAP Section 0.7.1:
+        // "Surface all blocking errors on the form. Invalid transition
+        // attempts MUST produce a blocking error message visible on the
+        // form - silent failures or post-save error logs are
+        // unacceptable." A silently shortened value is the same class of
+        // defect as a silent failure: the write reports success and the
+        // data is not what was written.
+        //
+        // Per AAP Section 0.7.4 only four messages are verbatim and
+        // non-negotiable ("All tasks must be closed before resolving
+        // this case.", "Cases cannot be returned to Draft.", "Closed
+        // cases are terminal and cannot be modified.", "No case found
+        // with that number."). This message is NOT one of them, so the
+        // wording is target-side authored; it names the field with the
+        // dictionary's own label, quotes the declared limit, and quotes
+        // the length received so the value can be fixed in one edit.
+        gs.addErrorMessage(violation.label + ' must be ' + violation.maxLength +
+            ' characters or fewer. The value supplied is ' + violation.actual +
+            ' characters.');
+    }
+
+    // current.setAbortAction(true) cancels the database write. Both calls
+    // are required and neither substitutes for the other: without the
+    // messages the write would be refused with nothing to read, and
+    // without the abort the messages would appear while the row was
+    // written with the value cut to fit - which is precisely the
+    // behaviour this rule exists to end.
+    current.setAbortAction(true);
+
+    // A refused write is worth a server-side trace: an integration whose
+    // payloads are being refused needs a record of it that does not
+    // depend on someone watching a form. The log names the fields and the
+    // lengths, never the values, so no case content or requester detail
+    // reaches the system log. current.number is empty on insert (the
+    // number is generated after the before rules run), so the fallback
+    // keeps the line readable for the insert case.
+    var refusedFields = [];
+    for (var w = 0; w < violations.length; w++) {
+        refusedFields.push(violations[w].label + '=' + violations[w].actual +
+            '/' + violations[w].maxLength);
+    }
+    gs.warn('x_casemgmt_validate_case_text_lengths: write refused on ' +
+        (current.getValue('number') || 'a new case') +
+        ' - over-length field(s): ' + refusedFields.join(', '));
+})(current, previous);
+]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2025-01-01 00:00:00</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>7c4b1ea2938f74320d74d6f88357a5c1</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_casemgmt_validate_case_text_lengths</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Case Management" source="x_casemgmt">x_casemgmt</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Case Management">82b99028936f74320d74d6f88357a5af</sys_scope>
+        <sys_update_name>sys_script_x_casemgmt_validate_case_text_lengths</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2025-01-01 00:00:00</sys_updated_on>
+        <template/>
+        <when>before</when>
+    </sys_script>
+</record_update>
