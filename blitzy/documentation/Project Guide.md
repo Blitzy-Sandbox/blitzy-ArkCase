@@ -13,28 +13,28 @@ This project re-platforms ArkCase's core case-management domain — a Java/Sprin
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'pie1':'#5B39F3','pie2':'#FFFFFF','pieStrokeColor':'#B23AF2','pieStrokeWidth':'2px','pieOuterStrokeColor':'#B23AF2','pieTitleTextSize':'16px','pieSectionTextSize':'14px'}}}%%
 pie showData
-    title Project Completion — 94.1% (AAP-scoped hours)
-    "Completed Work (AI)" : 784
-    "Remaining Work" : 49
+    title Project Completion — 94.0% (AAP-scoped hours)
+    "Completed Work (AI)" : 783
+    "Remaining Work" : 50
 ```
 
 | Metric | Hours |
 | --- | --- |
 | **Total Project Hours** | **833** |
-| Completed Hours (AI) | 784 |
+| Completed Hours (AI) | 783 |
 | Completed Hours (Manual) | 0 |
-| **Completed Hours (AI + Manual)** | **784** |
-| **Remaining Hours** | **49** |
-| **Percent Complete** | **94.1%** |
+| **Completed Hours (AI + Manual)** | **783** |
+| **Remaining Hours** | **50** |
+| **Percent Complete** | **94.0%** |
 
-> AAP-scoped work plus path to production: `784 / (784 + 49) = 784 / 833 = 94.1%`. All delivered autonomously; no manual hours are recorded.
+> AAP-scoped work plus path to production: `783 / (783 + 50) = 783 / 833 = 94.0%`. All delivered autonomously; no manual hours are recorded.
 
 ## 1.3 Key Accomplishments
 
 - ✅ **One installable package** — 576 blocks, each carrying a platform payload hash, byte-identical to the platform's own export.
-- ✅ **Proven install** — preview to zero problems of any type, then one clean commit, on four emptied instances.
+- ✅ **Proven install** — preview to zero problems of any type and one clean commit on four emptied instances; the application now runs on the verification instance from these exact bytes.
 - ✅ **One-commit deployment** — storage, choice values, role links and persona access all arrive with the commit.
-- ✅ **Automated suite green on the delivered bytes** — 20 of 20 tests, 179 of 179 steps; 13 of 13 transition assertions.
+- ✅ **Automated suite green on the installed application** — 20 of 20 tests, 179 of 179 steps; 13 of 13 transition assertions.
 - ✅ **Data model** — 3 tables, the full specified field set, 7 choice lists, `CASE0000001` numbering.
 - ✅ **Access control** — 3 roles, 29 access rules, 36 role links; the CRUD matrix verified per persona.
 - ✅ **State machine** — every guard refuses the save with its exact message, both case types.
@@ -42,22 +42,22 @@ pie showData
 
 ## 1.4 Critical Unresolved Issues
 
-**14 of the 95 requested items remain open.** Group counts sum to 14.
+**14 of the 99 requested items remain open.** The four items of the latest change request are all delivered. Group counts sum to 14.
 
 | Issue | Impact | Owner | ETA |
 | --- | --- | --- | --- |
-| **Independent-instance confirmation (1 item)** — the install gate is met on these exact bytes, but on a single instance emptied immediately beforehand rather than on a second, independent one | Platform state a teardown does not reset — caches, indexes, retained update history — was never re-created, so an install elsewhere is the one unproven case | Platform engineer | 8 h |
+| **Independent-instance confirmation (1 item)** — the install gate is met on these exact bytes, but only on the one verification instance, emptied immediately before each gated run, never on a second, independent instance | Platform state a teardown does not reset — caches, indexes, retained update history — was never re-created, so an install elsewhere is the one unproven case | Platform engineer | 8 h |
 | **Access-control decisions (3 items)** — organization parties cannot be saved because the referenced company table is unreadable to all three roles; counts and aggregates compute over rows the access rules deny; the anonymous endpoints are unthrottled at the platform perimeter | One party type is unusable; a viewer or agent can infer records they cannot read; the public endpoints rely on the application's own guard alone | Security admin | 16 h |
-| **Package hygiene decision (1 item)** — one shipped user row carries login date, time and a cloud egress address | The source environment's login trail travels with the package; no credential material does | Product owner | 4 h |
+| **Package hygiene decision (1 item)** — one shipped user row carries a login date, time and cloud egress address, and record actor fields name the stock `admin` authoring account | The source environment's login and authoring trail travels with the package; no credential material and no personal identity does | Product owner | 5 h |
 | **Presentation on theme-owned surfaces (2 items)** — control and focus-ring contrast, mobile zoom, target sizing; chart percentage announcement, label truncation, mobile legend | Portal and dashboard accessibility falls short of AA on surfaces the default theme owns | Product owner | 4 h |
 | **Specification ratifications (3 items)** — one column beyond the specified field set, the literal-identifier position, exact-concurrency duplicate submissions | Delivered schema arity differs from the specification; two positions are unratified | Product owner | 5 h |
-| **Platform limits and housekeeping (4 items)** — dashboard ownership unset, three rule names truncated at the platform's limit, tracked output paths outside the application directory, documentation carrying both current and superseded verdicts | Personas cannot navigate to their dashboards; an operator can read a superseded instruction as current | Platform engineer | 12 h |
+| **Platform limits and housekeeping (4 items)** — dashboard ownership unset, three rule names truncated at the platform's limit, tracked output paths outside the application directory, documentation carrying both current and superseded verdicts — including statements that the verification instance is empty, which it no longer is | Personas cannot navigate to their dashboards; an operator can read a superseded instruction as current | Platform engineer | 12 h |
 
 ## 1.5 Access Issues
 
 | System/Resource | Type of Access | Issue Description | Resolution Status | Owner |
 | --- | --- | --- | --- | --- |
-| Verification instance | Instance URL + admin credentials | Supplied and working. The instance is live, is not mid-upgrade, and now holds no installation — the agreed end state, with the package and its recorded digest as the durable artifact. | Resolved — verified | Instance owner |
+| Verification instance | Instance URL + admin credentials | Supplied and working. Live, not mid-upgrade, and carrying the application installed from the delivered bytes; its case, task and party rows now include the owner's own tryout edits. It is reclaimed after ten days without activity, so the package remains the durable artifact. | Resolved — verified | Instance owner |
 | Receiving production instance | Instance URL + admin credentials | No production instance has been named, so no deployment to one has been attempted. A URL and an administrator login are required. | Open — customer action required | Customer / Release Mgr |
 | Update Set preview and commit | Interactive browser session | The platform will not let the REST layer drive a preview or a commit; both are browser-only actions. | Accepted — operator step | Release Mgr |
 | Automated test execution | Client test runner | The client test runner cannot run headless on this platform release, so the shipped suite needs an interactive browser session against an instance holding the application. | Accepted — run as a release gate | QA lead |
@@ -65,7 +65,7 @@ pie showData
 
 ## 1.6 Recommended Next Steps
 
-1. **[High]** Install the package on the receiving instance through preview and commit, then record the census. *(3 h)*
+1. **[High]** Install the package on an independent receiving instance through preview and commit, then record the census. *(3 h)*
 2. **[High]** Re-run the packaged suite and transition harness there as the release identity. *(3 h)*
 3. **[High]** Authorize the company read rule and re-verify organization parties. *(3 h)*
 4. **[High]** Make the anonymous endpoints throttle at the perimeter and close the admission race. *(6 h)*
@@ -92,8 +92,9 @@ pie showData
 | Package verification & round-trip gating | 84 | Candidate production through the platform's own publish path, dependency-order verification, three guarded teardowns with ten-to-forty-seven-predicate zero-state proofs, residue elimination across six census snapshots, and four complete gate cycles of upload, preview to zero problems of any type, single native commit and post-commit census. |
 | Validation-gate execution & runtime verification | 76 | The seven-gate framework executed end to end plus the persona, transition, portal-contract, dashboard-render and accessibility campaigns, and a committed predicate ledger of 727 checks with the raw request, timestamp, status and body behind each. |
 | Repository-to-instance parity & native artifact authoring | 24 | 22 records authored natively in scope — 5 business rules, 3 client scripts, 3 date-range access rules and a UI policy with its 10 actions — each read back after creation, with parity between the repository definitions and the live application established across all six artifact groups before the package was published. |
-| Package data hygiene | 8 | Neutral actor identity across every record, cleared login metadata, reserved-domain addresses only, no credential element populated, and no instance host in the shipped bytes. |
-| **Total Completed** | **784** | **All hours delivered autonomously (0 manual).** |
+| Package data hygiene | 5 | Reserved-domain addresses only (15 of 15 on `.invalid`), no credential element populated, no instance host and no global scope stamp in the shipped bytes. |
+| Change-controlled README note | 2 | The requested single comment line appended as the last line of `servicenow-case-management-poc/README.md`, with every other file, both packages and the instance left exactly as they were, reviewed and gated before merge. |
+| **Total Completed** | **783** | **All hours delivered autonomously (0 manual).** |
 
 ## 2.2 Remaining Work Detail
 
@@ -103,7 +104,7 @@ pie showData
 | Authorize the narrowly scoped company read rule and re-verify the organization party flow | 3 | High |
 | Make the anonymous endpoints throttle at the platform perimeter and close the script-side admission race | 6 | High |
 | Implement the scoped count/aggregate disclosure control and re-run the persona access matrix | 5 | Medium |
-| Decide the shipped login-metadata footprint, then re-publish, re-gate and update the recorded digest | 4 | Medium |
+| Decide the shipped environment-metadata footprint, restore a clean source state, then re-publish, re-gate and update the recorded digest | 5 | Medium |
 | UAT across all three personas and both public pages, with sign-off | 4 | Medium |
 | Consolidate the documentation set to one current statement per fact | 8 | Medium |
 | Remove synthetic demo data and confirm the census | 2 | Medium |
@@ -112,77 +113,74 @@ pie showData
 | Ratify the additional column, the literal-identifier position and exact-concurrency deduplication | 3 | Low |
 | Confine the tracked output paths outside the application directory | 1 | Low |
 | Decide whether the historical run records fall inside the package exclusion | 1 | Low |
-| **Total Remaining** | **49** | — |
+| **Total Remaining** | **50** | — |
 
-> **Reconciliation:** Section 2.1 (784 h) + Section 2.2 (49 h) = 833 h = Total Project Hours (Section 1.2). Section 2.2 total (49 h) = Remaining Hours (Section 1.2) = Section 7 pie "Remaining Work". Priority split: High 15 + Medium 25 + Low 9 = 49.
+> **Reconciliation:** Section 2.1 (783 h) + Section 2.2 (50 h) = 833 h = Total Project Hours (Section 1.2). Section 2.2 total (50 h) = Remaining Hours (Section 1.2) = Section 7 pie "Remaining Work". Priority split: High 15 + Medium 26 + Low 9 = 50.
 
-## 2.3 Human Task Breakdown (decomposition of the 49 remaining hours)
+## 2.3 Human Task Breakdown (decomposition of the remaining hours)
 
 | ID | Task | Priority | Hours |
 | --- | --- | --- | --- |
-| HT-1 | Provision the receiving instance, prove it empty, then upload, preview to zero problems of any type and commit the package natively; record the post-commit census | High | 3 |
+| HT-1 | Provision an independent receiving instance, prove it empty, then upload, preview to zero problems of any type and commit the package natively; record the post-commit census | High | 3 |
 | HT-2 | Re-run the packaged 20-test / 179-step suite and the 13-assertion transition harness on that instance against the delivered bytes, and record the result as the release identity | High | 3 |
 | HT-3 | Authorize one global read rule on the company table restricted to the three roles and the minimum columns, then re-verify the organization party flow end to end | High | 3 |
 | HT-4 | Re-author the two anonymous rate-limit rules with valid resource keys, re-export, and demonstrate a refusal past the ceiling | High | 4 |
 | HT-5 | Close the script-side admission race so exactly simultaneous submissions cannot both be admitted | High | 2 |
 | HT-6 | Implement the three scoped before-query rules so counts and group-by tallies respect the access rules, then re-run the persona access matrix | Medium | 5 |
-| HT-7 | Decide the shipped login-metadata footprint; if it must go, clear the three fields at source, re-publish, re-gate and update the recorded digest wherever it is stated | Medium | 4 |
+| HT-7 | Decide the shipped environment-metadata footprint (login fields, authoring-account names). Before any re-publish, restore the shipped seed state or work from a fresh install of the delivered bytes, and purge application-scope records created since the 630-record baseline; then clear what must go, re-publish, re-gate and update the recorded digest wherever it is stated | Medium | 5 |
 | HT-8 | Run UAT across all three personas and both public pages and capture written sign-off | Medium | 4 |
-| HT-9 | Consolidate the documentation set to one current statement per fact and replace the retired instance-host references | Medium | 8 |
-| HT-10 | Remove the synthetic demo data and re-confirm the census (10 cases / 10 tasks / 8 parties) | Medium | 2 |
+| HT-9 | Consolidate the documentation set to one current statement per fact — including the statements that the verification instance is empty — replace the retired instance-host references, and decide whether to keep the README change-request note | Medium | 8 |
+| HT-10 | Remove the synthetic demo data and re-confirm the census (10 cases / 10 tasks / 8 parties on a fresh install) | Medium | 2 |
 | HT-11 | Set dashboard ownership so each persona can navigate to its dashboard, and correct the three truncated rule names in the next gated package | Medium | 2 |
 | HT-12 | Decide the theme-owned accessibility and chart items — control and focus-ring contrast, mobile zoom, target sizing, percentage announcement, label truncation, mobile legend — and implement what is chosen | Low | 4 |
 | HT-13 | Ratify the additional case column, the literal-identifier position and the exact-concurrency deduplication behaviour | Low | 3 |
 | HT-14 | Relocate the tracked evidence and summary paths that sit outside the application directory | Low | 1 |
 | HT-15 | Decide whether the historical run records fall inside the package exclusion and, if so, supersede them with dated headers | Low | 1 |
-| | **Total** | | **49** |
+| | **Total** | | **50** |
 
 # 3. Test Results
 
-The deliverable is a platform configuration package, so its test surface has three parts: static and structural verification of the package, which runs anywhere; read-only verification of the instance it targets; and an automated suite that ships inside the package and runs only where the application is installed. The table records verification executed against the artifact as it now stands.
+The deliverable is a platform configuration package, so its test surface has three parts: static and structural verification of the package, which runs anywhere; read-only verification of the installed application on the verification instance; and an automated suite that ships inside the package and runs where the application is installed. Every figure below was observed against the artifact and the instance as they now stand.
 
 | Area / Category | Framework | Tests | Passed | Failed | Coverage | What This Proves |
 | --- | --- | --- | --- | --- | --- | --- |
-| Serialized record definitions | `xmllint` (libxml2 2.14.5) | 226 | 226 | 0 | Every record definition in the application directory | No record definition can fail to load for syntax. |
-| Package structure & identity | Structural assertions (Python ElementTree) | 12 | 12 | 0 | The shipping package end to end | One descriptor, 576 uniquely named blocks, every action an insert-or-update, no amended block, a platform payload hash on all 576, and a digest matching the ledger committed beside it — the signature of a genuine platform export rather than a hand-assembled file. |
-| Package payload integrity | Payload parse (Python ElementTree) | 576 | 576 | 0 | 100% of blocks | Every record the package will apply is itself a well-formed document, so an import cannot break part-way on a malformed payload. |
-| Package artifact inventory | Class-count assertions | 30 | 30 | 0 | 30 artifact classes | The package carries the whole application: 3 tables, the dictionary and label set, 24 choice values across 7 lists, 3 counters, 3 roles, 29 access rules with 36 role links, 12 business rules, 2 script includes, 3 client scripts, 3 UI policies with 12 actions, 6 UI actions, 7 flows, 8 reports, 2 dashboards with 8 canvas placements, the portal chain, 2 anonymous services, the test assets and all 28 seed rows. |
-| Constraint conformance | Byte-level sweeps over the package | 6 | 5 | 1 | Scope stamps, actor identity, addresses, credentials, host, reference identifiers | Nothing is stamped to the global scope, no authenticating account identity survives, all 15 addresses are on the reserved domain, no credential element is populated, and no instance host appears. The literal-reference-identifier rule is not met — see §5.2. |
-| Operational scripts & descriptors | `node --check` (Node 22.23), `jq` | 9 | 9 | 0 | 9,070 script lines + 4 descriptors | The choice-reconciliation, seed, install, collateral-guard and transition-assertion scripts, and every run descriptor, parse before anyone runs them. |
-| Contract strings & seed thresholds | Exact-match sweep + seed census | 7 | 7 | 0 | 4 required messages, 3 data thresholds | The three blocking messages and the not-found message exist verbatim in the shipping bytes, and the seed set is 10 cases spanning all six statuses and both case types. |
-| Confinement & instance state | `git diff` against the base branch; read-only platform API | 12 | 12 | 0 | Whole repository; scope, tables, roles, portal, endpoints | Every change on this branch is an added file, so the ArkCase reactor, its build files and its CI configuration are byte-identical to the base; and the target instance is live, is not mid-upgrade, and holds no installation — the agreed end state. |
+| Record definitions, scripts & descriptors | `xmllint` (libxml2 2.14.5), `node --check` (Node 22.23), `jq` | 235 | 235 | 0 | All 226 XML definitions, 5 scripts, 4 JSON descriptors | Nothing in the application directory can fail to load or run for syntax. |
+| Package structure & identity | Structural assertions (Python ElementTree, `git`) | 12 | 12 | 0 | The shipping package end to end | One descriptor, 576 uniquely named insert-or-update blocks, no delete or amended block, a payload hash on all 576, and a digest, size and line count matching the committed ledger and blob — a genuine platform export, not a hand-assembled file. |
+| Package payload integrity | Payload parse (Python ElementTree) | 576 | 576 | 0 | 100% of blocks | Every record the package applies is itself well-formed, so an import cannot break part-way. |
+| Package artifact inventory | Distinct-record class counts | 36 | 36 | 0 | 36 artifact classes | The package carries the whole application — 3 tables, 24 choice values in 7 sets, 29 access rules with 36 role links, 12 business rules, 3 client scripts, 3 UI policies with 12 actions, 7 flows, 8 reports, 2 dashboards with 8 placements, the portal chain, 2 anonymous services, the 20-test / 179-step suite and all 28 seed rows — with no direct user-role grant. |
+| Constraint conformance, contract strings & seed thresholds | Byte-level sweeps and exact-match checks | 15 | 14 | 1 | Scope stamps, addresses, credentials, host, actor fields, reference identifiers; 4 messages; 4 seed thresholds | Nothing is stamped global, all 15 addresses are on `.invalid`, no credential or instance host ships, the four required messages are verbatim, and the seed spans all six statuses and both types with 3 users. The literal-reference-identifier rule is not met (§5.2 D3). |
+| Repository confinement & change set | `git`, CommonMark render (markdown-it 4.2.0) | 13 | 13 | 0 | Whole branch; latest change request | Every branch change is an added file, so the ArkCase reactor is untouched; the latest change is one inert README comment line, invisible when rendered, with both packages byte-identical and the push within size limits. |
+| Installed application — gates, portal contract & census | Read-only platform API, anonymous HTTP | 70 | 65 | 5 | 3 tables, 3 roles, scope, portal pages, both endpoints, 55-predicate census | Tables, roles, scope, derived persona grants, all 29 rules, 7 active flows, 12 rules, 8 reports and 2 dashboards are live; lookup returns only three fields and the verbatim not-found text; anonymous table access is refused. The 5 failures are seed-count predicates reading the owner's tryout edits (11 cases, 13 tasks). |
+| Packaged automated suite & transition harness | Automated Test Framework; in-scope harness | 33 | 33 | 0 | 20 tests / 179 steps; 13 transition assertions | The schema, role matrix on all three tables, every transition including the task-closure gate, the three blocking messages and the portal contracts hold on the installed application. |
 
-**Aggregate:** 878 checks executed, 877 passed, 1 failed.
-
-**The packaged suite.** The deliverable carries a 20-test / 179-step automated suite with its 768 step inputs, and a 13-assertion transition harness. Together they cover the schema and choice sets, the role matrix on all three tables, every row of the transition matrix including the task-closure gate, the three on-form blocking messages and the three portal contracts. Both execute only where the application is installed, and the client test runner cannot run headless on this platform release. Run against these exact bytes as the release gate, the suite returned **20 of 20 tests and 179 of 179 steps**, and the harness **13 of 13 assertions**, five times over. Alongside them sits a committed predicate ledger — 727 records, each carrying the request, UTC timestamp, HTTP status and response body behind one gate check, with six scripts that reproduce every figure.
+**Aggregate:** 990 checks, 984 passed, 6 failed — one platform-format constraint and five seed-count readings of the owner's tryout data.
 
 **Not covered.** These are real gaps, not omissions of convenience:
 
-- **No test drives the import.** Installation is proven by an operator performing preview and commit and reading the census afterwards, not by an automated assertion. It has been performed on the delivered bytes, but only on instances emptied immediately beforehand — never on an independent one.
-- **The packaged suite cannot be re-run where no installation exists.** It is the release gate for the receiving instance, and until it runs there the suite result describes an environment that has since been torn down.
-- **Wording of the blocking messages is asserted statically, not over the API.** The refusals themselves are exercised; the exact text is confirmed in the shipping bytes and observed on the rendered form, because the platform returns only its generic abort text to an API caller.
+- **No test drives the import.** Installation is proven by an operator performing preview and commit and reading the census afterwards. It has been performed on the delivered bytes, but only on the one verification instance, emptied immediately before each gated run — never on an independent one.
+- **Wording of the blocking messages is asserted statically, not over the API.** The refusals themselves are exercised; the exact text is confirmed in the shipping bytes and on the rendered form, because the platform returns only its generic abort text to an API caller.
 - **Perimeter throttling of the anonymous endpoints is unproven, and measured not to hold.** A 300-request run passed the configured ceiling without a refusal. The application's own sliding-window guard is exercised by a 29-assertion admission harness including 3,000 generated concurrency schedules; the platform-level rules are not.
-- **The install script's table-rebuild branch and the collateral guard's destructive path are unexercised.** Both are syntax-verified and the guard carries a 58-assertion off-instance harness, but neither has been driven against an instance in the state it exists for — and the install script is now a contingency the delivered package does not need.
+- **The install script's table-rebuild branch and the collateral guard's destructive path are unexercised.** Both are syntax-verified and the guard carries a 58-assertion off-instance harness, but neither has been driven against an instance in the state it exists for.
 - **Organization parties are untested outside an administrator session.** The company table the field references is unreadable to all three roles, so no persona-level test can reach that half of the party model.
 - **Accessibility, load and performance carry no automated assertions.** The portal was measured manually against WCAG AA; theme-owned surfaces fall short (§1.4). No concurrency or response-time budget is asserted anywhere.
-- **The 20 documents carry no executable assertions.** Their internal references resolve and their figures were re-derived, but their prose is not machine-verified.
+- **The 20 documents carry no executable assertions.** Their internal references resolve and their figures were re-derived, but their prose is not machine-verified. In renderers that disable raw HTML, the README's last-line comment shows as literal text.
 
 # 4. Runtime Validation & UI Verification
 
-The application was installed from the delivered package and driven on a live instance — as an administrator, under each of the three role personas, and as an anonymous visitor — across four complete install cycles, each starting from an instance proven empty. The lines below record what was observed on screen and over the wire. The instance now holds no installation, by agreement: the package and its recorded digest are the durable artifact.
+The application was installed from the delivered package and driven on a live instance — as an administrator, under each of the three role personas, and as an anonymous visitor — across four complete install cycles, each starting from an instance proven empty. It now runs on that verification instance from the same bytes, and the lines below record what was observed on screen and over the wire.
 
-- ✅ Operational — **Package install.** Upload, then preview returning zero errors, zero warnings and zero problems of any type with no problem row marked skip, ignore or collision; then a single native commit reporting success, 576 inserted, 0 updated, 0 collisions and 0 skipped. Repeated on four separately emptied instances.
+- ✅ Operational — **Package install.** Upload, then preview returning zero errors, zero warnings and zero problems of any type with no problem row marked skip, ignore or collision; then a single native commit reporting success, 576 inserted, 0 updated, 0 collisions and 0 skipped. Repeated in four install cycles, each on the verification instance emptied to a proven zero state.
 - ✅ Operational — **Provisioning census.** From the commit alone, with no post-import step: three tables answering with physical storage, 21/14/13 dictionary and label rows, three roles, 29 access rules, 36 role links, 24 choice values across seven lists, three number counters, seven flows reading Active and Published, eight reports, two dashboards with their eight canvas placements, the portal chain, two anonymous services and the full test-asset set.
-- ✅ Operational — **Persona access.** Each of the three demo personas resolves its scoped role from the shipped group route with nothing written by hand, confirmed on four independent installs. Driven under impersonation on all three tables: manager full create/read/write/delete; agent create plus assigned-only read and write with no delete; viewer read-only. Field-level rules on the assignment fields hold, and child tables narrow the same way through the parent case.
-- ✅ Operational — **Data set.** The case list shows 10 seed cases spanning all six statuses and both types, every one carrying an opened date, with their 10 child tasks and 8 typed parties resolving to their parents.
+- ✅ Operational — **Installed state today.** Scope `x_casemgmt` v1.0.0 committed from the canonical bytes (576 inserted, 0 collisions); the tables, roles, rules, flows, reports, dashboards and 20 tests all read back live, and the suite and harness re-ran green. The case list holds 11 cases, 13 tasks and 8 parties, including the owner's tryout rows.
+- ✅ Operational — **Persona access.** Each demo persona resolves its scoped role from the shipped group route with nothing written by hand. Under impersonation on all three tables: manager full create/read/write/delete; agent create plus assigned-only read and write with no delete; viewer read-only. Field-level rules on the assignment fields hold, and child tables narrow through the parent case.
 - ✅ Operational — **Forward transition guards.** Each refuses the save with its exact message and leaves the record byte-identical: `Draft → Open` requires an assigned group; `Open → In Progress` requires an agent who belongs to that group; `In Progress → Resolved` is refused while any child task is open ("All tasks must be closed before resolving this case."); `Resolved → Closed` requires the manager role.
 - ✅ Operational — **Prohibited moves and side effects.** Any return to `Draft` and any change to a closed case are refused verbatim, on the form, in the list editor and over the API; opened and closed dates are stamped; the pending reason is captured on `Pending` and cleared on the return to `In Progress`; the closed-case form lock is asserted on the rendered form.
 - ✅ Operational — **Write-path contracts.** Missing mandatory values, over-length text, a task without a parent, a party missing the reference its type requires, and a dangling reference are each refused before the row is created.
 - ✅ Operational — **Anonymous submission.** Returns the new case number with the confirmation text and the case lands in `Draft`; malformed bodies, wrong verbs, wrong content types and oversized or invalid field values are rejected; duplicates collapse.
-- ✅ Operational — **Anonymous lookup and page delivery.** Lookup returns exactly status, subject and opened date for a known number and the verbatim not-found message for an unknown one, with no internal field in the response; both portal pages render for a signed-out session; anonymous table access is refused outright.
+- ✅ Operational — **Anonymous lookup and page delivery.** Lookup returns exactly status, subject and opened date for a known number and the verbatim not-found message for an unknown one; injected query syntax, wildcards, script payloads, extra field requests and oversized input all return the not-found body with nothing leaked; both portal pages render signed out; anonymous table access is refused.
 - ⚠ Partial — **Perimeter throttling and presentation.** Agent Workspace renders 3 of 3 widgets and Manager View 5 of 5 over seed data with correct buckets, and the party form switches between its person and organization field on selection. A 300-request run against the anonymous endpoints passed the configured ceiling without a platform-level refusal; the application's own sliding-window guard held throughout.
 
-**Never exercised at runtime.** No install has been performed on an independent instance — every cycle ran on the same instance emptied immediately beforehand, so platform state a teardown does not reset was never re-created. Organization parties cannot be saved by any of the three personas, because the company table the field references is unreadable to them, so that half of the party model is unexercised outside an administrator session. The install script's table-rebuild branch has never run against an instance holding table metadata without physical storage, and the collateral guard has never been driven against a live delete. The demo personas hold no passwords by design, so every persona observation comes from impersonation rather than a direct login. No concurrency, latency or load profile has been measured, and no dashboard has been reached by navigation as a persona rather than by direct link.
+**Never exercised at runtime.** No install has been performed on an independent instance, so platform state a teardown does not reset was never re-created. Organization parties cannot be saved by any of the three personas, because the company table the field references is unreadable to them. The install script's table-rebuild branch has never run against an instance holding table metadata without physical storage, and the collateral guard has never been driven against a live delete. The demo personas hold no passwords by design, so every persona observation comes from impersonation rather than a direct login. No concurrency, latency or load profile has been measured, and no dashboard has been reached by navigation as a persona rather than by direct link.
 
 # 5. Compliance & Quality Review
 
@@ -192,18 +190,18 @@ Each row states where the deliverable stands now against the requirement it answ
 
 | Benchmark | Requirement | Status | Progress | Verified State |
 | --- | --- | --- | --- | --- |
-| Data model (§0.5.7) | 3 tables with the exact field sets, types and constraints | ✅ Pass | 100% | Every specified field present and type-correct across 21/14/13 live dictionary rows; auto-numbering issues the `CASE0000001` format. One column beyond the set (§5.2). |
+| Data model (§0.5.7) | 3 tables with the exact field sets, types and constraints | ✅ Pass | 100% | Every specified field present and type-correct across 21/14/13 live dictionary rows; auto-numbering issues the `CASE0000001` format. One column beyond the set (§5.2 D6). |
 | Choice lists (§0.5.7) | 7 choice fields with their specified values | ✅ Pass | 100% | 24 values across all seven fields, carried by the platform's native choice-set composites, materialising from the commit alone and rendering on the form. |
-| Case state machine (§0.5.5) | Both case types enforce every transition rule with blocking errors | ✅ Pass | 100% | Every row of the matrix enforced with its exact message and no partial write, on the form, in the list editor and over the API; 13 of 13 transition assertions pass. The enforcement layer differs from the specified one (§5.2). |
+| Case state machine (§0.5.5) | Both case types enforce every transition rule with blocking errors | ✅ Pass | 100% | Every row of the matrix enforced with its exact message and no partial write, on the form, in the list editor and over the API; 13 of 13 transition assertions pass on the installed application. The enforcement layer differs from the specified one (§5.2 D4). |
 | Access control matrix (§0.5.6) | 3 roles, table and field rules, assigned-only semantics | ✅ Pass | 100% | Matrix reproduced exactly under impersonation on all three tables, through both the agent and the group branch of "assigned only", across 29 rules and 36 role links, with each persona's role resolved from the commit alone. |
 | Write-path integrity (§0.5.7 constraints) | Mandatory, length, referential and conditional constraints hold | ✅ Pass | 100% | Enforced on every write path, not only the form: missing values, over-length text, orphan children, dangling references and party-type mismatches are all refused before insert. |
-| External portal (§0.7.3) | Anonymous submission and whitelisted status lookup | ✅ Pass | 100% | Submission returns the new number and creates a `Draft` case; lookup exposes only status, subject and opened date with the verbatim not-found message; anonymous table access is refused. Perimeter throttling is a separate open item (§1.4). |
+| External portal (§0.7.3) | Anonymous submission and whitelisted status lookup | ✅ Pass | 100% | Submission returns the new number and creates a `Draft` case; lookup exposes only status, subject and opened date with the verbatim not-found message, live today on the verification instance; anonymous table access is refused. Perimeter throttling is a separate open item (§1.4). |
 | Dashboards & reports (§0.7.3) | Both dashboards render with synthetic data | ⚠ Qualified | 97% | Agent Workspace 3 of 3 widgets, Manager View 5 of 5, over 8 reports with no broken references and their canvas placements transported; ownership is unset, so the personas reach them by link rather than by navigation (§1.4). |
-| Seed data thresholds (§0.7.4) | ≥10 cases across all statuses, both types, 3 users | ✅ Pass | 100% | 10 cases covering all six statuses and both types, 10 tasks, 8 parties, 3 users each resolving one role, all synthetic and free of personal data. |
-| Update Set integrity (§0.7.3 gate 7) | Loads on a fresh instance with zero preview errors | ✅ Pass | 95% | The shipping bytes previewed to zero problems of any type and committed in one native pass on an instance proven empty immediately beforehand — four times over. An install on an independent instance remains the unproven case (§5.2). |
+| Seed data thresholds (§0.7.4) | ≥10 cases across all statuses, both types, 3 users | ✅ Pass | 100% | The package carries 10 cases covering all six statuses and both types, 10 tasks, 8 parties and 3 users each resolving one role, all synthetic and free of personal data. |
+| Update Set integrity (§0.7.3 gate 7) | Loads on a fresh instance with zero preview errors | ✅ Pass | 95% | The shipping bytes previewed to zero problems of any type and committed in one native pass on an instance proven empty immediately beforehand — four times over — and the application now runs on that instance from these bytes. An independent instance remains the unproven case (§5.2 D1). |
 | Single Update Set deliverable (§0.7.2) | One exportable package that installs the application | ✅ Pass | 100% | One package at the canonical path carries the whole application and installs it in a single commit with no post-import step; every one of its 576 blocks carries a platform payload hash and the file is byte-identical to the platform's own export. |
-| Scope, platform & portability constraints (§0.3.2, §0.5.2, §0.7.2) | Scoped namespace only, no store applications, email untouched, no instance-key literals | ⚠ Qualified | 90% | No record is stamped to the global scope, no store application is used, no mail configuration is touched, and no instance host appears in the package. Five rows land in stock tables by design, and a platform export cannot avoid literal reference identifiers (§5.2). |
-| Repository confinement (§0.7.2) | All output under the application directory; ArkCase untouched | ⚠ Qualified | 92% | Every change on the branch is an added file and the ArkCase reactor is byte-identical to the base across all 3,456 Java sources and 114 build files. A review document, an HTML summary, a guide copy and 28 evidence captures sit outside the application directory (§5.2). |
+| Scope, platform & portability constraints (§0.3.2, §0.5.2, §0.7.2) | Scoped namespace only, no store applications, email untouched, no instance-key literals, synthetic data only | ⚠ Qualified | 88% | No record is stamped to the global scope, no store application is used, no mail configuration is touched, and no instance host appears in the package. Five rows land in stock tables by design, a platform export cannot avoid literal reference identifiers, and one user row carries environment metadata (§5.2 D3, D5, D7). |
+| Repository confinement (§0.7.2) | All output under the application directory; ArkCase untouched | ⚠ Qualified | 92% | Every change on the branch is an added file, and the ArkCase reactor is byte-identical to the base across all 3,456 Java sources and 145 Maven POMs. A review document, an HTML summary, a guide copy and 28 evidence captures sit outside the application directory (§5.2 D6). |
 
 ## 5.2 AAP & Rule Divergences and Gaps
 
@@ -211,18 +209,18 @@ No user-specified rules were supplied for this project, so the benchmark for div
 
 | What the AAP/Rule Required | What Was Delivered Instead | Why It Diverged | Impact | Remediation |
 | --- | --- | --- | --- | --- |
-| **D1** Round-trip re-import with zero preview errors on a *fresh* instance before commit (§0.7.1, §0.7.3 gate 7) | The gate run four times on the same instance, each time emptied to a proven zero state immediately before the exact shipping bytes were re-imported | **Sanctioned** — one instance was available, and the customer directed this as the closest achievable proxy with the caveat recorded | Platform state a teardown does not reset was never re-created, so an install elsewhere is the one unproven case | Run the same gate on the receiving instance (HT-1) |
-| **D2** Confirm post-commit deployable state, and deliver a live portal URL (§0.7.1, §0.7.2) | An intentionally empty instance; the package plus its recorded digest and a 727-record predicate ledger are the deliverable | **Sanctioned** — the customer required the instance returned to empty and the artifact, not the environment, to hold the proof | No live environment to demonstrate against; a URL exists only once someone installs the package | Re-provision from the package (HT-1) |
+| **D1** Round-trip re-import with zero preview errors on a *fresh* instance, then a confirmed post-commit deployable state and a live portal URL (§0.7.1, §0.7.2, §0.7.3 gate 7) | The gate run four times on the same instance, each time emptied to a proven zero state immediately before the exact shipping bytes were re-imported; the application now runs on that instance from those bytes | **Sanctioned** — one instance was available, and the customer directed reset-and-reimport as the closest achievable proxy with the caveat recorded | Platform state a teardown does not reset was never re-created, so an install elsewhere is the one unproven case | Run the same gate on an independent receiving instance (HT-1, HT-2) |
+| **D2** Build only what is specified (§0.7.2), README content as overview and install guide (§0.3.1, §0.4.1), and every change re-validated through round-trip and gates (§0.7.1, §0.7.3, §0.5.4) | One HTML comment line appended to the README, with no re-export, upload, preview, commit, suite or harness run, and known issues left as they were | **Sanctioned** — the customer asked for exactly one comment line and no other change, to trigger a separate capability being showcased | None on the application: both packages are byte-identical. Safe-mode renderers show the line as text | Keep or drop the note at merge (HT-9) |
 | **D3** No literal `sys_id` in any reference field anywhere (§0.7.2) | A platform export in which every reference is a literal identifier — 3,698 distinct — plus six compiled-plan rows that resolve nowhere on any instance | The export format has no by-key form and no script layer; shipping keys instead imports inert records | None observed: zero preview problems and a clean commit on four installs; flows install Active and published | Accept in writing, or commission a by-key installer and forfeit the platform's own gate (HT-13) |
 | **D4** Transition logic in Flow Designer with no background scripts for workflow state (§0.7.2) | Flows and subflows published and active, with the save refused by a before-update rule at order 250 that dispatches the matching subflow | **Sanctioned** — a flow's record trigger fires only after the write commits, so no flow can refuse a save, and blocking errors on the form were mandatory | None on behaviour; every specified message and refusal is observed. Two layers describe one rule set | Keep the flows and the rule in step |
 | **D5** Organization parties selectable and mandatory for their type (§0.5.7) with no global-scope writes (§0.3.2) | Two company rows ship into a stock table, and the field still points at a table no scoped role can read | Every read rule on that table is global and the plan forbids authoring global rules; the plan also fixes the field's target | One of the two party types is unusable for all three personas | Authorize one narrowly scoped global read rule (HT-3) |
 | **D6** Exactly the specified field set, the enumerated inventory, and all output in one subdirectory (§0.5.7, §0.7.2) | A 14th case column, artifact classes the inventory does not list, and 31 tracked paths outside the application directory | The mandated average-time-to-close widget cannot aggregate a value the platform does not store; the rest answer requested outcomes; evidence was written where the review trail lives | Larger surface to maintain, a schema arity that differs from the specification, and a wider repository footprint than one path | Ratify the column and inventory; relocate the paths (HT-13, HT-14) |
-| **D7** Synthetic data only, no environment or personal data (§0.7.2) | One shipped user row carries a login date, a login time and a cloud egress address | The suite must run against the exact shipped bytes, and impersonation writes login metadata into the very row the package carries | The source environment's login trail travels with the package. No credential material ships | Clear at source, re-publish, re-gate, update the digest (HT-7) |
+| **D7** Synthetic data only, no environment or personal data (§0.7.2) | One shipped user row carries a login date, time and cloud egress address, and record actor fields name the stock `admin` authoring account | The suite must run against the exact shipped bytes, impersonation writes login metadata into the row the package carries, and a native export records the account that authored each record | The source environment's login and authoring trail travels with the package. No credential and no personal identity ships | Decide the footprint; clear at source from a clean state, re-publish, re-gate, update the digest (HT-7) |
 | **D8** Three users, one per role (§0.7.4), delivered as role grants in the package | Three groups, three group-to-role links and three memberships, from which the platform derives the grants on install | **Sanctioned by platform constraint** — the user-role table is owned by the platform's role-management layer on this release and no update set can carry it | None: effective access is identical, verified on four clean installs, and it avoids a stock role a direct grant derives | None required |
 
-**D1 — the gate is met on these bytes, by reset-and-reimport.** Gate 7 asks for the exported package to re-import on a *fresh* instance with zero preview errors. One instance was available, so the customer directed the closest achievable proxy: empty it completely, prove the zero state, then re-import the exact candidate bytes with nothing in between. That ran four times — zero-state proof, upload, preview to zero errors *and* zero warnings, one native commit, then the post-commit census. What it cannot claim is what a second instance would prove: caches, indexes, retained update history and metadata a scope deletion does not reach were never re-created. Install on the receiving instance and read the census before release.
+**D1 — the gate is met on these bytes, and the application is live.** Gate 7 asks for the package to re-import on a *fresh* instance with zero preview errors, then a confirmed deployable state and a portal URL. One instance was available, so the customer directed the closest achievable proxy: empty it, prove the zero state, then re-import the exact bytes with nothing in between. That ran four times, each preview at zero errors and zero warnings, each followed by one native commit and a census, recorded in `servicenow-case-management-poc/docs/refine-run/qa4-evidence/qa4-gate-evidence.jsonl`. The application now runs on that instance from the canonical bytes. What it cannot claim is a second, independent instance: install there and read the census before release.
 
-**D2 — the instance is empty on purpose.** The plan asks for a live post-commit state and a portal URL as deliverables. The customer replaced both: the durable artifact is the package plus its SHA-256, and the instance is to be handed back clean. It is — the scope is gone, all three tables answer "invalid table", no scoped role exists, the portal URL redirects to login and the anonymous endpoint refuses at HTTP 401. The verified state instead lives in `docs/refine-run/qa4-evidence/`, where 727 predicate records each carry the request, timestamp, status and body behind one gate check, alongside six scripts that reproduce every figure.
+**D2 — a one-line change, deliberately unaccompanied.** The latest change request asked for one comment line in a Markdown file and nothing else, to trigger a separate capability being showcased. `servicenow-case-management-poc/README.md` line 2123 now reads `<!-- Refine PR note: comment-only change; no content, artifact, or behavior impact. -->`, added by commit `fcccd529` as +1/−0. Because the customer forbade any other change, the plan's re-export, round-trip and gate duties were not repeated for it, and known issues were left exactly as they were — including documents that still describe the verification instance as empty. Both package digests are unchanged. Decide at merge whether to keep the note.
 
 **D3 — literal reference identifiers.** The plan bars a literal `sys_id` in any reference field, anywhere. A platform Update Set export cannot satisfy that: the format serialises every reference as an identifier, and 3,698 distinct ones appear. The authored artifacts *are* clean — the five scripts contain three such tokens between them, all inside a comment block in `scripts/pre_delete_collateral_guard.js`. Two classes deserve naming: the three date-range rules in `acl/` carry a stock platform operation constant that resolves identically on every instance, and six compiled-plan rows resolve nowhere by construction. Neither has consequence — four installs previewed to zero problems and every flow installed active. Ratify the position in writing.
 
@@ -232,9 +230,9 @@ No user-specified rules were supplied for this project, so the benchmark for div
 
 **D6 — field set, inventory and footprint.** The specified field set defines twelve case columns; the delivered table carries fourteen — the plan's own transition matrix requires the pending reason, and `duration_to_close` exists because the mandated average-time-to-close widget cannot aggregate a difference the platform does not store. Several artifact classes also go beyond the enumerated inventory: a choice-reconciliation script and a collateral guard under `scripts/`, a 21-file automated suite under `atf/`, layout classes, client scripts and business rules beyond the six named. And 31 tracked paths sit outside the application directory — a review document, an HTML summary, a guide copy and 28 evidence captures. Ratify the additions; relocate the paths.
 
-**D7 — one shipped row carries environment metadata.** The plan permits synthetic data only. The demo manager's user row ships with a login date, a login time and a cloud egress address, because the exit condition requires the automated suite to run against the exact bytes that ship, and impersonating that persona writes login metadata straight into the row the package carries. Removing it after the fact would mean hand-editing a gated export, which destroys the byte-for-byte provenance that makes this package trustworthy. Nothing sensitive travels: no credential element is populated anywhere and all fifteen addresses are on the reserved `.invalid` domain. To ship without it, clear the three fields at source, re-publish, re-gate and update the digest.
+**D7 — shipped rows carry environment metadata.** The plan permits synthetic data only. The demo manager's user row ships with a login date, a login time and a cloud egress address, because the suite must run against the exact bytes that ship and impersonation writes login metadata into that row. The package's actor fields also name the stock `admin` account 1,322 times — the platform records whoever authored each record — with the rest reading `system` or a synthetic persona. Removing either after the fact means hand-editing a gated export, destroying its provenance. No credential element is populated and all fifteen addresses are on `.invalid`. To ship without them, clear at source from a clean state, re-publish and re-gate.
 
-**D8 — persona access arrives by derivation.** The plan asks for three users, one per role, and the natural reading is three role grants in the package. That is impossible on this platform release: the user-role table is owned by the platform's role-management layer, which refuses those payloads from any update set regardless of how they are stamped. The package therefore carries three groups, three group-to-role links and three memberships, and the platform derives the three effective grants during the commit. Verified on four independent installs: each persona resolves its scoped role with nothing written by hand. It is also the better mechanism: a direct grant derives a stock role the plan forbids, and the group route does not.
+**D8 — persona access arrives by derivation.** The plan asks for three users, one per role, and the natural reading is three role grants in the package. That is impossible on this platform release: the user-role table is owned by the platform's role-management layer, which refuses those payloads from any update set regardless of how they are stamped. The package therefore carries three groups, three group-to-role links and three memberships, and the platform derives the three effective grants during the commit. Verified on four clean installs: each persona resolves its scoped role with nothing written by hand. It is also the better mechanism: a direct grant derives a stock role the plan forbids, and the group route does not.
 
 # 6. Risk Assessment
 
@@ -242,13 +240,13 @@ These are forward-looking: what could still go wrong between this package and a 
 
 | Risk | Category | Severity | Probability | Mitigation | Status |
 | --- | --- | --- | --- | --- | --- |
-| **Install on an independent instance behaves differently** — the gate was met by emptying one instance and re-importing the exact bytes, so platform state a scope deletion does not reach (caches, indexes, retained update history) was never re-created | Integration | High | Medium | The package is a genuine platform export with a payload hash on all 576 blocks, previewed to zero problems of any type and committed cleanly four times over. Run the same gate on the receiving instance before release (HT-1, HT-2) | Open |
-| **Anonymous endpoints are unthrottled at the platform perimeter** — the two rate-limit rules carry display labels in their resource columns with no populated ceiling, so only the user half binds; a measured 300-request run returned 300 successes past the ceiling with no refusal | Security | Medium | High | Responses are whitelisted to three fields; pattern, mandatory-value, length, choice-membership and address validation all apply; wrong verbs and content types are refused; a script-side sliding-window guard and per-requester bucket are in place. Re-author the rules with valid resource keys and close the script-side race before public exposure (HT-4, HT-5) | Open |
+| **Install on an independent instance behaves differently** — the gate was met by emptying one instance and re-importing the exact bytes, so platform state a scope deletion does not reach (caches, indexes, retained update history) was never re-created; six compiled-plan references in the package resolve nowhere by construction | Integration | High | Medium | The package is a genuine platform export with a payload hash on all 576 blocks, previewed to zero problems of any type and committed cleanly four times, with all seven flows installing Active and published despite the six dangling plan rows. Run the same gate on the receiving instance before release (HT-1, HT-2) | Open |
+| **Anonymous endpoints are unthrottled at the platform perimeter** — the two rate-limit rules carry display labels in their resource columns with no populated ceiling, so only the user half binds; a measured 300-request run returned 300 successes past the ceiling with no refusal | Security | Medium | High | Responses are whitelisted to three fields; pattern, mandatory-value, length, choice-membership and address validation all apply; injected query syntax returns the not-found body; wrong verbs and content types are refused; a script-side sliding-window guard and per-requester bucket are in place. Re-author the rules with valid resource keys and close the script-side race before public exposure (HT-4, HT-5) | Open |
 | **Record counts disclose cardinality to restricted personas** — count and group-by paths compute before the access rules filter, so a viewer or agent can infer records they cannot open | Security | Medium | High | No field value is returned — only a tally. Three scoped before-query rules would narrow the count path the way the read path already narrows (HT-6) | Open — decision pending |
 | **Making Organization parties usable widens read on a stock table** — the only route is a read rule outside the scoped namespace, granted to every holder of the three roles | Security | Medium | Medium | Restrict it to the three roles and the minimum columns and take it through change control; same-specificity read rules are any-pass, so no existing rule needs changing (HT-3) | Decision required |
-| **Compiled execution plans may need a re-publish on the target** — six plan references in the package resolve nowhere on any instance by construction | Technical | Medium | Low | Proven inconsequential across four clean installs: zero preview problems, all seven flows install Active and published, 13 of 13 transition assertions and the full lifecycle suite green | Mitigated |
-| **An operator follows a superseded instruction** — 21 documents carrying layered dated corrections, with current and superseded verdicts in the same file and a retired instance host named 45 times | Operational | Medium | Medium | Every operative document states the delivered identity at its point of use and the gate rollup reads seven met. Consolidate to one current statement per fact (HT-9) | Open |
-| **The source environment's login trail travels with the package** — one shipped user row carries a login date, a login time and a cloud egress address | Operational | Medium | Low | No credential material ships anywhere in the package and every address is on a reserved domain. Clear the three fields at source and re-gate if the footprint matters (HT-7) | Open — decision pending |
+| **A re-publish from the verification instance ships its present state** — that instance now carries the owner's tryout rows (an extra Draft case, three extra tasks, changed statuses), and rendering a dashboard while the application is current creates view, list and export records in its scope; re-uploading the package there reopens the committed retrieved set, and re-committing overwrites the tryout rows | Operational | Medium | Medium | The shipped package is unaffected and byte-identical. Re-publish only from a fresh install of the delivered bytes, or restore the shipped seed state first; purge scope records created since the 630-record baseline; never re-upload onto an instance already holding the application (HT-7, HT-11) | Open |
+| **An operator follows a superseded instruction** — 21 documents carrying layered dated corrections, with current and superseded verdicts in the same file, a retired instance host named 45 times, and statements that the verification instance is empty | Operational | Medium | Medium | Every operative document states the delivered identity at its point of use and the gate rollup reads seven met. Consolidate to one current statement per fact (HT-9) | Open |
+| **The source environment's login and authoring trail travels with the package** — one shipped user row carries a login date, time and cloud egress address, and actor fields name the stock `admin` account | Operational | Medium | Low | No credential material and no personal identity ships, and every address is on a reserved domain. Clear at source from a clean state and re-gate if the footprint matters (HT-7) | Open — decision pending |
 | **A destructive schema operation cascades into access, transition and reporting metadata** — the platform offers no dependency manifest before a delete | Operational | Medium | Low | A mandatory read-only, fail-closed guard enumerates every dependant and aborts before the destructive call, refusing malformed input rather than widening the target; each teardown performed during delivery ran behind a freshly re-evaluated guard with the blast radius proven by a 52-table before-and-after diff | Mitigated |
 
 **Accepted behaviours, stated once and not tracked as risks.** A write refused by an access rule produces no message on the form, because the platform refuses before application code runs. The portal and both dashboards inherit the default theme, which sets the ceiling on contrast, focus visibility and target size. Three classes of platform metadata can only be addressed through their parent record's key.
@@ -260,9 +258,9 @@ These are forward-looking: what could still go wrong between this package and a 
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'pie1':'#5B39F3','pie2':'#FFFFFF','pieStrokeColor':'#B23AF2','pieStrokeWidth':'2px','pieOuterStrokeColor':'#B23AF2','pieTitleTextSize':'16px','pieSectionTextSize':'14px'}}}%%
 pie showData
-    title Project Hours — 833 total, 94.1% complete
-    "Completed Work" : 784
-    "Remaining Work" : 49
+    title Project Hours — 833 total, 94.0% complete
+    "Completed Work" : 783
+    "Remaining Work" : 50
 ```
 
 ## 7.2 Remaining Work by Priority
@@ -270,9 +268,9 @@ pie showData
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': {'pie1':'#5B39F3','pie2':'#B23AF2','pie3':'#A8FDD9','pieStrokeColor':'#B23AF2','pieStrokeWidth':'2px','pieOuterStrokeColor':'#B23AF2','pieTitleTextSize':'16px','pieSectionTextSize':'14px'}}}%%
 pie showData
-    title Remaining 49 Hours by Priority
+    title Remaining 50 Hours by Priority
     "High" : 15
-    "Medium" : 25
+    "Medium" : 26
     "Low" : 9
 ```
 
@@ -282,34 +280,34 @@ The categories and hours below are Section 2.2 exactly.
 
 | Category | Hours | Priority |
 | --- | --- | --- |
-| Independent receiving-instance install and gate | 6 | High |
-| Company-table read rule and organization party re-verify | 3 | High |
-| Perimeter throttling and the script-side admission race | 6 | High |
-| Count and aggregate disclosure control, matrix re-run | 5 | Medium |
-| Shipped login-metadata decision, re-publish and re-gate | 4 | Medium |
-| UAT across three personas and both public pages | 4 | Medium |
-| Documentation consolidation to one current statement per fact | 8 | Medium |
-| Demo-data removal and census confirmation | 2 | Medium |
-| Dashboard ownership and the three truncated rule names | 2 | Medium |
-| Accessibility and chart decisions on theme-owned surfaces | 4 | Low |
-| Written ratifications (extra column, identifiers, deduplication) | 3 | Low |
-| Out-of-directory tracked paths | 1 | Low |
-| Historical-record exclusion decision | 1 | Low |
-| **Total** | **49** | — |
+| Install the package on an independent receiving instance and gate it there | 6 | High |
+| Authorize the narrowly scoped company read rule and re-verify the organization party flow | 3 | High |
+| Make the anonymous endpoints throttle at the platform perimeter and close the script-side admission race | 6 | High |
+| Implement the scoped count/aggregate disclosure control and re-run the persona access matrix | 5 | Medium |
+| Decide the shipped environment-metadata footprint, restore a clean source state, then re-publish, re-gate and update the recorded digest | 5 | Medium |
+| UAT across all three personas and both public pages, with sign-off | 4 | Medium |
+| Consolidate the documentation set to one current statement per fact | 8 | Medium |
+| Remove synthetic demo data and confirm the census | 2 | Medium |
+| Set dashboard ownership and correct the three truncated rule names | 2 | Medium |
+| Accessibility and chart presentation decisions on theme-owned surfaces | 4 | Low |
+| Ratify the additional column, the literal-identifier position and exact-concurrency deduplication | 3 | Low |
+| Confine the tracked output paths outside the application directory | 1 | Low |
+| Decide whether the historical run records fall inside the package exclusion | 1 | Low |
+| **Total** | **50** | — |
 
 Colour key: **Completed / delivered = Dark Blue `#5B39F3`**, **Remaining = White `#FFFFFF`**, accents Violet-Black `#B23AF2`, highlight Mint `#A8FDD9`.
 
 # 8. Summary & Recommendations
 
-**What you have.** The ArkCase case-management slice now exists as a self-contained ServiceNow scoped application, and it arrives as one file: `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, 576 blocks, 3,282,299 bytes, SHA-256 `5565d986…`. Every block carries a platform payload hash and the file is byte-identical to the platform's own export, so what installs is what the platform itself produced — no hand-assembled XML anywhere in the chain. Inside it are the three tables with the full specified field set, the seven choice lists, `CASE0000001` numbering, three roles behind 29 access rules and 36 role links, seven flows with twelve ordered business rules enforcing the state machine, the internal form and list layouts, the unauthenticated portal with its two pages and two endpoints, both dashboards over eight reports, the synthetic seed census, a 20-test automated suite and the documentation set. It installs in three steps — import, preview, commit — and nothing else: no background script, no elevation, no second commit.
+**What you have.** The ArkCase case-management slice now exists as a self-contained ServiceNow scoped application, and it arrives as one file: `servicenow-case-management-poc/update-set/x_casemgmt_case_management_update_set.xml`, 576 blocks, 3,282,299 bytes, SHA-256 `5565d986…`. Every block carries a platform payload hash and the file is byte-identical to the platform's own export, so what installs is what the platform itself produced. Inside it are the three tables with the full specified field set, the seven choice lists, `CASE0000001` numbering, three roles behind 29 access rules and 36 role links, seven flows with twelve ordered business rules enforcing the state machine, the internal form and list layouts, the unauthenticated portal with its two pages and two endpoints, both dashboards over eight reports, the synthetic seed census, a 20-test automated suite and the documentation set. It installs in three steps — import, preview, commit — and nothing else. The latest change request, one inert README comment line, left both packages byte-identical.
 
-**What was proven.** The install gate ran end to end four times: an instance emptied to a verified zero state, the exact shipping bytes uploaded, preview returning zero problems of *any* type, one native commit reporting 576 inserted and 0 collisions, then a 55-predicate post-commit census. Across those installs, all three tables answered with their seed rows, the dictionary and label rows matched one-for-one, the 24 choice values materialised and rendered, all 36 role links arrived, all seven flows installed Active and published, both dashboards rendered with data, both public pages served signed out, and each of the three personas resolved its role with nothing written by hand. On the delivered bytes the packaged suite passes 20 of 20 tests and 179 of 179 steps, and the transition harness passes 13 of 13 assertions. Off the instance, 878 first-hand checks over the repository return 877 passes — the single failure is the literal-identifier constraint, which no platform export can satisfy. That evidence lives in the repository as a 727-record predicate ledger with the raw request, timestamp, status and body behind each check, plus six scripts that reproduce every figure.
+**What was proven.** The install gate ran end to end four times: an instance emptied to a verified zero state, the exact shipping bytes uploaded, preview returning zero problems of *any* type, one native commit reporting 576 inserted and 0 collisions, then a 55-predicate post-commit census. The application now runs on that instance from those bytes: tables, roles, rules, flows, reports, dashboards, both portal pages and both anonymous endpoints answer live, and the packaged suite passes 20 of 20 tests and 179 of 179 steps there with the transition harness at 13 of 13. Across the repository and the live application, 990 first-hand checks return 984 passes — one failure is the literal-identifier constraint no platform export can satisfy, and five are seed-count predicates reading the owner's own tryout edits. A 727-record predicate ledger with six reproducing scripts sits beside the package.
 
-**Where the gaps are.** Fourteen of the ninety-five requested items remain open, and they cluster. The one integration gap is that the gate was met on a single instance emptied immediately beforehand rather than on a second, independent one — the package is trustworthy, but the receiving instance is the case no run has exercised. Three are access-control decisions: the organization party type is unusable because its target table is unreadable to every scoped role and only a deliberate exception can change that; counts and aggregates compute before the access rules filter; and the two anonymous endpoints are unthrottled at the platform perimeter, relying on the application's own guard. The rest are decisions and housekeeping — one shipped user row carrying login metadata, theme-owned accessibility residues, three specification points needing written ratification, and documentation carrying both current and superseded verdicts.
+**Where the gaps are.** Fourteen of the ninety-nine requested items remain open, and they cluster. The one integration gap is that the gate was met only on the verification instance, never on a second, independent one. Three are access-control decisions: the organization party type is unusable because its target table is unreadable to every scoped role; counts and aggregates compute before the access rules filter; and the two anonymous endpoints are unthrottled at the platform perimeter, relying on the application's own guard. The rest are decisions and housekeeping — environment metadata in the shipped rows, theme-owned accessibility residues, three specification points needing written ratification, and documentation carrying both current and superseded verdicts, including that the verification instance is empty.
 
-**The critical path.** Fifteen hours of high-priority work stand between this package and a release candidate, and they run in order: install and gate on the receiving instance, re-run the suite and harness there and record that as the release identity, authorize the company read rule and re-verify organization parties, then make the endpoints throttle at the perimeter and close the admission race. Twenty-five hours of medium work follow — disclosure control, the login-metadata decision, UAT sign-off, documentation consolidation, demo-data removal and dashboard ownership — and nine hours of low-priority decisions after that. The success measures are already defined: the census returns the same figures on the receiving instance, the suite reads 20 of 20 there, and a request past the endpoint ceiling is refused.
+**The critical path.** Fifteen hours of high-priority work stand between this package and a release candidate, and they run in order: install and gate on an independent receiving instance, re-run the suite and harness there and record that as the release identity, authorize the company read rule and re-verify organization parties, then make the endpoints throttle at the perimeter and close the admission race. Twenty-six hours of medium work follow — disclosure control, the environment-metadata decision with any re-publish made from a clean source state, UAT sign-off, documentation consolidation, demo-data removal and dashboard ownership — and nine hours of low-priority decisions after that. The success measures are already defined: the census returns the same figures on the receiving instance, the suite reads 20 of 20 there, and a request past the endpoint ceiling is refused.
 
-**Readiness verdict.** At **94.1% of AAP-scoped hours (784 of 833)**, this is production-ready as a proof of concept and deployable today onto an internal instance. It is not yet ready for a public-facing release: the anonymous endpoints need real perimeter throttling and the count paths need scoping first, and neither is a code rewrite — one is configuration on two rules, the other three small scoped rules. The two headline concerns of the previous assessment are gone: the package now carries the whole application rather than a subset, and it has passed the round-trip gate on the exact bytes that ship. What remains is verification on the receiving instance, three security decisions, and paperwork.
+**Readiness verdict.** At **94.0% of AAP-scoped hours (783 of 833)**, this is production-ready as a proof of concept and already running on an internal instance. It is not yet ready for a public-facing release: the anonymous endpoints need real perimeter throttling and the count paths need scoping first, and neither is a code rewrite — one is configuration on two rules, the other three small scoped rules. What remains is verification on an independent receiving instance, three security decisions, and paperwork.
 
 # 9. Development Guide
 
@@ -353,7 +351,7 @@ curl -s -u "$SN_USER:$SN_PASS" -H 'Accept: application/json' \
   "$SN_URL/api/now/table/sys_upgrade_history?sysparm_limit=1&sysparm_query=upgrade_finishedISEMPTY&sysparm_fields=sys_id"
 ```
 
-Observed just now against a live instance holding no installation: `READY: {"result":[]}` and `{"result":[]}`. An empty readiness array is the correct starting state for a first install. An instance already carrying the application answers with its name and version instead — `{"result":[{"name":"x_casemgmt Case Management","version":"1.0.0"}]}`.
+Observed just now against the verification instance, which carries the application: `READY: {"result":[{"name":"x_casemgmt Case Management","version":"1.0.0"}]}` and `{"result":[]}`. An instance without the application answers `READY: {"result":[]}` — the correct starting state for a first install. If you see the name and version, the application is already there: do not upload the package onto that instance (see §9.4).
 
 ## 9.3 Artifact Verification (this replaces the build step)
 
@@ -410,20 +408,25 @@ done
 
 ## Step 6 — portability and data hygiene of the shipping package
 P=update-set/x_casemgmt_case_management_update_set.xml
+EMAIL='[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}'   # requires a real TLD
 echo "global scope stamps: $(grep -c '<sys_scope>global</sys_scope>' "$P" || true)   \
 source=global: $(grep -c 'source="global"' "$P" || true)   \
-addresses: $(grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+' "$P" | sort -u | wc -l) \
-(off reserved domain: $(grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+' "$P" | sort -u | grep -vc 'example.invalid' || true))   \
-instance host: $(grep -c 'service-now\.com' "$P" || true)"
-# observed: global scope stamps: 0   source=global: 0   addresses: 15 (off reserved domain: 0)   instance host: 0
+addresses: $(grep -oE "$EMAIL" "$P" | sort -u | wc -l) \
+(off reserved domain: $(grep -oE "$EMAIL" "$P" | sort -u | grep -vc '\.invalid$' || true))   \
+instance host: $(grep -c 'service-now\.com' "$P" || true)   \
+populated passwords: $(grep -c '<user_password>[^<]' "$P" || true)"
+# observed: global scope stamps: 0   source=global: 0   addresses: 15 (off reserved domain: 0)
+#           instance host: 0   populated passwords: 0
+grep -oE '<sys_(created|updated)_by>[^<]*' "$P" | sort | uniq -c
+# observed: the stock `system` and `admin` accounts only (see §5.2 D7)
 
 ## Step 7 — the committed gate ledger
 jq -s '{records: length, passed: [.[] | select(.pass == true)] | length}' \
   docs/refine-run/qa4-evidence/qa4-gate-evidence.jsonl
 # observed: {"records": 727, "passed": 724}
-cat docs/refine-run/qa4-evidence/canonical_sha256.txt
 sha256sum update-set/x_casemgmt_case_management_update_set.xml
-# the recorded digest and the file on disk must match: 5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983
+# must equal the digest recorded in docs/refine-run/qa4-evidence/canonical_sha256.txt:
+# 5565d98691abe9c5fd505d385dac650d5149e894952c772dc3c453d34a4cd983
 
 ## Step 8 — repository confinement
 cd .. && git diff --name-status origin/migration-poc...HEAD | grep -v '^A' | wc -l
@@ -435,13 +438,15 @@ cd .. && git diff --name-status origin/migration-poc...HEAD | grep -v '^A' | wc 
 Three steps, both browser-only, and nothing else. The platform will not let the REST layer drive a preview or a commit.
 
 1. **System Update Sets → Retrieved Update Sets → Import Update Set from XML** and upload `update-set/x_casemgmt_case_management_update_set.xml`. Wait for the state to reach *Loaded*, and confirm the retrieved set holds **576** children — the same number the §9.3 Step 3 report gives for the file.
-   *Use a clean instance.* The package envelope names a retrieved-set record; uploading it onto an instance that already holds this application appends children into that record rather than creating a new one, and a re-import produces "local update is newer" collisions.
+   *Use a clean instance.* The package envelope names a retrieved-set record; uploading it onto an instance that already holds this application — the verification instance included — reopens that committed record instead of creating a new one, a re-commit re-applies the 28 seed rows over whatever data is there, and a re-import produces "local update is newer" collisions. If the §9.2 readiness check returns the application's name and version, stop.
 2. Open the retrieved set and press **Preview Update Set**. **The gate is zero problems of *any* type** — errors and warnings both — and no row marked skipped, ignored or collision-accepted. That is what the delivered bytes produce.
 3. Press **Commit Update Set** and wait for *Committed*. Expect a report of 576 inserted, 0 updated, 0 collisions, 0 skipped, in well under a minute.
 
-There is no fourth step. The commit builds the three tables' physical storage, materialises all 24 choice values, creates the 29 access rules with all 36 role links, installs the seven flows Active and published, loads the 10/10/8 seed census, and derives the three persona role grants from the shipped group route. `scripts/post_import_remediation.js` is retained as a documented contingency only — it repairs storage, numbering, routing and role links if a target instance ever behaves differently — and `scripts/seed_demo_data.js` is only needed if you want the seed census restored after removing it. Both are idempotent and take a lease so two operators cannot collide.
+There is no fourth step. The commit builds the three tables' physical storage, materialises all 24 choice values, creates the 29 access rules with all 36 role links, installs the seven flows Active and published, loads the 10/10/8 seed census, and derives the three persona role grants from the shipped group route. `scripts/post_import_remediation.js` is retained as a documented contingency only — it repairs storage, numbering, routing and role links if a target instance ever behaves differently — and `scripts/seed_demo_data.js` is only needed if you want the seed census restored after removing it; it adopts rows by key and does not reset statuses. Both are idempotent and take a lease so two operators cannot collide.
 
 **Before any destructive schema change**, run `scripts/pre_delete_collateral_guard.js` first. It enumerates every dependant of the tables you name — access rules, role links, flows, business rules, reports, dashboard placements — and aborts before the delete if anything outside your allowlist would be caught. It is read-only, fail-closed, and refuses malformed input rather than widening the target.
+
+**Before any re-publish**, work from a fresh install of the delivered bytes, or from an instance whose seed rows have been restored to their shipped values. A publish exports whatever the application scope holds at that moment, including tryout edits and any view or list records a dashboard render created there.
 
 ## 9.5 Verification
 
@@ -454,8 +459,9 @@ for t in x_casemgmt_case x_casemgmt_case_task x_casemgmt_case_party; do
   curl -s -u "$SN_USER:$SN_PASS" -H 'Accept: application/json' \
     "$SN_URL/api/now/table/$t?sysparm_fields=sys_id" | jq '.result | length'
 done
-# after the commit: HTTP:200 with 10, 10 and 8 rows
-# before it:        HTTP:400 "Invalid table" — that is how an absent table answers here, not 404
+# after a fresh commit: HTTP:200 with 10, 10 and 8 rows
+# on the verification instance today: HTTP:200 with 11, 13 and 8 — the owner's tryout rows
+# before any commit: HTTP:400 "Invalid table" — that is how an absent table answers here, not 404
 
 # The three roles exist
 for r in x_casemgmt_case_manager x_casemgmt_case_agent x_casemgmt_case_viewer; do
@@ -488,6 +494,13 @@ curl -s "$SN_URL/api/x_casemgmt/case_status_lookup?number=CASE9000002" | jq -r '
 curl -s -o /dev/null -w "anonymous table read HTTP:%{http_code}\n" \
   "$SN_URL/api/now/table/x_casemgmt_case?sysparm_limit=1"     # expect HTTP:401
 
+# Application footprint — compare before and after any browser session or dashboard render
+SCOPE=$(curl -s -u "$SN_USER:$SN_PASS" -H 'Accept: application/json' \
+  "$SN_URL/api/now/table/sys_scope?sysparm_query=scope=x_casemgmt&sysparm_fields=sys_id" | jq -r '.result[0].sys_id')
+curl -s -u "$SN_USER:$SN_PASS" -H 'Accept: application/json' \
+  "$SN_URL/api/now/stats/sys_metadata?sysparm_count=true&sysparm_query=sys_scope=$SCOPE" | jq -r '.result.stats.count'
+# observed on the verification instance: 630
+
 # Anonymous submission (writes a row — use a disposable instance or delete the case afterwards)
 curl -s -X POST -H 'Content-Type: application/json' \
   -d '{"subject":"Smoke test","type":"General Inquiry","description":"smoke","requester_name":"Test Requester"}' \
@@ -495,7 +508,9 @@ curl -s -X POST -H 'Content-Type: application/json' \
 # expect HTTP 201 and a body carrying the new number and the submission confirmation
 ```
 
-In the browser, confirm: the case list shows ten cases across all six statuses and both types; **Agent Workspace** renders three widgets and **Manager View** five; the portal at `$SN_URL/x_casemgmt_case_portal` serves both pages to a signed-out session. Then run the automated suite — open `/atf_test_runner.do?sysparm_nostack=true` in one tab *first*, start the **Case Management** suite from **Automated Test Framework → Suites**, and choose that tab as the client runner. Expect **20 of 20 tests and 179 of 179 steps**. Separately, run `scripts/transition_logic_regression_assertions.js` from *Scripts - Background* with *In scope* set to the **Case Management** application — it must be that scope, since the validator it exercises is package-private — and expect `TOTAL=13 PASSED=13 FAILED=0`. Delete any smoke-test case you created so the demo census stays at ten.
+Every read-only command above was run as written against the verification instance and returned the stated result; the submission was not re-run there, to keep its data as the owner left it.
+
+In the browser, confirm: the case list shows the seed cases across all six statuses and both types (ten on a fresh install); **Agent Workspace** renders three widgets and **Manager View** five; the portal at `$SN_URL/x_casemgmt_case_portal` serves both pages to a signed-out session. Then run the automated suite — open `/atf_test_runner.do?sysparm_nostack=true` in one tab *first*, start the **Case Management** suite from **Automated Test Framework → Suites**, and choose that tab as the client runner. Expect **20 of 20 tests and 179 of 179 steps**. Separately, run `scripts/transition_logic_regression_assertions.js` from *Scripts - Background* with *In scope* set to the **Case Management** application — it must be that scope, since the validator it exercises is package-private — and expect `TOTAL=13 PASSED=13 FAILED=0`; it removes its own fixtures. Delete any smoke-test case you created so the demo census is unchanged.
 
 ## 9.6 Example Usage
 
@@ -510,13 +525,17 @@ In the browser, confirm: the case list shows ten cases across all six statuses a
 | --- | --- | --- |
 | Every URL returns a page inviting you to wake an instance, including REST | The instance is hibernating; HTTP 200 does not mean it is up | Wake it from the developer portal with the owning account, then re-run the §9.2 readiness check — which asserts a JSON body precisely for this reason |
 | A table probe returns HTTP 400 "Invalid table" | The application is not installed on this instance — that is how an absent table answers here | Complete §9.4; a 400 before the commit and a 200 after it is the expected pair |
-| Preview reports "local update is newer" collisions | The same package was previously committed on this instance | Use a clean instance for a verification round trip. The gate is zero problems of any type, which only a clean target can give you |
+| Preview reports "local update is newer" collisions, or the upload reopens an existing committed set | The same package was previously committed on this instance | Stop. Use a clean instance for a verification round trip; re-committing here re-applies the seed rows over existing data |
+| Seed-count checks fail on the verification instance (11 cases, 13 tasks, changed statuses) | The owner's own tryout added and progressed rows after the commit | Expected there; compare seed counts only on a fresh install. `scripts/seed_demo_data.js` adopts rows by key and will not reset statuses |
+| The application's metadata count rises after viewing a dashboard | Rendering a dashboard while the application is the administrator's current application creates view, list and export records in its scope | Compare against the §9.5 footprint count and delete only the records created since, before any re-publish |
 | An access rule or role link write returns a permission error over REST | These writes require `security_admin`, which cannot be elevated outside an interactive session | Elevate in the browser user menu and perform the write there. The install itself needs none of this |
 | A count or aggregate reports more rows than a persona can open | The count path runs before the access rules filter | Expected today; see §6 for the scoped before-query control |
 | A save is silently rejected with no message | An access rule refused the write before application code ran | Check the rule for that field or table; the API layer states the reason for the same request |
 | A status change takes a moment to save | A guarded transition dispatches its validation subflow synchronously | Expected behaviour; evaluate the guard first and dispatch only for permitted transitions if it matters |
 | The test suite never starts | The client runner cannot run headless on this release | Open `/atf_test_runner.do?sysparm_nostack=true` in a second tab *before* launching the suite, then select it as the runner |
 | The transition harness fails every assertion | It was run in the global scope, where the validator it calls is not visible | Run it from *Scripts - Background* with *In scope* set to the **Case Management** application |
+| A filtered count equals the table's full total | A field name the platform does not recognise in an encoded query is silently ignored, so the filter matches every row | Cross-check each filtered count against the unfiltered total and confirm every field name exists on the table |
+| The README's last line shows as literal text | The renderer disables raw HTML; standard CommonMark and most hosted renderers hide an HTML comment | Expected in safe-mode renderers; see §5.2 D2 |
 
 # 10. Appendices
 
@@ -533,13 +552,14 @@ All commands run from `servicenow-case-management-poc/` unless noted.
 | Count record blocks in a package | `python3 -c "import sys,xml.etree.ElementTree as ET;print(len(ET.parse(sys.argv[1]).getroot().findall('sys_update_xml')))" update-set/x_casemgmt_case_management_update_set.xml` (576) |
 | Confirm the package is a genuine platform export | count `payload_hash` elements against blocks — the canonical file is 576/576; a hand-assembled package is not (see §9.3 Step 3) |
 | Verify a required message string is present | `grep -rlF "All tasks must be closed before resolving this case." .` |
-| Confirm no personal data in seed rows | `grep -rhoE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+' seed-data \| sort -u` (all on the reserved `.invalid` domain) |
-| Confirm no instance-key literals in executable script code | `grep -ohE '\b[0-9a-f]{32}\b' scripts/*.js` (matches appear only inside a comment block) |
+| Confirm no personal data in seed rows | `grep -rhoE '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}' seed-data \| sort -u` (all on the reserved `.invalid` domain) |
+| Confirm no instance-key literals in executable script code | `grep -ohE '\b[0-9a-f]{32}\b' scripts/*.js` (3 matches, all inside a comment block) |
 | Confirm no instance host or global stamp in the package | `grep -c 'service-now\.com' update-set/x_casemgmt_case_management_update_set.xml` (0); same for `<sys_scope>global</sys_scope>` (0) |
 | Read the committed gate ledger | `jq -s '{records: length, passed: [.[] \| select(.pass == true)] \| length}' docs/refine-run/qa4-evidence/qa4-gate-evidence.jsonl` (727 / 724) |
+| Live 55-predicate census of an installed application (read-only; credentials from the environment) | `cd docs/refine-run/qa4-evidence/predicates && PYTHONDONTWRITEBYTECODE=1 python3 census.py <label> <out.jsonl> <retrieved-set sys_id>` |
 | Confirm the ArkCase tree is untouched (from the repository root) | `git diff --name-status origin/migration-poc...HEAD \| grep -v '^A' \| wc -l` (0) |
 | Instance readiness (asserts a JSON body, not a status code) | see §9.2 |
-| Live census of the three tables, roles and derived grants | see §9.5 |
+| Live census of the three tables, roles, derived grants and application footprint | see §9.5 |
 | Anonymous lookup smoke test | `curl -s "$SN_URL/api/x_casemgmt/case_status_lookup?number=CASE0000000"` |
 
 ## B. Endpoint & Port Reference
@@ -578,7 +598,7 @@ All commands run from `servicenow-case-management-poc/` unless noted.
 | Automated tests (20) and suite (1) | `atf/` |
 | Choice-value reconciliation, contingency install, seed, guard and harness scripts | `scripts/create_choice_values.js`, `scripts/post_import_remediation.js`, `scripts/seed_demo_data.js`, `scripts/pre_delete_collateral_guard.js`, `scripts/transition_logic_regression_assertions.js` |
 | Gate evidence — 727-record predicate ledger, raw captures, six reproducing scripts, recorded digest | `docs/refine-run/qa4-evidence/` (13 files, 432 KB) |
-| Delivery record for the consolidation and the re-gate | `docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`, `docs/refine-run/CR5-REGATE-EVIDENCE.md` |
+| Consolidation and install-gate narrative | `docs/refine-run/CONSOLIDATION-FINAL-REPORT.md`, `docs/refine-run/CR5-REGATE-EVIDENCE.md` |
 | Authoritative current-state record | `docs/PDI_LIMITATIONS_AND_KNOWN_ISSUES.md` |
 | Operator runbook and install walkthrough | `docs/HUMAN_DEPLOYMENT_RECREATE_GUIDE.md`, `docs/deployment.md` |
 | Specification documents | `docs/data-model.md`, `docs/state-machine.md`, `docs/acl-matrix.md`, `docs/portal-pages.md`, `docs/dashboards.md`, `docs/validation-gates.md` |
